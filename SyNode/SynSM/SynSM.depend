@@ -1,10 +1,14 @@
 # depslib dependency file v1.0
-1576173645 source:/home/softpro/Sources/ub-server/libs/Synopse/SyNode/SynSM/main.cpp
+1576328713 source:/home/softpro/Sources/ub-server/libs/Synopse/SyNode/SynSM/main.cpp
+	<jsfriendapi.h>
+	<js/Initialization.h>
+	<mozilla/Assertions.h>
+	<js/Date.h>
 
 1576164578 /home/softpro/Sources/ub-server/libs/Synopse/SyNode/SynSM/include/SynSM.h
 	<jsapi.h>
 
-1575821818 /usr/local/include/mozjs-52/jsapi.h
+1576328875 /usr/local/include/mozjs-52/jsapi.h
 	"mozilla/AlreadyAddRefed.h"
 	"mozilla/FloatingPoint.h"
 	"mozilla/MemoryReporting.h"
@@ -512,4 +516,19 @@
 
 1575821818 /usr/local/include/mozjs-52/js/Initialization.h
 	"jstypes.h"
+
+1575821818 /usr/local/include/mozjs-52/js/Date.h
+	"mozilla/FloatingPoint.h"
+	"mozilla/MathAlgorithms.h"
+	"js/Conversions.h"
+	"js/Value.h"
+
+1575821818 /usr/local/include/mozjs-52/js/Conversions.h
+	"mozilla/Casting.h"
+	"mozilla/FloatingPoint.h"
+	"mozilla/TypeTraits.h"
+	<math.h>
+	"jspubtd.h"
+	"js/RootingAPI.h"
+	"js/Value.h"
 

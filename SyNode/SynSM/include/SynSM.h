@@ -275,6 +275,9 @@ extern "C" JS_PUBLIC_API(void) SM_ReportErrorASCII(
 extern "C" JS_PUBLIC_API(void) SM_ReportErrorNumberUC(
     JSContext* cx, JSErrorCallback errorCallback, void* userRef, const unsigned errorNumber, ...);
 
+extern "C" JS_PUBLIC_API(void) SM_ReportErrorNumberUTF8(
+    JSContext* cx, JSErrorCallback errorCallback, void* userRef, const unsigned errorNumber, ...);
+
 extern "C" JS_PUBLIC_API(void) SM_ReportOutOfMemory(JSContext* cx);
 
 extern "C" JS_PUBLIC_API(JS::WarningReporter) SM_GetWarningReporter(JSContext* cx);

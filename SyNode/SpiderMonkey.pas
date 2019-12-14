@@ -2544,6 +2544,8 @@ procedure JS_ReportError(cx: PJSContext; const format: PCChar);
 // message, which is determined by the errorCallback
 procedure JS_ReportErrorNumberUC(cx: PJSContext; errorCallback: JSErrorCallback;
   userRef: pointer; const erroNubmer: uintN); cdecl; varargs; external SpiderMonkeyLib name 'SM_ReportErrorNumberUC';
+procedure JS_ReportErrorNumberUTF8(cx: PJSContext; errorCallback: JSErrorCallback;
+  userRef: pointer; const erroNubmer: uintN); cdecl; varargs; external SpiderMonkeyLib name 'SM_ReportErrorNumberUTF8';
 /// Reports a memory allocation error
 // - Call JS_ReportOutOfMemory to report that an operation failed because the
 // system is out of memory

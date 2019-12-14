@@ -1,5 +1,12 @@
 #include <jsfriendapi.h>
+#include <js/Date.h>
 #include <js/Initialization.h>
+#include <mozilla/Assertions.h>
+
+// Declared in vm/Runtime.h
+namespace js {
+    extern bool gCanUseExtraThreads;
+}
 
 JS_PUBLIC_API(bool) SM_Initialize(void)
 {
@@ -8,8 +15,7 @@ JS_PUBLIC_API(bool) SM_Initialize(void)
 
 JS_PUBLIC_API(void) SM_DisableExtraThreads(void)
 {
-// TODO:
-//  js::DisableExtraThreads();
+    js::gCanUseExtraThreads = false;
 }
 
 JS_PUBLIC_API(void) SM_ShutDown(void)
@@ -318,10 +324,10 @@ JS_PUBLIC_API(bool) SM_DeleteElement(
 JS_PUBLIC_API(JS::AutoIdVector*) SM_EnumerateToAutoIdVector(
     JSContext* cx, JS::HandleObject obj, size_t* length, jsid** data)
 {
-// TODO:
-//    js::AssertHeapIsIdle(cx->runtime());
+    // TODO:
+    // js::AssertHeapIsIdle(cx);
     CHECK_REQUEST(cx);
-//    assertSameCompartment(cx, obj);
+    // assertSameCompartment(cx, obj);
 
     JS::AutoIdVector* v = new JS::AutoIdVector(cx);
     if (!GetPropertyKeys(cx, obj, JSITER_OWNONLY, v)) {
@@ -403,8 +409,7 @@ JS_PUBLIC_API(bool) SM_GetArrayLength(JSContext* cx, JS::Handle<JSObject*> obj, 
 
 JS_PUBLIC_API(uint64_t) SM_GetReservedSlot(JSObject* obj, uint32_t index)
 {
-    // TODO: ASSERT
-    //return obj->as<js::NativeObject>().getReservedSlot(index).asRawBits();
+    return js::GetReservedSlot(obj, index).asRawBits();
 }
 
 JS_PUBLIC_API(void) SM_SetReservedSlot(
@@ -563,25 +568,27 @@ JS_PUBLIC_API(bool) SM_ParseJSON(
 
 JS_PUBLIC_API(void) SM_ReportErrorASCII(JSContext* cx, const char* format, ...)
 {
-    va_list ap;
-
-    //js::AssertHeapIsIdle(cx->runtime());
-    va_start(ap, format);
-    // TODO:
-    // js::ReportErrorVA(cx, JSREPORT_ERROR, format, js::ArgumentsAreASCII, ap);
-    va_end(ap);
-
+//    va_list ap;
+//    va_start(ap, errorNumber);
+//    JS_ReportErrorNumberASCIIVA(cx, errorCallback, userRef, errorNumber, ap);
+//    va_end(ap);
 }
 
 JS_PUBLIC_API(void) SM_ReportErrorNumberUC(
     JSContext* cx, JSErrorCallback errorCallback, void* userRef, const unsigned errorNumber, ...)
 {
-    va_list ap;
+//    va_list ap;
+//    va_start(ap, errorNumber);
+//    JS_ReportErrorNumberASCIIVA(cx, errorCallback, userRef, errorNumber, ap);
+//    va_end(ap);
+}
 
-    //js::AssertHeapIsIdle(cx->runtime());
+JS_PUBLIC_API(void) SM_ReportErrorNumberUTF8(
+    JSContext* cx, JSErrorCallback errorCallback, void* userRef, const unsigned errorNumber, ...)
+{
+    va_list ap;
     va_start(ap, errorNumber);
-    // TODO:
-    // js::ReportErrorNumberVA(cx, JSREPORT_ERROR, errorCallback, userRef, errorNumber, js::ArgumentsAreUnicode, ap);
+    JS_ReportErrorNumberUTF8VA(cx, errorCallback, userRef, errorNumber, ap);
     va_end(ap);
 }
 
@@ -608,13 +615,9 @@ JS_PUBLIC_API(JSObject*) SM_NewDateObject(
 
 JS_PUBLIC_API(JSObject*) SM_NewDateObjectMsec(JSContext* cx, double msec)
 {
-    // TODO:
-    // AssertHeapIsIdle(cx);
-    // CHECK_REQUEST(cx);
-    // JS::ClippedTime time = JS::TimeClip(msec);
-    // return NewDateObjectMsec(cx, time);
+    JS::ClippedTime time = JS::TimeClip(msec);
+    return JS::NewDateObject(cx, time);
 }
-
 
 JS_PUBLIC_API(bool) SM_ObjectIsDate(JSContext* cx, JS::HandleObject obj, bool* isDate)
 {
@@ -715,10 +718,6 @@ JS_PUBLIC_API(JS::Value) JS_ComputeThis(JSContext* cx, JS::Value* vp)
 {
     return JS::detail::ComputeThis(cx, vp);
 }
-
-
-
-
 
 JS_FRIEND_API(JSObject*) SM_NewInt8Array(JSContext* cx, uint32_t nelements)
 {
@@ -1129,6 +1128,7 @@ JS_FRIEND_API(JSObject*) SM_GetArrayBufferViewBuffer(
 
 JS_PUBLIC_API(bool) SM_InitModuleClasses(JSContext* cx, JS::HandleObject obj)
 {
+    // Intentionally commented out
     //return js::InitModuleClasses(cx, obj);
     return true;
 }
@@ -1136,16 +1136,14 @@ JS_PUBLIC_API(bool) SM_InitModuleClasses(JSContext* cx, JS::HandleObject obj)
 JS_PUBLIC_API(JSObject*) SM_CompileModule(JSContext* cx, JS::HandleObject obj, JS::CompileOptions& options,
     const char16_t* chars, size_t length)
 {
-    // TODO:
-    // SourceBufferHolder srcBuf(chars, length, SourceBufferHolder::NoOwnership);
-    // return frontend::CompileModule(cx, options, srcBuf);
+    JS::SourceBufferHolder srcBuf(chars, length, JS::SourceBufferHolder::NoOwnership);
+    JS::Rooted<JSObject*> module(cx);
+    return JS::CompileModule(cx, options, srcBuf, &module) ? module.get() : nullptr;
 }
 
 JS_PUBLIC_API(void) SM_SetModuleResolveHook(JSContext* cx, JS::HandleFunction hook)
 {
-    // TODO:
-    // Rooted<GlobalObject*> global(cx, cx->global());
-    // global->setModuleResolveHook(hook);
+    JS::SetModuleResolveHook(cx, hook);
 }
 
 
