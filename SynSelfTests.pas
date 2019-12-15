@@ -13085,28 +13085,28 @@ type
   end;
 
 procedure TestMasterSlaveRecordVersion(Test: TSynTestCase; const DBExt: TFileName);
-procedure TestMasterSlave(Master,Slave: TSQLRestServer; SynchronizeFromMaster: TSQLRest);
-var res: TRecordVersion;
-    Rec1,Rec2: TSQLRecordPeopleVersioned;
-begin
-  if SynchronizeFromMaster<>nil then
-    res := Slave.RecordVersionSynchronizeSlave(TSQLRecordPeopleVersioned,SynchronizeFromMaster,500) else
-    res := Slave.RecordVersionCurrent;
-  Test.Check(res=Master.RecordVersionCurrent);
-  Rec1 := TSQLRecordPeopleVersioned.CreateAndFillPrepare(Master,'order by ID','*');
-  Rec2 := TSQLRecordPeopleVersioned.CreateAndFillPrepare(Slave,'order by ID','*');
-  try
-    Test.Check(Rec1.FillTable.RowCount=Rec2.FillTable.RowCount);
-    while Rec1.FillOne do begin
-      Test.Check(Rec2.FillOne);
-      Test.Check(Rec1.SameRecord(Rec2),'simple fields');
-      Test.Check(Rec1.Version=Rec2.Version);
+  procedure TestMasterSlave(Master,Slave: TSQLRestServer; SynchronizeFromMaster: TSQLRest);
+  var res: TRecordVersion;
+      Rec1,Rec2: TSQLRecordPeopleVersioned;
+  begin
+    if SynchronizeFromMaster<>nil then
+      res := Slave.RecordVersionSynchronizeSlave(TSQLRecordPeopleVersioned,SynchronizeFromMaster,500) else
+      res := Slave.RecordVersionCurrent;
+    Test.Check(res=Master.RecordVersionCurrent);
+    Rec1 := TSQLRecordPeopleVersioned.CreateAndFillPrepare(Master,'order by ID','*');
+    Rec2 := TSQLRecordPeopleVersioned.CreateAndFillPrepare(Slave,'order by ID','*');
+    try
+      Test.Check(Rec1.FillTable.RowCount=Rec2.FillTable.RowCount);
+      while Rec1.FillOne do begin
+        Test.Check(Rec2.FillOne);
+        Test.Check(Rec1.SameRecord(Rec2),'simple fields');
+        Test.Check(Rec1.Version=Rec2.Version);
+      end;
+    finally
+      Rec1.Free;
+      Rec2.Free;
     end;
-  finally
-    Rec1.Free;
-    Rec2.Free;
   end;
-end;
 var Model: TSQLModel;
     Master,Slave1,Slave2: TSQLRestServerDB;
     MasterAccess: TSQLRestClientURI;
@@ -13115,31 +13115,33 @@ var Model: TSQLModel;
     Slave2Callback: IServiceRecordVersionCallback;
     i,n: integer;
     timeout: Int64;
-function CreateServer(const DBFileName: TFileName; DeleteDBFile: boolean): TSQLRestServerDB;
-begin
-  if DeleteDBFile then
-    DeleteFile(DBFileName);
-  result := TSQLRestServerDB.Create(Model,DBFileName,false,'');
-  result.DB.Synchronous := smOff;
-  result.DB.LockingMode := lmExclusive;
-  result.CreateMissingTables;
-end;
-procedure CreateMaster(DeleteDBFile: boolean);
-var serv: TSQLHttpServer;
-    ws: TSQLHttpClientWebsockets;
-begin
-  Master := CreateServer('testversion'+DBExt,DeleteDBFile);
-  if Test is TTestBidirectionalRemoteConnection then begin
-    serv := TTestBidirectionalRemoteConnection(Test).fHttpServer;
-    Test.Check(serv.AddServer(Master));
-    serv.WebSocketsEnable(Master,'key2').Settings.SetFullLog;
-    ws := TSQLHttpClientWebsockets.Create('127.0.0.1',HTTP_DEFAULTPORT,Model);
-    ws.WebSockets.Settings.SetFullLog;
-    Test.Check(ws.WebSocketsUpgrade('key2')='');
-    MasterAccess := ws;
-  end else
-    MasterAccess := TSQLRestClientDB.Create(Master);
-end;
+  function CreateServer(const DBFileName: TFileName; DeleteDBFile: boolean): TSQLRestServerDB;
+  begin
+    if DeleteDBFile then
+      DeleteFile(DBFileName);
+    result := TSQLRestServerDB.Create(TSQLModel.Create(Model),DBFileName,false,'');
+    result.Model.Owner := result;
+    result.DB.Synchronous := smOff;
+    result.DB.LockingMode := lmExclusive;
+    result.CreateMissingTables;
+  end;
+  procedure CreateMaster(DeleteDBFile: boolean);
+  var serv: TSQLHttpServer;
+      ws: TSQLHttpClientWebsockets;
+  begin
+    Master := CreateServer('testversion'+DBExt,DeleteDBFile);
+    if Test is TTestBidirectionalRemoteConnection then begin
+      serv := TTestBidirectionalRemoteConnection(Test).fHttpServer;
+      Test.Check(serv.AddServer(Master));
+      serv.WebSocketsEnable(Master,'key2').Settings.SetFullLog;
+      ws := TSQLHttpClientWebsockets.Create('127.0.0.1',HTTP_DEFAULTPORT,TSQLModel.Create(Model));
+      ws.Model.Owner := ws;
+      ws.WebSockets.Settings.SetFullLog;
+      Test.Check(ws.WebSocketsUpgrade('key2')='');
+      MasterAccess := ws;
+    end else
+      MasterAccess := TSQLRestClientDB.Create(Master);
+  end;
 begin
   Model := TSQLModel.Create(
     [TSQLRecordPeople,TSQLRecordPeopleVersioned,TSQLRecordTableDeleted],'root0');
