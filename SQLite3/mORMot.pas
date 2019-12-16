@@ -52031,6 +52031,7 @@ var Added: boolean;
       PS: PShortString;
       dyn: TDynArray;
       dynObjArray: PClassInstance;
+      U:RawUTF8;
   begin
     if Assigned(OnWriteObject) and OnWriteObject(self,Value,P,Options) then
       exit;
@@ -52219,6 +52220,13 @@ var Added: boolean;
               Add('[',']');
             end else begin // do not use AddDynArrayJSON to support HR
               inc(fHumanReadableLevel);
+              if dyn.HasCustomJSONParser then
+              begin
+                dyn.SaveToJSON(U);
+                AddString(U);
+              end
+              else
+              begin
               Add('[');
               po := dyn.Value^;
               for c := 1 to dyn.Count do begin
@@ -52230,6 +52238,7 @@ var Added: boolean;
               dec(fHumanReadableLevel);
               HR;
               Add(']');
+              end;
             end;
           end else
             AddDynArrayJSON(dyn);
