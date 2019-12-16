@@ -711,7 +711,8 @@ begin
 
   cx.BeginRequest;
   try
-    FGlobalObject := cx.NewRootedObject(cx.NewGlobalObject(@jsglobal_class));
+    FGlobalObject := cx.NewRootedObject(
+      cx.NewGlobalObject(@jsglobal_class, FireOnNewGlobalHook));
     if FGlobalObject.ptr = nil then
       raise ESMException.Create('Create global object');
     fcomp := cx.EnterCompartment(FGlobalObject.ptr);

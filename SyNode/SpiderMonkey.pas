@@ -839,7 +839,8 @@ type
     procedure FreeCompileOptions(opt: PJSCompileOptions);
 
     /// Create a new JavaScript object for use as a global object.
-    function NewGlobalObject(clasp: PJSClass): PJSObject;
+    function NewGlobalObject(clasp: PJSClass;
+      hookOption: OnNewGlobalHookOption = DontFireOnNewGlobalHook): PJSObject;
     /// Initialize standard JS class constructors, prototypes, and any top-level
     // functions and constants associated with the standard classes (e.g. isNaN
     // for Number).
@@ -3452,12 +3453,12 @@ function JS_NewCompartmentOptions(): PJS_CompartmentOptions; cdecl;
 procedure JS_FreeCompartmentOptions(opt: PJS_CompartmentOptions); cdecl;
   external SpiderMonkeyLib name 'SM_FreeCompartmentOptions';
 
-function JSContext.NewGlobalObject(clasp: PJSClass): PJSObject;
+function JSContext.NewGlobalObject(clasp: PJSClass; hookOption: OnNewGlobalHookOption): PJSObject;
 var
   Opt: PJS_CompartmentOptions;
 begin
   Opt := JS_NewCompartmentOptions;
-  Result := JS_NewGlobalObject(@Self, clasp, nil, DontFireOnNewGlobalHook, Opt);
+  Result := JS_NewGlobalObject(@Self, clasp, nil, hookOption, Opt);
   JS_FreeCompartmentOptions(Opt);
 end;
 
