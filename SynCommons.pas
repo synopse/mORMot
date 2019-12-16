@@ -83,9 +83,6 @@ uses
 {$ifdef MSWINDOWS}
   Windows,
   Messages,
-  {$ifndef LVCL}
-  Registry,
-  {$endif}
 {$else MSWINDOWS}
   {$ifdef KYLIX3}
     Types,
@@ -12874,10 +12871,8 @@ type
     /// finalize the instance
     destructor Destroy; override;
     {$ifdef MSWINDOWS}
-    {$ifndef LVCL}
     /// read time zone information from the Windows registry
     procedure LoadFromRegistry;
-    {$endif}
     {$endif MSWINDOWS}
     /// read time zone information from a compressed file
     // - if no file name is supplied, a ExecutableName.tz file would be used
@@ -13352,6 +13347,34 @@ function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
 
 /// low-level conversion of a Windows 64-bit TFileTime into a Unix time ms stamp
 function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
+
+type
+  /// direct access to the Windows Registry
+  // - could be used as alternative to TRegistry, which doesn't behave the same on
+  // all Delphi versions, and is enhanced on FPC (e.g. which supports REG_MULTI_SZ)
+  TWinRegistry = object
+  public
+    /// the opened HKEY handle
+    key: HKEY;
+    /// start low-level read access to a Windows Registry node
+    // - on success (returned true), ReadClose() should be called
+    function ReadOpen(root: HKEY; const keyname: RawUTF8; closefirst: boolean=false): boolean;
+    /// finalize low-level read access to the Windows Registry after ReadOpen()
+    procedure Close;
+    /// low-level read a string from the Windows Registry after ReadOpen()
+    // - in respect to Delphi's TRegistry, will properly handle REG_MULTI_SZ - and
+    // return its first value
+    function ReadString(const entry: SynUnicode; andtrim: boolean=true): RawUTF8;
+    /// low-level read a Windows Registry content after ReadOpen()
+    // - works with any kind of key, but was designed for REG_BINARY
+    function ReadData(const entry: SynUnicode): RawByteString;
+    /// low-level read a Windows Registry 32-bit REG_DWORD value after ReadOpen()
+    function ReadDword(const entry: SynUnicode): cardinal;
+    /// low-level read a Windows Registry 64-bit REG_QWORD value after ReadOpen()
+    function ReadQword(const entry: SynUnicode): QWord;
+    /// low-level enumeration of all sub-entries names of a Windows Registry key
+    function ReadEnumEntries: TRawUTF8DynArray;
+  end;
 
 {$else MSWINDOWS}
 
@@ -26430,6 +26453,93 @@ begin
     Windows.Sleep(ms);
 end;
 
+{ TWinRegistry }
+
+function TWinRegistry.ReadOpen(root: HKEY; const keyname: RawUTF8;
+  closefirst: boolean): boolean;
+var tmp: TSynTempBuffer;
+begin
+  if closefirst then
+    Close;
+  tmp.Init(length(keyname)*2);
+  UTF8ToWideChar(tmp.buf,pointer(keyname));
+  key := 0;
+  result := RegOpenKeyExW(root,tmp.buf,0,KEY_READ,key)=0;
+  tmp.Done;
+end;
+
+procedure TWinRegistry.Close;
+begin
+  if key<>0 then
+    RegCloseKey(key);
+end;
+
+function TWinRegistry.ReadString(const entry: SynUnicode; andtrim: boolean): RawUTF8;
+var rtype, rsize: DWORD;
+    tmp: TSynTempBuffer;
+begin
+  result := '';
+  if RegQueryValueExW(key,pointer(entry),nil,@rtype,nil,@rsize)<>0 then
+    exit;
+  tmp.Init(rsize);
+  if RegQueryValueExW(key,pointer(entry),nil,nil,tmp.buf,@rsize)=0 then begin
+    case rtype of
+      REG_SZ, REG_EXPAND_SZ, REG_MULTI_SZ:
+        RawUnicodeToUtf8(tmp.buf,StrLenW(tmp.buf),result);
+    end;
+    if andtrim then
+      result := Trim(result);
+  end;
+  tmp.Done;
+end;
+
+function TWinRegistry.ReadData(const entry: SynUnicode): RawByteString;
+var rtype, rsize: DWORD;
+begin
+  result := '';
+  if RegQueryValueExW(key,pointer(entry),nil,@rtype,nil,@rsize)<>0 then
+    exit;
+  SetLength(result,rsize);
+  if RegQueryValueExW(key,pointer(entry),nil,nil,pointer(result),@rsize)<>0 then
+    result := '';
+end;
+
+function TWinRegistry.ReadDword(const entry: SynUnicode): cardinal;
+var rsize: DWORD;
+begin
+  rsize := 4;
+  if RegQueryValueExW(key,pointer(entry),nil,nil,@result,@rsize)<>0 then
+    result := 0;
+end;
+
+function TWinRegistry.ReadQword(const entry: SynUnicode): QWord;
+var rsize: DWORD;
+begin
+  rsize := 8;
+  if RegQueryValueExW(key,pointer(entry),nil,nil,@result,@rsize)<>0 then
+    result := 0;
+end;
+
+function TWinRegistry.ReadEnumEntries: TRawUTF8DynArray;
+var count,maxlen,i,len: DWORD;
+    tmp: TSynTempBuffer;
+begin
+  result := nil;
+  if (RegQueryInfoKeyW(key,nil,nil,nil,@count,@maxlen,nil,nil,nil,nil,nil,nil)<>0) or
+     (count=0) then
+    exit;
+  SetLength(result,count);
+  inc(maxlen);
+  tmp.Init(maxlen*3);
+  for i := 0 to count-1 do begin
+    len := maxlen;
+    if RegEnumKeyExW(key,i,tmp.buf,len,nil,nil,nil,nil)=0 then
+      RawUnicodeToUtf8(tmp.buf,len,result[i]);
+  end;
+  tmp.Done;
+end;
+
+
 procedure RetrieveSystemInfo;
 var
   IsWow64Process: function(Handle: THandle; var Res: BOOL): BOOL; stdcall;
@@ -26438,8 +26548,8 @@ var
   Kernel: THandle;
   P: pointer;
   Vers: TWindowsVersion;
-  cpu, manuf, prod, prodver: string;
-  i: integer;
+  cpu, manuf, prod, prodver: RawUTF8;
+  reg: TWinRegistry;
 begin
   Kernel := GetModuleHandle(kernel32);
   GetTickCount64 := GetProcAddress(Kernel,'GetTickCount64');
@@ -26504,44 +26614,35 @@ begin
       FormatUTF8('Windows % SP% (%.%.%)',[WINDOWS_NAME[Vers],wServicePackMajor,
         dwMajorVersion,dwMinorVersion,dwBuildNumber],OSVersionText);
   OSVersionInt32 := (integer(Vers) shl 8)+ord(osWindows);
-  {$ifndef LVCL}
-  with TRegistry.Create do
-  try
-    RootKey := HKEY_LOCAL_MACHINE;
-    if OpenKeyReadOnly('\Hardware\Description\System\CentralProcessor\0') then begin
-      cpu := ReadString('ProcessorNameString');
-      if cpu='' then
-        cpu := ReadString('Identifier');
-    end;
-    if OpenKeyReadOnly('\Hardware\Description\System\BIOS') then begin
-      manuf := SysUtils.Trim(ReadString('SystemManufacturer'));
-      if manuf<>'' then
-        manuf := manuf+' ';
-      prod := SysUtils.Trim(ReadString('SystemProductName'));
-      prodver := SysUtils.Trim(ReadString('SystemVersion'));
-      if prodver='' then
-        prodver := SysUtils.Trim(ReadString('BIOSVersion'));
-      if OpenKeyReadOnly('\Hardware\Description\System') then begin
-        if prod='' then
-          prod := SysUtils.Trim(ReadString('SystemBiosVersion'));
-        if prodver='' then begin
-          prodver := SysUtils.Trim(ReadString('VideoBiosVersion'));
-          i := Pos(#13,prodver);
-          if i>0 then // e.g. multilines 'Oracle VM VirtualBox Version 5.2.33'
-            SetLength(prodver,i-1);
-        end;
-      end;
-      if prodver<>'' then
-        FormatUTF8('%% %',[manuf,prod,prodver],BiosInfoText) else
-        FormatUTF8('%%',[manuf,prod],BiosInfoText);
-    end;
-  finally
-    Free;
+  if reg.ReadOpen(HKEY_LOCAL_MACHINE,'Hardware\Description\System\CentralProcessor\0') then begin
+    cpu := reg.ReadString('ProcessorNameString');
+    if cpu='' then
+      cpu := reg.ReadString('Identifier');
   end;
-  {$endif}
+  if reg.ReadOpen(HKEY_LOCAL_MACHINE,'Hardware\Description\System\BIOS',true) then begin
+    manuf := reg.ReadString('SystemManufacturer');
+    if manuf<>'' then
+      manuf := manuf+' ';
+    prod := reg.ReadString('SystemProductName');
+    prodver := reg.ReadString('SystemVersion');
+    if prodver='' then
+      prodver := reg.ReadString('BIOSVersion');
+  end;
+  if (prod='') or (prodver='') then begin
+    if reg.ReadOpen(HKEY_LOCAL_MACHINE,'Hardware\Description\System',true) then begin
+      if prod='' then
+        prod := reg.ReadString('SystemBiosVersion');
+      if prodver='' then
+        prodver := reg.ReadString('VideoBiosVersion');
+    end;
+  end;
+  reg.Close;
+  if prodver<>'' then
+    FormatUTF8('%% %',[manuf,prod,prodver],BiosInfoText) else
+    FormatUTF8('%%',[manuf,prod],BiosInfoText);
   if cpu='' then
-    cpu := GetEnvironmentVariable('PROCESSOR_IDENTIFIER');
-  cpu := SysUtils.Trim(cpu);
+    cpu := StringToUTF8(GetEnvironmentVariable('PROCESSOR_IDENTIFIER'));
+  cpu := Trim(cpu);
   FormatUTF8('% x % ('+CPU_ARCH_TEXT+')',[SystemInfo.dwNumberOfProcessors,cpu],CpuInfoText);
 end;
 
@@ -37210,64 +37311,53 @@ begin
 end;
 
 {$ifdef MSWINDOWS}
-{$ifndef LVCL}
 procedure TSynTimeZone.LoadFromRegistry;
-const REGKEY = '\Software\Microsoft\Windows NT\CurrentVersion\Time Zones\';
-var Reg: TRegistry;
-    Keys: TStringList;
+const REGKEY = 'Software\Microsoft\Windows NT\CurrentVersion\Time Zones\';
+var reg: TWinRegistry;
+    keys: TRawUTF8DynArray;
     i,first,last,year,n: integer;
+    itemsize: DWORD;
     item: TTimeZoneData;
 begin
   fZones.Clear;
-  Keys := TStringList.Create;
-  Reg := TRegistry.Create;
-  try
-    Reg.RootKey := HKEY_LOCAL_MACHINE;
-    if Reg.OpenKeyReadOnly(REGKEY) then
-    try
-      Reg.GetKeyNames(Keys);
-    finally
-      Reg.CloseKey;
-    end;
-    for i := 0 to Keys.Count-1 do begin
-      Finalize(item);
-      FillcharFast(item.tzi,SizeOf(item.tzi),0);
-      if Reg.OpenKeyReadOnly(REGKEY+Keys[i]) then begin
-        try
-          StringToUTF8(Keys[i],RawUTF8(item.id));
-          StringToUTF8(Reg.ReadString('Display'),item.Display);
-          Reg.ReadBinaryData('TZI', item.tzi, SizeOf(item.tzi));
-        finally
-          Reg.CloseKey;
-        end;
-        if Reg.OpenKeyReadOnly(REGKEY+Keys[i]+'\Dynamic DST') then
-          try // warning: not available on XP/2003 by default
-            first := Reg.ReadInteger('FirstEntry');
-            last := Reg.ReadInteger('LastEntry');
-            n := 0;
-            SetLength(item.dyn,last-first+1);
-            for year := first to last do
-            if Reg.ReadBinaryData(IntToStr(year),item.dyn[n].tzi,
-                SizeOf(TTimeZoneInfo))=SizeOf(TTimeZoneInfo) then begin
+  if reg.ReadOpen(HKEY_LOCAL_MACHINE,REGKEY) then
+    keys := reg.ReadEnumEntries;
+  n := length(keys);
+  fZones.Capacity := n;
+  for i := 0 to n-1 do begin
+    Finalize(item);
+    FillcharFast(item.tzi,SizeOf(item.tzi),0);
+    if reg.ReadOpen(HKEY_LOCAL_MACHINE,REGKEY+keys[i],true) then begin
+      item.id := keys[i];
+      item.Display := reg.ReadString('Display');
+      itemsize := SizeOf(item.tzi);
+      RegQueryValueExW(reg.key,'TZI',nil,nil,@item.tzi,@itemsize);
+      if reg.ReadOpen(HKEY_LOCAL_MACHINE,REGKEY+keys[i]+'\Dynamic DST',true) then begin
+        // warning: never defined on XP/2003, and not for all entries
+        first := reg.ReadDword('FirstEntry');
+        last := reg.ReadDword('LastEntry');
+        if (first>0) and (last>=first) then begin
+          n := 0;
+          SetLength(item.dyn,last-first+1);
+          for year := first to last do begin
+            itemsize := SizeOf(TTimeZoneInfo);
+            if RegQueryValueExA(reg.key,pointer(UInt32ToUTF8(year)),nil,nil,
+               @item.dyn[n].tzi,@itemsize)=0 then begin
               item.dyn[n].year := year;
               inc(n);
             end;
-            SetLength(item.dyn,n);
-          finally
-            Reg.CloseKey;
           end;
-        fZones.Add(item);
+          SetLength(item.dyn,n);
+        end;
       end;
+      fZones.Add(item);
     end;
-  finally
-    Reg.Free;
-    Keys.Free;
   end;
+  reg.Close;
   fZones.ReHash;
   FreeAndNil(fIds);
   FreeAndNil(fDisplays);
 end;
-{$endif LVCL}
 {$endif MSWINDOWS}
 
 function TSynTimeZone.GetDisplay(const TzId: TTimeZoneID): RawUTF8;
