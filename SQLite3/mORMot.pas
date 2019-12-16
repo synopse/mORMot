@@ -2851,6 +2851,7 @@ type
 
   /// a wrapper containing a RTTI property definition
   // - used for direct Delphi / UTF-8 SQL type mapping/conversion
+  // - doesn't depend on RTL's TypInfo unit, to enhance cross-compiler support
   {$ifdef UNICODE}TPropInfo = record{$else}TPropInfo = object{$endif}
   public
     /// raw retrieval of the property read access definition
@@ -23841,6 +23842,17 @@ begin
     CustomWriter := DefaultCustomWriter;
 end;
 
+function HasDefaultObjArrayWriter(var dyn: TDynArray): boolean;
+var CustomReader: TDynArrayJSONCustomReader;
+    CustomWriter, DefaultWriter: TDynArrayJSONCustomWriter;
+begin
+  result := TTextWriter.GetCustomJSONParser(dyn,CustomReader,CustomWriter);
+  if result then begin
+    DefaultWriter := TObjArraySerializer(nil).DefaultCustomWriter;
+    result := PMethod(@CustomWriter)^.Code=PMethod(@DefaultWriter)^.Code;
+  end;
+end;
+
 procedure TObjArraySerializer.DefaultCustomWriter(const aWriter: TTextWriter; const aValue);
 var opt: TTextWriterWriteObjectOptions;
 begin
@@ -23880,11 +23892,11 @@ begin
     raise EModelException.CreateUTF8('%.Create(%) getter!',[self,fPropType^.Name]);
   fWrapper.Init(fPropType,dummy);
   fWrapper.IsObjArray := fObjArray<>nil;
-  fWrapper.HasCustomJSONParser;
+  fWrapper.HasCustomJSONParser; // set fWrapper.fParser
 end;
 
 procedure TSQLPropInfoRTTIDynArray.GetDynArray(Instance: TObject; var result: TDynArray);
-begin
+begin // fast assignment of fWrapper pre-initialized RTTI
   result.InitFrom(fWrapper,pointer(PtrUInt(Instance)+fGetterIsFieldPropOffset)^);
 end;
 
@@ -52031,7 +52043,6 @@ var Added: boolean;
       PS: PShortString;
       dyn: TDynArray;
       dynObjArray: PClassInstance;
-      U:RawUTF8;
   begin
     if Assigned(OnWriteObject) and OnWriteObject(self,Value,P,Options) then
       exit;
@@ -52213,20 +52224,13 @@ var Added: boolean;
         if not ((woDontStore0 in Options) and (dyn.Count=0)) then begin
           HR(P);
           dynObjArray := P^.DynArrayIsObjArrayInstance;
-          if dynObjArray<>nil then begin
+          if (dynObjArray<>nil) and HasDefaultObjArrayWriter(dyn) then begin
             if dyn.Count=0 then begin
               if woHumanReadableEnumSetAsComment in Options then
                 dynObjArray^.SetCustomComment(CustomComment);
               Add('[',']');
             end else begin // do not use AddDynArrayJSON to support HR
               inc(fHumanReadableLevel);
-              if dyn.HasCustomJSONParser then
-              begin
-                dyn.SaveToJSON(U);
-                AddString(U);
-              end
-              else
-              begin
               Add('[');
               po := dyn.Value^;
               for c := 1 to dyn.Count do begin
@@ -52239,9 +52243,8 @@ var Added: boolean;
               HR;
               Add(']');
               end;
-            end;
-          end else
-            AddDynArrayJSON(dyn);
+            end else
+            AddDynArrayJSON(dyn); // not an ObjArray: record-based serialization
         end;
       end;
       {$ifdef PUBLISHRECORD}
@@ -55552,7 +55555,7 @@ begin
             Include(ValueKindAsm,vIsDynArrayString);
         DynArrayWrapper.Init(ArgTypeInfo,dummy);
         DynArrayWrapper.IsObjArray := vIsObjArray in ValueKindAsm;
-        DynArrayWrapper.HasCustomJSONParser;
+        DynArrayWrapper.HasCustomJSONParser; // set DynArrayWrapper.fParser
       end;
       end;
       case ValueType of

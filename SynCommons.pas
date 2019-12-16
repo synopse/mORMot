@@ -8690,6 +8690,12 @@ type
     // exception otherwise)
     // - it will set back to the default binary + Base64 encoding serialization
     class procedure UnRegisterCustomJSONSerializer(aTypeInfo: pointer);
+    /// retrieve low-level custom serialization callbaks for a dynamic array
+    // - returns TRUE if this array has a custom JSON parser, and set the
+    // corresponding serialization/unserialization callbacks
+    class function GetCustomJSONParser(var DynArray: TDynArray;
+      out CustomReader: TDynArrayJSONCustomReader;
+      out CustomWriter: TDynArrayJSONCustomWriter): boolean;
 
     /// append some chars to the buffer in one line
     // - P should be ended with a #0
@@ -33706,7 +33712,7 @@ begin
   repeat
     L := length(Values[i]);
     if L>0 then begin
-      MoveSmall(pointer(Values[i]),P,L);
+      Move(pointer(Values[i])^,P^,L);
       inc(P,L);
     end;
     if i=high(Values) then
@@ -52580,10 +52586,22 @@ begin
   GlobalJSONCustomParsers.RegisterCallbacks(aTypeInfo,nil,nil);
 end;
 
+class function TTextWriter.GetCustomJSONParser(var DynArray: TDynArray;
+  out CustomReader: TDynArrayJSONCustomReader;
+  out CustomWriter: TDynArrayJSONCustomWriter): boolean;
+begin
+  result := DynArray.HasCustomJSONParser; // use var above since may set fParser
+  if result then
+    with GlobalJSONCustomParsers.fParser[DynArray.fParser] do begin
+      CustomReader := Reader;
+      CustomWriter := Writer;
+    end;
+end;
+
 {$ifndef NOVARIANTS}
 class procedure TTextWriter.RegisterCustomJSONSerializerForVariant(
-  aClass: TCustomVariantType;
-  aReader: TDynArrayJSONCustomReader; aWriter: TDynArrayJSONCustomWriter);
+  aClass: TCustomVariantType; aReader: TDynArrayJSONCustomReader;
+  aWriter: TDynArrayJSONCustomWriter);
 begin // here we register TCustomVariantTypeClass info instead of TypeInfo()
   GlobalJSONCustomParsers.RegisterCallbacksVariant(aClass,aReader,aWriter);
 end;
