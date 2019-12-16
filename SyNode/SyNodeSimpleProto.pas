@@ -147,11 +147,7 @@ begin
   found := False;
   for I := 0 to Length((AObj.proto as TSMSimpleRTTIProtoObject).FRTTIPropsCache)-1 do begin
     Result := @(AObj.proto as TSMSimpleRTTIProtoObject).FRTTIPropsCache[i];
-{$IFDEF SM52}
     if strComparePropGetterSetter(propName, Result.jsName, false) then begin
-{$ELSE}
-    if Result.jsName = propName then begin
-{$ENDIF}
       found := True;
       Break;
     end;
@@ -224,11 +220,7 @@ begin
     found := false;
     for i := 0 to Length((Instance.proto as TSMSimpleRTTIProtoObject).FRTTIPropsCache)-1 do begin
       propCache := @(Instance.proto as TSMSimpleRTTIProtoObject).FRTTIPropsCache[i];
-{$IFDEF SM52}
       if strComparePropGetterSetter(prop_name, propCache.jsName, true) then begin
-{$ELSE}
-        if propCache.jsName = prop_name then begin
-{$ENDIF}
         found := True;
         Break;
       end;

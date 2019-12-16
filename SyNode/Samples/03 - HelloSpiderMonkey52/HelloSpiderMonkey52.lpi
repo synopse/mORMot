@@ -50,7 +50,7 @@
       <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Other>
-      <CustomOptions Value="-dSM52"/>
+      <CustomOptions Value=""/>
     </Other>
   </CompilerOptions>
   <Debugging>
