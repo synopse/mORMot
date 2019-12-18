@@ -1900,7 +1900,11 @@ end;
       {$L static\x86_64-win64\eccwin64O1.o}
     {$endif}
     {$ifdef ECC_O2}
+      {$ifdef FPC}
       {$L static\x86_64-win64\eccwin64O2.o}
+      {$else}
+      {$L SynEcc64O2.o} // same file as static\x86_64-win64\eccwin64O2.o
+      {$endif}
     {$endif}
     {$ifdef ECC_O3}
       {$L static\x86_64-win64\eccwin64O3.o}
