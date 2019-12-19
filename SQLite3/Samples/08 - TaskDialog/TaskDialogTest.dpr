@@ -15,6 +15,7 @@ uses
   win32extra,  // for TaskDialogIndirect
   {$ENDIF}
   {$else}
+  SynCommons,
   SynTaskDialog,
   {$endif}
   mORMot,
