@@ -22936,7 +22936,7 @@ begin
 end;
 
 procedure QuotedStr(const S: RawUTF8; Quote: AnsiChar; var result: RawUTF8);
-var i,L,quote1,nquote: PtrInt;
+var i,L,quote1,nquote,dualquotes: PtrInt;
     P: PUTF8Char;
     c: AnsiChar;
 begin
@@ -22968,6 +22968,7 @@ begin
     Move(pointer(s)^,P^,L);
     P[L] := Quote;
   end else begin
+    dualquotes := ord(Quote)+ord(Quote)shl 8;
     MoveSmall(pointer(s),P,quote1);
     inc(P,quote1);
     P^ := Quote;
@@ -22975,7 +22976,7 @@ begin
     for i := quote1+1 to L do begin
       c := S[i];
       if c=Quote then begin
-        PWord(P)^ := ord('"')+ord('"')shl 8;
+        PWord(P)^ := dualquotes;
         inc(P,2);
       end else begin
         P^ := c;
