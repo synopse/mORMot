@@ -702,7 +702,7 @@ function TDDDAppSettingsAbstract.SyslogEvent(Sender: TTextWriter; Level: TSynLog
   const Text: RawUTF8): boolean;
 var
   buf: array[0..511] of AnsiChar; // 512 bytes for fast unfragmented UDP packet
-  len: integer;
+  len: PtrInt;
 begin
   result := false;
   if (fSyslog=nil) or not (Level in Log.SyslogLevels) then
@@ -787,7 +787,7 @@ class function TDDDAppSettingsAbstract.PasswordFields: RawUTF8;
         end;
         PI := PI^.Next;
       end;
-      C := C.ClassParent;
+      C := GetClassParent(C);
     end;
   end;
 var i: integer;

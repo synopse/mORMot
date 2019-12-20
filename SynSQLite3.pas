@@ -48,7 +48,7 @@ unit SynSQLite3;
   ***** END LICENSE BLOCK *****
 
 
-       SQLite3 3.29 database engine
+       SQLite3 3.30.1 database engine
       ********************************
 
      Brand new SQLite3 library to be used with Delphi
@@ -135,7 +135,7 @@ unit SynSQLite3;
   - moved all static .obj code into new SynSQLite3Static unit
   - allow either static .obj use via SynSQLite3Static or external .dll linking
     using TSQLite3LibraryDynamic to bind all APIs to the global sqlite3 variable
-  - updated SQLite3 engine to latest version 3.29
+  - updated SQLite3 engine to latest version 3.30.1
   - fixed: internal result cache is now case-sensitive for its SQL key values
   - raise an ESQLite3Exception if DBOpen method is called twice
   - added TSQLite3ErrorCode enumeration and sqlite3_resultToErrorCode()
@@ -525,8 +525,8 @@ type
   // TObject(p).Free
   TSQLDestroyPtr = procedure(p: pointer); cdecl;
 
-  /// SQLite3 collation (i.e. sort and comparaison) function prototype
-  // - this function MUST use s1Len and s2Len parameters during the comparaison:
+  /// SQLite3 collation (i.e. sort and comparison) function prototype
+  // - this function MUST use s1Len and s2Len parameters during the comparison:
   // s1 and s2 are not zero-terminated
   // - used by sqlite3.create_collation low-level function
   TSQLCollateFunc = function(CollateParam: pointer; s1Len: integer; s1: pointer;
@@ -1289,7 +1289,7 @@ type
     close: function(DB: TSQLite3DB): integer; cdecl;
 
     /// Return the version of the SQLite database engine, in ascii format
-    // - currently returns '3.29.0', when used with our SynSQLite3Static unit
+    // - currently returns '3.30.1', when used with our SynSQLite3Static unit
     // - if an external SQLite3 library is used, version may vary
     // - you may use the VersionText property (or Version for full details) instead
     libversion: function: PUTF8Char; cdecl;
@@ -4210,8 +4210,10 @@ var R: TSQLRequest;
     Count: PtrInt;
     Timer: TPrecisionTimer;
 begin
-  if self=nil then
+  if self=nil then begin
+    result := '';
     exit; // avoid GPF in case of call from a static-only server
+  end;
   Timer.Start;
   result := LockJSON(aSQL,aResultCount); // lock and try getting the request from the cache
   if result='' then // only Execute the DB request if not got from cache
@@ -4375,8 +4377,10 @@ end;
 
 function TSQLDataBase.LockJSON(const aSQL: RawUTF8; aResultCount: PPtrInt): RawUTF8;
 begin
-  if self=nil then
+  if self=nil then begin
+    result := '';
     exit; // avoid GPF in case of call from a static-only server
+  end;
   fSafe.Lock; // cache access is also protected by fSafe
   try
     if IsCacheable(aSQL) then begin
@@ -5642,7 +5646,7 @@ end;
 
 procedure TSQLStatementCached.Init(aDB: TSQLite3DB);
 begin
-  Caches.Init(TypeInfo(TSQLStatementCacheDynArray),Cache,nil,nil,nil,@Count);
+  Caches.InitSpecific(TypeInfo(TSQLStatementCacheDynArray),Cache,djRawUTF8,@Count);
   DB := aDB;
 end;
 

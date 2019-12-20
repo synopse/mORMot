@@ -58,7 +58,7 @@ unit SynTests;
 *)
 
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -212,14 +212,39 @@ type
     // ! if CheckNot(A<>10) then exit;
     function CheckNot(condition: Boolean; const msg: string = ''): Boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// used by the published methods to run test assertion against integers
+    // - if a<>b, will fail and include '#<>#' text before the supplied msg
+    function CheckEqual(a,b: Int64; const msg: RawUTF8 = ''): Boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// used by the published methods to run test assertion against UTF-8 strings
+    // - if a<>b, will fail and include '#<>#' text before the supplied msg
+    function CheckEqual(const a,b: RawUTF8; const msg: RawUTF8 = ''): Boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// used by the published methods to run test assertion against pointers/classes
+    // - if a<>b, will fail and include '#<>#' text before the supplied msg
+    function CheckEqual(a,b: pointer; const msg: RawUTF8 = ''): Boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// used by the published methods to run test assertion against integers
+    // - if a=b, will fail and include '#=#' text before the supplied msg
+    function CheckNotEqual(a,b: Int64; const msg: RawUTF8 = ''): Boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// used by the published methods to run test assertion against UTF-8 strings
+    // - if a=b, will fail and include '#=#' text before the supplied msg
+    function CheckNotEqual(const a,b: RawUTF8; const msg: RawUTF8 = ''): Boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// used by the published methods to run test assertion against pointers/classes
+    // - if a=b, will fail and include '#=#' text before the supplied msg
+    function CheckNotEqual(a,b: pointer; const msg: RawUTF8 = ''): Boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run a test assertion about two double values
+    // - includes some optional precision argument
     function CheckSame(const Value1,Value2: double;
       const Precision: double=1E-12; const msg: string = ''): Boolean;
     /// perform a string comparison with several value
     // - test passes if (Value=Values[0]) or (Value=Value[1]) or (Value=Values[2])...
     // and ExpectedResult=true
-    procedure CheckMatchAny(const Value: RawUTF8; const Values: array of RawUTF8;
-      CaseSentitive: Boolean=true; ExpectedResult: Boolean=true; const msg: string = '');
+    function CheckMatchAny(const Value: RawUTF8; const Values: array of RawUTF8;
+      CaseSentitive: Boolean=true; ExpectedResult: Boolean=true; const msg: string = ''): Boolean;
     /// used by the published methods to run a test assertion, with a error
     // message computed via FormatUTF8()
     // - condition must equals TRUE to pass the test
@@ -456,6 +481,11 @@ type
   end;
 
 
+const
+  EQUAL_MSG = '%<>% %';
+  NOTEQUAL_MSG = '%=% %';
+
+
 implementation
 
 {$ifdef FPC}
@@ -590,17 +620,55 @@ begin
   result := CheckFailed(not condition, msg);
 end;
 
-function TSynTestCase.CheckSame(const Value1, Value2, Precision: double;
-  const msg: string): Boolean;
+function TSynTestCase.CheckEqual(a,b: Int64; const msg: RawUTF8): Boolean;
 begin
-  result := SameValue(Value1,Value2,Precision);
-  Check(result,msg);
+  result := a=b;
+  CheckUTF8(result,EQUAL_MSG,[a,b,msg]);
 end;
 
-procedure TSynTestCase.CheckMatchAny(const Value: RawUTF8;
-  const Values: array of RawUTF8; CaseSentitive,ExpectedResult: Boolean; const msg: string);
+function TSynTestCase.CheckEqual(const a,b,msg: RawUTF8): Boolean;
 begin
-  Check((FindRawUTF8(Values,Value,CaseSentitive)>=0)=ExpectedResult);
+  result := a=b;
+  CheckUTF8(result,EQUAL_MSG,[a,b,msg]);
+end;
+
+function TSynTestCase.CheckEqual(a,b: pointer; const msg: RawUTF8): Boolean;
+begin
+  result := a=b;
+  CheckUTF8(result,EQUAL_MSG,[a,b,msg]);
+end;
+
+function TSynTestCase.CheckNotEqual(a,b: Int64; const msg: RawUTF8): Boolean;
+begin
+  result := a<>b;
+  CheckUTF8(result,NOTEQUAL_MSG,[a,b,msg]);
+end;
+
+function TSynTestCase.CheckNotEqual(const a,b,msg: RawUTF8): Boolean;
+begin
+  result := a<>b;
+  CheckUTF8(result,NOTEQUAL_MSG,[a,b,msg]);
+end;
+
+function TSynTestCase.CheckNotEqual(a,b: pointer; const msg: RawUTF8): Boolean;
+begin
+  result := a<>b;
+  CheckUTF8(result,NOTEQUAL_MSG,[a,b,msg]);
+end;
+
+function TSynTestCase.CheckSame(const Value1, Value2: double;
+  const Precision: double; const msg: string): Boolean;
+begin
+  result := SameValue(Value1,Value2,Precision);
+  CheckUTF8(result,EQUAL_MSG,[Value1,Value2,msg]);
+end;
+
+function TSynTestCase.CheckMatchAny(const Value: RawUTF8;
+  const Values: array of RawUTF8; CaseSentitive: Boolean;
+  ExpectedResult: Boolean; const msg: string): Boolean;
+begin
+  result := (FindRawUTF8(Values,Value,CaseSentitive)>=0)=ExpectedResult;
+  Check(result);
 end;
 
 procedure TSynTestCase.CheckUTF8(condition: Boolean; const msg: RawUTF8;

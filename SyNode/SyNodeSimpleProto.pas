@@ -175,16 +175,13 @@ begin
   val := vp.argv[0];
   case PI.PropType^{$IFNDEF FPC}^{$ENDIF}.Kind of
     tkInteger, tkEnumeration, tkSet{$ifdef FPC},tkBool{$endif}:
-      PI.SetOrdValue(Instance^.instance,val.asInteger);
+      PI.SetOrdProp(Instance^.instance,val.asInteger);
     tkInt64:
-      PI.SetInt64Value(Instance^.instance, val.asInt64);
+      PI.SetInt64Prop(Instance^.instance, val.asInt64);
     tkFloat:
-      PI.SetExtendedvalue(Instance^.instance, val.asDouble);
-    tkLString{$IFDEF FPC}, tkAString{$ENDIF}:
+      PI.SetFloatProp(Instance^.instance, val.asDouble);
+    tkLString,{$IFDEF FPC}tkLStringOld{$ENDIF},tkWString{$ifdef HASVARUSTRING},tkUString{$endif}:
       PI.SetLongStrValue(Instance^.instance, val.asJsString.ToUTF8(cx));
-    {$ifdef UNICODE} tkUString:
-      PI.SetUnicodeStrValue(Instance^.instance, val.asJsString.ToSynUnicode(cx));
-    {$endif}
   else
     raise ESMException.Create('NotImplemented');
   end;
@@ -281,17 +278,14 @@ begin
     tkInt64:
       Result.asInt64 := PI.GetInt64Value(Instance^.instance);
     tkFloat:
-      Result.asDouble := PI.GetExtendedValue(Instance^.instance);
-    tkLString{$ifdef FPC},tkAString{$endif}: begin
+      Result.asDouble := PI.GetDoubleValue(Instance^.instance);
+    tkLString,{$ifdef FPC}tkLStringOld,{$endif}tkWString{$ifdef HASVARUSTRING},tkUString{$endif}: begin
       PI.GetLongStrValue(Instance^.instance, tmp);
       Result.asJSString := cx.NewJSString(tmp);
     end;
-    {$ifdef UNICODE} tkUString:
-      Result.asJSString := cx.NewJSString(PI.GetUnicodeStrValue(Instance^.instance));
-    {$endif}
-    tkClass : begin
+    tkClass: begin
        new(FInst);
-       obj := TObject(PI.GetOrdValue(Instance^.instance));
+       obj := PI.GetObjProp(Instance^.instance);
        if obj <> nil then
          Result := FInst.CreateForObj(cx, obj, TSMSimpleRTTIProtoObject, Instance.Proto)
        else
@@ -299,7 +293,7 @@ begin
     end;
     tkDynArray: begin
        // MPV. WARNING. Every access to dyn array property will create a JS Array, so
-       // I recommend avoiding use of the dynamic arrays
+       // I recommend avoiding use of the dynamic arrays, or use a temp variable
        arr := PI.GetDynArray(Instance^.instance);
        Result.asJson[cx] := arr.SaveToJSON(true);
     end;

@@ -30,7 +30,7 @@ unit SynOleDB;
 
   Contributor(s):
   - Esteban Martin (EMartin)
-  - Pavel (mpv)
+  - Pavel Mashlyakovskii (mpv)
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -116,7 +116,7 @@ unit SynOleDB;
   - added TOleDBInformixConnectionProperties - by EMartin
 }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -1314,7 +1314,7 @@ end;
 { TOleDBStatement }
 
 procedure TOleDBStatement.BindTextU(Param: Integer; const Value: RawUTF8;
-  IO: TSQLDBParamInOutType=paramIn);
+  IO: TSQLDBParamInOutType);
 begin
   if (Value='') and fConnection.Properties.StoreVoidStringAsNull then
     CheckParam(Param,ftNull,IO) else
@@ -1352,13 +1352,13 @@ begin
 end;
 
 procedure TOleDBStatement.BindBlob(Param: Integer; Data: pointer; Size: integer;
-  IO: TSQLDBParamInOutType=paramIn);
+  IO: TSQLDBParamInOutType);
 begin
   SetString(CheckParam(Param,ftBlob,IO)^.VBlob,PAnsiChar(Data),Size);
 end;
 
 procedure TOleDBStatement.Bind(Param: Integer; Value: double;
-  IO: TSQLDBParamInOutType=paramIn);
+  IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param,ftDouble,IO)^.VInt64 := PInt64(@Value)^;
 end;
@@ -1382,23 +1382,23 @@ begin
     for i := 0 to high(Values) do
       if StoreVoidStringAsNull and (Values[i]='') then
         VArray[i] := 'null' else
-        QuotedStr(pointer(Values[i]),'''',VArray[i]);
+        QuotedStr(Values[i],'''',VArray[i]);
 end;
 
 procedure TOleDBStatement.Bind(Param: Integer; Value: Int64;
-  IO: TSQLDBParamInOutType=paramIn);
+  IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param,ftInt64,IO)^.VInt64 := Value;
 end;
 
 procedure TOleDBStatement.BindCurrency(Param: Integer; Value: currency;
-  IO: TSQLDBParamInOutType=paramIn);
+  IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param,ftCurrency,IO)^.VInt64 := PInt64(@Value)^;
 end;
 
 procedure TOleDBStatement.BindDateTime(Param: Integer; Value: TDateTime;
-  IO: TSQLDBParamInOutType=paramIn);
+  IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param,ftDate,IO)^.VInt64 := PInt64(@Value)^;
 end;
@@ -1443,7 +1443,7 @@ begin
   inherited Create(aConnection);
   fOleDBConnection := TOleDBConnection(aConnection);
   fParam.Init(TypeInfo(TOleDBStatementParamDynArray),fParams,@fParamCount);
-  fColumn.Init(TypeInfo(TSQLDBColumnPropertyDynArray),fColumns,nil,nil,nil,@fColumnCount,True);
+  fColumn.InitSpecific(TypeInfo(TSQLDBColumnPropertyDynArray),fColumns,djRawUTF8,@fColumnCount,True);
   fRowBufferSize := 16384;
   fAlignBuffer := true;
 end;
@@ -1615,7 +1615,7 @@ begin
     ftCurrency: result := Curr64ToStr(V^.Int64);
     ftDouble:
       if V^.Int64=0 then
-        result := '0' else
+        result := SmallUInt32UTF8[0] else
         result := DoubleToStr(V^.Double);
     end;
 end;
@@ -1770,7 +1770,7 @@ begin
     result := VType;
     case VType of
       ftInt64:     Value := {$ifdef DELPHI5OROLDER}integer{$endif}(VInt64);
-      ftDouble:    Value := PDouble(@VInt64)^;
+      ftDouble:    Value := unaligned(PDouble(@VInt64)^);
       ftCurrency:  Value := PCurrency(@VInt64)^;
       ftDate:      Value := PDateTime(@VInt64)^;
       ftUTF8:      Value := VText; // returned as WideString/OleStr variant
@@ -2596,7 +2596,7 @@ begin
       end;
     SynDBLog.Add.Log(sllDB,'CreateDatabase for "%" returned %',[ConnectionString,ord(result)]);
   finally
-    VarClear(DB);
+    DB := null;
     Catalog := nil;
     CoUninit;
   end;

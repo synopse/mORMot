@@ -64,7 +64,7 @@ unit SynBidirSock;
 
 }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -92,8 +92,8 @@ uses
   SynCommons,
   SynLog,
   SynCrtSock,
-  SynCrypto,
-  SynEcc;
+  SynCrypto, // for SHA and AES
+  SynEcc;    // for TECDHEProtocol
 
 
 { -------------- high-level SynCrtSock classes depending on SynCommons }
@@ -360,6 +360,7 @@ type
   TAsynchServer = class(TAsynchConnections)
   protected
     fServer: TCrtSocket;
+    fExecuteFinished: boolean;
     procedure Execute; override;
   public
     /// run the TCP server, listening on a supplied IP port
@@ -770,6 +771,10 @@ type
     // REST commands or NotifyCallback(wscNonBlockWithoutAnswer) to be processed
     // with a lower delay
     LoopDelay: cardinal;
+    /// ms between sending - allow to gather output frames
+    // - GetTickCount resolution is around 16ms under Windows, so default 10ms
+    // seems fine for a cross-platform similar behavior
+    SendDelay: cardinal;
     /// will close the connection after a given number of invalid Heartbeat sent
     // - when a Hearbeat is failed to be transmitted, the class will start
     // counting how many ping/pong did fail: when this property value is
@@ -813,9 +818,9 @@ type
   TWebSocketProcessState = (wpsCreate,wpsRun,wpsClose,wpsDestroy);
 
   /// abstract WebSockets process, used on both client or server sides
-  // - GetFrame/SendFrame abstract methods should be overriden with actual
-  // communication, and fState and ProcessStart/ProcessStop should be updated
-  // from the actual processing thread (e.g. as in TWebCrtSocketProcess)
+  // - CanGetFrame/GetFrame/SendFrame abstract methods should be overriden with
+  // actual communication, and fState and ProcessStart/ProcessStop should be
+  // updated from the actual processing thread (e.g. as in TWebCrtSocketProcess)
   TWebSocketProcess = class(TSynPersistent)
   protected
     fProcessName: RawUTF8;
@@ -831,9 +836,22 @@ type
     fProcessEnded: boolean;
     fNoConnectionCloseAtDestroy: boolean;
     fSafeIn, fSafeOut: PSynLocker;
-    /// methods run e.g. by TWebSocketServerRest.WebSocketProcessLoop
+    fInvalidPingSendCount: cardinal;
+    fSafePing: PSynLocker;
+    fLastSocketTicks: Int64;
+    function LastPingDelay: Int64;
+    procedure SetLastPingTicks(invalidPing: boolean=false);
+    /// callback methods run by ProcessLoop
     procedure ProcessStart; virtual;
     procedure ProcessStop; virtual;
+    // called by ProcessLoop - TRUE=continue, FALSE=ended
+    // - caller may have checked that some data is pending to read
+    function ProcessLoopStepReceive: boolean;
+    // called by ProcessLoop - TRUE=continue, FALSE=ended
+    // - caller may check that LastPingDelay>fSettings.SendDelay and Socket is writable
+    function ProcessLoopStepSend: boolean;
+    // blocking process, for one thread handling all WebSocket connection process
+    procedure ProcessLoop;
     function ComputeContext(out RequestProcess: TOnHttpServerRequest): THttpServerRequest; virtual; abstract;
     procedure HiResDelay(const start: Int64);
     procedure Log(const frame: TWebSocketFrame; const aMethodName: RawUTF8;
@@ -849,9 +867,14 @@ type
     /// finalize the context
     // - will release the TWebSocketProtocol associated instance
     destructor Destroy; override;
-    /// abstract low level incoming WebSockets framing protocol -> to be overriden
-    function GetFrame(out Frame: TWebSocketFrame; TimeOut: cardinal;
-      ErrorWithoutException: PInteger): boolean; virtual; abstract;
+    /// abstract low-level method to check if there is some pending data
+    // in the input Socket ready for GetFrame()
+    // - is defined separated to allow multi-thread pooling
+    function CanGetFrame(TimeOut: cardinal; ErrorWithoutException: PInteger): boolean;
+      virtual; abstract;
+    /// abstract low-level incoming WebSockets framing protocol -> to be overriden
+    // - CanGetFrame should have been called and returned true before
+    function GetFrame(out Frame: TWebSocketFrame; ErrorWithoutException: PInteger): boolean; virtual; abstract;
     /// abstract low level outgoing WebSockets framing protocol -> to be overriden
     // - use Outgoing.Push() to send frames asynchronously
     function SendFrame(var Frame: TWebSocketFrame): boolean; virtual; abstract;
@@ -889,6 +912,9 @@ type
     property Protocol: TWebSocketProtocol read fProtocol;
     /// the associated process name
     property ProcessName: RawUTF8 read fProcessName write fProcessName;
+    /// how many invalid heartbeat frames have been sent
+    // - a non 0 value indicates a connection problem
+    property InvalidPingSendCount: cardinal read fInvalidPingSendCount;
   end;
 
   /// TCrtSocket-based WebSockets process, used on both client or server sides
@@ -896,13 +922,6 @@ type
   TWebCrtSocketProcess = class(TWebSocketProcess)
   protected
     fSocket: TCrtSocket;
-    fLastSocketTicks: Int64;
-    fInvalidPingSendCount: cardinal;
-    fSafePing: PSynLocker;
-    function LastPingDelay: Int64;
-    procedure SetLastPingTicks(invalidPing: boolean=false);
-    // called by the thread handling the TCrtSocket processing
-    procedure ProcessLoop;
   public
     /// initialize the WebSockets process on a given TCrtSocket connection
     // - the supplied TWebSocketProtocol will be owned by this instance
@@ -911,21 +930,17 @@ type
       aOwnerConnection: Int64; aOwnerThread: TSynThread;
       const aSettings: TWebSocketProcessSettings;
       const aProcessName: RawUTF8); reintroduce; virtual;
-    /// finalize the WebSockets process context
-    destructor Destroy; override;
-    /// low level incoming WebSockets framing protocol over TCrtSocket
-    function GetFrame(out Frame: TWebSocketFrame; TimeOut: cardinal;
-      ErrorWithoutException: PInteger): boolean; override;
+    /// first step of the low level incoming WebSockets framing protocol over TCrtSocket
+    // - in practice, just call fSocket.SockInPending to check for pending data
+    function CanGetFrame(TimeOut: cardinal; ErrorWithoutException: PInteger): boolean; override;
+    /// 2nd step of the low level incoming WebSockets framing protocol over TCrtSocket
+    function GetFrame(out Frame: TWebSocketFrame; ErrorWithoutException: PInteger): boolean; override;
     /// low level outgoing WebSockets framing protocol over TCrtSocket
     function SendFrame(var Frame: TWebSocketFrame): boolean; override;
     /// the associated communication socket
     // - on the server side, is a THttpServerSocket
     // - access to this instance is protected by Safe.Lock/Unlock
     property Socket: TCrtSocket read fSocket;
-  published
-    /// how many invalid heartbeat frames have been sent
-    // - a non 0 value indicates a connection problem
-    property InvalidPingSendCount: cardinal read fInvalidPingSendCount;
   end;
 
 
@@ -968,12 +983,12 @@ type
     fWebSocketConnections: TObjectListLocked;
     fProtocols: TWebSocketProtocolList;
     fSettings: TWebSocketProcessSettings;
-    /// will validate the WebSockets handshake, then call WebSocketProcessLoop()
+    /// validate the WebSockets handshake, then call Context.fProcess.ProcessLoop()
     function WebSocketProcessUpgrade(ClientSock: THttpServerSocket;
       Context: TWebSocketServerResp): integer; virtual;
     /// overriden method which will recognize the WebSocket protocol handshake,
     // then run the whole bidirectional communication in its calling thread
-    // - here aCallingThread is a THttpServerResp, and ClientSock.Headers
+    // - here ConnectionThread is a THttpServerResp, and ClientSock.Headers
     // and ConnectionUpgrade properties should be checked for the handshake
     procedure Process(ClientSock: THttpServerSocket;
       ConnectionID: integer; ConnectionThread: TSynThread); override;
@@ -1340,6 +1355,7 @@ procedure TWebSocketProcessSettings.SetDefaults;
 begin
   HeartbeatDelay := 0;
   LoopDelay := 500;
+  SendDelay := 10;
   DisconnectAfterInvalidHeartbeatCount := 5;
   CallbackAcquireTimeOutMS := 5000;
   CallbackAnswerTimeOutMS := 5000;
@@ -2057,17 +2073,19 @@ end;
 function TWebSocketProtocolBinary.GetFramesInCompression: integer;
 begin
   if (self=nil) or (fFramesInBytes=0) then
-    result := 0 else
-    result := (fFramesInBytesSocket*100) div fFramesInBytes;
-  result := 100-result;
+    result := 100 else
+    if not fCompressed or (fFramesInBytesSocket<fFramesInBytes) then
+      result := 0 else
+      result := 100-(fFramesInBytesSocket*100) div fFramesInBytes;
 end;
 
 function TWebSocketProtocolBinary.GetFramesOutCompression: integer;
 begin
   if (self=nil) or (fFramesOutBytes=0) then
-    result := 0 else
-    result := (fFramesOutBytesSocket*100) div fFramesOutBytes;
-  result := 100-result;
+    result := 100 else
+    if not fCompressed or (fFramesOutBytesSocket<=fFramesOutBytes) then
+      result := 0 else
+      result := 100-(fFramesOutBytesSocket*100) div fFramesOutBytes;
 end;
 
 function TWebSocketProtocolBinary.ProcessHandshake(const ExtIn: TRawUTF8DynArray;
@@ -2266,6 +2284,7 @@ begin
   fOutgoing := TWebSocketFrameList.Create(0);
   fSafeIn := NewSynLocker;
   fSafeOut := NewSynLocker;
+  fSafePing := NewSynLocker;
 end;
 
 destructor TWebSocketProcess.Destroy;
@@ -2283,7 +2302,8 @@ begin
         SendPendingOutgoingFrames;
       frame.opcode := focConnectionClose;
       if SendFrame(frame) then // notify clean closure
-        GetFrame(frame,1000,@dummyerror);  // expects an answer from other side
+        if CanGetFrame(1000,@dummyerror) then
+          GetFrame(frame,@dummyerror);  // expects an answer from peer
     finally
       InterlockedDecrement(fProcessCount);
     end else
@@ -2301,6 +2321,7 @@ begin
   fIncoming.Free;
   fSafeIn.DoneAndFreeMem;
   fSafeOut.DoneAndFreeMem;
+  fSafePing.DoneAndFreeMem; // to be done lately to avoid GPF in above Destroy
   inherited Destroy;
 end;
 
@@ -2327,6 +2348,125 @@ begin
   except
   end;
   fProcessEnded := true;
+end;
+
+procedure TWebSocketProcess.SetLastPingTicks(invalidPing: boolean);
+var tix: Int64;
+begin
+  tix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
+  fSafePing.Lock;
+  try
+    fLastSocketTicks := tix;
+    if invalidPing then begin
+      inc(fInvalidPingSendCount);
+      fNoConnectionCloseAtDestroy := true;
+    end else
+      fInvalidPingSendCount := 0;
+  finally
+    fSafePing.UnLock;
+  end;
+end;
+
+function TWebSocketProcess.LastPingDelay: Int64;
+begin
+  result := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
+  fSafePing.Lock;
+  try
+    dec(result,fLastSocketTicks);
+  finally
+    fSafePing.UnLock;
+  end;
+end;
+
+function TWebSocketProcess.ProcessLoopStepReceive: boolean;
+var request: TWebSocketFrame;
+    sockerror: integer;
+begin
+  if fState=wpsRun then begin
+    InterlockedIncrement(fProcessCount); // flag currently processing
+    try
+      if CanGetFrame(1,@sockerror) and GetFrame(request,@sockerror) then begin
+        case request.opcode of
+        focPing: begin
+          request.opcode := focPong;
+          SendFrame(request);
+        end;
+        focPong:
+          ; // nothing to do
+        focText,focBinary:
+          fProtocol.ProcessIncomingFrame(self,request,'');
+        focConnectionClose: begin
+          if fState=wpsRun then begin
+            fState := wpsClose; // will close the connection
+            SendFrame(request);
+          end;
+        end;
+        end;
+      end else
+      if (fOwnerThread<>nil) and fOwnerThread.Terminated then
+        fState := wpsClose else
+      if sockerror<>0 then begin
+        WebSocketLog.Add.Log(sllInfo,'GetFrame SockInPending error % on %',
+          [sockerror,fProtocol],self);
+        fState := wpsClose;
+      end;
+    finally
+      InterlockedDecrement(fProcessCount); // release flag
+    end;
+  end;
+  result := (fState=wpsRun);
+end;
+
+function TWebSocketProcess.ProcessLoopStepSend: boolean;
+var request: TWebSocketFrame;
+    elapsed: cardinal;
+begin
+  if fState=wpsRun then begin
+    InterlockedIncrement(fProcessCount); // flag currently processing
+    try
+      elapsed := LastPingDelay;
+      if elapsed>fSettings.SendDelay then
+        if (fOutgoing.Count>0) and not SendPendingOutgoingFrames then
+          fState := wpsClose
+        else
+        if (fSettings.HeartbeatDelay<>0) and
+           (elapsed>fSettings.HeartbeatDelay) then begin
+          request.opcode := focPing;
+          if not SendFrame(request) then
+            if (fSettings.DisconnectAfterInvalidHeartbeatCount<>0) and
+               (fInvalidPingSendCount>=fSettings.DisconnectAfterInvalidHeartbeatCount) then
+              fState := wpsClose
+            else
+              SetLastPingTicks(true); // mark invalid, and avoid immediate retry
+        end;
+    finally
+      InterlockedDecrement(fProcessCount); // release flag
+    end;
+  end;
+  result := (fState=wpsRun);
+end;
+
+procedure TWebSocketProcess.ProcessLoop;
+begin
+  if fProtocol=nil then
+    exit;
+  ProcessStart; // any exception will close the socket
+  try
+    SetLastPingTicks;
+    fState := wpsRun;
+    while (fOwnerThread=nil) or not fOwnerThread.Terminated do
+      try
+        if ProcessLoopStepReceive and ProcessLoopStepSend then
+          HiResDelay(fLastSocketTicks)
+        else
+          break; // connection ended
+      except
+        fState := wpsClose;
+        break; // don't be optimistic: abort and close connection
+      end;
+  finally
+    ProcessStop;
+  end;
 end;
 
 procedure TWebSocketProcess.HiResDelay(const start: Int64);
@@ -2518,17 +2658,27 @@ constructor TWebCrtSocketProcess.Create(aSocket: TCrtSocket;
 begin
   inherited Create(aProtocol,aOwnerConnection,aOwnerThread,aSettings,aProcessName);
   fSocket := aSocket;
-  fSafePing := NewSynLocker;
 end;
 
-destructor TWebCrtSocketProcess.Destroy;
+function TWebCrtSocketProcess.CanGetFrame(TimeOut: cardinal; ErrorWithoutException: PInteger): boolean;
+var pending: integer;
 begin
-  inherited Destroy;
-  fSafePing.DoneAndFreeMem; // to be done lately to avoid GPF in above Destroy
+  if ErrorWithoutException<>nil then
+    ErrorWithoutException^ := 0;
+  pending := fSocket.SockInPending(TimeOut,{PendingAlsoInSocket=}true);
+  if pending<0 then // socket error
+    if ErrorWithoutException<>nil then begin
+      ErrorWithoutException^ := fSocket.LastLowSocketError;
+      result := false;
+      exit;
+    end else
+      raise EWebSockets.CreateUTF8('SockInPending() Error % on %:% - from %',
+        [fSocket.LastLowSocketError,fSocket.Server,fSocket.Port,fProtocol.fRemoteIP]);
+  result := (pending>=2);
 end;
 
 function TWebCrtSocketProcess.GetFrame(out Frame: TWebSocketFrame;
-  TimeOut: cardinal; ErrorWithoutException: PInteger): boolean;
+  ErrorWithoutException: PInteger): boolean;
 var hdr: TFrameHeader;
     opcode: TWebSocketFrameOpCode;
     masked: boolean;
@@ -2569,25 +2719,10 @@ var hdr: TFrameHeader;
   end;
 
 var data: RawByteString;
-    pending: integer;
 begin
-  if ErrorWithoutException<>nil then
-    ErrorWithoutException^ := 0;
   result := false;
   fSafeIn.Lock;
   try
-    pending := fSocket.SockInPending(TimeOut,false);
-    if pending<0 then
-      if ErrorWithoutException<>nil then begin
-        ErrorWithoutException^ := fSocket.LastLowSocketError;
-        exit;
-      end else
-        raise EWebSockets.CreateUTF8('SockInPending() Error % on %:% - %',
-          [fSocket.LastLowSocketError,fSocket.Server,fSocket.Port,fProtocol.fRemoteIP]);
-    if pending=1 then // 0=noneinbufferorsocket, 1=onlybuffer, 2=enough
-      pending := fSocket.SockInPending(TimeOut,true); // aSocketForceCheck=true
-    if pending<2 then
-      exit; // not enough data available
     GetHeader;
     Frame.opcode := opcode;
     Frame.content := [];
@@ -2667,108 +2802,6 @@ begin
     end;
   finally
     fSafeOut.UnLock;
-  end;
-end;
-
-procedure TWebCrtSocketProcess.ProcessLoop;
-var request: TWebSocketFrame;
-    elapsed: cardinal;
-    sockerror: integer;
-begin
-  if fProtocol=nil then
-    exit;
-  ProcessStart; // any exception will close the socket
-  try
-    SetLastPingTicks;
-    fState := wpsRun;
-    while (fState<>wpsDestroy) and not fOwnerThread.Terminated do
-      try
-        InterlockedIncrement(fProcessCount);
-        try
-          if GetFrame(request,1,@sockerror) then begin
-            case request.opcode of
-            focPing: begin
-              request.opcode := focPong;
-              SendFrame(request);
-            end;
-            focPong:
-              continue;
-            focText,focBinary:
-              fProtocol.ProcessIncomingFrame(self,request,'');
-            focConnectionClose: begin
-              if fState=wpsRun then begin
-                fState := wpsClose;
-                SendFrame(request);
-              end;
-              break; // will close the connection
-            end;
-            end;
-          end else
-          if fOwnerThread.Terminated then
-            break else
-          if sockerror<>0 then begin
-            WebSocketLog.Add.Log(sllInfo,'GetFrame SockInPending error % on %',
-              [sockerror,fProtocol],self);
-            fState := wpsClose;
-            break; // will close the connection
-          end else begin
-            elapsed := LastPingDelay;
-            if elapsed>0 then
-              if (fOutgoing.Count>0) and not SendPendingOutgoingFrames then begin
-                fState := wpsClose;
-                break; // and close
-              end else
-              if (fSettings.HeartbeatDelay<>0) and
-                 (elapsed>fSettings.HeartbeatDelay) then begin
-                request.opcode := focPing;
-                if not SendFrame(request) then
-                  if (fSettings.DisconnectAfterInvalidHeartbeatCount<>0) and
-                     (fInvalidPingSendCount>=fSettings.DisconnectAfterInvalidHeartbeatCount) then begin
-                    fState := wpsClose;
-                    break; // and close
-                  end else
-                    SetLastPingTicks(true); // mark invalid, and avoid immediate retry
-              end;
-          end;
-        finally
-          request.payload := '';
-          InterlockedDecrement(fProcessCount);
-        end;
-        HiResDelay(fLastSocketTicks);
-      except
-        fState := wpsClose;
-        break; // don't be optimistic: abort and close connection
-      end;
-  finally
-    ProcessStop;
-  end;
-end;
-
-procedure TWebCrtSocketProcess.SetLastPingTicks(invalidPing: boolean);
-var tix: Int64;
-begin
-  tix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
-  fSafePing.Lock;
-  try
-    fLastSocketTicks := tix;
-    if invalidPing then begin
-      inc(fInvalidPingSendCount);
-      fNoConnectionCloseAtDestroy := true;
-    end else
-      fInvalidPingSendCount := 0;
-  finally
-    fSafePing.UnLock;
-  end;
-end;
-
-function TWebCrtSocketProcess.LastPingDelay: Int64;
-begin
-  result := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
-  fSafePing.Lock;
-  try
-    dec(result,fLastSocketTicks);
-  finally
-    fSafePing.UnLock;
   end;
 end;
 
@@ -3402,7 +3435,7 @@ begin
       pseWrite: begin
         fOwner.fClients.ProcessWrite(30000);
         if {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64>=idletix then begin
-          fOwner.IdleEverySecond;
+          fOwner.IdleEverySecond; // may take some time -> retrieve ticks again
           idletix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64+1000;
         end;
       end;
@@ -3681,10 +3714,15 @@ begin
 end;
 
 destructor TAsynchServer.Destroy;
+var endtix: Int64;
 begin
   Terminate;
   fServer.Close; // shutdown the socket to unlock Accept() in Execute
+  DirectShutdown(CallServer('127.0.0.1',fServer.Port,false,cslTCP,1));
+  endtix := GetTickCount64+10000;
   inherited Destroy;
+  while not fExecuteFinished and (GetTickCount64<endtix) do
+    sleep(1); // wait for Execute to be finalized (unlikely)
   fServer.Free;
 end;
 
@@ -3726,6 +3764,7 @@ begin
       fLog.Add.Log(sllWarning,'Execute raised a % -> terminate %',
         [E.ClassType,fProcessName],self);
   end;
+  fExecuteFinished := true;
 end;
 
 

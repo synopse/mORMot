@@ -204,7 +204,7 @@ unit mORMotSQLite3;
 
     Version 1.18
     - unit SQLite3.pas renamed mORMotSQLite3.pas
-    - updated SQLite3 engine to latest version 3.29
+    - updated SQLite3 engine to latest version 3.30.1
     - BATCH adding in TSQLRestServerDB will now perform SQLite3 multi-INSERT
       statements: performance boost is from 2x (mem with transaction) to 60x
       (full w/out transaction) - faster than SQlite3 as external DB
@@ -1378,7 +1378,8 @@ end;
 function TSQLRestServerDB.MainEngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8;
 var aSQL: RawUTF8;
 begin
-  if (ID<0) or (TableModelIndex<0) or (result<>'') then
+  result := '';
+  if (ID<0) or (TableModelIndex<0) then
     exit;
   with Model.TableProps[TableModelIndex] do
     FormatUTF8('SELECT % FROM % WHERE RowID=:(%):;',

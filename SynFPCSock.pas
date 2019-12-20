@@ -194,7 +194,8 @@ const
 {$IFDEF BSD}
   SO_NOSIGPIPE  = $1022;
 {$ENDIF}
-  SOMAXCONN     = 1024;
+  // we use Linux default here
+  SOMAXCONN     = 128;
 
   IPV6_UNICAST_HOPS     = sockets.IPV6_UNICAST_HOPS;
   IPV6_MULTICAST_IF     = sockets.IPV6_MULTICAST_IF;

@@ -87,7 +87,7 @@ interface
 
 { $D-,L-} // avoid jumping in the source for any EComplete exceptions e.g.
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 uses
   Windows, Messages, SysUtils, Classes, Types, Graphics, Controls, Forms,
@@ -1362,7 +1362,7 @@ begin
         if Assigned(_Text) then
         begin
           {$ifdef UNICODE}
-          if fmt = CF_TEXT then
+          if fmt in [CF_TEXT, CF_UNICODETEXT] then
             Txt := _Text
           else
             Txt := UnicodeString(AnsiString(PAnsiChar(_Text)));

@@ -1,6 +1,6 @@
 program TaskDialogTest;
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64
 
 uses
   {$ifdef FPC}

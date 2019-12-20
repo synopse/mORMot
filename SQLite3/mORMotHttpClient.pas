@@ -142,7 +142,7 @@ interface
 { if defined, TSQLHttpClientWebSockets won't be declared
   - will avoid to link SynBidirSock and SynEcc units }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 WITHLOG
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 WITHLOG
 
 uses
 {$ifdef MSWINDOWS}

@@ -55,7 +55,7 @@ unit SynTable;
 
 interface
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64
 
 uses
   {$ifdef MSWINDOWS}
@@ -1049,6 +1049,10 @@ type
     // - e.g. funcCountStar for the special Count(*) expression or
     // funcDistinct, funcMax for distinct(...)/max(...) aggregation
     FunctionKnown: (funcNone, funcCountStar, funcDistinct, funcMax);
+    /// MongoDB-like sub field e.g. 'mainfield.subfield1.subfield2'
+    // - still identifying 'mainfield' in Field index, and setting
+    // SubField='.subfield1.subfield2'
+    SubField: RawUTF8;
   end;
 
   /// the recognized SELECT expressions for TSynTableStatement
@@ -1068,6 +1072,10 @@ type
     // - WhereField=0 for ID, 1 for field # 0, 2 for field #1,
     // and so on... (i.e. WhereField = RTTI field index +1)
     Field: integer;
+    /// MongoDB-like sub field e.g. 'mainfield.subfield1.subfield2'
+    // - still identifying 'mainfield' in Field index, and setting
+    // SubField='.subfield1.subfield2'
+    SubField: RawUTF8;
     /// the operator of the WHERE expression
     Operator: TSynTableStatementOperator;
     /// the SQL function name associated to a Field and Value
@@ -1109,7 +1117,7 @@ type
     fWhere: TSynTableStatementWhereDynArray;
     fOrderByField: TSQLFieldIndexDynArray;
     fGroupByField: TSQLFieldIndexDynArray;
-    fWhereHasParenthesis: boolean;
+    fWhereHasParenthesis, fHasSelectSubFields, fWhereHasSubFields: boolean;
     fOrderByDesc: boolean;
     fLimit: integer;
     fOffset: integer;
@@ -1129,7 +1137,10 @@ type
       SimpleFieldsBits: TSQLFieldBits=[0..MAX_SQLFIELDS-1];
       FieldProp: TSynTableFieldProperties=nil);
     /// compute the SELECT column bits from the SelectFields array
-    procedure SelectFieldBits(var Fields: TSQLFieldBits; var withID: boolean);
+    // - optionally set Select[].SubField into SubFields[Select[].Field]
+    // (e.g. to include specific fields from MongoDB embedded document)
+    procedure SelectFieldBits(var Fields: TSQLFieldBits; var withID: boolean;
+      SubFields: PRawUTF8Array=nil);
 
     /// the SELECT SQL statement parsed
     // - equals '' if the parsing failed
@@ -1140,10 +1151,14 @@ type
     property SelectFunctionCount: integer read fSelectFunctionCount;
     /// the retrieved table name
     property TableName: RawUTF8 read fTableName;
+    /// if any Select[].SubField was actually set
+    property HasSelectSubFields: boolean read fHasSelectSubFields;
     /// the WHERE clause of this SQL statement
     property Where: TSynTableStatementWhereDynArray read fWhere;
     /// if the WHERE clause contains any ( ) parenthesis expression
     property WhereHasParenthesis: boolean read fWhereHasParenthesis;
+    /// if the WHERE clause contains any Where[].SubField
+    property WhereHasSubFields: boolean read fWhereHasSubFields;
     /// recognize an GROUP BY clause with one or several fields
     // - here 0 = ID, otherwise RTTI field index +1
     property GroupByField: TSQLFieldIndexDynArray read fGroupByField;
@@ -3997,7 +4012,7 @@ begin
   if P1<>P2 then
     if P1<>nil then
       if P2<>nil then begin
-        V := PDouble(P1)^-PDouble(P2)^;
+        V := unaligned(PDouble(P1)^)-unaligned(PDouble(P2)^);
         if V<0 then
           result := -1 else
         if V=0 then
@@ -4345,7 +4360,7 @@ begin
 end;
 
 procedure TSynTable.UpdateFieldData(RecordBuffer: PUTF8Char; RecordBufferLen,
-  FieldIndex: integer; var result: TSBFString; const NewFieldData: TSBFString='');
+  FieldIndex: integer; var result: TSBFString; const NewFieldData: TSBFString);
 var NewSize, DestOffset, OldSize: integer;
     F: TSynTableFieldProperties;
     NewData, Dest: PAnsiChar;
@@ -4375,7 +4390,7 @@ begin
   // update content
   OldSize :=  F.GetLength(Dest);
   dec(RecordBufferLen,OldSize);
-  SetLength(Result,RecordBufferLen+NewSize);
+  SetString(Result,nil,RecordBufferLen+NewSize);
   MoveFast(RecordBuffer^,PByteArray(result)[0],DestOffset);
   MoveFast(NewData^,PByteArray(result)[DestOffset],NewSize);
   MoveFast(Dest[OldSize],PByteArray(result)[DestOffset+NewSize],RecordBufferLen-DestOffset);
@@ -4839,7 +4854,7 @@ begin
   tftCurrency:
     W.AddCurr64(PInt64(FieldBuffer)^);
   tftDouble:
-    W.AddDouble(PDouble(FieldBuffer)^);
+    W.AddDouble(unaligned(PDouble(FieldBuffer)^));
   // some variable-size field value
   tftVarUInt32:
     W.Add(FromVarUInt32(PByte(FieldBuffer)));
@@ -4933,7 +4948,7 @@ begin
   tftCurrency:
     result := PCurrency(FieldBuffer)^;
   tftDouble:
-    result := PDouble(FieldBuffer)^;
+    result := unaligned(PDouble(FieldBuffer)^);
   // some variable-size field value
   tftVarUInt32:
     result := FromVarUInt32(PB);
@@ -5005,7 +5020,7 @@ begin
   tftCurrency:
     Curr64ToStr(PInt64(FieldBuffer)^,result);
   tftDouble:
-    ExtendedToStr(PDouble(FieldBuffer)^,DOUBLE_PRECISION,result);
+    ExtendedToStr(unaligned(PDouble(FieldBuffer)^),DOUBLE_PRECISION,result);
   // some variable-size field value
   tftVarUInt32:
     UInt32ToUtf8(FromVarUInt32(PB),result);
@@ -5545,7 +5560,7 @@ begin
     result := 0 else
     case FieldType of
     tftDouble:
-      result := PDouble(Owner.GetData(RecordBuffer,self))^;
+      result := unaligned(PDouble(Owner.GetData(RecordBuffer,self))^);
     else
       result := GetInt64(RecordBuffer);
     end;
@@ -5626,10 +5641,10 @@ begin
       tftInt32:
         result := PInteger(P1)^-PInteger(P2)^;
       tftDouble: begin
-        PDouble(@SortCompareTmp)^ := PDouble(P1)^-PDouble(P2)^;
-        if PDouble(@SortCompareTmp)^<0 then
+        unaligned(PDouble(@SortCompareTmp)^) := unaligned(PDouble(P1)^)-unaligned(PDouble(P2)^);
+        if unaligned(PDouble(@SortCompareTmp)^)<0 then
           goto minus else
-        if PDouble(@SortCompareTmp)^>0 then
+        if unaligned(PDouble(@SortCompareTmp)^)>0 then
           goto plus else
           goto zer;
       end;
@@ -5819,12 +5834,12 @@ begin
   if SBF<>nil then
   repeat
     case Oper of
-      soEqualTo:              if PDouble(SBF)^=Value then exit;
-      soNotEqualTo:           if PDouble(SBF)^<>Value then exit;
-      soLessThan:             if PDouble(SBF)^<Value then exit;
-      soLessThanOrEqualTo:    if PDouble(SBF)^<=Value then exit;
-      soGreaterThan:          if PDouble(SBF)^>Value then exit;
-      soGreaterThanOrEqualTo: if PDouble(SBF)^>=Value then exit;
+      soEqualTo:              if unaligned(PDouble(SBF)^)=Value then exit;
+      soNotEqualTo:           if unaligned(PDouble(SBF)^)<>Value then exit;
+      soLessThan:             if unaligned(PDouble(SBF)^)<Value then exit;
+      soLessThanOrEqualTo:    if unaligned(PDouble(SBF)^)<=Value then exit;
+      soGreaterThan:          if unaligned(PDouble(SBF)^)>Value then exit;
+      soGreaterThanOrEqualTo: if unaligned(PDouble(SBF)^)>=Value then exit;
       else break;
     end;
     // not found: go to next value
@@ -5982,15 +5997,16 @@ function GetPropIndex: integer;
 begin
   if not GetNextFieldProp(P,Prop) then
     result := -1 else
-  if IsRowID(pointer(Prop)) then
-    result := 0 else begin // 0 = ID field
-    result := GetFieldIndex(Prop);
-    if result>=0 then // -1 = no valid field name
-      inc(result);  // otherwise: PropertyIndex+1
-  end;
+    if IsRowID(pointer(Prop)) then
+      result := 0 else begin // 0 = ID field
+      result := GetFieldIndex(Prop);
+      if result>=0 then // -1 = no valid field name
+        inc(result);  // otherwise: PropertyIndex+1
+    end;
 end;
 function SetFields: boolean;
 var select: TSynTableStatementSelect;
+    B: PUTF8Char;
 begin
   result := false;
   FillcharFast(select,SizeOf(select),0);
@@ -6017,7 +6033,15 @@ begin
     if P^<>')' then
       exit;
     P := GotoNextNotSpace(P+1);
-  end;
+  end else
+    if P^='.' then begin // MongoDB-like field.subfield1.subfield2
+      B := P;
+      repeat
+        inc(P);
+      until not(ord(P^) in IsJsonIdentifier);
+      FastSetString(select.SubField,B,P-B);
+      fHasSelectSubFields := true;
+    end;
   if P^ in ['+','-'] then begin
     select.ToBeAdded := GetNextItemInteger(P,' ');
     if select.ToBeAdded=0 then
@@ -6060,6 +6084,7 @@ begin
     {$ifndef NOVARIANTS}
     SetVariantNull(Where.ValueVariant);
     {$endif}
+    inc(P,4);
   end else begin
     // numeric statement or 'true' or 'false' (OK for NormalizeValue)
     B := P;
@@ -6132,12 +6157,22 @@ begin
 end;
 {$endif}
 function GetWhereExpression(FieldIndex: integer; var Where: TSynTableStatementWhere): boolean;
+var B: PUTF8Char;
 begin
   result := false;
   Where.ParenthesisBefore := whereBefore;
   Where.JoinedOR := whereWithOR;
   Where.NotClause := whereNotClause;
   Where.Field := FieldIndex; // 0 = ID, otherwise PropertyIndex+1
+  if P^='.' then begin // MongoDB-like field.subfield1.subfield2
+    B := P;
+    repeat
+      inc(P);
+    until not(ord(P^) in IsJsonIdentifier);
+    FastSetString(Where.SubField,B,P-B);
+    fWhereHasSubFields := true;
+    P := GotoNextNotSpace(P);
+  end;
   case P^ of
   '=': Where.Operator := opEqualTo;
   '>': if P[1]='=' then begin
@@ -6381,15 +6416,22 @@ lim2: if IdemPropNameU(Prop,'LIMIT') then
   fSQLStatement := SQL; // make a private copy e.g. for Where[].ValueSQL
 end;
 
-procedure TSynTableStatement.SelectFieldBits(var Fields: TSQLFieldBits; var withID: boolean);
+procedure TSynTableStatement.SelectFieldBits(var Fields: TSQLFieldBits;
+  var withID: boolean; SubFields: PRawUTF8Array);
 var i: integer;
+    f: ^TSynTableStatementSelect;
 begin
   FillcharFast(Fields,SizeOf(Fields),0);
   withID := false;
-  for i := 0 to Length(Select)-1 do
-    if Select[i].Field=0 then
+  f := pointer(Select);
+  for i := 1 to Length(Select) do begin
+    if f^.Field=0 then
       withID := true else
-      include(Fields,Select[i].Field-1);
+      include(Fields,f^.Field-1);
+    if (SubFields<>nil) and fHasSelectSubFields then
+      SubFields^[f^.Field] := f^.SubField;
+    inc(f);
+  end;
 end;
 
 
@@ -6871,7 +6913,7 @@ begin
     end
     else if aText > txtend then
       break;
-    if (PtrInt(PtrUInt(txtretry))> 0) and (txtretry <= txtend + 1) then begin
+    if (PtrInt(PtrUInt(txtretry)) > 0) and (txtretry <= txtend + 1) then begin
       aText := txtretry;
       inc(txtretry);
       pat := patretry;
@@ -7176,7 +7218,7 @@ begin
               else
                 Search := SearchContains1;
             end;
-            '?':
+            '?': // ?something*
               if aCaseInsensitive then
                 Search := SearchNoRangeU
               else
@@ -7226,7 +7268,7 @@ var
   m: PSBNDMQ2Mask absolute result;
   c: PCardinal;
 begin
-  SetLength(result, SizeOf(m^));
+  SetString(result, nil, SizeOf(m^));
   {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(m^, SizeOf(m^), 0);
   for i := 0 to length(Pattern) - 1 do begin
     c := @m^[u[p[i]]]; // for FPC code generation
@@ -8274,7 +8316,7 @@ begin
     exit;
   Safe.Lock;
   try
-    fFalsePositivePercent := PDouble(P)^; inc(P,8);
+    fFalsePositivePercent := unaligned(PDouble(P)^); inc(P,8);
     if (fFalsePositivePercent<=0) or (fFalsePositivePercent>100) then
       exit;
     fSize := PCardinal(P)^; inc(P,4);
@@ -10333,7 +10375,7 @@ begin
     fPassWord := '';
     exit;
   end;
-  SetString(tmp,PAnsiChar(value),Length(value)); // private copy
+  SetString(tmp,PAnsiChar(pointer(value)),Length(value)); // private copy
   SymmetricEncrypt(GetKey,tmp);
   fPassWord := BinToBase64(tmp);
 end;
@@ -10368,9 +10410,9 @@ end;
 constructor TSynAuthenticationAbstract.Create;
 begin
   fSafe.Init;
-  fTokenSeed := Random32;
+  fTokenSeed := Random32gsl;
   fSessionGenerator := abs(fTokenSeed*PPtrInt(self)^);
-  fTokenSeed := abs(fTokenSeed*Random32);
+  fTokenSeed := abs(fTokenSeed*Random32gsl);
 end;
 
 destructor TSynAuthenticationAbstract.Destroy;
@@ -10649,22 +10691,22 @@ end;
 
 function DateToSQL(Date: TDateTime): RawUTF8;
 begin
+  result := '';
   if Date<=0 then
-    result := '' else begin
-    SetLength(result,13);
-    PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC;
-    DateToIso8601PChar(Date,PUTF8Char(pointer(result))+3,True);
-  end;
+     exit;
+  FastSetString(result,nil,13);
+  PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC;
+  DateToIso8601PChar(Date,PUTF8Char(pointer(result))+3,True);
 end;
 
 function DateToSQL(Year,Month,Day: Cardinal): RawUTF8;
 begin
+  result := '';
   if (Year=0) or (Month-1>11) or (Day-1>30) then
-    result := '' else begin
-    SetLength(result,13);
-    PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC;
-    DateToIso8601PChar(PUTF8Char(pointer(result))+3,True,Year,Month,Day);
-  end;
+    exit;
+  FastSetString(result,nil,13);
+  PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC;
+  DateToIso8601PChar(PUTF8Char(pointer(result))+3,True,Year,Month,Day);
 end;
 
 var
@@ -11416,7 +11458,7 @@ begin
     repeat
       inc(P);
     until (P = PEnd) or not(P^ in IS_UTF8_WORD);
-    aTextLen := P - aText;
+    aTextLen := P - aText; // now aText/aTextLen point to a word
     n := fWordCount;
     repeat
       dec(n);
@@ -11962,7 +12004,7 @@ begin
   n := 0;
   fTaskLock.Lock;
   try
-    variant(fTaskLock.Padding[0]) := true;
+    variant(fTaskLock.Padding[0]) := true; // = fTaskLock.LockedBool[0]
     try
       for i := 0 to length(fTask)-1 do begin
         t := @fTask[i];
@@ -12592,6 +12634,7 @@ end;
 function EnumAllProcesses(out Count: Cardinal): TCardinalDynArray;
 var n: cardinal;
 begin
+  result := nil;
   n := 2048;
   repeat
     SetLength(result, n);
@@ -12958,6 +13001,7 @@ function TSystemUse.History(aProcessID,aDepth: integer): TSingleDynArray;
 var i,n: integer;
     data: TSystemUseDataDynArray;
 begin
+  result := nil;
   data := HistoryData(aProcessID,aDepth);
   n := length(data);
   SetLength(result,n);

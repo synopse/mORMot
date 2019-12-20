@@ -126,7 +126,7 @@ implementation
 {$I Zeos.inc} // define conditionals like ZEOS72UP and ENABLE_*
 // for best performance: tune your project options or Zeos.inc to define USE_SYNCOMMONS
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -1089,7 +1089,7 @@ begin
       case VType of
       ftNull:     fStatement.SetNull(i+FirstDbcIndex,stUnknown);
       ftInt64:    fStatement.SetLong(i+FirstDbcIndex,VInt64);
-      ftDouble:   fStatement.SetDouble(i+FirstDbcIndex,PDouble(@VInt64)^);
+      ftDouble:   fStatement.SetDouble(i+FirstDbcIndex,unaligned(PDouble(@VInt64)^));
       ftCurrency: {$ifdef ZEOS72UP}
                   fStatement.SetCurrency(i+FirstDbcIndex,PCurrency(@VInt64)^);
                   {$else}

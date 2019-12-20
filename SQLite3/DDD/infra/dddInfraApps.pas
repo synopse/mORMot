@@ -54,7 +54,7 @@ unit dddInfraApps;
 
 }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -1659,7 +1659,7 @@ function TDDDSynCrtSocket.DataInPending(aTimeOut: integer): integer;
 begin
   fSafe.Lock;
   try
-    result := fSocket.SockInPending(aTimeOut,true); // aSocketForceCheck=true
+    result := fSocket.SockInPending(aTimeOut,{aPendingAlsoInSocket=}true);
   finally
     fSafe.UnLock;
   end;

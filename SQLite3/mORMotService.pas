@@ -594,8 +594,54 @@ procedure SynDaemonIntercept(log: TSynLog=nil);
 
 {$endif MSWINDOWS}
 
+type
+  /// command line patterns recognized by ParseCommandArgs()
+  TParseCommand = (
+    pcHasRedirection, pcHasSubCommand, pcHasParenthesis,
+    pcHasJobControl, pcHasWildcard, pcHasShellVariable,
+    pcUnbalancedSingleQuote, pcUnbalancedDoubleQuote,
+    pcTooManyArguments, pcInvalidCommand, pcHasEndingBackSlash);
+  TParseCommands = set of TParseCommand;
+  PParseCommands = ^TParseCommands;
+  /// used to store references of arguments recognized by ParseCommandArgs()
+  TParseCommandsArgs = array[0..31] of PAnsiChar;
+  PParseCommandsArgs = ^TParseCommandsArgs;
+
+const
+  /// identifies some bash-specific processing
+  PARSECOMMAND_BASH = [pcHasRedirection .. pcHasShellVariable];
+  /// identifies obvious invalid content
+  PARSECOMMAND_ERROR = [pcUnbalancedSingleQuote .. pcHasEndingBackSlash];
+
+/// low-level parsing of a RunCommand() execution command
+// - parse and fills argv^[0..argc^-1] with corresponding arguments, after
+// un-escaping and un-quoting if applicable, using temp^ to store the content
+// - if argv=nil, do only the parsing, not the argument extraction - could be
+// used for fast validation of the command line syntax
+// - you can force arguments OS flavor using the posix parameter - note that
+// Windows parsing is not consistent by itself (e.g. double quoting or
+// escaping depends on the actual executable called) so returned flags
+// should be considered as indicative only with posix=false
+function ParseCommandArgs(const cmd: RawUTF8; argv: PParseCommandsArgs = nil;
+  argc: PInteger = nil; temp: PRawUTF8 = nil;
+  posix: boolean = {$ifdef MSWINDOWS}false{$else}true{$endif}): TParseCommands;
+
+function ToText(cmd: TParseCommands): shortstring; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
-function RunProcess(const path, arg1: TFileName; waitfor: boolean): integer;
+// - optional env value follows 'n1=v1'#0'n2=v2'#0'n3=v3'#0#0 Windows layout
+function RunProcess(const path, arg1: TFileName; waitfor: boolean;
+  const arg2: TFileName=''; const arg3: TFileName=''; const arg4: TFileName='';
+  const arg5: TFileName=''; const env: TFileName=''; envaddexisting: boolean=false): integer;
+
+/// like fpSystem, but cross-platform
+// - under POSIX, calls bash only if needed, after ParseCommandArgs() analysis
+// - under Windows (especially Windows 10), creating a process can be dead slow
+// https://randomascii.wordpress.com/2019/04/21/on2-in-createprocess
+function RunCommand(const cmd: TFileName; waitfor: boolean;
+  const env: TFileName=''; envaddexisting: boolean=false;
+  parsed: PParseCommands=nil): integer;
 
 
 { *** cross-plaform high-level services/daemons }
@@ -897,7 +943,9 @@ end;
 
 function TServiceController.Start(const Args: array of PChar): boolean;
 begin
-  Result := StartService(FHandle, length(Args), @Args[0]);
+  if length(Args)=0 then
+    Result := StartService(FHandle, 0, nil) else
+    Result := StartService(FHandle, length(Args), @Args[0]);
 end;
 
 function TServiceController.Stop: boolean;
@@ -910,7 +958,7 @@ var desc: SynUnicode;
 begin
   if Description='' then
     exit;
-  desc := StringToSynUnicode(Description);
+  StringToSynUnicode(Description, desc);
   ChangeServiceConfig2(FHandle, SERVICE_CONFIG_DESCRIPTION, @desc);
 end;
 
@@ -1420,39 +1468,81 @@ function CreateProcessW(lpApplicationName: PWideChar; lpCommandLine: PWideChar;
 function GetExitCodeProcess(hProcess: THandle; out lpExitCode: DWORD): BOOL; stdcall;
   external kernel32;
 
-function RunProcess(const path, arg1: TFileName; waitfor: boolean): integer;
+function RunProcess(const path, arg1: TFileName; waitfor: boolean;
+  const arg2,arg3,arg4,arg5,env: TFileName; envaddexisting: boolean): integer;
+begin
+  result := RunCommand(FormatString('"%" % % % % %', [path, arg1, arg2, arg3, arg4, arg5]),
+    waitfor, env, envaddexisting);
+end;
+
+var
+  EnvironmentCache: SynUnicode;
+
+function RunCommand(const cmd: TFileName; waitfor: boolean;
+  const env: TFileName; envaddexisting: boolean; parsed: PParseCommands): integer;
 var
   startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
   processinfo: TProcessInformation;
-  cmdline, runpath: TFileName;
-  wcmdline, currentdir: SynUnicode;
+  path: TFileName;
+  wcmd, wenv, wpath: SynUnicode;
+  e, p: PWideChar;
   exitcode: DWORD;
+  i: integer;
 begin
   // https://support.microsoft.com/en-us/help/175986/info-understanding-createprocess-and-command-line-arguments
-  cmdline := '"' + path + '"';
-  if arg1 <> '' then
-    cmdline := cmdline + ' ' + arg1;
-  // CreateProcess can alter the strings so do the copy!
-  wcmdline := StringToSynUnicode(cmdline);
-  runpath := ExtractFilePath(path);
-  if runpath = '' then
-    runpath := ExeVersion.ProgramFilePath;
-  currentdir := StringToSynUnicode(runpath);
+  result := -1;
+  if cmd = '' then
+    exit;
+  // CreateProcess can alter the strings -> use local SynUnicode
+  StringToSynUnicode(cmd, wcmd);
+  if cmd[1] = '"' then begin
+    path := copy(cmd, 2, maxInt);
+    i := Pos('"', path);
+    if i = 0 then
+      exit;
+    SetLength(path, i - 1); // unquote "path" string
+  end
+  else begin
+    i := Pos(' ', cmd);
+    if i <= 1 then
+      exit;
+    path := copy(cmd, 1, i - 1);
+  end;
+  path := ExtractFilePath(path);
+  if path = '' then
+    path := ExeVersion.ProgramFilePath;
+  StringToSynUnicode(path, wpath);
+  if env <> '' then begin
+    StringToSynUnicode(env, wenv);
+    if envaddexisting then begin
+      GlobalLock;
+      if EnvironmentCache = '' then begin
+        e := GetEnvironmentStringsW;
+        p := e;
+        while p^ <> #0 do
+          inc(p, StrLenW(p) + 1); // go to name=value#0 pairs end
+        SetString(EnvironmentCache, e, (PtrUInt(p) - PtrUInt(e)) shr 1);
+        FreeEnvironmentStringsW(e);
+      end;
+      wenv := EnvironmentCache + wenv;
+      GlobalUnLock;
+    end;
+  end;
   FillCharFast(startupinfo, SizeOf(startupinfo), 0);
   startupinfo.cb := SizeOf(startupinfo);
+  FillCharFast(processinfo, SizeOf(processinfo), 0);
   // https://docs.microsoft.com/pl-pl/windows/desktop/ProcThread/process-creation-flags
-  if CreateProcessW(nil, pointer(wcmdline), nil, nil, false,
-   CREATE_DEFAULT_ERROR_MODE or DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP,
-   nil, pointer(currentdir), startupinfo, processinfo) then begin
-    if waitfor then begin
+  if CreateProcessW(nil, pointer(wcmd), nil, nil, false, CREATE_UNICODE_ENVIRONMENT or
+      CREATE_DEFAULT_ERROR_MODE or DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP,
+      pointer(wenv), pointer(wpath), startupinfo, processinfo) then begin
+    if waitfor then
       if WaitForSingleObject(processinfo.hProcess,INFINITE) = WAIT_FAILED then
         result := -GetLastError
+      else if not GetExitCodeProcess(processinfo.hProcess, exitcode) then
+        result := -GetLastError
       else
-        if not GetExitCodeProcess(processinfo.hProcess, exitcode) then
-          result := -GetLastError
-        else
-          result := exitcode;
-    end else
+        result := exitcode
+    else
       result := 0;
     CloseHandle(processinfo.hProcess);
     CloseHandle(processinfo.hThread);
@@ -1584,7 +1674,7 @@ procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
   const start, stop: TThreadMethod; log: TSynLog; const servicename: string);
 var
   pid, sid: {$ifdef FPC}TPID{$else}pid_t{$endif};
-  pidfilename, pidfilelockname: TFileName;
+  pidfilename: TFileName;
 const
   TXT: array[boolean] of string[4] = ('run', 'fork');
 begin
@@ -1650,10 +1740,14 @@ begin
 end;
 {$endif FPC}
 
-function RunProcess(const path, arg1: TFileName; waitfor: boolean): integer;
+function RunInternal(args: PPAnsiChar; waitfor: boolean;
+  const env: TFileName; envaddexisting: boolean): integer;
 var
   pid: {$ifdef FPC}TPID{$else}pid_t{$endif};
-  a: array[0..2] of PAnsiChar; // assume no UNICODE on BSD, i.e. TFileName is
+  e: array[0..511] of PAnsiChar; // max 512 environment variables
+  envpp: PPAnsiChar;
+  P: PAnsiChar;
+  n: PtrInt;
 begin
   {$ifdef FPC}
   {$if (defined(BSD) or defined(SUNOS)) and defined(FPC_USE_LIBC)}
@@ -1671,14 +1765,37 @@ begin
   if pid = 0 then begin // we are in child process -> switch to new executable
     if not waitfor then
       CleanAfterFork; // don't share the same console
-    a[0] := pointer(path);
-    a[1] := pointer(arg1); // expect a single (may be quoted) argument
-    a[2] := nil;
+    envpp := envp;
+    if env <> '' then begin
+      n := 0;
+      result := {$ifdef FPC}-ESysE2BIG{$else}-7{$endif};
+      if envaddexisting and (envpp <> nil) then begin
+        while envpp^ <> nil do begin
+          if PosChar(envpp^, #10) = nil then begin // filter simple variables
+            if n = high(e) - 1 then
+              exit;
+            e[n] := envpp^;
+            inc(n);
+          end;
+          inc(envpp);
+        end;
+      end;
+      P := pointer(env); // env follows Windows layout 'n1=v1'#0'n2=v2'#0#0
+      while P^ <> #0 do begin
+        if n = high(e) - 1 then
+          exit;
+        e[n] := P; // makes POSIX compatible
+        inc(n);
+        inc(P, StrLen(P) + 1);
+      end;
+      e[n] := nil; // end with null
+      envpp := @e;
+    end;
     {$ifdef FPC}
-    FpExecV(a[0], @a);
+    FpExecve(args^, args, envpp);
     FpExit(127);
     {$else}
-    execv(a[0], @a);
+    execve(args^, args, envpp);
     _exit(127);
     {$endif}
   end;
@@ -1690,7 +1807,218 @@ begin
     result := 0; // fork success (don't wait for the child process to fail)
 end;
 
+function RunProcess(const path, arg1: TFileName; waitfor: boolean;
+  const arg2,arg3,arg4,arg5,env: TFileName; envaddexisting: boolean): integer;
+var
+  a: array[0..6] of PAnsiChar;   // assume no UNICODE on BSD, i.e. as TFileName
+begin
+  a[0] := pointer(path);
+  a[1] := pointer(arg1);
+  a[2] := pointer(arg2);
+  a[3] := pointer(arg3);
+  a[4] := pointer(arg4);
+  a[5] := pointer(arg5);
+  a[6] := nil; // end with null
+  result := RunInternal(@a, waitfor, env, envaddexisting);
+end;
+
+function RunCommand(const cmd: TFileName; waitfor: boolean;
+  const env: TFileName; envaddexisting: boolean;
+  parsed: PParseCommands): integer;
+var
+  temp: RawUTF8;
+  err: TParseCommands;
+  a: TParseCommandsArgs;
+begin
+  err := ParseCommandArgs(cmd, @a, nil, @temp);
+  if parsed <> nil then
+    parsed^ := err;
+  if err = [] then
+    // no need to spawn the shell for simple commands
+    result := RunInternal(a, waitfor, env, envaddexisting)
+  else if err * PARSECOMMAND_ERROR <> [] then
+    // no system call for clearly invalid command line
+    result := {$ifdef FPCLINUXNOTBSD}-ESysELIBBAD{$else}-80{$endif}
+  else begin // execute complex commands via the shell
+    a[0] := '/bin/sh';
+    a[1] := '-c';
+    a[2] := pointer(cmd);
+    a[3] := nil;
+    result := RunInternal(@a, waitfor, env, envaddexisting);
+  end;
+end;
+
 {$endif MSWINDOWS}
+
+function ToText(cmd: TParseCommands): shortstring;
+begin
+  if cmd = [] then
+    result[0] := #0
+  else
+    GetSetNameShort(TypeInfo(TParseCommands), cmd, result, {trim=}true);
+end;
+
+function ParseCommandArgs(const cmd: RawUTF8; argv: PParseCommandsArgs;
+  argc: PInteger; temp: PRawUTF8; posix: boolean): TParseCommands;
+var
+  n: PtrInt;
+  state: set of (sWhite, sInArg, sInSQ, sInDQ, sSpecial, sBslash);
+  c: AnsiChar;
+  D, P: PAnsiChar;
+begin
+  result := [pcInvalidCommand];
+  if argv <> nil then
+    argv[0] := nil;
+  if argc <> nil then
+    argc^ := 0;
+  if cmd = '' then
+    exit;
+  if argv = nil then
+    D := nil
+  else begin
+    if temp = nil then
+      exit;
+    SetLength(temp^, length(cmd));
+    D := pointer(temp^);
+  end;
+  state := [];
+  n := 0;
+  P := pointer(cmd);
+  repeat
+    c := P^;
+    if D <> nil then
+      D^ := c;
+    inc(P);
+    case c of
+      #0: begin
+        if sInSQ in state then
+          include(result, pcUnbalancedSingleQuote);
+        if sInDQ in state then
+          include(result, pcUnbalancedDoubleQuote);
+        exclude(result, pcInvalidCommand);
+        if argv <> nil then
+          argv[n] := nil;
+        if argc <> nil then
+          argc^ := n;
+        exit;
+      end;
+      #1 .. ' ': begin
+       if state = [sInArg] then begin
+         state := [];
+         if D <> nil then begin
+           D^ := #0;
+           inc(D);
+         end;
+         continue;
+       end;
+       if state * [sInSQ, sInDQ] = [] then
+         continue;
+      end;
+      '\':
+        if posix and (state * [sInSQ, sBslash] = []) then
+          if sInDQ in state then begin
+            case P^ of
+              '"', '\', '$', '`': begin
+                include(state, sBslash);
+                continue;
+              end;
+            end;
+          end else if P^ = #0 then begin
+            include(result, pcHasEndingBackSlash);
+            exit;
+          end else begin
+            if D <> nil then
+              D^ := P^;
+            inc(P);
+          end;
+      '^':
+        if not posix and (state * [sInSQ, sInDQ, sBslash] = []) then
+          if PWord(P)^ = $0a0d then begin
+            inc(P, 2);
+            continue;
+          end
+          else if P^ = #0 then begin
+            include(result, pcHasEndingBackSlash);
+            exit;
+          end else begin
+            if D <> nil then
+              D^ := P^;
+            inc(P);
+          end;
+      '''':
+        if posix and not(sInDQ in state) then
+          if sInSQ in state then begin
+            exclude(state, sInSQ);
+            continue;
+          end else if state = [] then begin
+            if argv <> nil then begin
+              argv[n] := D;
+              inc(n);
+              if n = high(argv^) then
+                exit;
+            end;
+            state := [sInSQ, sInArg];
+            continue;
+          end else if state = [sInArg] then begin
+            state := [sInSQ, sInArg];
+            continue;
+          end;
+      '"':
+        if not(sInSQ in state) then
+          if sInDQ in state then begin
+            exclude(state, sInDQ);
+            continue;
+          end else if state = [] then begin
+            if argv <> nil then begin
+              argv[n] := D;
+              inc(n);
+              if n = high(argv^) then
+                exit;
+            end;
+            state := [sInDQ, sInArg];
+            continue;
+          end else if state = [sInArg] then begin
+            state := [sInDQ, sInArg];
+            continue;
+          end;
+      '|', '<', '>':
+        if state * [sInSQ, sInDQ] = [] then
+          include(result, pcHasRedirection);
+      '&', ';':
+        if posix and (state * [sInSQ, sInDQ] = []) then begin
+          include(state, sSpecial);
+          include(result, pcHasJobControl);
+        end;
+      '`':
+        if posix and (state * [sInSQ, sBslash] = []) then
+           include(result, pcHasSubCommand);
+      '(', ')':
+        if posix and (state * [sInSQ, sInDQ] = []) then
+          include(result, pcHasParenthesis);
+      '$':
+        if posix and (state * [sInSQ, sBslash] = []) then
+          if p^ = '(' then
+            include(result, pcHasSubCommand)
+          else
+            include(result, pcHasShellVariable);
+      '*', '?':
+        if posix and (state * [sInSQ, sInDQ] = []) then
+          include(result, pcHasWildcard);
+    end;
+    exclude(state, sBslash);
+    if state = [] then begin
+      if argv <> nil then begin
+        argv[n] := D;
+        inc(n);
+        if n = high(argv^) then
+          exit;
+      end;
+      state := [sInArg];
+    end;
+    if D <> nil then
+      inc(D);
+  until false;
+end;
 
 
 { *** cross-plaform high-level services }

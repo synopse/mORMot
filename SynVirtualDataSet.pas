@@ -55,7 +55,7 @@ unit SynVirtualDataSet;
 
 }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -915,7 +915,7 @@ begin
           ftInt64:
             VariantToInt64(Values[ndx],fTemp64);
           ftDouble,SynTable.ftDate:
-            VariantToDouble(Values[ndx],PDouble(@fTemp64)^);
+            VariantToDouble(Values[ndx],unaligned(PDouble(@fTemp64)^));
           ftUTF8: begin
             VariantToUTF8(Values[ndx],fTempUTF8,wasString);
             result := pointer(fTempUTF8);

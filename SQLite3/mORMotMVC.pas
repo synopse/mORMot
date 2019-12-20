@@ -52,7 +52,7 @@ unit mORMotMVC;
 
 }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -634,8 +634,8 @@ type
     /// to be called when the data model did change to force content re-creation
     // - this default implementation will call fMainRunner.NotifyContentChanged
     procedure FlushAnyCache; virtual;
-    /// generic IMVCApplication implementation
-    procedure Error(var Msg: RawUTF8; var Scope: variant);
+    /// generic IMVCApplication.Error method implementation
+    procedure Error(var Msg: RawUTF8; var Scope: variant); virtual;
     /// every view will have this data context transmitted as "main":...
     function GetViewInfo(MethodIndex: integer): variant; virtual;
     /// compute the data context e.g. for the /mvc-info URI
@@ -1218,7 +1218,7 @@ begin
   inherited Create;
   fContext.CookieName := 'mORMot';
   // temporary secret for encryption
-  fContext.CryptNonce := Random32;
+  fContext.CryptNonce := Random32gsl;
   TAESPRNG.Main.FillRandom(@fContext.Crypt,sizeof(fContext.Crypt));
   // temporary secret for HMAC-CRC32C
   TAESPRNG.Main.FillRandom(@rnd,sizeof(rnd));
@@ -1308,7 +1308,7 @@ begin
   if len>sizeof(tmp.data) then // all cookies storage should be < 4K
     raise EMVCApplication.CreateGotoError('Big Fat Cookie');
   result := InterlockedIncrement(fContext.SessionCount);
-  tmp.head.cryptnonce := Random32;
+  tmp.head.cryptnonce := Random32gsl;
   tmp.head.session := result;
   tmp.head.issued := UnixTimeUTC;
   if SessionTimeOutMinutes=0 then

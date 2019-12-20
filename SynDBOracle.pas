@@ -143,7 +143,7 @@ unit SynDBOracle;
 
 }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -2242,7 +2242,7 @@ begin
   if V=nil then // column is NULL
     result := 0 else
     case C^.ColumnType of // optimized for ToDataSet() in SynDBVCL.pas
-    ftDouble:   result := PDouble(V)^;
+    ftDouble:   result := unaligned(PDouble(V)^);
     ftInt64:    result := PInt64(V)^;
     ftCurrency: begin
       PInt64(@Curr)^ := StrToCurr64(V); // handle '.5' - not GetExtended()
@@ -2304,7 +2304,7 @@ begin // dedicated version to avoid as much memory allocation than possible
            WR.Add(PInt64(V)^) else
            WR.AddNoJSONEscape(V); // already as SQLT_STR
        ftDouble:
-         WR.AddDouble(PDouble(V)^);
+         WR.AddDouble(unaligned(PDouble(V)^));
        ftCurrency:
          WR.AddFloatStr(V); // already as SQLT_STR
        ftDate:
@@ -2650,7 +2650,7 @@ const
   MAX_INLINED_PARAM_SIZE = 32*1024*1024;
 
 procedure TSQLDBOracleStatement.ExecutePrepared;
-var i,j: integer;
+var i,j: PtrInt;
     Env: POCIEnv;
     Context: POCISvcCtx;
     Type_List: POCIType;
@@ -2671,6 +2671,9 @@ var i,j: integer;
     num_val: OCINumber;
     tmp: RawUTF8;
     str_val: POCIString;
+    {$ifdef FPC_64}
+    wasStringHacked: TByteDynArray;
+    {$endif FPC_64}
 label txt;
 begin
   if (fStatement=nil) then
@@ -2872,7 +2875,7 @@ begin
                     goto txt; // IN huge integers will be managed as text
                   end else begin
                   VDBType := SQLT_FLT; // OUT values will be converted as double
-                  PDouble(oData)^ := VInt64;
+                  unaligned(PDouble(oData)^) := VInt64;
                 end;
             ftDouble:
               VDBType := SQLT_FLT;
@@ -2882,7 +2885,7 @@ begin
                 goto txt; // input-only currency values will be managed as text
               end else begin
                 VDBType := SQLT_FLT; // OUT values will be converted as double
-                PDouble(oData)^ := PCurrency(oData)^;
+                unaligned(PDouble(oData)^) := PCurrency(oData)^;
               end;
             ftDate:
               if VInOut=paramIn then begin
@@ -2912,7 +2915,20 @@ begin
                 VDBTYPE := SQLT_BIN;
                 oData := pointer(VData);
               end else begin
-                VDBTYPE := SQLT_LVB;
+                VDBTYPE := SQLT_LVB; // layout: raw data prepended by int32 len
+                {$ifdef FPC_64}
+                // in case of FPC+CPU64 TSQLDBParam.VData is a RawByteString and
+                // length is stored as SizeInt = Int64 (not int32) -> patch
+                // (no patch needed for Delphi, in which len is always longint)
+                if Length(VData)>MaxInt then
+                  raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared: % blob length ' +
+                    'exceeds max size for parameter #%',[self,KB(oLength),i+1]);
+                UniqueString(VData); // for thread-safety
+                PInteger(PtrInt(VData)-sizeof(Integer))^ := oLength;
+                if wasStringHacked=nil then
+                  SetLength(wasStringHacked,fParamCount shr 3+1);
+                SetBitPtr(pointer(wasStringHacked),i); // for unpatching below
+                {$endif FPC_64}
                 oData := Pointer(PtrInt(VData)-sizeof(Integer));
                 Inc(oLength,sizeof(Integer));
               end;
@@ -2938,8 +2954,14 @@ begin
       FetchTest(Status); // error + set fRowCount+fCurrentRow+fRowFetchedCurrent
       Status := OCI_SUCCESS; // mark OK for fBoundCursor[] below
     finally
+      {$ifdef FPC_64}
+      if wasStringHacked<>nil then // restore patched strings length ASAP
+        for i := 0 to fParamCount-1 do
+          if GetBitPtr(pointer(wasStringHacked),i) then
+            PInteger(PtrInt(fParams[i].VData)-sizeof(Integer))^ := 0;
+      {$endif FPC_64}
       for i := 0 to ociArraysCount-1 do
-        OCI.Check(nil,self,OCI.ObjectFree(Env, fError, ociArrays[i], OCI_OBJECTFREE_FORCE), fError);
+        OCI.Check(nil,self,OCI.ObjectFree(Env, fError, ociArrays[i], OCI_OBJECTFREE_FORCE), fError, false, sllError);
       // 3. release and/or retrieve OUT bound parameters
       if fParamsArrayCount>0 then
       for i := 0 to fParamCount-1 do
@@ -2957,10 +2979,10 @@ begin
               SynDBLog.Add.Log(sllError,'SQLT_RSET param release');
       ftInt64:
         if VDBType=SQLT_FLT then // retrieve OUT integer parameter
-          VInt64 := trunc(PDouble(@VInt64)^);
+          VInt64 := trunc(unaligned(PDouble(@VInt64)^));
       ftCurrency:
         if VDBType=SQLT_FLT then // retrieve OUT currency parameter
-          PCurrency(@VInt64)^ := PDouble(@VInt64)^;
+          PCurrency(@VInt64)^ := unaligned(PDouble(@VInt64)^);
       ftDate:
         case VDBType of
         SQLT_DAT: // retrieve OUT date parameter

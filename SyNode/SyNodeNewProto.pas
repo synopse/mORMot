@@ -685,7 +685,7 @@ begin
         mORMot.PPropInfo(PPropInfoEx(TRttiMember(pc.mbr).Handle)^.Info).SetOrdValue(Instance.Instance, i_val);
       end else if PTypeinfo(pc.typeInfo).Kind = tkClass then begin
         IsInstanceObject(cx, vp.argv[0], setObj);
-        mORMot.PPropInfo(PPropInfoEx(TRttiMember(pc.mbr).Handle)^.Info).SetOrdValue(Instance.Instance, Integer(setObj.Instance));
+        mORMot.PPropInfo(PPropInfoEx(TRttiMember(pc.mbr).Handle)^.Info).SetObjProp(Instance.Instance, setObj.Instance);
       end else begin
         JSVal2TVal(cx, pc.typeInfo, vp.argv[0], v);
         TRttiProperty(pc.mbr).SetValue(Instance.Instance, v);
@@ -782,15 +782,15 @@ begin
                 rval.asInteger := GetOrdProp(Instance.Instance, PPropInfoEx(TRttiMember(pc.mbr).Handle)^.Info);
               end;
             end;
-            tkWString, tkUString:
+            tkWString{$ifdef HASVARUSTRING},tkUString{$endif}:
               rval := cx.NewJSString(mORMot.PPropInfo(PPropInfoEx(TRttiMember(pc.mbr).Handle)^.Info).GetUnicodeStrValue(Instance.Instance)).ToJSVal;
             tkLString: begin
               mORMot.PPropInfo(PPropInfoEx(TRttiMember(pc.mbr).Handle)^.Info).GetLongStrValue(Instance.Instance, tmp);
               rval := cx.NewJSString(tmp).ToJSVal;
             end;
             tkClass: begin
-              //MPV TODO Optymize. Don't create calss every time - instead check pointer is not changed
-              clObj := TObject(mORMot.PPropInfo(PPropInfoEx(TRttiMember(pc.mbr).Handle)^.Info).GetOrdValue(Instance.Instance));
+              //MPV TODO Optimize. Don't create class every time - instead check pointer is not changed
+              clObj := mORMot.PPropInfo(PPropInfoEx(TRttiMember(pc.mbr).Handle)^.Info).GetObjProp(Instance.Instance);
               if Assigned(clObj) then begin
                 New(InstanceIO);
                 rval := InstanceIO.CreateForObj(cx,clObj, TSMNewRTTIProtoObject, Instance.proto);

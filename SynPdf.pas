@@ -293,7 +293,7 @@ unit SynPdf;
 }
 
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64
 
 {$ifndef MSWINDOWS}
   { disable features requiring OS specific APIs
@@ -1032,9 +1032,6 @@ type
   protected
     function SpaceNotNeeded: boolean; override;
     procedure InternalWriteTo(W: TPdfWrite); override;
-  public
-    /// simple creator, replacing every % in Fmt by the corresponding Args[]
-    constructor CreateFmt(Fmt: PAnsiChar; const Args: array of Integer);
   end;
 
   /// a PDF object, storing a textual value with no encryption
@@ -3899,36 +3896,6 @@ end;
 
 { TPdfRawText }
 
-constructor TPdfRawText.CreateFmt(Fmt: PAnsiChar; const Args: array of Integer);
-var s, tmp: PDFString;
-    PDeb: PAnsiChar;
-    A: integer;
-begin
-  if high(Args)<0 then
-    s := Fmt else begin
-    A := 0;
-    while Fmt^<>#0 do begin
-      if Fmt^<>'%' then begin
-        PDeb := Fmt;
-        while (Fmt^<>'%') and (Fmt^<>#0) do inc(Fmt);
-        SetString(tmp,PDeb,Fmt-PDeb);
-        s := s+tmp;
-      end;
-      if Fmt^=#0 then break;
-      inc(Fmt);
-      if A<=high(Args) then begin
-        Str(Args[A],tmp);
-        s := s+tmp;
-        inc(A);
-      end else begin
-        s := s+Fmt;
-        break;
-      end;
-    end;
-  end;
-  inherited Create(s);
-end;
-
 procedure TPdfRawText.InternalWriteTo(W: TPdfWrite);
 begin
   W.Add(FValue);
@@ -4698,27 +4665,20 @@ end;
 
 function TPdfWrite.AddEscapeContent(const Text: RawByteString): TPdfWrite;
 {$ifdef USE_PDFSECURITY}
-var tmp: PAnsiChar;
-    L: integer;
-    buf: array[byte] of AnsiChar;
+var tmp: TSynTempBuffer;
 {$endif USE_PDFSECURITY}
 begin
+  if Text<>'' then
 {$ifdef USE_PDFSECURITY}
-  if (Text<>'') and (fDoc.fEncryption<>nil) then begin
-    L := length(Text);
-    if L<sizeof(buf) then
-      tmp := buf else
-      GetMem(tmp,L);
-    try
-      fDoc.fEncryption.EncodeBuffer(pointer(Text)^,tmp^,L);
-      result := AddEscape(tmp,L);
-    finally
-      if tmp<>buf then
-        Freemem(tmp);
-    end;
-  end else
+    if fDoc.fEncryption<>nil then begin
+      tmp.Init(length(Text));
+      fDoc.fEncryption.EncodeBuffer(pointer(Text)^,tmp.buf^,tmp.len);
+      AddEscape(tmp.buf,tmp.len);
+      tmp.Done;
+    end else
 {$endif USE_PDFSECURITY}
-  result := AddEscape(pointer(Text),length(Text));
+    AddEscape(pointer(Text),length(Text));
+  result := self;
 end;
 
 function TPdfWrite.AddEscape(Text: PAnsiChar; TextLen: integer): TPdfWrite;
@@ -4952,15 +4912,15 @@ begin
 end;
 var L: Integer;
 {$ifdef USE_PDFSECURITY}
-    tmp: TWordDynArray;
+    sectmp: TSynTempBuffer;
 {$endif USE_PDFSECURITY}
 begin
   if WideCharCount>0 then begin
 {$ifdef USE_PDFSECURITY}
     if fDoc.fEncryption<>nil then begin
-      SetLength(tmp,WideCharCount);
-      fDoc.fEncryption.EncodeBuffer(PW^,pointer(tmp)^,WideCharCount*2);
-      PW := pointer(tmp);
+      sectmp.Init(WideCharCount*2);
+      fDoc.fEncryption.EncodeBuffer(PW^,sectmp.buf^,WideCharCount*2);
+      PW := sectmp.buf;
     end;
 {$endif USE_PDFSECURITY}
     repeat
@@ -4975,6 +4935,10 @@ begin
       inc(B,L*4);
       dec(WideCharCount,L);
     until WideCharCount=0;
+{$ifdef USE_PDFSECURITY}
+    if fDoc.fEncryption<>nil then
+      sectmp.Done;
+{$endif USE_PDFSECURITY}
   end;
   result := self;
 end;
@@ -9807,7 +9771,6 @@ begin
   else
     R^.iType := R^.iType; // for debug purpose (breakpoint)
   end;
-
   case R^.iType of
     EMR_RESTOREDC,
     EMR_SETWINDOWEXTEX,
@@ -10269,7 +10232,6 @@ begin
     if not DC[nDC].pen.null then
       Canvas.Stroke;
   end;
-
   with DC[nDC], Canvas do begin
     FViewSize := ViewSize;
     FViewOrg := ViewOrg;
@@ -10338,7 +10300,6 @@ begin
       MM_ANISOTROPIC:
         ;  // TBD
     end;
-
     if FWinSize.cx=0 then // avoid EZeroDivide
       FFactorX := 1.0 else
       FFactorX := Abs(FViewSize.cx / FWinSize.cx);
@@ -10358,7 +10319,6 @@ begin
           WorldTransform := Custom^;
       end;
     end;
-
     // use transformation
     ScaleXForm := WorldTransform;
     FWorldFactorX := WorldTransform.eM11;
@@ -11232,8 +11192,8 @@ end;
 
 initialization
   {$ifdef USE_SYNGDIPLUS}
-  // initialize the Gdi+ library if necessary
-  if Gdip=nil then
+  // initialize Gdi+ if necessary (and possible, i.e. not from a dll)
+  if (Gdip=nil) and not IsLibrary then
     Gdip := TGDIPlus.Create('gdiplus.dll');
   {$endif}
 

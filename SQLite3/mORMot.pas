@@ -45,7 +45,7 @@ unit mORMot;
     Michalis Kamburelis
     MilesYou
     Ondrej
-    Pavel (mpv)
+    Pavel Mashlyakovskii (mpv)
     Sabbiolina
     Transmogrifix
     Vadim Orel
@@ -1206,10 +1206,9 @@ unit mORMot;
 *)
 
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64
 
 {.$define PUREPASCAL}  // define for debugg, not on production
-{.$define USETYPEINFO} // define for debugg, not on production
 
 {$ifdef MSWINDOWS}
 
@@ -1294,14 +1293,6 @@ uses
 {$endif}
   Classes,
   SynZip, // use crc32 for TSQLRestClientURI.SetUser
-{$ifdef USETYPEINFO}
-  // some pure pascal version must handle the 64-bit ordinal values or
-  // a not-Delphi RTTI layout of the underlying compiler (e.g. FPC)
-  TypInfo,
-  {$ifdef FPC}
-  SynFPCTypInfo, // small wrapper unit around FPC's TypInfo.pp
-  {$endif}
-{$endif}
 {$ifndef LVCL}
   SyncObjs, // for TEvent
   Contnrs,  // for TObjectList
@@ -1317,6 +1308,9 @@ uses
 {$ifdef GSSAPIAUTH}
   SynGSSAPI,
   SynGSSAPIAuth,
+{$endif}
+{$ifdef FPC}
+  SynFPCTypInfo, // small wrapper unit around FPC's TypInfo.pp
 {$endif}
   SynCommons,
   SynTable, // for SynTable, TSynFilter and TSynValidate
@@ -1516,7 +1510,7 @@ type
   // in monetary calculations which may occur with sftFloat type
   // - sftObject is a TEXT containing an ObjectToJSON serialization, able to
   // handle published properties of any not TPersistent as JSON object,
-  // TStrings or TRawUTF8List  as JSON arrays of strings, TCollection or
+  // TStrings or TRawUTF8List as JSON arrays of strings, TCollection or
   // TObjectList as JSON arrays of JSON objects
   // - sftVariant is a TEXT containing a variant value encoded as JSON:
   // string values are stored between quotes, numerical values directly stored,
@@ -1705,6 +1699,11 @@ const
   // - independently from the actual storage level
   // - i.e. will match RawUTF8, string, UnicodeString, WideString properties
   RAWTEXT_FIELDS: TSQLFieldTypes = [sftAnsiText,sftUTF8Text];
+
+  /// kind of fields which will be stored as TEXT values
+  // - i.e. RAWTEXT_FIELDS and TDateTime/TDateTimeMS
+  STRING_FIELDS: TSQLFieldTypes = [sftAnsiText,sftUTF8Text,sftUTF8Custom,
+    sftDateTime,sftDateTimeMS];
 
 {$ifndef NOVARIANTS}
 type
@@ -2507,82 +2506,31 @@ type
   /// points to information about a class, able to create new instances
   PClassInstance = ^TClassInstance;
 
-
-{ type definitions below were adapted from TypInfo.pas
- - this implementation doesn't require to include Variant.pas any more (which
-  allow easy server-side compile with LVCL, e.g.)
- - some code was rewritten in an object orientation manner (declared as objects
-  instead of records) to avoid use of global function/procedure
- - allows easy published properties enumeration with ClassProp()
- - if a property doesn't have a write attribute (i.e. no setter), its value
-  is set using the field adress itself (from read f* getter)
- - some useful but not implemented functions were added in optimized assembler }
-
-type
 {$ifdef FPC}
-  /// available type families for Free Pascal RTTI values
-  // - values differs from Delphi, and are taken from FPC typinfo.pp unit
-  TTypeKind = (tkUnknown,tkInteger,tkChar,tkEnumeration,tkFloat,
-    tkSet,tkMethod,tkSString,tkLString,tkAString,
-    tkWString,tkVariant,tkArray,tkRecord,tkInterface,
-    tkClass,tkObject,tkWChar,tkBool,tkInt64,tkQWord,
-    tkDynArray,tkInterfaceRaw,tkProcVar,tkUString,tkUChar,tkHelper);
-const
-  // maps record or object types
-  tkRecordTypes = [tkObject,tkRecord];
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} // e.g. for ARM
+    {$PACKRECORDS C}
+  {$else}
+    {$A-}
+  {$endif}
 {$else}
-  /// available type families for Delphi 6 and up
-  TTypeKind = (tkUnknown, tkInteger, tkChar, tkEnumeration, tkFloat,
-    tkString, tkSet, tkClass, tkMethod, tkWChar, tkLString, tkWString,
-    tkVariant, tkArray, tkRecord, tkInterface, tkInt64, tkDynArray
-    {$ifdef UNICODE}, tkUString{$endif});
-const
-  // maps record or object types
-  tkRecordTypes = [tkRecord];
-{$endif}
-  // maps long string types
-  tkStringTypes =
-    [tkLString,tkWString{$ifdef HASVARUSTRING},tkUString{$endif}{$ifdef FPC},tkAString{$endif}];
-  // maps 1, 8, 16, 32 and 64-bit ordinal types
-  tkOrdinalTypes =
-    [tkInteger, tkChar, tkWChar, tkEnumeration, tkSet, tkInt64
-     {$ifdef FPC},tkBool,tkQWord{$endif}];
+  {$A-} // Delphi compiler use packed/unaligned structs for most internal types
+{$endif FPC}
 
 type
-  /// specify ordinal (tkInteger and tkEnumeration) storage size and sign
-  // - note: Int64 is stored as its own TTypeKind, not as tkInteger
-  TOrdType = (otSByte, otUByte, otSWord, otUWord, otSLong, otULong
-    {$ifdef FPC_NEWRTTI},otSQWord,otUQWord{$endif});
-
-  /// specify floating point (ftFloat) storage size and precision
-  // - here ftDouble is renamed ftDoub to avoid confusion with TSQLDBFieldType
-  TFloatType = (ftSingle, ftDoub, ftExtended, ftComp, ftCurr);
-
-  TTypeKinds = set of TTypeKind;
-  PTypeKind = ^TTypeKind;
+  {$ifndef FPC}
+  PMethod = ^TMethod; // not defined on older Delphi revisions
+  {$endif FPC}
   PTypeInfo = ^TTypeInfo;
-  {$ifdef HASDIRECTTYPEINFO}
+  {$ifdef HASDIRECTTYPEINFO} // you should use inlined Deref() function below
   PPTypeInfo = PTypeInfo;
   {$else}
   PPTypeInfo = ^PTypeInfo;
-  {$endif}
-  POrdType = ^TOrdType;
-  PFloatType = ^TFloatType;
-
+  {$endif HASDIRECTTYPEINFO}
   PTypeInfoDynArray = array of PTypeInfo;
-
-{$ifdef FPC}
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-{$PACKRECORDS C}
-{$else}
-{$A-}
-{$endif}
-{$else}
-{$A-} { Delphi compiler use packed storage for this internal types, not aligned data }
-{$endif}
-
   PPropInfo = ^TPropInfo;
   PMethodInfo = ^TMethodInfo;
+  TClassArray = array[0..MaxInt div SizeOf(TClass)-1] of TClass;
+  PClassArray = ^TClassArray;
 
   /// used to store a chain of properties RTTI
   // - could be used e.g. by TSQLPropInfo to handled flattened properties
@@ -2652,7 +2600,7 @@ type
     // - is prefered to MaxValue to identify the number of stored bytes
     OrdType: TOrdType;
     {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    Dummy: DWORD; // needed on ARM for correct alignment !!??
+    EnumDummy: DWORD; // needed on ARM for correct alignment !!??
     {$endif}
     { this seemingly extraneous inner record is here for alignment purposes, so
     that its data gets aligned properly (if FPC_REQUIRES_PROPER_ALIGNMENT is set) }
@@ -2680,6 +2628,8 @@ type
     BaseType: PPTypeInfo;
     {$endif FPC_ENUMHASINNER}
     /// a concatenation of shortstrings, containing the enumeration names
+    // - those shortstrings are not aligned whatsoever (even if
+    // FPC_REQUIRES_PROPER_ALIGNMENT is set)
     NameList: string[255];
     {$ifdef FPC_ENUMHASINNER}
     function MinValue: Longint; inline;
@@ -2699,7 +2649,11 @@ type
     procedure GetEnumNameAll(var result: TRawUTF8DynArray; TrimLeftLowerCase: boolean); overload;
     /// retrieve all element names as CSV, with optional quotes
     procedure GetEnumNameAll(var result: RawUTF8; const Prefix: RawUTF8='';
-      quotedValues: boolean=false); overload;
+      quotedValues: boolean=false; const Suffix: RawUTF8='';
+      trimedValues: boolean=false; unCamelCased: boolean=false); overload;
+    /// retrieve all trimed element names as CSV
+    procedure GetEnumNameTrimedAll(var result: RawUTF8; const Prefix: RawUTF8='';
+      quotedValues: boolean=false; const Suffix: RawUTF8='');
     /// get all enumeration names as a JSON array of strings
     function GetEnumNameAllAsJSONArray(TrimLeftLowerCase: boolean;
       UnCamelCased: boolean=false): RawUTF8;
@@ -2757,9 +2711,6 @@ type
     // - can be used e.g. to populate a combo box as such:
     // ! PTypeInfo(TypeInfo(TMyEnum))^.EnumBaseType^.AddCaptionStrings(ComboBox.Items);
     procedure AddCaptionStrings(Strings: TStrings; UsedValuesBits: Pointer=nil);
-    /// retrieve all trimed element names as CSV
-    procedure GetEnumNameTrimedAll(var result: RawUTF8; const Prefix: RawUTF8='';
-      quotedValues: boolean=false);
     /// get the corresponding enumeration ordinal value, from its name without
     // its first lowercase chars ('Done' will find otDone e.g.)
     // - return -1 if not found (don't use directly this value to avoid any GPF)
@@ -2767,7 +2718,7 @@ type
     /// get the corresponding enumeration ordinal value, from its name without
     // its first lowercase chars ('Done' will find otDone e.g.)
     // - return -1 if not found (don't use directly this value to avoid any GPF)
-    function GetEnumNameTrimedValue(Value: PUTF8Char): Integer; overload;
+    function GetEnumNameTrimedValue(Value: PUTF8Char; ValueLen: integer=0): Integer; overload;
     /// compute how many bytes this type will use to be stored as a enumerate
     function SizeInStorageAsEnum: Integer;
     /// compute how many bytes this type will use to be stored as a set
@@ -2777,17 +2728,7 @@ type
     procedure SetEnumFromOrdinal(out Value; Ordinal: Integer);
   end;
 
-{$ifdef FPC}
-{$PACKRECORDS 1}
-{$else}
-{$A-}
-{$endif}
- { Delphi and FPC compiler use packed storage for this internal type }
-  TRecordField =
-    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-    packed
-    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-    record
+  TRecordField = record
     TypeInfo: PPTypeInfo;
     {$ifdef FPC}
     Offset: SizeInt;
@@ -2795,11 +2736,7 @@ type
     Offset: Cardinal;
     {$endif FPC}
   end;
-  TRecordType =
-    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-    packed
-    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-    record
+  TRecordType = record
     {$ifdef FPC_NEWRTTI}
     RecInitInfo: Pointer;
     {$endif FPC_NEWRTTI}
@@ -2810,17 +2747,27 @@ type
   PRecordField = ^TRecordField;
   PRecordType = ^TRecordType;
 
-{$ifdef FPC}
-{$PACKRECORDS 1}
-{$else}
-{$A-}
-{$endif}
- { Delphi and FPC compiler use packed storage for this internal type }
+  TIntfFlag = (ifHasGuid,ifDispInterface,ifDispatch{$ifdef FPC},ifHasStrGUID{$endif});
+  TIntfFlags = set of TIntfFlag;
+
+  /// a wrapper to interface type information, as defined by the Delphi RTTI
+  TInterfaceTypeData = record
+    IntfParent: PPTypeInfo; // ancestor
+    IntfFlags: TIntfFlags;
+    IntfGuid: TGUID;
+    IntfUnit: ShortString;
+  end;
+  PInterfaceTypeData = ^TInterfaceTypeData;
+
   /// a wrapper containing type information definition
   // - user types defined as an alias don't have this type information:
   // & type NewType = OldType;
   // - user types defined as new types have this type information:
   // & type NewType = type OldType;
+  {$ifdef FPC}
+    {$push}
+    {$PACKRECORDS 1}
+  {$endif}
   {$ifdef UNICODE}TTypeInfo = record{$else}TTypeInfo = object{$endif}
   public
     /// the value type family
@@ -2836,7 +2783,7 @@ type
     function ClassCreate: TObject;
     /// get the SQL type of this Delphi class type
     // - returns either sftObject, sftID, sftMany or sftUnknown
-    function ClassSQLFieldType: TSQLFieldType; {$ifdef HASINLINE}inline;{$endif}
+    function ClassSQLFieldType: TSQLFieldType;
     /// get the number of published properties in this class
     // - you can count the plain fields without any getter function, if you
     // do need only the published properties corresponding to some value
@@ -2858,11 +2805,15 @@ type
     function EnumBaseType: PEnumType; {$ifdef HASINLINENOTX86}inline;{$endif}
     /// get the record type information
     function RecordType: PRecordType; {$ifdef HASINLINENOTX86}inline;{$endif}
+    /// get the interface type information
+    function InterfaceType: PInterfaceTypeData; {$ifdef HASINLINENOTX86}inline;{$endif}
     /// get the dynamic array type information of the stored item
     function DynArrayItemType(aDataSize: PInteger=nil): PTypeInfo;
       {$ifdef HASINLINE}inline;{$endif}
     /// get the dynamic array size (in bytes) of the stored item
     function DynArrayItemSize: integer; {$ifdef HASINLINENOTX86}inline;{$endif}
+    /// get the SQL type of the items of a dynamic array
+    function DynArraySQLFieldType: TSQLFieldType;
     /// recognize most used string types, returning their code page
     // - will recognize TSQLRawBlob as the fake CP_SQLRAWBLOB code page
     // - will return the exact code page since Delphi 2009, from RTTI
@@ -2887,85 +2838,93 @@ type
     procedure InterfaceAncestors(out Ancestors: PTypeInfoDynArray;
       OnlyImplementedBy: TInterfacedObjectClass;
       out AncestorsImplementedEntry: TPointerDynArray);
+    {$ifdef FPC_PROVIDE_ATTR_TABLE}
+    /// type attributes, introduced since SVN 42356-42411 (2019/07)
+    function AttributeTable: PFPCAttributeTable; inline;
+    {$endif FPC_PROVIDE_ATTR_TABLE}
   end;
 
-{$ifdef FPC}
-{$PACKRECORDS 1}
-{$else}
-{$A-}
-{$endif}
-  { Delphi and FPC compiler use packed storage for this internal type }
-  /// a wrapper containing a property definition, with GetValue() and SetValue()
-  // functions for direct Delphi / UTF-8 SQL type mapping/conversion
-  // - handle byte, word, integer, cardinal, Int64 properties as INTEGER
-  // - handle boolean properties as INTEGER (0 is false, anything else is true)
-  // - handle enumeration properties as INTEGER, storing the ordinal value of the
-  // enumeration (i.e. starting at 0 for the first element)
-  // - handle enumerations set properties as INTEGER, each bit corresponding to
-  // an enumeration (therefore a set of up to 64 elements can be stored in such
-  // a field)
-  // - handle RawUTF8 properties as TEXT (UTF-8 encoded) - this is the preferred
-  //  field type for storing some textual content in the ORM
-  // - handle WinAnsiString properties as TEXT (UTF-8 decoded in WinAnsi char set)
-  // - handle RawUnicode properties as TEXT (UTF-8 decoded as UTF-16 Win32 unicode)
-  // - handle Single, Double and Extended properties as FLOAT
-  // - handle TDateTime properties as ISO-8061 encoded TEXT
-  // - handle TTimeLog properties as properietary fast INTEGER date time
-  // - handle Currency property as FLOAT (safely converted to/from currency)
-  // - handle TSQLRecord descendant properties as INTEGER RowID index to another record
-  // (warning: the value contains pointer(RowID), not a valid object memory - you
-  // have to manually retrieve the record, using a integer(IDField) typecast)
-  // - handle TSQLRecordMany descendant properties as an "has many" instance (this
-  // is a particular case of TSQLRecord: it won't contain pointer(ID), but an object)
-  // - handle TRecordReference properties as INTEGER (64-bit) RecordRef-like value
-  //  (use TSQLRest.Retrieve(Reference) to get a record content)
-  // - handle TSQLRawBlob properties as BLOB
-  // - handle dynamic arrays as BLOB, in the TDynArray.SaveTo binary format (is able
-  //  to handle dynamic arrays of records, with records or strings within records)
-  // - handle records as BLOB, in the RecordSave binary format (our code is ready
-  //  for that, but Delphi doesn't create the RTTI for records so it won't work)
-  // - WideString, shortstring, UnicodeString (i.e. Delphi 2009+ generic string),
-  // indexed properties are not handled yet (use faster RawUnicodeString instead
-  // of WideString and UnicodeString) - in fact, the generic string type is handled
+  /// how a RTTI property definition access its value
+  // - as returned by TPropInfo.Getter/Setter methods
+  TPropInfoCall = (
+    picNone, picField, picMethod, picIndexed);
+
+  /// a wrapper containing a RTTI property definition
+  // - used for direct Delphi / UTF-8 SQL type mapping/conversion
+  // - doesn't depend on RTL's TypInfo unit, to enhance cross-compiler support
   {$ifdef UNICODE}TPropInfo = record{$else}TPropInfo = object{$endif}
   public
-    {$ifdef USETYPEINFO}
-    function RetrieveFieldSize: integer;
-    {$endif}
+    /// raw retrieval of the property read access definition
+    // - note: 'var Call' generated incorrect code on Delphi XE4 -> use PMethod
+    function Getter(Instance: TObject; Call: PMethod): TPropInfoCall; {$ifdef HASINLINE}inline;{$endif}
+    /// raw retrieval of the property access definition
+    function Setter(Instance: TObject; Call: PMethod): TPropInfoCall; {$ifdef HASINLINE}inline;{$endif}
+    /// raw retrieval of tkInteger,tkEnumeration,tkSet,tkChar,tkWChar,tkBool
+    // - rather call GetOrdValue/GetInt64Value
     function GetOrdProp(Instance: TObject): PtrInt;
-     {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
-    function GetObjProp(Instance: TObject): TObject;
+    /// raw assignment of tkInteger,tkEnumeration,tkSet,tkChar,tkWChar,tkBool
+    // - rather call SetOrdValue/SetInt64Value
     procedure SetOrdProp(Instance: TObject; Value: PtrInt);
+    /// raw retrieval of tkClass
+    function GetObjProp(Instance: TObject): TObject;
+    /// raw retrieval of tkInt64,tkQWord
+    // - rather call GetInt64Value
     function GetInt64Prop(Instance: TObject): Int64;
+    /// raw assignment of tkInt64,tkQWord
+    // - rather call SetInt64Value
     procedure SetInt64Prop(Instance: TObject; const Value: Int64);
+    /// raw retrieval of tkLString
     procedure GetLongStrProp(Instance: TObject; var Value: RawByteString);
+    /// raw assignment of tkLString
     procedure SetLongStrProp(Instance: TObject; const Value: RawByteString);
+    /// raw copy of tkLString
     procedure CopyLongStrProp(Source,Dest: TObject);
+    /// raw retrieval of tkString into an Ansi7String
     procedure GetShortStrProp(Instance: TObject; var Value: RawByteString);
+    /// raw retrieval of tkWString
     procedure GetWideStrProp(Instance: TObject; var Value: WideString);
+    /// raw assignment of tkWString
     procedure SetWideStrProp(Instance: TObject; const Value: WideString);
     {$ifdef HASVARUSTRING}
-    function GetUnicodeStrProp(Instance: TObject): UnicodeString;
+    /// raw retrieval of tkUString
+    procedure GetUnicodeStrProp(Instance: TObject; var Value: UnicodeString);
+    /// raw assignment of tkUString
     procedure SetUnicodeStrProp(Instance: TObject; const Value: UnicodeString);
     {$endif HASVARUSTRING}
+    /// raw retrieval of tkFloat/currency
+    // - use instead GetCurrencyValue
     function GetCurrencyProp(Instance: TObject): currency;
+    /// raw assignment of tkFloat/currency
     procedure SetCurrencyProp(Instance: TObject; const Value: Currency);
+    /// raw retrieval of tkFloat/double
     function GetDoubleProp(Instance: TObject): double;
+    /// raw assignment of tkFloat/double
     procedure SetDoubleProp(Instance: TObject; Value: Double);
+    /// raw retrieval of tkFloat - with conversion to 64-bit double
+    // - use instead GetDoubleValue
     function GetFloatProp(Instance: TObject): double;
+    /// raw assignment of tkFloat
+    // - use instead SetDoubleValue
     procedure SetFloatProp(Instance: TObject; Value: TSynExtended);
     {$ifndef NOVARIANTS}
+    /// raw retrieval of tkVariant
     procedure GetVariantProp(Instance: TObject; var result: Variant);
+    /// raw assignment of tkVariant
     procedure SetVariantProp(Instance: TObject; const Value: Variant);
-    {$endif}
+    {$endif NOVARIANTS}
   public
     /// the type definition of this property
+    // - call TPropInfo.TypeInfo for cross-compiler access to this information
     PropType: PPTypeInfo;
-    /// contains the offset of a field, or the getter method set by 'read' Delphi declaration
+    /// contains the offset of a field, or the getter method set by 'read' declaration
+    // - if this field is 0 (no 'read' was specified), raw access methods will
+    // use SetProc to get the field memory address to read from
+    // - call TPropInfo.Getter for cross-compiler access to this information
     GetProc: PtrUInt;
-    /// contains the offset of a field, or the setter method set by 'write' Delphi declaration
-    // - if this field is nil (no 'write' was specified), SetValue() use GetProc to
-    // get the field memory address to save into
+    /// contains the offset of a field, or the setter method set by 'write' declaration
+    // - if this field is 0 (no 'write' was specified), raw access methods will
+    // use GetProc to get the field memory address to save into
+    // - call TPropInfo.Setter for cross-compiler access to this information
     SetProc: PtrUInt;
     /// contains the 'stored' boolean value/method (used in TPersistent saving)
     // - either integer(True) - the default, integer(False), reference to a Boolean
@@ -2973,7 +2932,8 @@ type
     // - if a property is marked as "stored AS_UNIQUE" (i.e. "stored false"),
     // it is created as UNIQUE in the SQL database and its bit is set in
     // Model.fIsUnique[]
-    StoredProc: PtrInt;
+    // - call TPropInfo.IsStored for cross-compiler access to this information
+    StoredProc: PtrUInt;
     /// contains the index value of an indexed class data property
     // - outside SQLite3, this can be used to define a VARCHAR() length value
     // for the textual field definition (sftUTF8Text/sftAnsiText); e.g.
@@ -2982,8 +2942,9 @@ type
     // - is used by a dynamic array property for fast usage of the
     // TSQLRecord.DynArray(DynArrayFieldIndex) method
     Index: Integer;
-    /// contains the default value (2147483648=$80000000 indicates nodefault)
+    /// contains the default value (NO_DEFAULT=$80000000 indicates none set)
     // when an ordinal or set property is saved as TPersistent
+    // - see TPropInfo.DefaultOr0/DefaultOrVoid for easy use
     Default: Longint;
     /// index of the property in the current inherited class definition
     // - first name index at a given class level is 0
@@ -2991,24 +2952,27 @@ type
     NameIndex: SmallInt;
     {$ifdef FPC}
     /// contains the type of the GetProc/SetProc/StoredProc, see also ptxxx
-    // bit 0..1 GetProc     e.g. PropProcs and 3=ptField
-    //     2..3 SetProc     e.g. (PropProcs shr 2) and 3=ptField
-    //     4..5 StoredProc
-    //     6 : true, constant index property
-    PropProcs : Byte;
-    {$endif}
+    // - bit 0..1 GetProc     e.g. PropProcs and 3=ptField
+    //       2..3 SetProc     e.g. (PropProcs shr 2) and 3=ptField
+    //       4..5 StoredProc
+    //       6 : true, constant index property
+    // - rather call TPropInfo.Getter/Setter for cross-compiler access
+    PropProcs: Byte;
+    {$ifdef FPC_PROVIDE_ATTR_TABLE}
+    /// property attributes, introduced since FPC SVN 42356-42411 (2019/07)
+    AttributeTable: PFPCAttributeTable;
+    {$endif FPC_PROVIDE_ATTR_TABLE}
+    {$endif FPC}
     /// the property definition Name
     Name: ShortString;
 
     /// the type information of this property
     // - will de-reference the PropType pointer on Delphi and newer FPC compilers
-    function TypeInfo: PTypeInfo;
-      {$ifdef HASINLINENOTX86}inline;{$endif}
+    function TypeInfo: PTypeInfo; {$ifdef HASINLINENOTX86}inline;{$endif}
     /// get the next property information
     // - no range check: use ClassProp()^.PropCount to determine the properties count
     // - get the first PPropInfo with ClassProp()^.PropList
-    function Next: PPropInfo;
-      {$ifdef FPC}inline;{$else}{$ifdef HASINLINENOTX86}inline;{$endif} {$endif}
+    function Next: PPropInfo; {$ifdef HASINLINENOTX86}inline;{$endif}
     /// return FALSE (AS_UNIQUE) if was marked as "stored AS_UNIQUE"
     //  (i.e. "stored false"), or TRUE by default
     // - if Instance=nil, will work only at RTTI level, not with field or method
@@ -3027,8 +2991,13 @@ type
     /// compare two published properties
     function SameValue(Source: TObject; DestInfo: PPropInfo; Dest: TObject): boolean;
     /// return true if this property is a BLOB (TSQLRawBlob)
-    function IsBlob: boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+    function IsBlob: boolean;     {$ifdef HASINLINE}inline;{$endif}
+    /// return the Default RTTI value defined for this property, or 0 if not set
+    function DefaultOr0: integer; {$ifdef HASINLINE}inline;{$endif}
+    /// return TRUE if the property has its Default RTTI value, or is 0/""/nil
+    function IsDefaultOrVoid(Instance: TObject): boolean;
+    /// compute in how many bytes this property is stored
+    function RetrieveFieldSize: integer;
     /// low-level getter of the ordinal property value of a given instance
     // - this method will check if the corresponding property is ordinal
     // - return -1 on any error
@@ -3047,10 +3016,10 @@ type
     /// low-level getter of the floating-point property value of a given instance
     // - this method will check if the corresponding property is floating-point
     // - return 0 on any error
-    function GetExtendedValue(Instance: TObject): TSynExtended;
+    function GetDoubleValue(Instance: TObject): double;
     /// low-level setter of the floating-point property value of a given instance
     // - this method will check if the corresponding property is floating-point
-    procedure SetExtendedValue(Instance: TObject; const Value: TSynExtended);
+    procedure SetDoubleValue(Instance: TObject; const Value: double);
     /// low-level getter of the long string property value of a given instance
     // - this method will check if the corresponding property is a Long String,
     // and will return '' if it's not the case
@@ -3094,7 +3063,7 @@ type
     /// low-level getter of the Unicode string property value of a given instance
     // - this method will check if the corresponding property is a Unicode String
     function GetUnicodeStrValue(Instance: TObject): UnicodeString;
-    {$endif}
+    {$endif HASVARUSTRING}
     /// low-level getter of a dynamic array wrapper
     // - this method will NOT check if the property is a dynamic array: caller
     // must have already checked that PropType^^.Kind=tkDynArray
@@ -3126,19 +3095,13 @@ type
     /// return TRUE if the property has a write setter or direct field
     function WriteIsDefined: boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    /// return TRUE if the property has a read or write setter or direct field
-    // - may be used e.g. to avoid EPropertyError when calling FPC typinfo
-    function WriteIsPossible: boolean;
     /// returns the low-level field read address, if GetterIsField is TRUE
-    function GetterAddr(Instance: pointer): pointer;
-      {$ifdef HASINLINENOTX86}inline;{$endif}
+    function GetterAddr(Instance: pointer): pointer; {$ifdef HASINLINENOTX86}inline;{$endif}
     /// returns the low-level field write address, if SetterIsField is TRUE
-    function SetterAddr(Instance: pointer): pointer;
-      {$ifdef HASINLINE}inline;{$endif}
+    function SetterAddr(Instance: pointer): pointer; {$ifdef HASINLINE}inline;{$endif}
     /// low-level getter of the field value memory pointer
     // - return NIL if both getter and setter are methods
-    function GetFieldAddr(Instance: TObject): pointer;
-      {$ifdef HASINLINE}inline;{$endif}
+    function GetFieldAddr(Instance: TObject): pointer; {$ifdef HASINLINE}inline;{$endif}
     /// low-level setter of the property value as its default
     // - this method will check the property type, e.g. setting '' for strings,
     // and 0 for numbers, or running FreeAndNil() on any nested object (unless
@@ -3146,10 +3109,33 @@ type
     procedure SetDefaultValue(Instance: TObject; FreeAndNilNestedObjects: boolean=true);
     {$ifndef NOVARIANTS}
     /// low-level setter of the property value from a supplied variant
+    // - will optionally make some conversion if the property type doesn't
+    // match the variant type, e.g. a text variant could be converted to integer
+    // when setting a tkInteger kind of property
+    // - a tkDynArray property is expected to be a T*ObjArray and will be
+    // converted from a TDocVariant using a newly allocated T*ObjArray
     procedure SetFromVariant(Instance: TObject; const Value: variant);
     /// low-level getter of the property value into a variant value
+    // - a tkDynArray property is expected to be a T*ObjArray and will be
+    // converted into a TDocVariant using a temporary JSON serialization
     procedure GetVariant(Instance: TObject; var Dest: variant);
     {$endif NOVARIANTS}
+    /// low-level setter of the property value from its text representation
+    /// - handle published integer, Int64, floating point values, (wide)string,
+    // enumerates (e.g. boolean), variant properties of the object
+    // - for variant properties, could unserialize the Text as JSON into a
+    // TDocVariantData if TryCustomVariants (and AllowDouble) are set
+    // - dynamic arrays are unserialized from JSON [...], unless a
+    // TRawUTF8DynArray property has been stored as CSV
+    procedure SetFromText(Instance: TObject; const Text: RawUTF8;
+      TryCustomVariants: PDocVariantOptions=nil; AllowDouble: boolean=false);
+    /// low-level appender of the property value to a text buffer
+    // - write the published integer, Int64, floating point values, (wide)string,
+    // enumerates (e.g. boolean), variant properties of the object
+    // - dynamic arrays will be serialized as JSON, unless RawUTF8DynArrayAsCSV
+    // is set, and a TRawUTF8DynArray property will be stored as CSV
+    procedure GetToText(Instance: TObject; WR: TTextWriter; RawUTF8DynArrayAsCSV: boolean=false;
+      Escape: TTextWriterKind=twNone);
     /// read an TObject published property, as saved by ObjectToJSON() function
     // - will use direct in-memory reference to the object, or call the corresponding
     // setter method (if any), creating a temporary instance via TTypeInfo.ClassCreate
@@ -3162,11 +3148,9 @@ type
       Options: TJSONToObjectOptions=[]): PUTF8Char;
   end;
 
-{$ifdef FPC}
-{$PACKRECORDS DEFAULT}
-{$else}
-{$A+}
-{$endif}
+  {$ifdef FPC}
+    {$pop}
+  {$endif}
 
   /// the available methods calling conventions
   // - this is by design only relevant to the x86 model
@@ -3194,7 +3178,6 @@ type
   PCallingConvention = ^TCallingConvention;
   PParamInfo  = ^TParamInfo;
 
-{$A-} { Delphi and FPC compiler use packed storage for this internal type }
   /// a wrapper around method returned result definition
   {$ifdef UNICODE}TReturnInfo = record{$else}TReturnInfo = object{$endif}
   public
@@ -3215,7 +3198,6 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
-{$A-} { Delphi and FPC compiler use packed storage for this internal type }
   /// a wrapper around an individual method parameter definition
   {$ifdef UNICODE}TParamInfo = record{$else}TParamInfo = object{$endif}
   public
@@ -3236,11 +3218,9 @@ type
     Name: ShortString;
     /// get the next parameter information
     // - no range check: use TReturnInfo.ParamCount to determine the appropriate count
-    function Next: PParamInfo;
-      {$ifdef HASINLINE}inline;{$endif}
+    function Next: PParamInfo; {$ifdef HASINLINE}inline;{$endif}
   end;
 
-{$A-} { Delphi and FPC compiler use packed storage for this internal type }
   /// a wrapper around a method definition
   {$ifdef UNICODE}TMethodInfo = record{$else}TMethodInfo = object{$endif}
   public
@@ -3266,11 +3246,33 @@ type
   end;
 
 {$ifdef FPC}
-{$PACKRECORDS DEFAULT}
+  const
+    ptField = 0;
+    ptStatic = 1;
+    ptVirtual = 2;
+    ptConst = 3;
+    NO_INDEX = 0;
+  {$PACKRECORDS DEFAULT} // back to normal alignment
 {$else}
-{$A+} { default aligned data }
-{$endif}
+  const
+    NO_INDEX = longint($80000000);
+    ptField = $ff;
+    ptVirtual = $fe;
+  type
+    /// used to map a TPropInfo.GetProc/SetProc and retrieve its kind
+    // - defined here for proper Delphi inlining
+    PropWrap = packed record
+      FillBytes: array [0..SizeOf(Pointer)-2] of byte;
+      /// =$ff for a ptField address, or =$fe for a ptVirtual method
+      Kind: byte;
+    end;
+  {$A+}
+{$endif FPC}
 
+const
+  NO_DEFAULT = longint($80000000);
+
+type
   TJSONSerializer = class;
 
   /// ORM attributes for a TSQLPropInfo definition
@@ -4136,16 +4138,18 @@ type
   // - resulting content will be UTF-8 encoded
   // - use an internal buffer, faster than string+string
   TINIWriter = class(TTextWriter)
-    /// write the published integer, Int64, floating point values, (wide)string,
-    // enumerates (e.g. boolean), variant properties of the object
-    // - won't handle shortstring properties
+    /// write the published properties of the object in INI text format
+    // - i.e. append PropertyName=PropertyValue lines
     // - add a new INI-like section with [Value.ClassName] if WithSection is true
-    // - the object must have been compiled with the $M+ define, i.e. must
-    // inherit from TPersistent or TSQLRecord
+    // - use internally TPropInfo.GetToText for the conversion to text
+    // - Value object must have been compiled with the $M+ define, i.e. must
+    // inherit from TPersistent, TSynPersistent or TSQLRecord
     // - the enumerates properties are stored with their integer index value
+    // - dynamic arrays will be serialized as JSON, unless RawUTF8DynArrayAsCSV
+    // is set, and a TRawUTF8DynArray property will be stored as CSV
     // - content can be read back using overloaded procedures ReadObject()
     procedure WriteObject(Value: TObject; const SubCompName: RawUTF8='';
-      WithSection: boolean=true); reintroduce;
+      WithSection: boolean=true; RawUTF8DynArrayAsCSV: boolean=false); reintroduce;
   end;
 
   /// method prototype to be used for custom serialization of a class
@@ -4208,9 +4212,6 @@ type
     // - function ObjectToJSON() is just a wrapper over this method
     procedure WriteObject(Value: TObject;
       Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]); override;
-    /// override method, handling IncludeUnitName option
-    procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
-      IncludeUnitName, IncludePointer: boolean); override;
     /// customize TSQLRecord.GetJSONValues serialization process
     // - jwoAsJsonNotAsString will force TSQLRecord.GetJSONValues to serialize
     // nested property instances as a JSON object/array, not a JSON string:
@@ -4291,7 +4292,10 @@ type
     // - then you can use ObjArrayAdd/ObjArrayFind/ObjArrayDelete to manage
     // the stored items, and never forget to call ObjArrayClear to release
     // the memory
-    class procedure RegisterObjArrayForJSON(aDynArray: PTypeInfo; aItem: TClass); overload;
+    // - will use the default published properties serializer, unless you specify
+    // your custom Reader/Write callbacks
+    class procedure RegisterObjArrayForJSON(aDynArray: PTypeInfo;
+      aItem: TClass; aReader: TDynArrayJSONCustomReader=nil; aWriter: TDynArrayJSONCustomWriter=nil);overload;
     /// let T*ObjArray dynamic arrays be used for storage of class instances
     // - will allow JSON serialization and unserialization of the registered
     // dynamic array property defined in any TPersistent or TSQLRecord
@@ -4332,7 +4336,8 @@ function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PPropIn
 
 /// retrieve a Field property RTTI information from a Property Name
 // - this special version also search into parent properties (default is only current)
-function ClassFieldPropWithParents(aClassType: TClass; const PropName: shortstring): PPropInfo;
+function ClassFieldPropWithParents(aClassType: TClass; const aPropName: shortstring;
+  aCaseSensitive: boolean=false): PPropInfo;
 
 /// retrieve an integer/Int64 Field propery value from a Property Name
 // - this version also search into parent properties
@@ -4349,7 +4354,7 @@ function ClassFieldInstance(Instance: TObject; const PropName: shortstring;
 /// retrieve a Field property RTTI information from a Property Name
 // - this special version also search into parent properties (default is only current)
 function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char;
-  PropNameLen: integer): PPropInfo;
+  PropNameLen: integer; aCaseSensitive: boolean=false): PPropInfo;
 
 /// retrieve a Field property RTTI information searching for an exact Property class type
 // - this special version also search into parent properties
@@ -4417,7 +4422,7 @@ function GetObjectComponent(Obj: TPersistent; const ComponentName: shortstring;
 
 /// retrieve the class property RTTI information for a specific class
 function InternalClassProp(ClassType: TClass): PClassProp;
-  {$ifdef FPC}inline;{$endif}
+  {$ifdef FPC}inline;{$else}{$ifdef HASINLINENOTX86}inline;{$endif}{$endif}
 
 /// retrieve the class property RTTI information for a specific class
 // - will return the number of published properties
@@ -4433,7 +4438,7 @@ function InternalClassProp(ClassType: TClass): PClassProp;
 //  !        // use P^
 //  !        P := P^.Next;
 //  !      end;
-//  !      CT := CT.ClassParent;
+//  !      CT := GetClassParent(CT);
 //  !    until CT=nil;
 //  !  end;
 // such a loop is much faster than using the RTL's TypeInfo or RTTI units
@@ -4909,7 +4914,7 @@ type
   TSQLURIMethods = set of TSQLURIMethod;
 
 /// convert a string HTTP verb into its TSQLURIMethod enumerate
-function StringToMethod(const method: RawUTF8): TSQLURIMethod;
+function ToMethod(const method: RawUTF8): TSQLURIMethod;
 
 var
   /// the options used by TSynJsonFileSettings.SaveIfNeeded
@@ -5885,6 +5890,9 @@ type
     /// retrieve the "Content-Type" value from OutHead
     // - if GuessJSONIfNoneSet is TRUE, returns JSON if none was set in headers
     function OutBodyType(GuessJSONIfNoneSet: boolean=True): RawUTF8;
+    /// check if the "Content-Type" value from OutHead is JSON
+    // - if GuessJSONIfNoneSet is TRUE, assume JSON is used
+    function OutBodyTypeIsJson(GuessJSONIfNoneSet: boolean=True): boolean;
     /// just a wrapper around FindIniNameValue(pointer(InHead),UpperName)
     // - use e.g. as
     // ! Call.Header(HEADER_REMOTEIP_UPPER) or Call.Header(HEADER_BEARER_UPPER)
@@ -8110,18 +8118,18 @@ type
 
     /// return true if all published properties values in Other are identical to
     // the published properties of this object
+    // - instances must be of the same class type
+    // - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are compared
+    // - comparison is much faster than SameValues() below
+    function SameRecord(Reference: TSQLRecord): boolean;
+    /// return true if all published properties values in Other are identical to
+    // the published properties of this object
     // - work with different classes: Reference properties name must just be
     // present in the calling object
     // - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are compared
     // - compare the text representation of the values: fields may be of different
     // type, encoding or precision, but still have same values
     function SameValues(Reference: TSQLRecord): boolean;
-    /// return true if all published properties values in Other are identical to
-    // the published properties of this object
-    // - instances must be of the same class type
-    // - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are compared
-    // - comparaison is much faster than SameValues() above
-    function SameRecord(Reference: TSQLRecord): boolean;
     /// clear the values of all published properties, and also the ID property
     procedure ClearProperties; overload;
     /// clear the values of specified published properties
@@ -8679,7 +8687,7 @@ type
     // - you can specify a Row index to be updated during the sort in PCurrentRow
     // - sort is very fast, even for huge tables (more faster than any indexed
     // SQL query): 500,000 rows are sorted instantly
-    // - this optimized sort implementation does the comparaison first by the
+    // - this optimized sort implementation does the comparison first by the
     // designed field, and, if the field value is identical, the ID value is
     // used (it will therefore sort by time all identical values)
     procedure SortFields(Field: integer; Asc: boolean=true;
@@ -8718,7 +8726,7 @@ type
     // (X'53514C697465' e.g.)
     // - since TSQLTable data is PUTF8Char, string type is sftUTF8Text only
     function FieldType(Field: integer; out FieldTypeInfo: PSQLTableFieldType): TSQLFieldType; overload;
-    /// get the appropriate Sort comparaison function for a field,
+    /// get the appropriate Sort comparison function for a field,
     // nil if not available (bad field index or field is blob)
     // - field type is guessed from first data row
     function SortCompare(Field: integer): TUTF8Compare;
@@ -8894,7 +8902,7 @@ type
     // - use the specified TSQLRecord class or create instances
     // of the first associated record class (from internal QueryTables[])
     procedure ToObjectList(DestList: TObjectList; RecordType: TSQLRecordClass=nil); overload;
-    {$ifdef ISDELPHI2010} // Delphi 2009 generics are buggy
+    {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics are buggy
     /// create a TObjectList<TSQLRecord> with TSQLRecord instances corresponding
     // to this TSQLTable result set
     // - use the specified TSQLRecord class or create instances
@@ -9502,10 +9510,12 @@ type
   // to circumvent some specific DB provider or case sensitivity issue on fields
   // - by default, check of missing field name will be case insensitive, unless
   // the rpmMissingFieldNameCaseSensitive option is set
+  // - rpmQuoteFieldName will quote the field names - to be used e.g. with
+  // FireBird in its Dialect 3
   TSQLRecordPropertiesMappingOptions = set of (
     rpmAutoMapKeywordFields,
     rpmNoCreateMissingTable, rpmNoCreateMissingField,
-    rpmMissingFieldNameCaseSensitive);
+    rpmMissingFieldNameCaseSensitive, rpmQuoteFieldName);
 
   /// pointer to external database properties for ORM
   // - is used e.g. to allow a "fluent" interface for MapField() method
@@ -9652,6 +9662,10 @@ type
     /// the external field names, following fProps.Props.Field[] order
     // - excluding ID/RowID field, which is stored in RowIDFieldName
     property ExtFieldNames: TRawUTF8DynArray read fExtFieldNames;
+    /// the unquoted external field names, following fProps.Props.Field[] order
+    // - excluding ID/RowID field, which is stored in RowIDFieldName
+    // - in respect to ExtFieldNames[], this array will never quote the field name
+    property ExtFieldNamesUnQuotedSQL: TRawUTF8DynArray read fExtFieldNamesUnQuotedSQL;
     /// each bit set, following fProps.Props.Field[]+1 order (i.e. 0=ID,
     // 1=Field[0], ...), indicates that this external field name
     // has not been mapped
@@ -10814,7 +10828,10 @@ type
   // been previously registered via TInterfaceFactory.RegisterUnsafeSPIType
   // so that low-level logging won't include such values
   // - vIsQword is set for ValueType=smvInt64 over a QWord unsigned 64-bit value
-  TServiceMethodValueAsm = set of (vIsString, vPassedByReference, vIsObjArray, vIsSPI, vIsQword);
+  // - vIsDynArrayString is set for ValueType=smvDynArray of string values
+  // - vIsDateTimeMS is set for ValueType=smvDateTime and TDateTimeMS value
+  TServiceMethodValueAsm = set of (vIsString, vPassedByReference,
+    vIsObjArray, vIsSPI, vIsQword, vIsDynArrayString, vIsDateTimeMS);
 
   /// describe a service provider method argument
   {$ifdef UNICODE}TServiceMethodArgument = record{$else}TServiceMethodArgument = object{$endif}
@@ -10914,6 +10931,9 @@ type
     procedure FixValueAndAddToObject(const Value: variant; var DestDoc: TDocVariantData);
     {$endif}
   end;
+
+  /// pointer to a service provider method argument
+  PServiceMethodArgument = ^TServiceMethodArgument;
 
   /// describe a service provider method arguments
   TServiceMethodArgumentDynArray = array of TServiceMethodArgument;
@@ -11023,6 +11043,14 @@ type
     // - if Input is TRUE, will handle const / var arguments
     // - if Input is FALSE, will handle var / out / result arguments
     function ArgsArrayToObject(P: PUTF8Char; Input: boolean): RawUTF8;
+    /// convert parameters encoded as name=value or name='"value"' or name='{somejson}'
+    // into a JSON object
+    // - on Windows, use double-quotes ("") anywhere you expect single-quotes (")
+    // - as expected e.g. from a command line tool
+    // - if Input is TRUE, will handle const / var arguments
+    // - if Input is FALSE, will handle var / out / result arguments
+    function ArgsCommandLineToObject(P: PUTF8Char; Input: boolean;
+      RaiseExceptionOnUnknownParam: boolean=false): RawUTF8;
     /// returns a dynamic array list of all parameter names
     // - if Input is TRUE, will handle const / var arguments
     // - if Input is FALSE, will handle var / out / result arguments
@@ -11672,6 +11700,10 @@ type
     // - if aMethodName does not have an exact method match, it will try with a
     // trailing underscore, so that e.g. /service/start will match IService._Start()
     function FindMethodIndex(const aMethodName: RawUTF8): integer;
+    /// find a particular method in internal Methods[] list
+    // - just a wrapper around FindMethodIndex() returing a PServiceMethod
+    // - will return nil if the method is not known
+    function FindMethod(const aMethodName: RawUTF8): PServiceMethod;
     /// find the index of a particular interface.method in internal Methods[] list
     // - will search for a match against Methods[].InterfaceDotMethodName property
     // - won't find the default AddRef/Release/QueryInterface methods
@@ -12156,10 +12188,11 @@ type
       aScope: TInterfaceStubLogLayouts; SepChar: AnsiChar): RawUTF8;
     function GetLogHash: cardinal;
     procedure OnExecuteToLog(Ctxt: TOnInterfaceStubExecuteParamsVariant);
+  public
     /// low-level internal constructor
+    // - you should not call this method, but the overloaded alternatives
     constructor Create(aFactory: TInterfaceFactory;
       const aInterfaceName: RawUTF8); reintroduce; overload; virtual;
-  public
     /// initialize an interface stub from TypeInfo(IMyInterface)
     // - assign the fake class instance to a stubbed interface variable:
     // !var I: ICalculator;
@@ -12491,10 +12524,11 @@ type
   TInterfaceMockSpy = class(TInterfaceMock)
   protected
     procedure IntSetOptions(Options: TInterfaceStubOptions); override;
+  public
     /// this will set and force imoLogMethodCallsAndResults option as needed
+    // - you should not call this method, but the overloaded alternatives
     constructor Create(aFactory: TInterfaceFactory;
       const aInterfaceName: RawUTF8); override;
-  public
     /// check that a method has been called a specify number of times
     procedure Verify(const aMethodName: RawUTF8;
       aOperator: TSQLQueryOperator=qoGreaterThan; aCount: cardinal=0); overload;
@@ -15093,7 +15127,7 @@ type
     // Results: TIDDynArray parameter
     function BatchSend(Batch: TSQLRestBatch): integer; overload;
 
-    {$ifdef ISDELPHI2010} // Delphi 2009 generics support is buggy :(
+    {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
     /// get an instance of one interface-based service
     // - may return nil if this service interface is not available
     function Service<T: IInterface>: T;
@@ -15135,7 +15169,7 @@ type
     function RetrieveList<T: TSQLRecord>(const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8=''): TObjectList<T>; overload;
-    {$endif ISDELPHI2010}
+    {$endif ISDELPHIXE}
 
     /// you can call this method in TThread.Execute to ensure that
     // the thread will be taken into account during process
@@ -18166,6 +18200,7 @@ type
     fStoredClass: TSQLRecordClass;
     fStoredClassProps: TSQLModelRecordProperties;
     fStoredClassRecordProps: TSQLRecordProperties;
+    fStoredClassMapping: PSQLRecordPropertiesMapping;
     fStorageLockShouldIncreaseOwnerInternalState: boolean;
     fStorageLockLogTrace: boolean;
     fModified: boolean;
@@ -20561,32 +20596,32 @@ type
   // ! Model.VirtualTableRegister(TSQLRecordDali1,TSQLVirtualTableJSON);
   TSQLRecordVirtualTableAutoID = class(TSQLRecordVirtual);
 
-/// special comparaison function for sorting ftRecord (TRecordReference/RecordRef)
+/// special comparison function for sorting ftRecord (TRecordReference/RecordRef)
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareRecord(P1,P2: PUTF8Char): PtrInt;
 
-/// special comparaison function for sorting sftBoolean
+/// special comparison function for sorting sftBoolean
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareBoolean(P1,P2: PUTF8Char): PtrInt;
 
-/// special comparaison function for sorting sftEnumerate, sftSet or sftID
+/// special comparison function for sorting sftEnumerate, sftSet or sftID
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareUInt32(P1,P2: PUTF8Char): PtrInt;
 
-/// special comparaison function for sorting sftInteger, sftTID, sftRecordVersion
+/// special comparison function for sorting sftInteger, sftTID, sftRecordVersion
 // sftTimeLog/sftModTime/sftCreateTime or sftUnixTime/sftUnixMSTime UTF-8 encoded
 // values in the SQLite3 database or JSON content
 function UTF8CompareInt64(P1,P2: PUTF8Char): PtrInt;
 
-/// special comparaison function for sorting sftCurrency
+/// special comparison function for sorting sftCurrency
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareCurr64(P1,P2: PUTF8Char): PtrInt;
 
-/// special comparaison function for sorting sftFloat
+/// special comparison function for sorting sftFloat
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareDouble(P1,P2: PUTF8Char): PtrInt;
 
-/// special comparaison function for sorting sftDateTime or sftDateTimeMS
+/// special comparison function for sorting sftDateTime or sftDateTimeMS
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareISO8601(P1,P2: PUTF8Char): PtrInt;
 
@@ -20657,7 +20692,10 @@ const
   /// special TSQLFieldBits value containing all field bits set to 1
   ALL_FIELDS: TSQLFieldBits = [0..MAX_SQLFIELDS-1];
 
-  // contains TSQLAuthUser.ComputeHashedPassword('synopse')
+  /// default hashed password set by TSQLAuthGroup.InitializeTable for all users
+  // - contains TSQLAuthUser.ComputeHashedPassword('synopse')
+  // - override AuthAdminDefaultPassword, AuthSupervisorDefaultPassword and
+  // AuthUserDefaultPassword values to follow your own application expectations
   DEFAULT_HASH_SYNOPSE = '67aeea294e1cb515236fd7829c55ec820ef888e8e221814d24d83b3dc4d825dd';
 
   /// the Server-side instance implementation patterns without any ID
@@ -20880,12 +20918,11 @@ function CurrentServiceContextServer: TSQLRestServer;
 
 /// returns a safe 256-bit hexadecimal nonce, changing every 5 minutes
 // - as used e.g. by TSQLRestServerAuthenticationDefault.Auth
-// - this function is very fast, even if cryptographically-level secure
+// - this function is very fast, even if cryptographically-level SHA-3 secure
 function CurrentServerNonce(Previous: boolean=false): RawUTF8;
 
 function ToText(ft: TSQLFieldType): PShortString; overload;
 function ToText(vk: TSQLRecordVirtualKind): PShortString; overload;
-function ToText(tk: TTypeKind): PShortString; overload;
 function ToText(e: TSQLEvent): PShortString; overload;
 function ToText(he: TSQLHistoryEvent): PShortString; overload;
 function ToText(o: TSQLOccasion): PShortString; overload;
@@ -20929,12 +20966,12 @@ implementation
 {$ifdef FPC}
 uses
   {$ifndef MSWINDOWS}
-  SynFPCLinux,
+  SynFPCLinux, // includes minimal redirection to FPC's TypInfo.pp unit
   BaseUnix,
   Unix,
   {$endif}
   dynlibs;
-{$endif}
+{$endif FPC}
 
 // ************ some RTTI and SQL mapping routines
 
@@ -21000,24 +21037,227 @@ end;
 {$endif HASDIRECTTYPEINFO}
 
 
-{$ifndef FPC}
-
+{$ifndef FPC} /// no RTTI alignment under Delphi - see also SynFPCTypInfo
 type
-  /// used to map a TPropInfo.GetProc/SetProc and retrieve its kind
-  PropWrap = packed record
-    FillBytes: array [0..SizeOf(Pointer)-2] of byte;
-    /// = $ff for a field address, or =$fe for a virtual method
-    Kind: byte;
-  end;
-  /// no RTTI alignment under Delphi
   AlignToPtr = pointer;
   AlignTypeData = pointer;
+  AlignTypeDataClean = pointer;
   UnalignToDouble = Double;
-
-const
-  NO_INDEX = Integer($80000000);
-
 {$endif FPC}
+
+{ some inlined methods }
+
+function GetTypeData(const info: TTypeInfo): pointer;
+{$ifdef HASINLINE}inline;{$endif}
+begin
+  result := AlignTypeData(PAnsiChar(@info)+2+PByte(PAnsiChar(@info)+1)^);
+end;
+
+function GetTypeDataClean(const info: TTypeInfo): pointer;
+{$ifdef HASINLINE}inline;{$endif}
+begin
+  result := AlignTypeDataClean(PAnsiChar(@info)+2+PByte(PAnsiChar(@info)+1)^);
+end;
+
+function TTypeInfo.ClassType: PClassType;
+{$ifdef HASINLINENOTX86}
+begin
+  result := GetTypeData(self);
+end;
+{$else}
+asm // very fast code
+        movzx   edx, byte ptr[eax].TTypeInfo.Name
+        lea     eax, [eax + edx].TTypeInfo.Name[1]
+end;
+{$endif}
+
+function TTypeInfo.RecordType: PRecordType;
+{$ifdef HASINLINENOTX86}
+begin
+  result := GetTypeData(self);
+end;
+{$else}
+asm // very fast code
+        movzx   edx, byte ptr[eax].TTypeInfo.Name
+        lea     eax, [eax + edx].TTypeInfo.Name[1]
+end;
+{$endif}
+
+function TTypeInfo.InterfaceType: PInterfaceTypeData;
+{$ifdef HASINLINENOTX86}
+begin
+  result := GetTypeData(self);
+end;
+{$else}
+asm // very fast code
+        movzx   edx, byte ptr[eax].TTypeInfo.Name
+        lea     eax, [eax + edx].TTypeInfo.Name[1]
+end;
+{$endif}
+
+function TTypeInfo.FloatType: TFloatType;
+begin
+  result := PFloatType(GetTypeData(self))^;
+end;
+
+function TTypeInfo.OrdType: TOrdType;
+begin
+  result := POrdType(GetTypeData(self))^;
+end;
+
+function TTypeInfo.IsQWord: boolean;
+begin
+  {$ifdef FPC}
+  result := Kind=tkQWord;
+  {$else}
+  if @self=TypeInfo(QWord) then
+    result := true else
+    {$ifdef UINICODE}if Kind=tkInt64 then // check MinInt64Value>MaxInt64Value
+      with PHash128Rec(PAnsiChar(@Name[1])+ord(Name[0]))^ do
+        result := Lo>Hi else {$endif}
+        result := false;
+  {$endif}
+end;
+
+function TPropInfo.Getter(Instance: TObject; Call: PMethod): TPropInfoCall;
+begin
+  if GetProc=0 then begin // no 'read' was defined -> try from 'write' field
+    if (SetProc<>0) and
+       ({$ifdef FPC}(PropProcs shr 2)and 3{$else}PropWrap(SetProc).Kind{$endif}=ptField) then begin
+      Call.Data := pointer(PtrUInt(Instance)+SetProc{$ifndef FPC}and $00ffffff{$endif});
+      result := picField;
+    end else
+      result := picNone;
+    exit;
+  end else
+  case {$ifdef FPC}integer(PropProcs)and 3{$else}PropWrap(GetProc).Kind{$endif} of
+  ptField: begin  // GetProc is an offset to the instance fields
+    Call.Data := pointer(PtrUInt(Instance)+GetProc{$ifndef FPC}and $00ffffff{$endif});
+    result := picField;
+    exit;
+  end;
+  ptVirtual: // GetProc is an offset to the class VMT
+    Call.Code := PPointer(PPtrUInt(Instance)^+{$ifndef FPC}word{$endif}(GetProc))^;
+  {$ifdef FPC} ptConst: exit(picNone); {$endif} // never happen on properties?
+  else // ptStatic: GetProc is the method code itself
+    Call.Code := pointer(GetProc);
+  end;
+  Call.Data := Instance;
+  if {$ifdef FPC}(PropProcs shr 6)and 1{$else}Index{$endif}<>NO_INDEX then
+    result := picIndexed else
+    result := picMethod;
+end;
+
+function TPropInfo.Setter(Instance: TObject; Call: PMethod): TPropInfoCall;
+begin
+  if SetProc=0 then begin // no 'write' was defined -> try from 'read' field
+    if (GetProc<>0) and
+       ({$ifdef FPC}integer(PropProcs)and 3{$else}PropWrap(GetProc).Kind{$endif}=ptField) then begin
+      Call.Data := pointer(PtrUInt(Instance)+GetProc{$ifndef FPC}and $00ffffff{$endif});
+      result := picField;
+    end else
+      result := picNone;
+    exit;
+  end else
+  case {$ifdef FPC}(PropProcs shr 2)and 3{$else}PropWrap(SetProc).Kind{$endif} of
+  ptField: begin  // SetProc is an offset to the instance fields
+    Call.Data := pointer(PtrUInt(Instance)+SetProc{$ifndef FPC}and $00ffffff{$endif});
+    result := picField;
+    exit;
+  end;
+  ptVirtual: // SetProc is an offset to the class VMT
+    Call.Code := PPointer(PPtrUInt(Instance)^+{$ifndef FPC}word{$endif}(SetProc))^;
+  {$ifdef FPC} ptConst: exit(picNone); {$endif}
+  else // ptStatic: SetProc is the method code itself
+    Call.Code := pointer(SetProc);
+  end;
+  Call.Data := Instance;
+  if {$ifdef FPC}(PropProcs shr 6)and 1{$else}Index{$endif}<>NO_INDEX then
+    result := picIndexed else
+    result := picMethod;
+end;
+
+function TPropInfo.GetterAddr(Instance: pointer): pointer;
+{$ifdef HASINLINENOTX86}
+begin
+  result := Pointer(PtrUInt(Instance)+GetProc{$ifndef FPC} and $00ffffff{$endif});
+end;
+{$else}
+asm
+        mov     eax, [eax].TPropInfo.GetProc
+        and     eax, $00ffffff
+        add     eax, edx
+end;
+{$endif}
+
+function TPropInfo.SetterAddr(Instance: pointer): pointer;
+begin
+  result := Pointer(PtrUInt(Instance)+SetProc{$ifndef FPC} and $00ffffff{$endif});
+end;
+
+function TPropInfo.TypeInfo: PTypeInfo;
+{$ifdef HASINLINENOTX86}
+begin
+  {$ifndef HASDIRECTTYPEINFO}
+  if PropType<>nil then
+    result := PropType^ else
+  {$endif}
+    result := pointer(PropType);
+end;
+{$else}
+asm // Delphi is so bad at compiling above code...
+        mov     eax, [eax].TPropInfo.PropType
+        test    eax, eax
+        jz      @z
+        mov     eax, [eax]
+        ret
+@z:     db      $f3 // rep ret
+end;
+{$endif HASINLINENOTX86}
+
+function TPropInfo.GetterIsField: boolean;
+begin
+  result := {$ifdef FPC}integer(PropProcs)and 3{$else}PropWrap(GetProc).Kind{$endif}=ptField;
+end;
+
+function TPropInfo.SetterIsField: boolean;
+begin
+ result := {$ifdef FPC}(PropProcs shr 2)and 3{$else}PropWrap(SetProc).Kind{$endif}=ptField;
+end;
+
+function TPropInfo.GetFieldAddr(Instance: TObject): pointer;
+begin
+  if not GetterIsField then
+    if not SetterIsField then
+      // both are methods -> returns nil
+      result := nil else
+      // field - Setter is the field offset in the instance data
+      result := SetterAddr(Instance) else
+    // field - Getter is the field offset in the instance data
+    result := GetterAddr(Instance);
+end;
+
+{$ifdef HASINLINENOTX86}
+function TPropInfo.Next: PPropInfo;
+begin
+  result := AlignToPtr(PAnsiChar(@Name[0]) + SizeOf(Name[0]) + Length(Name));
+end;
+{$else}
+function TPropInfo.Next: PPropInfo;
+asm     // very fast code
+        movzx   edx, byte ptr[eax].TPropInfo.Name
+        lea     eax, [eax + edx].TPropInfo.Name[1]
+end;
+{$endif HASINLINENOTX86}
+
+function TPropInfo.WriteIsDefined: boolean;
+begin
+  {$ifdef FPC} // see typinfo.IsWriteableProp
+  result := (SetProc<>0) and ((PropProcs shr 2)and 3 in [ptField..ptVirtual]);
+  {$else}
+  result := SetProc<>0;
+  {$endif}
+end;
 
 function GetInterfaceFromEntry(Instance: TObject; Entry: PInterfaceEntry; out Obj): boolean;
   {$ifndef FPC}
@@ -21026,7 +21266,7 @@ function GetInterfaceFromEntry(Instance: TObject; Entry: PInterfaceEntry; out Ob
     TGetProc = function: IInterface of object;
   var Call: TMethod;
   begin // sub-procedure to avoid try..finally for TGetProc(): Interface result
-    if PropWrap(ImplGetter).Kind=$FE then
+    if PropWrap(ImplGetter).Kind=ptVirtual then
       Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(ImplGetter))^ else
       Call.Code := Pointer(ImplGetter);
     Call.Data := Instance;
@@ -21042,8 +21282,8 @@ begin
         IInterface(Obj)._AddRef;
     end
   {$ifndef FPC} else
-    if PropWrap(Entry^.ImplGetter).Kind=$FF then
-      IInterface(Obj) := IInterface(PPointer(PtrUInt(Instance)+PtrUInt(Entry^.ImplGetter and $00FFFFFF))^) else
+    if PropWrap(Entry^.ImplGetter).Kind=ptField then
+      IInterface(Obj) := IInterface(PPointer(PtrUInt(Instance)+PtrUInt(Entry^.ImplGetter and $00ffffff))^) else
       UseImplGetter(Instance,Entry^.ImplGetter,IInterface(Obj)){$endif};
   Result := Pointer(Obj)<>nil;
 end;
@@ -21063,7 +21303,7 @@ begin
       {$endif}
       for i := 0 to Count-1 do
       if IdemPropName(result^.Name{$ifdef FPC}^{$endif},aMethodName) then
-        Exit else
+        exit else
         {$ifdef FPC}
         inc(result);
         {$else}
@@ -21071,7 +21311,7 @@ begin
         {$endif}
     end;
     {$ifdef FPC}
-    aClassType := aClassType.ClassParent; // vmtParent slot is reference on FPC
+    aClassType := GetClassParent(aClassType); // vmtParent slot is reference on FPC
     if aClassType=nil then
     {$else}
     if PPointer(PtrInt(aClassType)+vmtParent)^<>nil then
@@ -21095,10 +21335,10 @@ begin // see http://hallvards.blogspot.fr/2006/09/extended-class-rtti.html
     {$ifdef FPC}
     result := pointer(PtrUInt(@Addr)+SizeOf(Pointer));
     {$else}
-    result := @Name[ord(Name[0])+1];
+    result := pointer(PAnsiChar(@Name[1])+ord(Name[0]));
     if PtrUInt(result)-PtrUInt(@self)=Len then
       result := nil; // no method details available
-    {$endif}
+    {$endif FPC}
   end else
       result := @self;
 end;
@@ -21110,19 +21350,19 @@ end;
 
 function TParamInfo.Next: PParamInfo;
 begin
-  result := AlignToPtr(@Name[ord(Name[0])+1]);
+  result := AlignToPtr(PAnsiChar(@Name[1])+ord(Name[0]));
   {$ifdef ISDELPHI2010}
-  Inc(PByte(result),PWord(result)^); // attributes
+  inc(PByte(result),PWord(result)^); // ignore optional attributes
   {$endif}
 end;
 
 function InternalClassProp(ClassType: TClass): PClassProp;
 {$ifdef FPC}
 begin
-  with GetFPCTypeData(pointer(ClassType.ClassInfo))^ do
-    result := AlignToPtr(@UnitName[ord(UnitName[0])+1]);
+  with PTypeInfo(PPointer(PtrUInt(ClassType)+vmtTypeInfo)^)^.ClassType^ do
+    result := AlignToPtr(PAnsiChar(@UnitName[1])+ord(UnitName[0]));
 {$else}
-{$ifdef PUREPASCAL}
+{$ifdef HASINLINENOTX86}
 var PTI: PTypeInfo;
 begin // code is a bit abstract, but compiles very well
   PTI := PPointer(PtrInt(ClassType)+vmtTypeInfo)^;
@@ -21140,7 +21380,7 @@ asm // this code is the fastest possible
         movzx   edx, byte ptr[eax].TClassType.UnitName
         lea     eax, [eax + edx].TClassType.UnitName[1].TClassProp
 @z:
-{$endif PUREPASCAL}
+{$endif HASINLINENOTX86}
 {$endif FPC}
 end;
 
@@ -21162,7 +21402,7 @@ begin
         PClassProp(@UnitName[ord(UnitName[0])+1])^ do begin
       PropInfo := @PropList;
       result := PropCount;
-    {$endif}
+    {$endif FPC}
       exit;
     end;
   end;
@@ -21189,22 +21429,21 @@ begin
       end;
     end else
       inc(result,CP^.PropCount);
-    ClassType := ClassType.ClassParent;
+    ClassType := GetClassParent(ClassType);
   end;
 end;
 
 function ClassHasPublishedFields(ClassType: TClass): boolean;
 var CP: PClassProp;
 begin
+  result := true;
   while ClassType<>nil do begin
     CP := InternalClassProp(ClassType);
     if CP=nil then
       break; // no RTTI information (e.g. reached TObject level)
-    if CP^.PropCount>0 then begin
-      result := true;
+    if CP^.PropCount>0 then
       exit;
-    end;
-    ClassType := ClassType.ClassParent;
+    ClassType := GetClassParent(ClassType);
   end;
   result := false;
 end;
@@ -21215,7 +21454,7 @@ var P: PClassProp;
 begin
   if C=nil then
     exit;
-  InternalAdd(C.ClassParent,list);
+  InternalAdd(GetClassParent(C),list);
   P := InternalClassProp(C);
   if (P<>nil) and (P^.PropCount>0) then
     ObjArrayAdd(list,pointer(C));
@@ -21244,14 +21483,10 @@ begin
           result[n] := P;
           inc(n);
         end;
-        {$ifdef HASINLINE}
-        P := P^.Next;
-        {$else}
-        with P^ do P := @Name[ord(Name[0])+1];
-        {$endif}
+        P := AlignToPtr(PAnsiChar(@P^.Name[1])+ord(P^.Name[0])); // := P^.Next
       end;
     end;
-    ClassType := ClassType.ClassParent;
+    ClassType := GetClassParent(ClassType);
   end;
   SetLength(result,n);
 end;
@@ -21261,6 +21496,7 @@ function ClassFieldNamesAllProps(ClassType: TClass; IncludePropType: boolean;
 var props: PPropInfoDynArray;
     n,i: integer;
 begin
+  result := nil;
   props := ClassFieldAllProps(ClassType,Types);
   n := length(props);
   SetLength(result,n);
@@ -21284,45 +21520,49 @@ begin
     result := nil;
 end;
 
-function ClassFieldPropWithParents(aClassType: TClass; const PropName: shortstring): PPropInfo;
-var i: integer;
+function ClassFieldPropWithParents(aClassType: TClass; const aPropName: shortstring;
+  aCaseSensitive: boolean): PPropInfo;
+var n, i: integer;
 begin
   while aClassType<>nil do begin
-    for i := 1 to InternalClassPropInfo(aClassType,result) do
-      if (result^.Name[0]=PropName[0]) and
-         IdemPropNameUSameLen(@result^.Name[1],@PropName[1],ord(PropName[0])) then
-        exit else
-        {$ifdef HASINLINE}
-        result := result^.Next;
-        {$else}
-        with result^ do result := @Name[ord(Name[0])+1];
-        {$endif}
-    aClassType := aClassType.ClassParent;
+    n := InternalClassPropInfo(aClassType,result);
+    if n<>0 then
+      if aCaseSensitive then
+        for i := 1 to n do
+          if result^.Name=aPropName then
+            exit else
+            result := result^.Next else
+        for i := 1 to n do
+          if (result^.Name[0]=aPropName[0]) and
+             IdemPropNameUSameLen(@result^.Name[1],@aPropName[1],ord(aPropName[0])) then
+            exit else
+            result := result^.Next;
+    aClassType := GetClassParent(aClassType);
   end;
   result := nil;
 end;
 
 function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char;
-  PropNameLen: integer): PPropInfo;
-{$ifdef FPC}
-var name: AnsiString;
-{$else}
-var i: integer;
-{$endif}
+  PropNameLen: integer; aCaseSensitive: boolean): PPropInfo;
+var n, i: integer;
 begin
-  {$ifdef FPC}
-  SetString(name,PAnsiChar(PropName),PropNameLen);
-  result := pointer(GetFPCPropInfo(aClassType,name));
-  {$else}
-  while (PropNameLen<>0) and (aClassType<>nil) do begin
-    for i := 1 to InternalClassPropInfo(aClassType,result) do
-      if IdemPropName(result^.Name,PropName,PropNameLen) then
-        exit else
-        result := result^.Next;
-    aClassType := aClassType.ClassParent;
-  end;
+  if PropNameLen<>0 then
+    while aClassType<>nil do begin
+      n := InternalClassPropInfo(aClassType,result);
+      if n<>0 then
+        if aCaseSensitive then
+          for i := 1 to n do
+            if (result^.Name[0]=AnsiChar(PropNameLen)) and
+               CompareMemFixed(@result^.Name[1],PropName,PropNameLen) then
+              exit else
+              result := result^.Next else
+        for i := 1 to n do
+          if IdemPropName(result^.Name,PropName,PropNameLen) then
+            exit else
+            result := result^.Next;
+      aClassType := GetClassParent(aClassType);
+    end;
   result := nil;
-  {$endif}
 end;
 
 function ClassFieldPropWithParentsFromClassType(aClassType,aSearchedClassType: TClass): PPropInfo;
@@ -21335,7 +21575,7 @@ begin
            (result^.PropType^.ClassType^.ClassType=aSearchedClassType) then
           exit else
           result := result^.Next;
-      aClassType := aClassType.ClassParent;
+      aClassType := GetClassParent(aClassType);
     end;
   result := nil;
 end;
@@ -21350,7 +21590,7 @@ begin
            (result^.PropType^.InheritsFrom(aSearchedClassType)) then
           exit else
           result := result^.Next;
-      aClassType := aClassType.ClassParent;
+      aClassType := GetClassParent(aClassType);
     end;
   result := nil;
 end;
@@ -21364,7 +21604,7 @@ begin
         if result^.GetFieldAddr(nil)=aSearchedOffset then
           exit else
           result := result^.Next;
-      aClassType := aClassType.ClassParent;
+      aClassType := GetClassParent(aClassType);
     end;
   result := nil;
 end;
@@ -22049,7 +22289,7 @@ begin
         tkFloat:
           if aType^.FloatType=ftDoub then
             C := TSQLPropInfoRTTIDouble;
-        tkLString {$ifdef FPC},tkAString{$endif}:
+        tkLString {$ifdef FPC},tkLStringOld{$endif}:
           case aType^.AnsiStringCodePage of // recognize optimized UTF-8/UTF-16
             CP_UTF8:  C := TSQLPropInfoRTTIRawUTF8;
             CP_UTF16: C := TSQLPropInfoRTTIRawUnicode;
@@ -22118,7 +22358,7 @@ begin
   fPropInfo := aPropInfo;
   fPropType := aPropInfo^.TypeInfo;
   if aPropInfo.GetterIsField then begin
-    fGetterIsFieldPropOffset := aPropInfo.GetProc{$ifndef FPC} and $00FFFFFF{$endif};
+    fGetterIsFieldPropOffset := aPropInfo.GetProc{$ifndef FPC} and $00ffffff{$endif};
     if (aPropInfo.SetProc=0) or (aPropInfo.SetProc=fPropInfo.GetProc) then
       fInPlaceCopySameClassPropOffset := fGetterIsFieldPropOffset;
   end;
@@ -22645,7 +22885,7 @@ begin
     result := 1 else begin
     V1 := fPropInfo.GetCurrencyProp(Item1);
     V2 := fPropInfo.GetCurrencyProp(Item2);
-    Result := PInt64(@V1)^-PInt64(@V2)^;
+    result := CompareInt64(PInt64(@V1)^,PInt64(@V2)^);
   end;
 end;
 
@@ -22882,7 +23122,7 @@ var valid: boolean;
 begin
   tmp.Init(Value); // private copy since the buffer will be modified
   try
-    PropInfo^.ClassFromJSON(Instance,tmp.buf,valid);
+    PropInfo^.ClassFromJSON(Instance,tmp.buf,valid,JSONTOOBJECT_TOLERANTOPTIONS);
   finally
     tmp.Done;
   end;
@@ -22909,7 +23149,7 @@ begin
   // unserialize object from JSON UTF-8 TEXT - not fast, but works
   FromVarString(PByte(P),tmp);
   try
-    PropInfo^.ClassFromJSON(Instance,tmp.buf,valid);
+    PropInfo^.ClassFromJSON(Instance,tmp.buf,valid,JSONTOOBJECT_TOLERANTOPTIONS);
   finally
     tmp.Done;
   end;
@@ -23145,7 +23385,6 @@ end;
 
 function TSQLPropInfoRTTIRawUTF8.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
-
   function CompareWithLocalTempCopy: PtrInt;
   var tmp1,tmp2: RawByteString;
   begin
@@ -23155,7 +23394,6 @@ function TSQLPropInfoRTTIRawUTF8.CompareValue(Item1, Item2: TObject;
       result := UTF8IComp(pointer(tmp1),pointer(tmp2)) else
       result := StrComp(pointer(tmp1),pointer(tmp2));
   end;
-
 var
   offs: PtrUInt;
   p1,p2: pointer;
@@ -23460,14 +23698,17 @@ end;
 
 procedure TSQLPropInfoRTTIUnicode.CopySameClassProp(Source: TObject;
   DestInfo: TSQLPropInfo; Dest: TObject);
+var tmp: UnicodeString;
 begin
-  TSQLPropInfoRTTIUnicode(DestInfo).fPropInfo.SetUnicodeStrProp(Dest,
-    fPropInfo.GetUnicodeStrProp(Source));
+  fPropInfo.GetUnicodeStrProp(Source,tmp);
+  TSQLPropInfoRTTIUnicode(DestInfo).fPropInfo.SetUnicodeStrProp(Dest,tmp);
 end;
 
 procedure TSQLPropInfoRTTIUnicode.GetBinary(Instance: TObject; W: TFileBufferWriter);
+var tmp: UnicodeString;
 begin
-  W.Write(UnicodeStringToUtf8(fPropInfo.GetUnicodeStrProp(Instance)));
+  fPropInfo.GetUnicodeStrProp(Instance,tmp);
+  W.Write(UnicodeStringToUtf8(tmp));
 end;
 
 procedure TSQLPropInfoRTTIUnicode.CopyValue(Source, Dest: TObject);
@@ -23482,7 +23723,7 @@ function TSQLPropInfoRTTIUnicode.GetHash(Instance: TObject; CaseInsensitive: boo
 var Up: array[byte] of AnsiChar; // avoid slow heap allocation
     Value: UnicodeString;
 begin
-  Value := fPropInfo.GetUnicodeStrProp(Instance);
+  fPropInfo.GetUnicodeStrProp(Instance,Value);
   if CaseInsensitive then
     result := crc32c(0,Up,UpperCopy255W(Up,pointer(Value),length(Value))-Up) else
     result := crc32c(0,pointer(Value),length(Value)*2);
@@ -23490,8 +23731,10 @@ end;
 
 procedure TSQLPropInfoRTTIUnicode.GetValueVar(Instance: TObject;
   ToSQL: boolean; var result: RawUTF8; wasSQLString: PBoolean);
+var tmp: UnicodeString;
 begin
-  result := UnicodeStringToUtf8(fPropInfo.GetUnicodeStrProp(Instance));
+  fPropInfo.GetUnicodeStrProp(Instance,tmp);
+  RawUnicodeToUtf8(pointer(tmp),length(tmp),result);
   if wasSQLString<>nil then
     wasSQLString^ := true;
 end;
@@ -23500,8 +23743,8 @@ procedure TSQLPropInfoRTTIUnicode.GetJSONValues(Instance: TObject; W: TJSONSeria
 var tmp: UnicodeString;
 begin
   W.Add('"');
-  tmp := fPropInfo.GetUnicodeStrProp(Instance);
-  if PtrUInt(tmp)<>0 then
+  fPropInfo.GetUnicodeStrProp(Instance,tmp);
+  if tmp<>'' then
     W.AddJSONEscapeW(pointer(tmp),0);
   W.Add('"');
 end;
@@ -23516,8 +23759,8 @@ begin
     result := -1 else
   if Item2=nil then
     result := 1 else begin
-    tmp1 := fPropInfo.GetUnicodeStrProp(Item1);
-    tmp2 := fPropInfo.GetUnicodeStrProp(Item2);
+    fPropInfo.GetUnicodeStrProp(Item1,tmp1);
+    fPropInfo.GetUnicodeStrProp(Item2,tmp2);
     if CaseInsensitive then
       result := AnsiICompW(pointer(tmp1),pointer(tmp2)) else
       result := StrCompW(pointer(tmp1),pointer(tmp2));
@@ -23561,8 +23804,10 @@ end;
 
 procedure TSQLPropInfoRTTIUnicode.GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
   var temp: RawByteString);
+var tmp: UnicodeString;
 begin
-  temp := UnicodeStringToUtf8(fPropInfo.GetUnicodeStrProp(Instance));
+  fPropInfo.GetUnicodeStrProp(Instance,tmp);
+  RawUnicodeToUtf8(pointer(tmp),length(tmp),RawUTF8(temp));
   aValue.Options := [];
   aValue.VType := ftUTF8;
   aValue.VText := Pointer(temp);
@@ -23572,21 +23817,43 @@ end;
 
 type
   TObjArraySerializer = class(TPointerClassHashed)
+  protected
+    procedure DefaultCustomWriter(const aWriter: TTextWriter; const aValue);
+    function DefaultCustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
   public
     Instance: TClassInstance;
-    constructor Create(aInfo: pointer; aItem: TClass); reintroduce;
-    procedure CustomWriter(const aWriter: TTextWriter; const aValue);
-    function CustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
+    CustomReader: TDynArrayJSONCustomReader;
+    CustomWriter: TDynArrayJSONCustomWriter;
+    constructor Create(aInfo: pointer; aItem: TClass;
+      aReader: TDynArrayJSONCustomReader; aWriter: TDynArrayJSONCustomWriter); reintroduce;
   end;
   PTObjArraySerializer = ^TObjArraySerializer;
 
-constructor TObjArraySerializer.Create(aInfo: pointer; aItem: TClass);
+constructor TObjArraySerializer.Create(aInfo: pointer; aItem: TClass;
+  aReader: TDynArrayJSONCustomReader; aWriter: TDynArrayJSONCustomWriter);
 begin
   inherited Create(aInfo);
   Instance.Init(aItem);
+  if Assigned(aReader) then
+    CustomReader := aReader else
+    CustomReader := DefaultCustomReader;
+  if Assigned(aWriter) then
+    CustomWriter := aWriter else
+    CustomWriter := DefaultCustomWriter;
 end;
 
-procedure TObjArraySerializer.CustomWriter(const aWriter: TTextWriter; const aValue);
+function HasDefaultObjArrayWriter(var dyn: TDynArray): boolean;
+var CustomReader: TDynArrayJSONCustomReader;
+    CustomWriter, DefaultWriter: TDynArrayJSONCustomWriter;
+begin
+  result := TTextWriter.GetCustomJSONParser(dyn,CustomReader,CustomWriter);
+  if result then begin
+    DefaultWriter := TObjArraySerializer(nil).DefaultCustomWriter;
+    result := PMethod(@CustomWriter)^.Code=PMethod(@DefaultWriter)^.Code;
+  end;
+end;
+
+procedure TObjArraySerializer.DefaultCustomWriter(const aWriter: TTextWriter; const aValue);
 var opt: TTextWriterWriteObjectOptions;
 begin
   if twoEnumSetsAsTextInRecord in aWriter.CustomOptions then
@@ -23597,7 +23864,7 @@ begin
   aWriter.WriteObject(TObject(aValue),opt);
 end;
 
-function TObjArraySerializer.CustomReader(P: PUTF8Char; var aValue;
+function TObjArraySerializer.DefaultCustomReader(P: PUTF8Char; var aValue;
   out aValid: Boolean): PUTF8Char;
 begin
   if TObject(aValue)=nil then
@@ -23625,11 +23892,11 @@ begin
     raise EModelException.CreateUTF8('%.Create(%) getter!',[self,fPropType^.Name]);
   fWrapper.Init(fPropType,dummy);
   fWrapper.IsObjArray := fObjArray<>nil;
-  fWrapper.HasCustomJSONParser;
+  fWrapper.HasCustomJSONParser; // set fWrapper.fParser
 end;
 
 procedure TSQLPropInfoRTTIDynArray.GetDynArray(Instance: TObject; var result: TDynArray);
-begin
+begin // fast assignment of fWrapper pre-initialized RTTI
   result.InitFrom(fWrapper,pointer(PtrUInt(Instance)+fGetterIsFieldPropOffset)^);
 end;
 
@@ -24559,7 +24826,7 @@ begin
   if aClassType=nil then
     exit; // no RTTI information (e.g. reached TObject level)
   if not (pilSingleHierarchyLevel in fOptions) then
-    InternalAddParentsFirst(aClassType.ClassParent,aFlattenedProps);
+    InternalAddParentsFirst(GetClassParent(aClassType),aFlattenedProps);
   for i := 1 to InternalClassPropInfo(aClassType,P) do begin
     if (P^.PropType^.Kind=tkClass) and
        (P^.PropType^.ClassSQLFieldType in [sftObject,sftUnknown]) then begin
@@ -24580,7 +24847,7 @@ begin
   if aClassType=nil then
     exit; // no RTTI information (e.g. reached TObject level)
   if not (pilSingleHierarchyLevel in fOptions) then
-    InternalAddParentsFirst(aClassType.ClassParent);
+    InternalAddParentsFirst(GetClassParent(aClassType));
   for i := 1 to InternalClassPropInfo(aClassType,P) do begin
     Add(TSQLPropInfoRTTI.CreateFrom(P,Count,fOptions,nil));
     P := P^.Next;
@@ -24798,18 +25065,21 @@ begin
       result := URI+'&authenticationbearer='+URIAuthenticationBearer
 end;
 
-function StringToMethod(const method: RawUTF8): TSQLURIMethod;
-const NAME: array[mGET..high(TSQLURIMethod)] of string[11] = ( // sorted by occurence
+function ToMethod(const method: RawUTF8): TSQLURIMethod;
+const NAME: array[mGET..high(TSQLURIMethod)] of string[10] = ( // sorted by occurence
   'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT','LOCK','UNLOCK','STATE',
   'OPTIONS','PROPFIND','PROPPATCH','TRACE','COPY','MKCOL','MOVE','PURGE','REPORT',
   'MKACTIVITY','MKCALENDAR','CHECKOUT','MERGE','NOTIFY','PATCH','SEARCH','CONNECT');
-var URIMethodUp: string[11];
+var L: PtrInt;
+    N: PShortString;
 begin
-  if Length(method)<11 then begin
-    URIMethodUp[0] := AnsiChar(UpperCopy(@URIMethodUp[1],method)-@URIMethodUp[1]);
+  L := Length(method);
+  if L<11 then begin
+    N := @NAME;
     for result := low(NAME) to high(NAME) do
-      if URIMethodUp=NAME[result] then
-        exit;
+      if (L=ord(N^[0])) and IdemPropNameUSameLen(@N^[1],pointer(method),L) then
+        exit else
+        inc(PByte(N),11);
   end;
   result := mNone;
 end;
@@ -24861,11 +25131,11 @@ function TSynMonitorUsage.Track(Instance: TObject; const Name: RawUTF8): integer
       k: TSynMonitorType;
       g: TSynMonitorUsageGranularity;
       p: PSynMonitorUsageTrackProp;
-      parent: TClass;
+      ctp: TClass;
   begin
     n := length(Props);
     while ClassType<>nil do begin
-      parent := ClassType.ClassParent;
+      ctp := GetClassParent(ClassType);
       for i := 1 to InternalClassPropInfo(ClassType,nfo) do begin
         k := MonitorPropUsageValue(nfo);
         if k<>smvUndefined then begin
@@ -24874,8 +25144,8 @@ function TSynMonitorUsage.Track(Instance: TObject; const Name: RawUTF8): integer
           p^.Info := nfo;
           p^.Kind := k;
           ShortStringToAnsi7String(nfo^.Name,p^.Name);
-          if (parent<>nil) and (FindPropName(['Bytes','MicroSec'],p^.Name)>=0) then
-            ToText(parent,p^.Name); // meaningful property name
+          if (ctp<>nil) and (FindPropName(['Bytes','MicroSec'],p^.Name)>=0) then
+            ToText(ctp,p^.Name); // meaningful property name = parent name
           for g := low(p^.Values) to high(p^.Values) do
             SetLength(p^.Values[g],USAGE_VALUE_LEN[g]);
           p^.ValueLast := nfo^.GetInt64Value(Instance);
@@ -24883,7 +25153,7 @@ function TSynMonitorUsage.Track(Instance: TObject; const Name: RawUTF8): integer
         end;
         nfo := nfo^.Next;
       end;
-      ClassType := parent;
+      ClassType := ctp;
     end;
   end;
 
@@ -26318,8 +26588,10 @@ begin
   for i := 2 to fRowCount do begin
     {$ifdef FPC}Move{$else}MoveFast{$endif}(U^^,P^,len^);
     inc(P,len^);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(Sep)^,P^,SepLen);
-    inc(P,SepLen);
+    if SepLen>0 then begin
+      MoveSmall(pointer(Sep),P,SepLen);
+      inc(P,SepLen);
+    end;
     inc(len);
     inc(U,FieldCount); // go to next row
   end;
@@ -26904,7 +27176,7 @@ var
 
 type
   /// a static object is used for smaller recursive stack size and faster code
-  // - these special sort implementation do the comparaison first by the
+  // - these special sort implementation do the comparison first by the
   // designed field, and, if the field value is identical, the ID value is
   // used (it will therefore sort by time all identical values)
   // - code generated is very optimized: stack and memory usage, CPU registers
@@ -27034,7 +27306,7 @@ begin
     SetPP(@Results[P*Params.FieldCount+Params.FieldIndex],P);
     repeat
       // this loop has no multiplication -> most of the time is spent in compIJ
-      if Params.Asc then begin // ascending order comparaison
+      if Params.Asc then begin // ascending order comparison
         while compI<0 do begin
           inc(I);
           inc(PByte(CI),FieldCountNextPtr); // next row
@@ -27043,7 +27315,7 @@ begin
           dec(J);
           dec(PByte(CJ),FieldCountNextPtr); // previous row
         end;
-      end else begin // descending order comparaison
+      end else begin // descending order comparison
         while compI>0 do begin
           inc(I);
           inc(PByte(CI),FieldCountNextPtr); // next row
@@ -27358,7 +27630,7 @@ begin
   fOwnedRecords.Add(result);
 end;
 
-{$ifdef ISDELPHI2010} // Delphi 2009 generics are buggy
+{$ifdef ISDELPHI2010} // Delphi 2009/2010 generics are buggy
 function TSQLTable.ToObjectList<T>: TObjectList<T>;
 var R,Item: TSQLRecord;
     row: PPUtf8Char;
@@ -27821,7 +28093,6 @@ begin
          ((Lang=sndxNone) and FindUTF8(pointer(EnumValue),Search)) then
         include(EnumValues,i);
       inc(PByte(P),ord(P^[0])+1);
-      // {$ifdef FPC}P := AlignToPtr(P);{$endif} enum values seem to be not aligned
     end;
     // then search directly from the INTEGER value
     if Int64(EnumValues)<>0 then
@@ -28105,7 +28376,7 @@ function TSQLTable.ExpandAsSynUnicode(Row,Field: integer; Client: TObject; out T
 var s: string;
 begin
   result := ExpandAsString(Row,Field,Client,s);
-  Text := StringToSynUnicode(s);
+  StringToSynUnicode(s,Text);
 end;
 
 function TSQLTable.GetTimeLog(Row, Field: integer; Expanded: boolean;
@@ -28531,7 +28802,7 @@ begin
       end;
     end;
     else
-      raise EORMException.Create('Invalid EncodeAsSQLPrepared() call');
+      raise EORMException.CreateUTF8('Unexpected EncodeAsSQLPrepared(%)',[ord(Occasion)]);
     end;
     W.SetText(result);
   finally
@@ -29240,67 +29511,34 @@ end;
 
 { TINIWriter }
 
-procedure TINIWriter.WriteObject(Value: TObject; const SubCompName: RawUTF8='';
-  WithSection: boolean=true);
-var P: PPropInfo;
-    i, V: integer;
-    VT: shortstring; // for str()
+procedure TINIWriter.WriteObject(Value: TObject; const SubCompName: RawUTF8;
+  WithSection, RawUTF8DynArrayAsCSV: boolean);
+var CT: TClass;
+    P: PPropInfo;
     Obj: TObject;
-    tmp: RawUTF8;
-    arr: TDynArray;
-    {$ifndef NOVARIANTS}
-    VV: Variant;
-    {$endif}
+    i: integer;
 begin
   if Value<>nil then begin
     if WithSection then
       // new TObject.ClassName is UnicodeString (Delphi 20009) -> inline code with
       // vmtClassName = UTF-8 encoded text stored in a shortstring = -44
       Add(#13#10'[%]'#13#10,[ClassNameShort(Value)^]);
-    for i := 1 to InternalClassPropInfo(Value.ClassType,P) do begin
-      case P^.PropType^.Kind of
-        tkInt64{$ifdef FPC}, tkQWord{$endif}:
-          Add('%%=%'#13#10,[SubCompName,P^.Name,P^.GetInt64Prop(Value)]);
-        {$ifdef FPC}tkBool,{$endif}
-        tkEnumeration, tkInteger, tkSet: begin
-          V := P^.GetOrdProp(Value);
-          if V<>P^.Default then
-            Add('%%=%'#13#10,[SubCompName,P^.Name,V]);
-        end;
-        {$ifdef FPC}tkAString,{$endif} tkLString, tkWString
-        {$ifdef HASVARUSTRING},tkUString{$endif}: begin
-          P^.GetLongStrValue(Value,tmp);
-          Add('%%=%'#13#10,[SubCompName,P^.Name,tmp]);
-        end;
-        tkFloat: begin
-          VT[0] := AnsiChar(ExtendedToString(VT,P^.GetFloatProp(Value),DOUBLE_PRECISION));
-          Add('%%=%'#13#10,[SubCompName,P^.Name,VT]);
-        end;
-        tkDynArray: begin
-          Add('%%=%'#13#10,[SubCompName,P^.Name]);
-          P^.GetDynArray(Value,arr);
-          AddDynArrayJSON(arr);
-          AddCR;
-        end;
-        {$ifdef PUBLISHRECORD}
-        tkRecord{$ifdef FPC},tkObject{$endif}:
-          Add('%%=%'#13#10,[SubCompName,P^.Name,BinToBase64WithMagic(
-            RecordSave(P^.GetFieldAddr(Value)^,P^.PropType^))]);
-        {$endif}
-        tkClass: begin
+    CT := Value.ClassType;
+    repeat
+      for i := 1 to InternalClassPropInfo(CT,P) do begin
+        if P^.PropType^.Kind=tkClass then begin // recursive serialization
           Obj := P^.GetObjProp(Value);
           if (Obj<>nil) and ClassHasPublishedFields(PPointer(Obj)^) then
-             WriteObject(Obj,SubCompName+ToUTF8(P^.Name)+'.',false);
+            WriteObject(Obj,SubCompName+ToUTF8(P^.Name)+'.',false);
+        end else begin // regular properties
+          Add('%%=%'#13#10,[SubCompName,P^.Name]);
+          P^.GetToText(Value,self,RawUTF8DynArrayAsCSV,twNone);
+          AddCR;
         end;
-        {$ifndef NOVARIANTS}
-        tkVariant: begin // stored as JSON, e.g. '1.234' or '"text"'
-          P^.GetVariantProp(Value,VV);
-          Add('%%=%'#13#10,[SubCompName,P^.Name,VariantSaveJSON(VV)]);
-        end;
-        {$endif}
-      end; // tkString (shortstring) and tkInterface is not handled
-      P := P^.Next;
-    end;
+        P := P^.Next;
+      end;
+      CT := GetClassParent(CT);
+    until CT=TObject;
   end;
 end;
 
@@ -29354,7 +29592,7 @@ end;
 function TPropInfo.ClassFromJSON(Instance: TObject; From: PUTF8Char;
   var Valid: boolean; Options: TJSONToObjectOptions): PUTF8Char;
 var Field: ^TObject;
-    tmp: TObject;
+    {$ifndef FPC}tmp: TObject;{$endif}
 begin
   valid := false;
   result := nil;
@@ -29381,7 +29619,7 @@ begin
     end;
     exit;
   end else
-  {$endif}
+  {$endif FPC}
   if GetterIsField then
     // no setter -> use direct in-memory access from getter (if available)
     Field := GetterAddr(Instance) else
@@ -29392,9 +29630,8 @@ end;
 
 function TPropInfo.GetOrdValue(Instance: TObject): PtrInt;
 begin
-  if (Instance<>nil) and (@self<>nil) and
-     (PropType^.Kind in [
-       tkInteger,tkEnumeration,tkSet,{$ifdef FPC}tkBool,{$endif}tkClass]) then
+  if (Instance<>nil) and (@self<>nil) and (PropType^.Kind in
+      [tkInteger,tkEnumeration,tkSet,{$ifdef FPC}tkBool,{$endif}tkClass]) then
     result := GetOrdProp(Instance) else
     result := -1;
 end;
@@ -29414,20 +29651,22 @@ end;
 
 function TPropInfo.GetCurrencyValue(Instance: TObject): Currency;
 begin
-  if (Instance<>nil) and (@self<>nil) and (PropType^.Kind=tkFloat) and
-     (PropType^.FloatType=ftCurr) then
-    result := GetCurrencyProp(Instance) else
+  if (Instance<>nil) and (@self<>nil) and (PropType^.Kind=tkFloat) then
+    if {$ifdef HASINLINE}PropType^.FloatType{$else}
+       PFloatType(@PropType^.Name[ord(PropType^.Name[0])+1])^{$endif}=ftCurr then
+      result := GetCurrencyProp(Instance) else
+      result := GetFloatProp(Instance) else
     result := 0;
 end;
 
-function TPropInfo.GetExtendedValue(Instance: TObject): TSynExtended;
+function TPropInfo.GetDoubleValue(Instance: TObject): double;
 begin
   if (Instance<>nil) and (@self<>nil) and (PropType^.Kind=tkFloat) then
      result := GetFloatProp(Instance) else
      result := 0;
 end;
 
-procedure TPropInfo.SetExtendedValue(Instance: TObject; const Value: TSynExtended);
+procedure TPropInfo.SetDoubleValue(Instance: TObject; const Value: double);
 begin
   if (Instance<>nil) and (@self<>nil) and (PropType^.Kind=tkFloat) then
     SetFloatProp(Instance,Value);
@@ -29459,12 +29698,13 @@ end;
 
 procedure TPropInfo.GetLongStrValue(Instance: TObject; var result: RawUTF8);
 var tmp: RawByteString;
-    tmpWS: WideString;
+    WS: WideString;
+    {$ifdef HASVARUSTRING}US: UnicodeString;{$endif}
     cp: integer;
 begin
   if (Instance<>nil) and (@self<>nil) then
   case PropType^.Kind of
-  {$ifdef FPC}tkAString,{$endif} tkLString: begin
+  {$ifdef FPC}tkLStringOld,{$endif} tkLString: begin
     GetLongStrProp(Instance,tmp);
     if tmp='' then
       result := '' else begin
@@ -29477,12 +29717,14 @@ begin
     end;
   end;
   {$ifdef HASVARUSTRING}
-  tkUString:
-    result := UnicodeStringToUTF8(GetUnicodeStrProp(Instance));
-  {$endif}
+  tkUString: begin
+    GetUnicodeStrProp(Instance,US);
+    RawUnicodeToUtf8(pointer(US),length(US),result);
+  end;
+  {$endif HASVARUSTRING}
   tkWString: begin
-    GetWideStrProp(Instance,tmpWS);
-    RawUnicodeToUtf8(pointer(tmpWS),length(tmpWS),result);
+    GetWideStrProp(Instance,WS);
+    RawUnicodeToUtf8(pointer(WS),length(WS),result);
   end;
   else result := '';
   end
@@ -29492,7 +29734,7 @@ end;
 procedure TPropInfo.GetRawByteStringValue(Instance: TObject; var Value: RawByteString);
 begin
   if (Instance<>nil) and (@self<>nil) and
-     (PropType^.Kind in [{$ifdef FPC}tkAString,{$endif}tkLString]) then
+     (PropType^.Kind in [{$ifdef FPC}tkLStringOld,{$endif}tkLString]) then
     GetLongStrProp(Instance,Value) else
     Value := '';
 end;
@@ -29527,7 +29769,7 @@ var cp: integer;
 begin
   if (Instance<>nil) and (@self<>nil) then
   case PropType^.Kind of
-  {$ifdef FPC}tkAString,{$endif}tkLString: begin
+  {$ifdef FPC}tkLStringOld,{$endif}tkLString: begin
     if Value<>'' then begin
       cp := PropType^.AnsiStringCodePage;
       if cp=CP_UTF8 then
@@ -29558,34 +29800,42 @@ var i: integer;
     i64: Int64;
     u: RawUTF8;
     d: double;
+    c: PClassInstance;
 begin
   if (Instance<>nil) and (@self<>nil) then
   case PropType^.Kind of
   tkInteger,tkEnumeration,tkSet,tkChar,tkWChar{$ifdef FPC},tkBool{$endif}:
     if VariantToInteger(Value,i) then
       SetOrdProp(Instance,i) else
-    if (PropType^.Kind=tkEnumeration) and VariantToUTF8(Value,u) then begin
-      i := PropType^.EnumBaseType^.GetEnumNameValue(pointer(u),length(u));
+    if VariantToUTF8(Value,u) then begin
+      if PropType^.Kind=tkEnumeration then
+        i := PropType^.EnumBaseType^.GetEnumNameValue(pointer(u),length(u)) else
+        i := UTF8ToInteger(u,-1);
       if i>=0 then
         SetOrdProp(Instance,i)
     end;
   tkInt64{$ifdef FPC},tkQWord{$endif}:
-    if VariantToInt64(Value,i64) then
+    if VariantToInt64(Value,i64) or (VariantToUTF8(Value,u) and ToInt64(u,i64)) then
       SetInt64Prop(Instance,i64);
   {$ifdef HASVARUSTRING}tkUString,{$endif}
-  tkLString, tkWString {$ifdef FPC},tkAString{$endif}:
+  tkLString, tkWString {$ifdef FPC},tkLStringOld{$endif}:
     if VariantToUTF8(Value,u) then
       SetLongStrValue(Instance,u);
   tkFloat:
-    if VariantToDouble(Value,d) then
+    if VariantToDouble(Value,d) or (VariantToUTF8(Value,u) and ToDouble(u,d)) then
       SetFloatProp(Instance,d);
   tkVariant:
     SetVariantProp(Instance,Value);
   tkClass:
     DocVariantToObject(_Safe(Value)^,GetObjProp(Instance));
-  tkDynArray:
-    DocVariantToObjArray(_Safe(Value)^,GetFieldAddr(Instance)^,
-      TJSONSerializer.RegisterObjArrayFindType(TypeInfo));
+  tkDynArray: begin
+    c := TJSONSerializer.RegisterObjArrayFindType(TypeInfo);
+    if c<>nil then
+      DocVariantToObjArray(_Safe(Value)^,GetFieldAddr(Instance)^,c) else begin
+      U := _Safe(Value)^.ToJSON;
+      GetDynArray(Instance).LoadFromJSON(pointer(U));
+    end;
+  end;
   {$ifdef PUBLISHRECORD}
   tkRecord{$ifdef FPC},tkObject{$endif}: begin
     VariantSaveJSON(Value,twJSONEscape,u);
@@ -29598,30 +29848,29 @@ end;
 procedure TPropInfo.GetVariant(Instance: TObject; var Dest: variant);
 var i: PtrInt;
     U: RawUTF8;
-    p: Pointer;
 begin
   if (Instance<>nil) and (@self<>nil) then
   case PropType^.Kind of
   tkInteger,tkEnumeration,tkSet,tkChar,tkWChar{$ifdef FPC},tkBool{$endif}: begin
     i := GetOrdProp(Instance);
     case PropType^.Kind of
-    tkInteger,tkSet: Dest := i;
+    tkInteger,tkSet: Dest := integer(i);
     tkChar: Dest := AnsiChar(i);
     tkWChar: Dest := WideChar(i);
     {$ifdef FPC}
     tkBool: Dest := boolean(i);
-    tkEnumeration: Dest := i;
+    tkEnumeration: Dest := integer(i);
     {$else}
     tkEnumeration:
       if TypeInfo=system.TypeInfo(boolean) then
         Dest := boolean(i) else
-        Dest := i;
-    {$endif}
+        Dest := integer(i);
+    {$endif FPC}
     end;
   end;
   tkInt64{$ifdef FPC},tkQWord{$endif}:
     Dest := GetInt64Prop(Instance);
-  tkLString,tkWString{$ifdef HASVARUSTRING},tkUString{$endif}{$ifdef FPC},tkAString{$endif}: begin
+  tkLString,tkWString{$ifdef HASVARUSTRING},tkUString{$endif}{$ifdef FPC},tkLStringOld{$endif}: begin
     GetLongStrValue(Instance,U);
     RawUTF8ToVariant(U,Dest);
   end;
@@ -29629,16 +29878,105 @@ begin
   tkVariant: GetVariantProp(Instance,Dest);
   tkClass: ObjectToVariant(GetObjProp(Instance),Dest);
   tkDynArray: begin
-    p := pointer(GetOrdProp(Instance));
-    TDocVariantData(Dest).InitArrayFromObjArray(p,JSON_OPTIONS_FAST);
-  end
+    GetDynArray(Instance).SaveToJSON(U); // works for T*ObjArray and records
+    TDocVariantData(Dest).InitJSONInPlace(pointer(U),JSON_OPTIONS_FAST);
+  end;
   else VarClear(Dest);
   end;
 end;
+
 {$endif NOVARIANTS}
 
+procedure TPropInfo.SetFromText(Instance: TObject; const Text: RawUTF8;
+  TryCustomVariants: PDocVariantOptions; AllowDouble: boolean);
+{$ifndef NOVARIANTS}var tmp: variant;{$endif}
+begin
+  if (Instance<>nil) and (@self<>nil) then
+  case PropType^.Kind of
+  tkChar,tkWChar:
+    if Text<>'' then
+     SetOrdProp(Instance,ord(Text[1]));
+  tkInteger,tkEnumeration,tkSet{$ifdef FPC},tkBool{$endif}:
+    SetOrdProp(Instance,GetIntegerDef(pointer(Text),DefaultOr0));
+  tkInt64{$ifdef FPC},tkQWord{$endif}:
+    SetInt64Prop(Instance,GetInt64(pointer(Text)));
+  tkLString,{$ifdef FPC}tkLStringOld,{$endif}{$ifdef HASVARUSTRING}tkUString,{$endif}tkWString:
+    SetLongStrValue(Instance,Text);
+  tkFloat:
+    if PropType^.FloatType=ftCurr then
+      SetCurrencyProp(Instance,StrToCurrency(pointer(Text))) else
+      SetFloatProp(Instance,GetExtended(pointer(Text)));
+  {$ifndef NOVARIANTS}
+  tkVariant: begin
+    if TryCustomVariants<>nil then
+      GetVariantFromJSON(pointer(Text),TextToVariantNumberType(pointer(Text))=varString,
+        tmp,TryCustomVariants,{allowdouble=}true) else
+      RawUTF8ToVariant(Text,tmp);
+    SetVariantProp(Instance,tmp);
+  end;
+  {$endif NOVARIANTS}
+  tkDynArray:
+    if Text<>'' then
+      if IsRawUTF8DynArray(TypeInfo) and (Text[1]<>'[') then
+        CSVToRawUTF8DynArray(pointer(Text),PRawUTF8DynArray(GetFieldAddr(Instance))^) else
+        GetDynArray(Instance).LoadFromJSON(pointer(Text)); // T*ObjArray and records
+  end;
+end;
+
+procedure TPropInfo.GetToText(Instance: TObject; WR: TTextWriter;
+  RawUTF8DynArrayAsCSV: boolean; Escape: TTextWriterKind);
+var i: integer;
+    tmp: RawUTF8;
+    a: PRawUTF8DynArray;
+    da: TDynArray;
+    {$ifndef NOVARIANTS}v: variant;{$endif}
+begin
+  if (Instance<>nil) and (@self<>nil) and (WR<>nil) then
+  case PropType^.Kind of
+  tkInteger,tkEnumeration,tkSet,tkChar,tkWChar{$ifdef FPC},tkBool{$endif}: begin
+    i := GetOrdProp(Instance);
+    case PropType^.Kind of
+    tkChar:  WR.Add(AnsiChar(i));
+    tkWChar: WR.AddNoJSONEscapeW(@i,1);
+    else     WR.Add(i);
+    end;
+  end;
+  tkInt64{$ifdef FPC},tkQWord{$endif}:
+    WR.Add(GetInt64Prop(Instance));
+  tkLString,{$ifdef FPC}tkLStringOld,{$endif}{$ifdef HASVARUSTRING}tkUString,{$endif}tkWString: begin
+    GetLongStrValue(Instance,tmp);
+    WR.Add(pointer(tmp),length(tmp),Escape);
+  end;
+  tkFloat:
+    if PropType^.FloatType=ftCurr then
+      WR.AddCurr64(GetCurrencyProp(Instance)) else
+      WR.AddDouble(GetFloatProp(Instance));
+  {$ifndef NOVARIANTS}
+  tkVariant: begin
+    GetVariantProp(Instance,v);
+    WR.AddVariant(v,Escape);
+  end;
+  {$endif NOVARIANTS}
+  tkDynArray: begin
+    if RawUTF8DynArrayAsCSV and IsRawUTF8DynArray(TypeInfo) then begin
+      a := GetFieldAddr(Instance);
+      if (a<>nil) and (a^<>nil) then begin
+        for i := 0 to length(a^)-1 do begin
+          WR.AddString(a^[i]);
+          WR.Add(',');
+        end;
+        WR.CancelLastComma;
+      end;
+    end else begin
+      GetDynArray(Instance,da);
+      WR.AddDynArrayJSON(da); // works for T*ObjArray and records
+    end;
+  end;
+  end;
+end;
+
 procedure TPropInfo.SetDefaultValue(Instance: TObject; FreeAndNilNestedObjects: boolean);
-var Item: TObject;
+var obj: TObject;
     da: TDynArray;
     {$ifdef PUBLISHRECORD}
     addr: pointer;
@@ -29647,15 +29985,15 @@ begin
   if (Instance<>nil) and (@self<>nil) then
   case PropType^.Kind of
   tkInteger,tkEnumeration,tkSet,tkChar,tkWChar{$ifdef FPC},tkBool{$endif}:
-    SetOrdProp(Instance,0);
+    SetOrdProp(Instance,DefaultOr0);
   tkInt64{$ifdef FPC},tkQWord{$endif}:
     SetInt64Prop(Instance,0);
-  tkLString{$ifdef FPC},tkAString{$endif}:
+  tkLString{$ifdef FPC},tkLStringOld{$endif}:
     SetLongStrProp(Instance,'');
   {$ifdef HASVARUSTRING}
   tkUString:
     SetUnicodeStrProp(Instance,'');
-  {$endif}
+  {$endif HASVARUSTRING}
   tkWString:
     SetWideStrProp(Instance,'');
   tkFloat:
@@ -29664,15 +30002,14 @@ begin
   tkVariant:
     SetVariantProp(Instance,SynCommons.Null);
   {$endif}
-  tkClass:
-  begin
-    Item := GetObjProp(Instance);
-    if Item<>nil then
+  tkClass: begin
+    obj := GetObjProp(Instance);
+    if obj<>nil then
       if FreeAndNilNestedObjects then begin
         SetOrdProp(Instance,0); // mimic FreeAndNil()
-        Item.Free;
+        obj.Free;
       end else
-        ClearObject(Item,false);
+        ClearObject(obj,false);
   end;
   tkDynArray: begin
     GetDynArray(Instance,da);
@@ -29691,25 +30028,19 @@ end;
 function TPropInfo.GetGenericStringValue(Instance: TObject): string;
 var tmp: RawUTF8;
 begin
-  if (Instance=nil) or (@self=nil) then
-    result := '' else
-    case PropType^.Kind of
-      {$ifdef FPC}tkAString,{$endif} tkLString, tkWString: begin
-        GetLongStrValue(Instance,tmp);
-        result := UTF8ToString(tmp);
-      end;
-      {$ifdef HASVARUSTRING}
-      tkUString:
-        result := string(GetUnicodeStrProp(Instance));
-      {$endif}else result := '';
-     end;
+  if (Instance=nil) or (@self=nil) or not(PropType^.Kind in [{$ifdef FPC}tkLStringOld,{$endif}
+     {$ifdef HASVARUSTRING}tkUString,{$endif} tkLString, tkWString]) then
+    result := '' else begin
+    GetLongStrValue(Instance,tmp);
+    result := UTF8ToString(tmp);
+  end;
 end;
 
 procedure TPropInfo.SetGenericStringValue(Instance: TObject; const Value: string);
 begin
   if (Instance<>nil) and (@self<>nil) then
     case PropType^.Kind of
-      {$ifdef FPC}tkAString,{$endif}tkLString, tkWString:
+      {$ifdef FPC}tkLStringOld,{$endif}tkLString, tkWString:
          SetLongStrValue(Instance,StringToUtf8(Value));
       {$ifdef HASVARUSTRING}
        tkUString:
@@ -29721,9 +30052,9 @@ end;
 {$ifdef HASVARUSTRING}
 function TPropInfo.GetUnicodeStrValue(Instance: TObject): UnicodeString;
 begin
-  if (Instance<>nil) and (@self<>nil) and
-     (PropType^.Kind=tkUString) then
-    result := GetUnicodeStrProp(Instance);
+  if (Instance<>nil) and (@self<>nil) and (PropType^.Kind=tkUString) then
+    GetUnicodeStrProp(Instance,result) else
+    result := '';
 end;
 
 procedure TPropInfo.SetUnicodeStrValue(Instance: TObject; const Value: UnicodeString);
@@ -29872,6 +30203,7 @@ end;
 procedure TPropInfo.CopyValue(Source, Dest: TObject; DestInfo: PPropInfo);
 var Value: RawByteString;
     WS: WideString;
+    {$ifdef HASVARUSTRING}US: UnicodeString;{$endif}
     {$ifndef NOVARIANTS}
     V: variant;
     {$endif}
@@ -29887,8 +30219,7 @@ begin
   kS := PropType^.Kind;
   kD := DestInfo^.PropType^.Kind;
   case kS of
-    {$ifdef FPC}tkBool,{$endif}
-    tkEnumeration, tkInteger, tkSet, tkChar, tkWChar:
+    {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkInteger, tkSet, tkChar, tkWChar:
 int:  if DestInfo=@Self then
         SetOrdProp(Dest,GetOrdProp(Source)) else
 dst:  if kD in tkOrdinalTypes then // use Int64 to handle e.g. cardinal
@@ -29932,9 +30263,8 @@ i64:    SetInt64Prop(Dest,GetInt64Prop(Source)) else
         SetFloatProp(Dest,GetFloatProp(Source)) else
       if kD=tkFloat then
         DestInfo.SetFloatProp(Dest,GetFloatProp(Source));
-    {$ifdef FPC}tkAString,{$endif}
-    tkLString:
-      if kD=tkLString then begin
+    tkLString{$ifdef FPC},tkLStringOld{$endif}:
+      if kD=kS then begin
         GetLongStrProp(Source,Value);
         DestInfo.SetLongStrProp(Dest,Value);
       end else
@@ -29944,8 +30274,10 @@ str:  if kD in tkStringTypes then begin
       end;
     {$ifdef HASVARUSTRING}
     tkUString:
-      if kD=tkUString then
-        DestInfo.SetUnicodeStrProp(Dest,GetUnicodeStrProp(Source)) else
+      if kD=tkUString then begin
+        GetUnicodeStrProp(Source,US);
+        DestInfo.SetUnicodeStrProp(Dest,US);
+      end else
         goto str;
     {$endif}
     tkWString:
@@ -29970,1405 +30302,469 @@ str:  if kD in tkStringTypes then begin
   end; // note: tkString (shortstring) and tkInterface not handled
 end;
 
-function TPropInfo.GetFieldAddr(Instance: TObject): pointer;
-begin
-  if not GetterIsField then
-    if not SetterIsField then
-      // both are methods -> returns nil
-      result := nil else
-      //  field - Setter is the field offset in the instance data
-      result := SetterAddr(Instance) else
-    // field - Getter is the field offset in the instance data
-    result := GetterAddr(Instance);
-end;
-
 function TPropInfo.IsBlob: boolean;
 begin
   result := (@self<>nil) and (TypeInfo=system.TypeInfo(TSQLRawBlob));
 end;
 
-function TPropInfo.GetterIsField: boolean;
+function TPropInfo.DefaultOr0: integer;
 begin
-  {$ifdef FPC}
-  result := PropProcs and 3=ptField;
-  {$else}
-  result := PropWrap(GetProc).Kind=$FF;
-  {$endif}
+  if Default=NO_DEFAULT then
+    result := 0 else
+    result := Default;
 end;
 
-function TPropInfo.SetterIsField: boolean;
+function TPropInfo.IsDefaultOrVoid(Instance: TObject): boolean;
+var p: PPointer;
 begin
-  {$ifdef FPC}
-  result := (PropProcs shr 2) and 3=ptField;
-  {$else}
-  result := PropWrap(SetProc).Kind=$FF;
-  {$endif}
-end;
-
-function TPropInfo.WriteIsDefined: boolean;
-begin
-  {$ifdef FPC} // see typinfo.IsWriteableProp
-  result := (SetProc<>0) and ((PropProcs shr 2) and 3 in [ptField..ptVirtual]);
-  {$else}
-  result := SetProc<>0;
-  {$endif}
-end;
-
-function TPropInfo.WriteIsPossible: boolean;
-begin // = GetterIsField or WriteIsDefined
-  {$ifdef FPC}
-  result := (PropProcs and 3=ptField) or
-    ((SetProc<>0) and ((PropProcs shr 2) and 3 in [ptField..ptVirtual]));
-  {$else}
-  result := (PropWrap(GetProc).Kind=$FF) or (SetProc<>0);
-  {$endif}
-end;
-
-function TPropInfo.GetterAddr(Instance: pointer): pointer;
-{$ifdef HASINLINENOTX86}
-begin
-  result := Pointer(PtrUInt(Instance)+GetProc{$ifndef FPC} and $00FFFFFF{$endif});
-end;
-{$else}
-asm
-        mov     eax, [eax].TPropInfo.GetProc
-        and     eax, $00ffffff
-        add     eax, edx
-end;
-{$endif}
-
-function TPropInfo.SetterAddr(Instance: pointer): pointer;
-begin
-  result := Pointer(PtrUInt(Instance)+SetProc{$ifndef FPC} and $00FFFFFF{$endif});
-end;
-
-function TPropInfo.TypeInfo: PTypeInfo;
-{$ifdef HASINLINENOTX86}
-begin
-  {$ifndef HASDIRECTTYPEINFO}
-  if PropType<>nil then
-    result := PropType^ else
-  {$endif}
-    result := pointer(PropType);
-end;
-{$else}
-asm // Delphi is so bad at compiling above code...
-        mov     eax, [eax].TPropInfo.PropType
-        test    eax, eax
-        jz      @z
-        mov     eax, [eax]
-        ret
-@z:     db      $f3 // rep ret
-end;
-{$endif HASINLINENOTX86}
-
-{$ifdef FPC_OR_PUREPASCAL}
-function TPropInfo.Next: PPropInfo;
-begin
-  result := AlignToPtr(@Name[ord(Name[0])+1]);
-end;
-{$else}
-{$ifdef HASINLINENOTX86}
-function TPropInfo.Next: PPropInfo;
-begin
-  result := @Name[ord(Name[0])+1];
-end;
-{$else}
-function TPropInfo.Next: PPropInfo;
-asm     // very fast code
-        movzx   edx, byte ptr[eax].TPropInfo.Name
-        lea     eax, [eax + edx].TPropInfo.Name[1]
-end;
-{$endif HASINLINENOTX86}
-{$endif FPC_OR_PUREPASCAL}
-
-{$ifdef USETYPEINFO}
-
-function TPropInfo.IsStored(Instance: TObject): boolean;
-begin
-  result := TypInfo.IsStoredProp(Instance,@self);
+  case PropType^.Kind of
+  tkInteger,tkEnumeration,tkSet,tkChar,tkWChar{$ifdef FPC},tkBool{$endif}:
+    result := GetOrdProp(Instance)=DefaultOr0;
+  tkFloat:
+    result := GetFloatProp(Instance)=0;
+  tkInt64{$ifdef FPC},tkQWord{$endif}:
+    result := GetInt64Prop(Instance)=0;
+  tkLString,{$ifdef HASVARUSTRING}tkUString,{$endif}{$ifdef FPC}tkLStringOld,{$endif}tkWString,tkDynArray,tkClass,tkInterface: begin
+    p := GetFieldAddr(Instance);
+    result := (p<>nil) and (p^=nil);
+  end;
+  tkVariant: begin
+    p := GetFieldAddr(Instance);
+    result := (p<>nil) and VarDataIsEmptyOrNull(p^);
+  end;
+  else result := false;
+  end;
 end;
 
 function TPropInfo.RetrieveFieldSize: integer;
 begin
   case PropType^.Kind of
   tkInteger,tkEnumeration,tkSet,tkChar,tkWChar{$ifdef FPC},tkBool{$endif}:
-    case PropType^.OrdType of
-    otSByte, otUByte: result := 1;
-    otSWord, otUWord: result := 2;
-    {$ifdef FPC_NEWRTTI}otSQWord, otUQWord: result := 8;{$endif}
-    else result := 4;
-    end;
+    result := ORDTYPE_SIZE[PropType^.OrdType];
   tkFloat:
     case PropType^.FloatType of
     ftSingle:   result := 4;
     ftExtended: result := 10;
     else result := 8;
     end;
-  tkLString,tkWString,tkClass,tkInterface,tkDynArray: result := SizeOf(pointer);
+  tkLString,{$ifdef HASVARUSTRING}tkUString,{$endif}{$ifdef FPC}tkLStringOld,{$endif}tkWString,tkClass,tkInterface,tkDynArray:
+    result := SizeOf(pointer);
   tkInt64{$ifdef FPC},tkQWord{$endif}: result := 8;
   tkVariant: result := SizeOf(variant);
   else result := 0;
   end;
 end;
 
-function TPropInfo.GetObjProp(Instance: TObject): TObject;
+function FromOrdType(o: TOrdType; P: pointer): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif} // shared by GetOrdProp/GetEnumName
 begin
-  if GetterIsField then
-    result := PObject(GetterAddr(Instance))^ else
-    result := pointer(PtrUInt(TypInfo.GetOrdProp(Instance,@self)));
-end;
-
-function TPropInfo.GetOrdProp(Instance: TObject): PtrInt;
-begin
-  result := TypInfo.GetOrdProp(Instance,@self);
-end;
-
-procedure TPropInfo.SetOrdProp(Instance: TObject; Value: PtrInt);
-var P: pointer;
-begin
-  if SetterIsField then
-    P := SetterAddr(Instance) else
-  if (SetProc=0) and GetterIsField then
-    P := GetterAddr(Instance) else begin
-    TypInfo.SetOrdProp(Instance,@self,Value);
-    exit;
-  end;
-  if PropType^.Kind=tkClass then
-    PPTrInt(P)^ := Value else
-    case PropType^.OrdType of
-    otUByte,otSByte: PByte(P)^ := Value;
-    otUWord,otSWord: PWord(P)^ := Value;
-    otULong,otSLong: PCardinal(P)^ := Value;
-    {$ifdef FPC_NEWRTTI}otSQWord, otUQWord: PInt64(P)^ := Value;{$endif}
-    end;
-end;
-
-function TPropInfo.GetInt64Prop(Instance: TObject): Int64;
-begin
-  if GetterIsField then
-    result := PInt64(GetterAddr(Instance))^ else
-    result := TypInfo.GetInt64Prop(Instance,@self);
-end;
-
-procedure TPropInfo.SetInt64Prop(Instance: TObject; const Value: Int64);
-begin
-  if SetterIsField then
-    PInt64(SetterAddr(Instance))^ := Value else
-  if (SetProc=0) and GetterIsField then
-    PInt64(GetterAddr(Instance))^ := Value else
-    TypInfo.SetInt64Prop(Instance,@self,Value);
-end;
-
-procedure TPropInfo.GetLongStrProp(Instance: TObject; var Value: RawByteString);
-begin
-  if GetterIsField then
-    Value := PRawByteString(GetterAddr(Instance))^ else
-    Value := TypInfo.{$ifdef UNICODE}GetAnsiStrProp{$else}GetStrProp{$endif}(Instance,@self);
-end;
-
-procedure TPropInfo.GetShortStrProp(Instance: TObject; var Value: RawByteString);
-begin
-  if GetterIsField then
-    Value := ShortStringToAnsi7String(PShortString(GetterAddr(Instance))^) else
-    Value := TypInfo.{$ifdef UNICODE}GetAnsiStrProp{$else}GetStrProp{$endif}(Instance,@self);
-end; // no SetShortStrProp() by now
-
-procedure TPropInfo.SetLongStrProp(Instance: TObject; const Value: RawByteString);
-begin
-  if SetterIsField then
-    PRawByteString(SetterAddr(Instance))^ := Value else
-  if (SetProc=0) and GetterIsField then
-    PRawByteString(GetterAddr(Instance))^ := Value else
-    TypInfo.{$ifdef UNICODE}SetAnsiStrProp{$else}SetStrProp{$endif}(Instance,@self,Value);
-end;
-
-procedure TPropInfo.GetWideStrProp(Instance: TObject; var Value: WideString);
-begin
-  Value := TypInfo.GetWideStrProp(Instance,@self);
-end;
-
-procedure TPropInfo.SetWideStrProp(Instance: TObject; const Value: WideString);
-begin
-  TypInfo.SetWideStrProp(Instance,@self,Value);
-end;
-
-{$ifdef HASVARUSTRING}
-function TPropInfo.GetUnicodeStrProp(Instance: TObject): UnicodeString;
-begin
-  result := TypInfo.GetUnicodeStrProp(Instance,@self);
-end;
-
-procedure TPropInfo.SetUnicodeStrProp(Instance: TObject; const Value: UnicodeString);
-begin
-  if SetterIsField then
-    PUnicodeString(SetterAddr(Instance))^ := Value else
-  if (SetProc=0) and GetterIsField then
-    PUnicodeString(GetterAddr(Instance))^ := Value else
-    TypInfo.SetUnicodeStrProp(Instance,@self,Value);
-end;
-{$endif HASVARUSTRING}
-
-function TPropInfo.GetCurrencyProp(Instance: TObject): currency;
-begin
-  if GetterIsField then
-    result := PCurrency(GetterAddr(Instance))^ else
-    result := TypInfo.GetFloatProp(Instance,@self);
-end;
-
-procedure TPropInfo.SetCurrencyProp(Instance: TObject; const Value: Currency);
-begin
-  if SetterIsField then
-    PCurrency(SetterAddr(Instance))^ := Value else
-  if (SetProc=0) and GetterIsField then
-    PCurrency(GetterAddr(Instance))^ := Value else
-    TypInfo.SetFloatProp(Instance,@self,value);
-end;
-
-function TPropInfo.GetDoubleProp(Instance: TObject): double;
-begin
-  if GetterIsField then
-    result := PDouble(GetterAddr(Instance))^ else
-    result := TypInfo.GetFloatProp(Instance,@self);
-end;
-
-procedure TPropInfo.SetDoubleProp(Instance: TObject; Value: Double);
-begin
-  if SetterIsField then
-    PDouble(SetterAddr(Instance))^ := Value else
-  if (SetProc=0) and GetterIsField then
-    PDouble(GetterAddr(Instance))^ := Value else
-    TypInfo.SetFloatProp(Instance,@self,value);
-end;
-
-function TPropInfo.GetFloatProp(Instance: TObject): double;
-begin
-  result := TypInfo.GetFloatProp(Instance,@self);
-end;
-
-procedure TPropInfo.SetFloatProp(Instance: TObject; Value: TSynExtended);
-var P: pointer;
-begin
-  if SetterIsField then
-    P := SetterAddr(Instance) else
-  if (SetProc=0) and GetterIsField then
-    P := GetterAddr(Instance) else begin
-    TypInfo.SetFloatProp(Instance,@self,value);
-    exit;
-  end;
-  case PropType^.FloatType of
-    ftSingle:    PSingle(P)^ := Value;
-    ftDoub:      PDouble(P)^ := Value;
-    ftExtended:  PExtended(P)^ := Value;
-    ftCurr:      PCurrency(P)^ := Value;
+  case o of
+  otSByte: result := PShortInt(P)^;
+  otSWord: result := PSmallInt(P)^;
+  otSLong: result := PInteger(P)^;
+  otUByte: result := PByte(P)^;
+  otUWord: result := PWord(P)^;
+  otULong: result := PCardinal(P)^;
+  {$ifdef FPC_NEWRTTI}otSQWord, otUQWord: result := PInt64(P)^;{$endif}
+  else result := 0; // should not happen
   end;
 end;
 
-{$ifndef NOVARIANTS}
-procedure TPropInfo.GetVariantProp(Instance: TObject; var result: Variant);
+procedure ToOrdType(o: TOrdType; P: pointer; Value: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
 begin
-  if GetterIsField then
-    SetVariantByValue(PVariant(GetterAddr(Instance))^,result) else
-    result := TypInfo.GetVariantProp(Instance,@self);
+  case o of
+  otUByte,otSByte: PByte(P)^ := Value;
+  otUWord,otSWord: PWord(P)^ := Value;
+  otULong,otSLong: PCardinal(P)^ := Value;
+  {$ifdef FPC_NEWRTTI}otSQWord, otUQWord: PInt64(P)^ := Value;{$endif}
+  end;
 end;
-
-procedure TPropInfo.SetVariantProp(Instance: TObject; const Value: Variant);
-begin
-  if (SetProc=0) and GetterIsField then
-    PVariant(GetterAddr(Instance))^ := Value else
-    TypInfo.SetVariantProp(Instance,@self,Value);
-end;
-{$endif}
-
-{$else USETYPEINFO} // Delphi-only version below
 
 function TPropInfo.IsStored(Instance: TObject): boolean;
-type // function(Instance: TObject) trick does not work with CPU64 :(
-  TStoredProc = function: Boolean of object;
-var Call: TMethod;
+type
+  TGetProc = function: boolean of object;
+  TGetIndexed = function(Index: integer): boolean of object;
+var pt: byte;
+    call: TMethod;
 begin
-  if (StoredProc and (not PtrInt($ff)))=0 then
-    result := boolean(StoredProc) else
-  if Instance=nil then
-    // field or method without Instance specified -> assume "stored true"
-    result := true else
-  if PropWrap(StoredProc).Kind=$ff then
-    result := PBoolean(PtrInt(Instance)+StoredProc and $00FFFFFF)^ else begin
-    if PropWrap(StoredProc).Kind=$fe then
-      Call.Code := pointer((PPtrUInt(PPtrInt(Instance)^+SmallInt(StoredProc))^)) else
-      Call.Code := pointer(StoredProc);
-    Call.Data := Instance;
-    result := TStoredProc(Call);
+  pt := {$ifdef FPC}(PropProcs shr 4)and 3{$else}PropWrap(StoredProc).Kind{$endif};
+  if {$ifdef FPC}pt=ptConst{$else}(StoredProc and (not PtrInt($ff)))=0{$endif} then
+    result := boolean(StoredProc) else begin
+    case pt of
+      ptField: begin
+        result := PBoolean(PtrUInt(Instance)+StoredProc{$ifndef FPC}and $00ffffff{$endif})^;
+        exit;
+      end;
+      ptVirtual:
+        call.Code := PPointer(PPtrUInt(Instance)^+{$ifndef FPC}word{$endif}(StoredProc))^;
+      else
+        call.Code := pointer(StoredProc);
+    end;
+    call.Data := Instance;
+    if {$ifdef FPC}(PropProcs shr 6)and 1{$else}Index{$endif}<>NO_INDEX then
+      result := TGetIndexed(call)(Index) else
+      result := TGetProc(call);
+  end;
+end;
+
+function TPropInfo.GetObjProp(Instance: TObject): TObject;
+type
+  TGetProc = function: TObject of object;
+  TGetIndexed = function(Index: Integer): TObject of object;
+var call: TMethod;
+begin
+  case Getter(Instance,@call) of
+    picField:   result := PObject(call.Data)^;
+    picMethod:  result := TGetProc(call);
+    picIndexed: result := TGetIndexed(call)(Index);
+    else result := nil;
   end;
 end;
 
 function TPropInfo.GetOrdProp(Instance: TObject): PtrInt;
-type // function(Instance: TObject) trick does not work with CPU64 :(
-  TGetProc = function: PtrInt of object;
-  TIndexedGetProc = function(Index: Integer): PtrInt of object;
-var value: PtrInt;
-    Call: TMethod;
-    P: pointer;
+type
+  TGetProc = function: Pointer of object; // pointer result is a PtrInt register
+  TGetIndexed = function(Index: Integer): Pointer of object;
+var call: TMethod;
 begin
-  if GetProc=0 then  // no read attribute -> use write offset
-    if PropWrap(SetProc).Kind<>$FF then begin
-      result := 0;
-      exit;
-    end else // we only allow setting if we know the field address
-      P := Pointer(PtrUInt(Instance)+SetProc and $00FFFFFF) else
-    if PropWrap(GetProc).Kind=$FF then
-      P := Pointer(PtrUInt(Instance)+GetProc and $00FFFFFF) else begin
-      if PropWrap(GetProc).Kind=$FE then
-        Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(GetProc))^ else
-        Call.Code := Pointer(GetProc);
-      Call.Data := Instance;
-      if Index=NO_INDEX then
-        value := TGetProc(Call) else
-        value := TIndexedGetProc(Call)(Index);
-      P := @value;
-    end;
-  with TypeInfo^ do
-  if Kind in [tkClass,tkInterface,tkDynArray] then
-    result := PPtrInt(P)^ else
-    case TOrdType(PByte(AlignToPtr(@Name[ord(Name[0])+1]))^) of // OrdType of
-    otSByte: result := PShortInt(P)^;
-    otSWord: result := PSmallInt(P)^;
-    otSLong: result := PInteger(P)^;
-    otUByte: result := PByte(P)^;
-    otUWord: result := PWord(P)^;
-    otULong: result := PCardinal(P)^;
-    else result := 0; // should not happen
-    end;
+  case Getter(Instance,@call) of
+    picField:   call.Code := PPointer(call.Data)^;
+    picMethod:  call.Code := TGetProc(call);
+    picIndexed: call.Code := TGetIndexed(call)(Index);
+    else call.Code := nil; // call.Code is used to store the raw value
+  end;
+  if PropType^.Kind in [tkClass,tkDynArray,tkInterface] then
+    result := PtrInt(call.Code) else
+    result := FromOrdType({$ifdef HASINLINE}PropType^.OrdType{$else}
+      POrdType(@PropType^.Name[ord(PropType^.Name[0])+1])^{$endif},@call.Code);
 end;
 
 procedure TPropInfo.SetOrdProp(Instance: TObject; Value: PtrInt);
-type // procedure(Instance: TObject) trick does not work with CPU64 :(
-  TSetProp = procedure(Value: PtrInt) of object;
-  TIndexedProp = procedure(Index: integer; Value: PtrInt) of object;
-var P: pointer;
-    Call: TMethod;
+type
+  TSetProc = procedure(Value: PtrInt) of object;
+  TSetIndexed = procedure(Index: integer; Value: PtrInt) of object;
+var call: TMethod;
 begin
-  if SetProc=0 then  // no write attribute -> use read offset
-    if PropWrap(GetProc).Kind<>$FF then
-      exit else // we only allow setting if we know the field address
-      P := Pointer(PtrUInt(Instance)+GetProc and $00FFFFFF) else
-    if PropWrap(SetProc).Kind=$FF then
-      P := Pointer(PtrUInt(Instance)+SetProc and $00FFFFFF) else begin
-      if PropWrap(SetProc).Kind=$FE then
-        Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(SetProc))^ else
-        Call.Code := Pointer(SetProc);
-      Call.Data := Instance;
-      if Index=NO_INDEX then
-        TSetProp(Call)(Value) else
-        TIndexedProp(Call)(Index,Value);
-      exit;
-    end;
-  with PropType^^ do
-  if Kind in [tkClass,tkInterface,tkDynArray] then
-    PPtrInt(P)^ := Value else
-    case TOrdType(PByte(AlignToPtr(@Name[ord(Name[0])+1]))^) of // OrdType of
-    otSByte: PShortInt(P)^ := Value;
-    otSWord: PSmallInt(P)^ := Value;
-    otSLong: PInteger(P)^ := Value;
-    otUByte: PByte(P)^ := Value;
-    otUWord: PWord(P)^ := Value;
-    otULong: PCardinal(P)^ := Value;
-    end;
-end;
-
-function TPropInfo.GetObjProp(Instance: TObject): TObject;
-begin
-  if GetterIsField then
-    result := PObject(GetterAddr(Instance))^ else
-    result := pointer(GetOrdProp(Instance));
+  case Setter(Instance,@call) of
+    picField:  if PropType^.Kind=tkClass then
+                 PPTrInt(call.Data)^ := Value else
+                 ToOrdType(PropType^.OrdType,call.Data,Value);
+    picMethod:  TSetProc(call)(Value);
+    picIndexed: TSetIndexed(call)(Index,Value);
+  end;
 end;
 
 function TPropInfo.GetInt64Prop(Instance: TObject): Int64;
-type // function(Instance: TObject) trick does not work with CPU64 :(
+type
   TGetProc = function: Int64 of object;
-  TIndexedGetProc = function(Index: Integer): Int64 of object;
-var Call: TMethod;
+  TGetIndexed = function(Index: Integer): Int64 of object;
+var call: TMethod;
 begin
-  if PropWrap(GetProc).Kind=$FF then
-    // field - Getter is the field offset in the instance data
-    result := PInt64(PtrUInt(Instance)+GetProc and $00FFFFFF)^
-  else begin
-    if PropWrap(GetProc).Kind=$FE then
-      Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(GetProc))^ else
-      Call.Code := Pointer(GetProc);
-    Call.Data := Instance;
-    if Index=NO_INDEX then
-      result := TGetProc(Call) else
-      result := TIndexedGetProc(Call)(Index);
+  case Getter(Instance,@call) of
+    picField:   result := PInt64(call.Data)^;
+    picMethod:  result := TGetProc(call);
+    picIndexed: result := TGetIndexed(call)(Index);
+    else result := 0;
   end;
 end;
 
 procedure TPropInfo.SetInt64Prop(Instance: TObject; const Value: Int64);
-type // procedure(Instance: TObject) trick does not work with CPU64 :(
-  TSetProp = procedure(const Value: Int64) of object;
-  TIndexedProp = procedure(Index: integer; const Value: Int64) of object;
-var Call: TMethod;
+type
+  TSetProc = procedure(Value: Int64) of object;
+  TSetIndexed = procedure(Index: integer; Value: Int64) of object;
+var call: TMethod;
 begin
-  if SetProc=0 then  // no write attribute -> use read offset
-    if PropWrap(GetProc).Kind<>$FF then
-      exit else // we only allow setting if we know the field address
-      PInt64(PtrUInt(Instance)+GetProc and $00FFFFFF)^ := Value else
-    if PropWrap(SetProc).Kind=$FF then
-      PInt64(PtrUInt(Instance)+SetProc and $00FFFFFF)^ := Value else begin
-      if PropWrap(SetProc).Kind=$FE then
-        Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(SetProc))^ else
-        Call.Code := Pointer(SetProc);
-      Call.Data := Instance;
-      if Index=NO_INDEX then
-        TSetProp(Call)(Value) else
-        TIndexedProp(Call)(Index,Value);
-  end;
-end;
-
-procedure TPropInfo.GetLongStrProp(Instance: TObject; var Value: RawByteString);
-procedure CallMethod(Instance: TObject; var Value: RawByteString);
-type // function(Instance: TObject) trick does not work with CPU64 :(
-  TAStringGetProc = function: RawByteString of object;
-  TAStringIndexedGetProc = function(Index: Integer): RawByteString of object;
-var Call: TMethod;
-begin
-  if PropWrap(GetProc).Kind=$FE then
-    // virtual method  - Getter is a signed 2 byte integer VMT offset
-    Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(GetProc))^ else
-    // static method - Getter is the actual address
-    Call.Code := Pointer(GetProc);
-  Call.Data := Instance;
-  if Index=NO_INDEX then  // no index
-    Value := TAStringGetProc(Call) else
-    Value := TAStringIndexedGetProc(Call)(Index);
-end;
-begin // caller must check that PropType^.Kind = tkWString
-  if PropWrap(GetProc).Kind=$FF then
-    // field - Getter is the field offset in the instance data
-    Value := PRawByteString(PtrUInt(Instance)+GetProc and $00FFFFFF)^ else
-    CallMethod(Instance,Value);
-end;
-
-procedure TPropInfo.SetLongStrProp(Instance: TObject; const Value: RawByteString);
-type // procedure(Instance: TObject) trick does not work with CPU64 :(
-  TSetProp = procedure(const Value: RawByteString) of object;
-  TIndexedProp = procedure(Index: integer; const Value: RawByteString) of object;
-var Call: TMethod;
-begin // caller must check that PropType^.Kind = tkLString
-  if SetProc=0 then  // no setter ?
-    if PropWrap(GetProc).Kind<>$FF then
-      exit else  // we only allow setting if we know the field address
-      PRawByteString(PtrUInt(Instance)+GetProc and $00FFFFFF)^ := Value else
-  if PropWrap(SetProc).Kind=$FF then
-    // field - Setter is the field offset in the instance data
-    PRawByteString(PtrUInt(Instance)+SetProc and $00FFFFFF)^ := Value else begin
-      if PropWrap(SetProc).Kind=$FE then
-        Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(SetProc))^ else
-        Call.Code := Pointer(SetProc);
-      Call.Data := Instance;
-      if Index=NO_INDEX then
-        TSetProp(Call)(Value) else
-        TIndexedProp(Call)(Index,Value);
+  case Setter(Instance,@call) of
+    picField:   PInt64(call.Data)^ := Value;
+    picMethod:  TSetProc(call)(Value);
+    picIndexed: TSetIndexed(call)(Index,Value);
   end;
 end;
 
 procedure TPropInfo.GetShortStrProp(Instance: TObject; var Value: RawByteString);
-procedure CallMethod(Instance: TObject; var Value: RawByteString);
 type
-  TSStringGetProc = function: shortstring of object;
-  TSStringIndexedGetProc = function(Index: Integer): shortstring of object;
-var Call: TMethod;
+  TGetProc = function: ShortString of object;
+  TGetIndexed = function(Index: Integer): ShortString of object;
+var call: TMethod;
+    tmp: ShortString;
 begin
-  if PropWrap(GetProc).Kind=$FE then
-    // virtual method  - Getter is a signed 2 byte integer VMT offset
-    Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(GetProc))^ else
-    // static method - Getter is the actual address
-    Call.Code := Pointer(GetProc);
-  Call.Data := Instance;
-  if Index=NO_INDEX then  // no index
-    Value := ShortStringToAnsi7String(TSStringGetProc(Call)) else
-    Value := ShortStringToAnsi7String(TSStringIndexedGetProc(Call)(Index));
-end;
-begin // caller must check that PropType^.Kind = tkString/tkSString
-  if PropWrap(GetProc).Kind=$FF then
-    // field - Getter is the field offset in the instance data
-    Value := ShortStringToAnsi7String(PShortString(PtrUInt(Instance)+GetProc and $00FFFFFF)^) else
-    CallMethod(Instance,Value);
+  case Getter(Instance,@call) of
+    picField:   tmp := PShortString(call.Data)^;
+    picMethod:  tmp := TGetProc(call);
+    picIndexed: tmp := TGetIndexed(call)(Index);
+    else tmp := '';
+  end;
+  ShortStringToAnsi7String(tmp,RawUTF8(Value));
 end; // no SetShortStrProp() by now
+
+procedure TPropInfo.GetLongStrProp(Instance: TObject; var Value: RawByteString);
+  procedure SubProc(pic: TPropInfoCall; const call: TMethod);
+  type
+    TGetProc = function: RawByteString of object;
+    TGetIndexed = function(Index: Integer): RawByteString of object;
+  begin
+    case pic of
+      picMethod:  value := TGetProc(call);
+      picIndexed: value := TGetIndexed(call)(Index);
+      else value := '';
+    end;
+  end;
+var pic: TPropInfoCall;
+    call: TMethod;
+begin
+  pic := Getter(Instance,@call);
+  if pic=picField then
+    value := PRawByteString(call.Data)^ else
+    SubProc(pic,call); // avoid try..finally
+end;
+
+procedure TPropInfo.SetLongStrProp(Instance: TObject; const Value: RawByteString);
+type
+  TSetProc = procedure(const Value: RawByteString) of object;
+  TSetIndexed = procedure(Index: integer; const Value: RawByteString) of object;
+var call: TMethod;
+begin
+  case Setter(Instance,@call) of
+    picField:   PRawByteString(call.Data)^ := Value;
+    picMethod:  TSetProc(call)(Value);
+    picIndexed: TSetIndexed(call)(Index,Value);
+  end;
+end;
 
 procedure TPropInfo.GetWideStrProp(Instance: TObject; var Value: WideString);
 type
-  TUStringGetProc = function: WideString of object;
-  TUStringIndexedGetProc = function(Index: Integer): WideString of object;
-var M: TMethod;
-begin // caller must check that PropType^.Kind = tkWString
-  if PropWrap(GetProc).Kind=$FF then
-    // field - Getter is the field offset in the instance data
-    Value := PWideString(PtrUInt(Instance)+GetProc and $00FFFFFF)^
-  else begin
-    if PropWrap(GetProc).Kind=$FE then
-      // virtual method  - Getter is a signed 2 byte integer VMT offset
-      M.Code := PPointer(PPtrInt(Instance)^+SmallInt(GetProc))^ else
-      // static method - Getter is the actual address
-      M.Code := Pointer(GetProc);
-    M.Data := Instance;
-    if Index=NO_INDEX then  // no index
-      Value := TUStringGetProc(M)() else
-      Value := TUStringIndexedGetProc(M)(Index);
+  TGetProc = function: WideString of object;
+  TGetIndexed = function(Index: Integer): WideString of object;
+var call: TMethod;
+begin
+  case Getter(Instance,@call) of
+    picField:   value := PWideString(call.Data)^;
+    picMethod:  value := TGetProc(call);
+    picIndexed: value := TGetIndexed(call)(Index);
+    else value := '';
   end;
 end;
 
 procedure TPropInfo.SetWideStrProp(Instance: TObject; const Value: WideString);
 type
-  TUStringSetProc = procedure(const Value: WideString) of object;
-  TUStringIndexedSetProc = procedure(Index: Integer; const Value: WideString) of object;
-var M: TMethod;
-begin // caller must check that PropType^.Kind = tkWString
-  if SetProc=0 then  // no setter ?
-    if PropWrap(GetProc).Kind<>$FF then
-      exit else begin  // we only allow setting if we know the field address
-      PWideString(PtrUInt(Instance)+GetProc and $00FFFFFF)^ := Value;
-      exit;
-    end;
-  if PropWrap(SetProc).Kind=$FF then
-    // field - Setter is the field offset in the instance data
-    PWideString(PtrUInt(Instance)+SetProc and $00FFFFFF)^ := Value else begin
-    if PropWrap(SetProc).Kind=$FE then
-      // virtual method  - Setter is a signed 2 byte integer VMT offset
-      M.Code := PPointer(PPtrInt(Instance)^+SmallInt(SetProc))^ else
-      // static method - Setter is the actual address
-      M.Code := Pointer(SetProc);
-    M.Data := Instance;
-    if Index=NO_INDEX then  // no index
-      TUStringSetProc(M)(Value) else
-      TUStringIndexedSetProc(M)(Index, Value);
+  TSetProc = procedure(const Value: WideString) of object;
+  TSetIndexed = procedure(Index: integer; const Value: WideString) of object;
+var call: TMethod;
+begin
+  case Setter(Instance,@call) of
+    picField:   PWideString(call.Data)^ := Value;
+    picMethod:  TSetProc(call)(Value);
+    picIndexed: TSetIndexed(call)(Index,Value);
   end;
 end;
 
 {$ifdef HASVARUSTRING}
-function TPropInfo.GetUnicodeStrProp(Instance: TObject): UnicodeString;
-type
-  TUStringGetProc = function: UnicodeString of object;
-  TUStringIndexedGetProc = function(Index: Integer): UnicodeString of object;
-var M: TMethod;
-begin // caller must check that PropType^.Kind = tkUString
-  if PropWrap(GetProc).Kind=$FF then
-    // field - Getter is the field offset in the instance data
-    result := PUnicodeString(PtrUInt(Instance)+GetProc and $00FFFFFF)^
-  else begin
-    if PropWrap(GetProc).Kind=$FE then
-      // virtual method  - Getter is a signed 2 byte integer VMT offset
-      M.Code := PPointer(PPtrInt(Instance)^+SmallInt(GetProc))^ else
-      // static method - Getter is the actual address
-      M.Code := Pointer(GetProc);
-    M.Data := Instance;
-    if Index=NO_INDEX then  // no index
-      result := TUStringGetProc(M)() else
-      result := TUStringIndexedGetProc(M)(Index);
+procedure TPropInfo.GetUnicodeStrProp(Instance: TObject; var Value: UnicodeString);
+  procedure SubProc(pic: TPropInfoCall; const call: TMethod); // avoid try..finally
+  type
+    TGetProc = function: UnicodeString of object;
+    TGetIndexed = function(Index: Integer): UnicodeString of object;
+  begin
+    case pic of
+      picMethod:  Value := TGetProc(call);
+      picIndexed: Value := TGetIndexed(call)(Index);
+      else Value := '';
+    end;
   end;
+var pic: TPropInfoCall;
+    call: TMethod;
+begin
+  pic := Getter(Instance,@call);
+  if pic=picField then
+    Value := PUnicodeString(call.Data)^ else
+    SubProc(pic,call);
 end;
 
 procedure TPropInfo.SetUnicodeStrProp(Instance: TObject; const Value: UnicodeString);
 type
-  TUStringSetProc = procedure (const Value: UnicodeString) of object;
-  TUStringIndexedSetProc = procedure (Index: Integer; const Value: UnicodeString) of object;
-var M: TMethod;
-begin // caller must check that PropType^.Kind = tkUString
-  if SetProc=0 then  // no setter ?
-    if PropWrap(GetProc).Kind<>$FF then
-      exit else begin  // we only allow setting if we know the field address
-      PUnicodeString(PtrUInt(Instance)+GetProc and $00FFFFFF)^ := Value;
-      exit;
-    end;
-  if PropWrap(SetProc).Kind=$FF then
-    // field - Setter is the field offset in the instance data
-    PUnicodeString(PtrUInt(Instance)+SetProc and $00FFFFFF)^ := Value else begin
-    if PropWrap(SetProc).Kind=$FE then
-      // virtual method  - Setter is a signed 2 byte integer VMT offset
-      M.Code := PPointer(PPtrInt(Instance)^+SmallInt(SetProc))^ else
-      // static method - Setter is the actual address
-      M.Code := Pointer(SetProc);
-    M.Data := Instance;
-    if Index=NO_INDEX then // no index
-      TUStringSetProc(M)(Value) else
-      TUStringIndexedSetProc(M)(Index, Value);
+  TSetProc = procedure(const Value: UnicodeString) of object;
+  TSetIndexed = procedure(Index: integer; const Value: UnicodeString) of object;
+var call: TMethod;
+begin
+  case Setter(Instance,@call) of
+    picField:   PUnicodeString(call.Data)^ := Value;
+    picMethod:  TSetProc(call)(Value);
+    picIndexed: TSetIndexed(call)(Index,Value);
   end;
 end;
 {$endif HASVARUSTRING}
 
 function TPropInfo.GetCurrencyProp(Instance: TObject): currency;
-type // function(Instance: TObject) trick does not work with CPU64 :(
+type
   TGetProc = function: currency of object;
-  TIndexedGetProc = function(Index: Integer): currency of object;
-var P: Pointer;
-    Call: TMethod;
-begin // faster code by AB
-  if PropWrap(GetProc).Kind=$FF then begin
-    // field - GetProc is the field offset in the instance data
-    P := Pointer(PtrUInt(Instance)+GetProc and $00FFFFFF);
-    Result := PCurrency(P)^;
-  end
-  else begin
-    if PropWrap(GetProc).Kind=$FE then
-      Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(GetProc))^ else
-      Call.Code := Pointer(GetProc);
-    Call.Data := Instance;
-    if Index=NO_INDEX then
-      result := TGetProc(Call) else
-      result := TIndexedGetProc(Call)(Index);
+  TGetIndexed = function(Index: Integer): currency of object;
+var call: TMethod;
+begin
+  case Getter(Instance,@call) of
+    picField:   result := PCurrency(call.Data)^;
+    picMethod:  result := TGetProc(call);
+    picIndexed: result := TGetIndexed(call)(Index);
+    else result := 0;
   end;
 end;
 
 procedure TPropInfo.SetCurrencyProp(Instance: TObject; const Value: Currency);
+type
+  TSetProc = procedure(const Value: currency) of object;
+  TSetIndexed = procedure(Index: integer; const Value: currency) of object;
+var call: TMethod;
 begin
-  if SetterIsField then
-    PCurrency(SetterAddr(Instance))^ := Value else
-  if (SetProc=0) and GetterIsField then
-    PCurrency(GetterAddr(Instance))^ := Value else
-    SetFloatProp(Instance,value);
+  case Setter(Instance,@call) of
+    picField:   PCurrency(call.Data)^ := Value;
+    picMethod:  TSetProc(call)(Value);
+    picIndexed: TSetIndexed(call)(Index,Value);
+  end;
 end;
 
 function TPropInfo.GetDoubleProp(Instance: TObject): double;
-type // function(Instance: TObject) trick does not work with CPU64 :(
+type
   TGetProc = function: double of object;
-  TIndexedGetProc = function(Index: Integer): double of object;
-var P: Pointer;
-    Call: TMethod;
-begin // faster code by AB
-  if PropWrap(GetProc).Kind=$FF then begin
-    // field - GetProc is the field offset in the instance data
-    P := Pointer(PtrUInt(Instance)+GetProc and $00FFFFFF);
-    Result := PDouble(P)^;
-  end
-  else begin
-    if PropWrap(GetProc).Kind=$FE then
-      Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(GetProc))^ else
-      Call.Code := Pointer(GetProc);
-    Call.Data := Instance;
-    if Index=NO_INDEX then
-      result := TGetProc(Call) else
-      result := TIndexedGetProc(Call)(Index);
+  TGetIndexed = function(Index: Integer): double of object;
+var call: TMethod;
+begin
+  case Getter(Instance,@call) of
+    picField:   result := unaligned(PDouble(call.Data)^);
+    picMethod:  result := TGetProc(call);
+    picIndexed: result := TGetIndexed(call)(Index);
+    else result := 0;
   end;
 end;
 
 procedure TPropInfo.SetDoubleProp(Instance: TObject; Value: Double);
+type
+  TSetProc = procedure(const Value: double) of object;
+  TSetIndexed = procedure(Index: integer; const Value: double) of object;
+var call: TMethod;
 begin
-  if SetterIsField then
-    PDouble(SetterAddr(Instance))^ := Value else
-  if (SetProc=0) and GetterIsField then
-    PDouble(GetterAddr(Instance))^ := Value else
-    SetFloatProp(Instance,value);
+  case Setter(Instance,@call) of
+    picField:   unaligned(PDouble(call.Data)^) := Value;
+    picMethod:  TSetProc(call)(Value);
+    picIndexed: TSetIndexed(call)(Index,Value);
+  end;
 end;
 
 function TPropInfo.GetFloatProp(Instance: TObject): double;
-type // function(Instance: TObject) trick does not work with CPU64 :(
-  TGetProc = function: extended of object;
-  TIndexedGetProc = function(Index: Integer): extended of object;
-var P: Pointer;
-    Call: TMethod;
-begin // faster code by AB
-  if PropWrap(GetProc).Kind=$FF then begin
-    // field - GetProc is the field offset in the instance data
-    P := Pointer(PtrUInt(Instance)+GetProc and $00FFFFFF);
-    case PropType^.FloatType of
-      ftSingle:    Result := PSingle(P)^;
-      ftDoub:      Result := PDouble(P)^;
-      ftExtended:  Result := PExtended(P)^;
-      ftComp:      Result := PComp(P)^;
-      ftCurr:      Result := PCurrency(P)^; // use GetInt64Prop() to avoid rounding
-    else Result := 0;
-    end;
-  end
-  else begin
-    if PropWrap(GetProc).Kind=$FE then
-      Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(GetProc))^ else
-      Call.Code := Pointer(GetProc);
-    Call.Data := Instance;
-    if Index=NO_INDEX then
-      result := TGetProc(Call) else
-      result := TIndexedGetProc(Call)(Index);
-    if PropType^.FloatType = ftCurr then
-      Result := Result / 10000;
+type
+  TSingleProc = function: Single of object;
+  TSingleIndexed = function(Index: Integer): Single of object;
+  TDoubleProc = function: Double of object;
+  TDoubleIndexed = function(Index: Integer): Double of object;
+  TExtendedProc = function: Extended of object;
+  TExtendedIndexed = function(Index: Integer): Extended of object;
+  TCurrencyProc = function: Currency of object;
+  TCurrencyIndexed = function(Index: Integer): Currency of object;
+var call: TMethod;
+    ft: TFloatType;
+begin
+  result := 0;
+  ft := {$ifdef HASINLINE}PropType^.FloatType{$else}
+    PFloatType(@PropType^.Name[ord(PropType^.Name[0])+1])^{$endif};
+  case Getter(Instance,@call) of
+    picField:
+      case ft of
+        ftSingle:    result := PSingle(call.Data)^;
+        ftDoub:      result := unaligned(PDouble(call.Data)^);
+        ftExtended:  result := PExtended(call.Data)^;
+        ftCurr:      result := PCurrency(call.Data)^;
+      end;
+    picMethod:
+      case ft of
+        ftSingle:    result := TSingleProc(call);
+        ftDoub:      result := TDoubleProc(call);
+        ftExtended:  result := TExtendedProc(call);
+        ftCurr:      result := TCurrencyProc(call);
+      end;
+    picIndexed:
+      case ft of
+        ftSingle:    result := TSingleIndexed(call)(Index);
+        ftDoub:      result := TDoubleIndexed(call)(Index);
+        ftExtended:  result := TExtendedIndexed(call)(Index);
+        ftCurr:      result := TCurrencyIndexed(call)(Index);
+      end;
   end;
 end;
 
 procedure TPropInfo.SetFloatProp(Instance: TObject; Value: TSynExtended);
-type // procedure(Instance: TObject) trick does not work with CPU64 :(
-  TSingleSetProc = procedure(const Value: Single) of object;
-  TDoubleSetProc = procedure(const Value: Double) of object;
-  TExtendedSetProc = procedure(const Value: Extended) of object;
-  TCompSetProc = procedure(const Value: Comp) of object;
-  TCurrencySetProc = procedure(const Value: Currency) of object;
-var P: Pointer;
-    Call: TMethod;
-label St;
+type
+  TSingleProc = procedure(const Value: Single) of object;
+  TSingleIndexed = procedure(Index: integer; const Value: Single) of object;
+  TDoubleProc = procedure(const Value: double) of object;
+  TDoubleIndexed = procedure(Index: integer; const Value: double) of object;
+  TExtendedProc = procedure(const Value: Extended) of object;
+  TExtendedIndexed = procedure(Index: integer; const Value: Extended) of object;
+  TCurrencyProc = procedure(const Value: Currency) of object;
+  TCurrencyIndexed = procedure(Index: integer; const Value: Currency) of object;
+var call: TMethod;
+    ft: TFloatType;
 begin
-  if SetProc=0 then  // no setter ?
-    if PropWrap(GetProc).Kind<>$FF then
-      exit else begin  // we only allow setting if we know the field address
-      P := Pointer(PtrUInt(Instance)+GetProc and $00FFFFFF);
-      goto St;  // use the field address to set its value
-    end;
-  if PropWrap(SetProc).Kind=$FF then begin
-    // field - SetProc is the field offset in the instance data
-    P := Pointer(PtrUInt(Instance)+SetProc and $00FFFFFF);
-St: case PropType^^.FloatType of
-      ftSingle:    PSingle(P)^ := Value;
-      ftDoub:      PDouble(P)^ := Value;
-      ftExtended:  PExtended(P)^ := Value;
-      ftComp:      PComp(P)^ := Value;
-      ftCurr:      PCurrency(P)^ := Value;
-    end;
-  end
-  else begin
-    if PropWrap(SetProc).Kind=$FE then
-      Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(SetProc))^ else
-      Call.Code := Pointer(SetProc);
-    Call.Data := Instance;
-    if Index=NO_INDEX then begin // no index
-      case PropType^^.FloatType of
-        ftSingle  :  TSingleSetProc(Call)(Value);
-        ftDoub :     TDoubleSetProc(Call)(Value);
-        ftExtended:  TExtendedSetProc(Call)(Value);
-        ftComp    :  TCompSetProc(Call)(Value);
-        ftCurr    :  TCurrencySetProc(Call)(Value);
+  ft := {$ifdef HASINLINE}PropType^.FloatType{$else}
+    PFloatType(@PropType^.Name[ord(PropType^.Name[0])+1])^{$endif};
+  case Setter(Instance,@call) of
+    picField:
+      case ft of
+        ftSingle:    PSingle(call.Data)^ := Value;
+        ftDoub:      unaligned(PDouble(call.Data)^) := Value;
+        ftExtended:  PExtended(call.Data)^ := Value;
+        ftCurr:      PCurrency(call.Data)^ := Value;
       end;
-    end;  // indexed methods not handled here, since not used in TSQLRecord
+    picMethod:
+      case ft of
+        ftSingle:    TSingleProc(call)(Value);
+        ftDoub:      TDoubleProc(call)(Value);
+        ftExtended:  TExtendedProc(call)(Value);
+        ftCurr:      TCurrencyProc(call)(Value);
+      end;
+    picIndexed:
+      case ft of
+        ftSingle:    TSingleIndexed(call)(Index,Value);
+        ftDoub:      TDoubleIndexed(call)(Index,Value);
+        ftExtended:  TExtendedIndexed(call)(Index,Value);
+        ftCurr:      TCurrencyIndexed(call)(Index,Value);
+      end;
   end;
 end;
 
 {$ifndef NOVARIANTS}
 procedure TPropInfo.GetVariantProp(Instance: TObject; var result: Variant);
-  procedure ByMethod; // sub proc for faster execution of simple types
-  type // function(Instance: TObject) trick does not work with CPU64 :(
-    TGetProc = function: Variant of object;
-    TIndexedGetProc = function(Index: Integer): Variant of object;
-  var Call: TMethod;
+  procedure SubProc(pic: TPropInfoCall; const call: TMethod); // avoid try..finally
+  type
+    TGetProc = function: variant of object;
+    TGetIndexed = function(Index: Integer): variant of object;
   begin
-    if PropWrap(GetProc).Kind=$FE then
-      Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(GetProc))^ else
-      Call.Code := Pointer(GetProc);
-    Call.Data := Instance;
-    if Index=NO_INDEX then
-      result := TGetProc(Call) else
-      result := TIndexedGetProc(Call)(Index);
+    case pic of
+      picMethod:  result := TGetProc(call);
+      picIndexed: result := TGetIndexed(call)(Index);
+      else result := '';
+    end;
   end;
+var pic: TPropInfoCall;
+    call: TMethod;
 begin
-  if PropWrap(GetProc).Kind=$FF then
-    // field - Getter is the field offset in the instance data
-    SetVariantByValue(PVariant(PtrUInt(Instance)+GetProc and $00FFFFFF)^,result) else
-    ByMethod;
+  pic := Getter(Instance,@call);
+  if pic=picField then
+    SetVariantByValue(PVariant(call.Data)^,result) else
+    SubProc(pic,call);
 end;
 
 procedure TPropInfo.SetVariantProp(Instance: TObject; const Value: Variant);
-  procedure ByMethod; // sub proc for faster execution of simple types
-  type // procedure(Instance: TObject) trick does not work with CPU64 :(
-    TSetProp = procedure(const Value: Variant) of object;
-    TIndexedProp = procedure(Index: integer; const Value: Variant) of object;
-  var Call: TMethod;
-  begin
-    if PropWrap(SetProc).Kind=$FE then
-      Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(SetProc))^ else
-      Call.Code := Pointer(SetProc);
-    Call.Data := Instance;
-    if Index=NO_INDEX then
-      TSetProp(Call)(Value) else
-      TIndexedProp(Call)(Index,Value);
-  end;
-begin
-  if SetProc=0 then  // no write attribute -> use read offset
-    if PropWrap(GetProc).Kind<>$FF then
-      exit else // we only allow setting if we know the field address
-      PVariant(PtrUInt(Instance)+GetProc and $00FFFFFF)^ := Value else
-    if PropWrap(SetProc).Kind=$FF then
-      PVariant(PtrUInt(Instance)+SetProc and $00FFFFFF)^ := Value else
-      ByMethod;
-end;
-{$endif}
-
-{$endif USETYPEINFO}
-
-
 type
-  TIntfFlag = (ifHasGuid,ifDispInterface,ifDispatch{$ifdef FPC},ifHasStrGUID{$endif});
-  TIntfFlags = set of TIntfFlag;
-
-  {$ifdef FPC}
-  {$PACKRECORDS C}
-  {$endif}
-
-  PInterfaceTypeData = ^TInterfaceTypeData;
-  TInterfaceTypeData =
-    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}packed{$endif} record
-    IntfParent: PPTypeInfo; // ancestor
-    IntfFlags: TIntfFlags;
-    IntfGuid: TGUID;
-    IntfUnit: ShortString;
-  end;
-
-  {$ifdef FPC}
-  PRawInterfaceTypeData = ^TRawInterfaceTypeData;
-  TRawInterfaceTypeData =
-    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}packed{$endif} record
-    RawIntfParent: PTypeInfo;
-    RawIntfFlags : TIntfFlagsBase;
-    IID: TGUID;
-    RawIntfUnit: ShortString;
-    IIDStr: ShortString;
-  end;
-  {$endif}
-
-  {$ifdef FPC}
-  {$PACKRECORDS DEFAULT}
-  {$endif}
-
-
-  TMethodKind = (mkProcedure, mkFunction, mkConstructor, mkDestructor,
-    mkClassProcedure, mkClassFunction, mkClassConstructor, mkClassDestructor,
-    mkOperatorOverload{$ifndef FPC},{ Obsolete } mkSafeProcedure, mkSafeFunction{$endif});
-
-  TIntfMethodEntryTail =
-    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}packed{$endif} record
-    {$ifdef FPC_NEWRTTI}
-    ResultType: PPTypeInfo;
-    CC: TCallingConvention;
-    Kind: TMethodKind;
-    ParamCount: Word;
-    StackSize: SizeInt;
-    Name: ShortString;
-    {$else}
-    Kind: TMethodKind;
-    CC: TCallingConvention;
-    ParamCount: Byte;
-    {Params: array[0..ParamCount - 1] of TVmtMethodParam;}
-    {$endif FPC_NEWRTTI}
-  end;
-
-{ TTypeInfo }
-
-function TTypeInfo.ClassType: PClassType;
-{$ifdef HASINLINENOTX86}
+  TSetProc = procedure(const Value: variant) of object;
+  TSetIndexed = procedure(Index: integer; const Value: variant) of object;
+var call: TMethod;
 begin
-  result := AlignTypeData(@Name[ord(Name[0])+1]);
-end;
-{$else}
-asm // very fast code
-        movzx   edx, byte ptr[eax].TTypeInfo.Name
-        lea     eax, [eax + edx].TTypeInfo.Name[1]
-end;
-{$endif}
-
-function TTypeInfo.ClassCreate: TObject;
-var instance: TClassInstance;
-begin
-  instance.Init(ClassType^.ClassType);
-  result := instance.CreateNew;
-end;
-
-function TTypeInfo.RecordType: PRecordType;
-{$ifdef HASINLINENOTX86}
-begin
-  result := AlignTypeData(@Name[ord(Name[0])+1]);
-end;
-{$else}
-asm // very fast code
-        movzx   edx, byte ptr[eax].TTypeInfo.Name
-        lea     eax, [eax + edx].TTypeInfo.Name[1]
-end;
-{$endif}
-
-function TTypeInfo.ClassFieldCount(onlyWithoutGetter: boolean): integer;
-begin
-  result := ClassFieldCountWithParents(ClassType^.ClassType,onlyWithoutGetter);
-end;
-
-function TTypeInfo.ClassSQLFieldType: TSQLFieldType;
-var CT: PClassType;
-    C: TClass;
-begin
-  CT := AlignTypeData(@Name[ord(Name[0])+1]); // inlined ClassType
-  C := CT^.ClassType;
-  result := sftUnknown;
-  while true do // unrolled several InheritsFrom() calls
-    if C<>TSQLRecordMany then
-    if C<>TSQLRecord then
-    if (C<>TRawUTF8List) and (C<>TStrings) and
-       (C<>TObjectList) {$ifndef LVCL}and (C<>TCollection){$endif} then
-      if CT^.ParentInfo<>nil then begin
-        if CT^.PropCount>0 then
-          result := sftObject; // identify any class with published properties
-        {$ifdef HASDIRECTTYPEINFO}
-        with PTypeInfo(CT^.ParentInfo)^ do
-        {$else} // circumvent weird Delphi inlining compiler random bug
-        with CT^.ParentInfo^^ do
-        {$endif}
-          CT := AlignTypeData(@Name[ord(Name[0])+1]); // get parent ClassType
-        C := CT^.ClassType;
-        if C<>TObject then
-          continue else
-          break;
-      end else break
-    else begin
-      result := sftObject; // TStrings,TObjectList,TRawUTF8List or TCollection
-      break;
-    end else begin
-      result := sftID; // TSQLRecord field is pointer(RecordID), not an Instance
-      break;
-    end else begin
-      result := sftMany; // no data is stored here, but in a pivot table
-      break;
-    end;
-end;
-
-function TTypeInfo.InheritsFrom(AClass: TClass): boolean;
-{$ifdef FPC_OR_PUREPASCAL}
-var CT: PClassType;
-begin
-  CT := ClassType;
-  repeat
-    if CT^.ClassType={$ifndef FPC}pointer{$endif}(AClass) then begin
-      result := true;
-      exit;
-    end;
-    if CT^.ParentInfo = nil then
-      break else
-      CT := CT^.ParentInfo^.ClassType;
-  until CT = nil;
-  result := false;
-end;
-{$else}
-asm     // eax=PClassType edx=AClass
-@1:     movzx   ecx, byte ptr[eax].TTypeInfo.Name
-        lea     eax, [eax + ecx].TTypeInfo.Name[1]
-        cmp     edx, [eax].TClassType.ClassType
-        jz      @2
-        mov     eax, [eax].TClassType.ParentInfo
-        test    eax, eax
-        jz      @3 // no parent
-        mov     eax, [eax] // get parent type info
-        jmp     @1
-@3:     rep     ret
-@2:     mov     eax, 1
-end;
-{$endif}
-
-function TTypeInfo.GetSQLFieldType: TSQLFieldType;
-begin // very fast, thanks to the TypeInfo() compiler-generated function
-  case Kind of
-    tkInteger: begin
-      result := sftInteger;
-      exit; // direct exit is faster in generated asm code (Delphi 7 at least)
-    end;
-    tkInt64:
-      if (@self=TypeInfo(TRecordReference)) or
-         (@self=TypeInfo(TRecordReferenceToBeDeleted)) then begin
-        result := sftRecord;
-        exit;
-      end else
-      if @self=TypeInfo(TCreateTime) then begin
-        result := sftCreateTime;
-        exit;
-      end else
-      if @self=TypeInfo(TModTime) then begin
-        result := sftModTime;
-        exit;
-      end else
-      if @self=TypeInfo(TTimeLog) then begin
-        result := sftTimeLog;
-        exit;
-      end else
-      if @self=TypeInfo(TUnixTime) then begin
-        result := sftUnixTime;
-        exit;
-      end else
-      if @self=TypeInfo(TUnixMSTime) then begin
-        result := sftUnixMSTime;
-        exit;
-      end else
-      if @self=TypeInfo(TID) then begin
-        result := sftTID;
-        exit;
-      end else
-      if @self=TypeInfo(TSessionUserID) then begin
-        result := sftSessionUserID;
-        exit;
-      end else
-      if @self=TypeInfo(TRecordVersion) then begin
-        result := sftRecordVersion;
-        exit;
-      end else
-      if (ord(Name[1]) and $df=ord('T')) and // T...ID pattern in type name -> TID
-         (PWord(@Name[ord(Name[0])-1])^ and $dfdf=ord('I')+ord('D') shl 8) then begin
-        result := sftTID;
-        exit;
-      end else begin
-        result := sftInteger;
-        exit;
-      end;
-    {$ifdef FPC}
-    tkBool: begin
-      result := sftBoolean;
-      exit;
-    end;
-    tkQWord: begin
-      result := sftInteger;
-      exit;
-    end;
-    {$endif}
-    tkSet: begin
-      result := sftSet;
-      exit;
-    end;
-    tkEnumeration:
-      {$ifndef FPC}
-      if @self=TypeInfo(Boolean) then begin
-        result := sftBoolean;
-        exit;
-      end else
-      {$endif}
-      if @self=TypeInfo(WordBool) then begin // circumvent a Delphi RTTI bug
-        result := sftBoolean;
-        exit;
-      end else
-      begin
-        result := sftEnumerate;
-        exit;
-      end;
-    tkFloat:
-      if @self=TypeInfo(Currency) then begin
-        result := sftCurrency;
-        exit;
-      end else
-      if @self=TypeInfo(TDateTime) then begin
-        result := sftDateTime;
-        exit;
-      end else
-      if @self=TypeInfo(TDateTimeMS) then begin
-        result := sftDateTimeMS;
-        exit;
-      end else begin
-        result := sftFloat;
-        exit;
-      end;
-      {$ifdef FPC}tkAString,{$endif} tkLString:
-      // do not use AnsiStringCodePage since AnsiString = GetAcp may change
-      if (@self=TypeInfo(TSQLRawBlob)) or
-         (@self=TypeInfo(RawByteString)) then begin
-        result := sftBlob;
-        exit;
-      end else
-      if @self=TypeInfo(WinAnsiString) then begin
-        result := sftAnsiText;
-        exit;
-      end else begin
-        result := sftUTF8Text; // CP_UTF8,CP_UTF16 and any other to UTF-8 text
-        exit;
-      end;
-    {$ifdef HASVARUSTRING}tkUString,{$endif} tkChar, tkWChar, tkWString: begin
-      result := sftUTF8Text;
-      exit;
-    end;
-    tkDynArray: begin
-      result := sftBlobDynArray;
-      exit;
-    end;
-    {$ifdef PUBLISHRECORD}
-    tkRecord{$ifdef FPC},tkObject{$endif}: begin
-      result := sftUTF8Custom;
-      exit;
-    end;
-    {$endif}
-    {$ifndef NOVARIANTS}
-    tkVariant: begin // this function does not need to handle sftNullable
-      result := sftVariant;
-      exit;
-    end;
-    {$endif}
-    tkClass: begin
-      result := ClassSQLFieldType;
-      exit;
-    end;
-    // note: tkString (shortstring) and tkInterface not handled
-    else begin
-      result := sftUnknown;
-      exit;
-    end;
+  case Setter(Instance,@call) of
+    picField:   PVariant(call.Data)^ := Value;
+    picMethod:  TSetProc(call)(Value);
+    picIndexed: TSetIndexed(call)(Index,Value);
   end;
 end;
-
-function TTypeInfo.FloatType: TFloatType;
-begin
-  {$ifdef FPC}
-  result := PFloatType(GetFPCTypeData(@self))^;
-  {$else}
-  result := TFloatType(PByte(@Name[ord(Name[0])+1])^);
-  {$endif}
-end;
-
-function TTypeInfo.OrdType: TOrdType;
-begin
-  {$ifdef FPC}
-  result := POrdType(GetFPCTypeData(@self))^;
-  {$else}
-  result := TOrdType(PByte(@Name[ord(Name[0])+1])^);
-  {$endif}
-end;
-
-function TTypeInfo.IsQWord: boolean;
-begin
-  {$ifdef FPC}
-  result := Kind=tkQWord;
-  {$else}
-  if @self=TypeInfo(QWord) then
-    result := true else
-    {$ifdef UINICODE}if Kind=tkInt64 then // check MinInt64Value>MaxInt64Value
-      with PHash128Rec(@Name[ord(Name[0])+1])^ do
-        result := Lo>Hi else {$endif}
-      result := false;
-  {$endif}
-end;
-
-function TTypeInfo.EnumBaseType: PEnumType;
-{$ifdef FPC}
-var base: PPTypeInfo;
-begin
-  result := PEnumType(GetFPCTypeData(@self));
-  if Kind=tkBool then
-    exit; // circumvent diverse RTTI encoding
-  base := result^.BaseType;
-  if (base<>nil) and (base<>@self) then // no redirection if already the base type
-    result := PEnumType(GetFPCTypeData(pointer(DeRef(base))));
-end;
-{$else}
-{$ifdef HASINLINENOTX86}
-begin
-  with PEnumType(@Name[ord(Name[0])+1])^.BaseType^^ do
-    result := @Name[ord(Name[0])+1];
-end;
-{$else}
-asm     // very fast code
-        movzx   edx, byte ptr[eax].TTypeInfo.Name
-        mov     eax, [eax + edx].TTypeInfo.Name[1].TEnumType.BaseType
-        mov     eax, [eax]
-        movzx   edx, byte ptr[eax].TTypeInfo.Name
-        lea     eax, [eax + edx].TTypeInfo.Name[1]
-end;
-{$endif}
-{$endif FPC}
-
-function TTypeInfo.SetEnumType: PEnumType;
-begin
-  if (@self=nil) or (Kind<>tkSet) then
-    result := nil else begin
-  {$ifdef FPC}
-    result := pointer(TypInfo.PTypeData(GetFPCTypeData(@self))^.
-      {$ifdef FPC_NEWRTTI}CompTypeRef^{$else}CompType{$endif});
-    if result<>nil then
-      result := PTypeInfo(result)^.EnumBaseType;
-  {$else}
-    result := PPTypeInfo(PPointer(PtrUInt(@Name[ord(Name[0])+1])+SizeOf(TOrdType))^)^.
-      EnumBaseType;
-  {$endif FPC}
-  end;
-end;
-
-function TTypeInfo.DynArrayItemType(aDataSize: PInteger): PTypeInfo;
-begin
-  if @self=nil then
-    result := nil else
-    result := DynArrayTypeInfoToRecordInfo(@self,aDataSize);
-end;
-
-function TTypeInfo.DynArrayItemSize: integer;
-begin
-  if @self=nil then
-    result := 0 else
-    DynArrayTypeInfoToRecordInfo(@self,@result);
-end;
-
-function TTypeInfo.AnsiStringCodePage: integer;
-begin
-  {$ifdef HASCODEPAGE}
-  if @self=TypeInfo(TSQLRawBlob) then
-    result := CP_SQLRAWBLOB else
-    if Kind in [{$ifdef FPC}tkAString,{$endif} tkLString] then
-      {$ifdef FPC}
-      result := PWord(GetFPCTypeData(@self))^ else
-      {$else}
-      result := PWord(@Name[ord(Name[0])+1])^ else // from RTTI
-      {$endif}
-  {$else}
-  if @self=TypeInfo(RawUTF8) then
-    result := CP_UTF8 else
-  if @self=TypeInfo(WinAnsiString) then
-    result := CODEPAGE_US else
-  if @self=TypeInfo(RawUnicode) then
-    result := CP_UTF16 else
-  if @self=TypeInfo(TSQLRawBlob) then
-    result := CP_SQLRAWBLOB else
-  if @self=TypeInfo(RawByteString) then
-    result := CP_RAWBYTESTRING else
-  if (@self=TypeInfo(AnsiString)) or IdemPropName(Name,'TCaption') then
-    result := 0 else
-  {$endif HASCODEPAGE}
-    result := CP_UTF8; // default is UTF-8
-end;
-
-function TTypeInfo.InterfaceGUID: PGUID;
-{$ifdef FPC} var td: PTypeData; {$endif}
-begin
-  if (@self=nil) or (Kind<>tkInterface) then result := nil else
-{$ifdef FPC} begin
-    td := GetFPCTypeData(@self);
-    result := @td^.GUID;
-  end; {$else}
-    result := @PInterfaceTypeData(@Name[ord(Name[0])+1])^.IntfGuid;
-{$endif}
-end;
-
-function TTypeInfo.InterfaceUnitName: PShortString;
-{$ifdef FPC} var td: PTypeData; {$endif}
-begin
-  if (@self=nil) or (Kind<>tkInterface) then
-    result := @NULL_SHORTSTRING else
-{$ifdef FPC} begin
-    td := GetFPCTypeData(@self);
-    result := @td^.IntfUnit;
-  end; {$else}
-    result := @PInterfaceTypeData(@Name[ord(Name[0])+1])^.IntfUnit;
-{$endif}
-end;
-
-function TTypeInfo.InterfaceAncestor: PTypeInfo;
-begin
-  if (@self=nil) or (Kind<>tkInterface) then
-    result := nil else
-    {$ifdef FPC}
-    with PInterfaceTypeData(GetFPCTypeData(@self))^ do
-    {$else}
-    with PInterfaceTypeData(@Name[ord(Name[0])+1])^ do
-    {$endif}
-      result := pointer(Deref(IntfParent));
-end;
-
-procedure TTypeInfo.InterfaceAncestors(out Ancestors: PTypeInfoDynArray;
-  OnlyImplementedBy: TInterfacedObjectClass;
-  out AncestorsImplementedEntry: TPointerDynArray);
-var n: integer;
-    nfo: PTypeInfo;
-    typ: PInterfaceTypeData;
-    entry: pointer;
-begin
-  if (@self=nil) or (Kind<>tkInterface) then
-    exit;
-  n := 0;
-  {$ifdef FPC}
-  typ := PInterfaceTypeData(GetFPCTypeData(@self));
-  {$else}
-  typ := @Name[ord(Name[0])+1];
-  {$endif FPC}
-  repeat
-    if typ^.IntfParent=nil then
-      exit;
-    nfo := Deref(typ^.IntfParent);
-    if nfo=TypeInfo(IInterface) then
-      exit;
-    {$ifdef FPC}
-    typ := PInterfaceTypeData(GetFPCTypeData(pointer(nfo)));
-    {$else}
-    typ := @nfo^.Name[ord(nfo^.Name[0])+1];
-    {$endif FPC}
-    if ifHasGuid in typ^.IntfFlags then begin
-      if OnlyImplementedBy<>nil then begin
-        entry := OnlyImplementedBy.GetInterfaceEntry(typ^.IntfGuid);
-        if entry=nil then
-          continue;
-        SetLength(AncestorsImplementedEntry,n+1);
-        AncestorsImplementedEntry[n] := entry;
-      end;
-      SetLength(Ancestors,n+1);
-      Ancestors[n] := nfo;
-      inc(n);
-    end;
-  until false;
-end;
-
-
-{ TClassProp }
-
-function TClassProp.FieldProp(const PropName: shortstring): PPropInfo;
-var i: integer;
-begin
-  if @self<>nil then begin
-    result := @PropList;
-    for i := 1 to PropCount do
-      if IdemPropName(result^.Name,PropName) then
-        exit else
-        result := result^.Next;
-  end;
-  result := nil;
-end;
-
-
-{ TClassType }
-
-function TClassType.ClassProp: PClassProp;
-begin
-  if pointer(@self)<>nil then
-    {$ifdef FPC}
-    result := AlignToPtr(@UnitName[ord(UnitName[0])+1]) else
-    {$else}
-    result := pointer(@UnitName[ord(UnitName[0])+1]) else
-    {$endif}
-    result := nil; // avoid GPF
-end;
-
-function TClassType.RTTISize: integer;
-var C: PClassProp;
-    P: PPropInfo;
-    i: Integer;
-begin
-  result := 0;
-  C := ClassProp;
-  if C=nil then
-    exit;
-  P := @C^.PropList;
-  for i := 1 to C^.PropCount do
-    P := P^.Next;
-  result := PtrUInt(P)-PtrUInt(@self);
-end;
-
-function TClassType.InheritsFrom(AClass: TClass): boolean;
-{$ifdef FPC_OR_PUREPASCAL}
-var P: PTypeInfo;
-begin
-  result := true;
-  if ClassType=AClass then
-    exit;
-  P := DeRef(ParentInfo);
-  while P<>nil do
-    with P^.ClassType^ do
-    if ClassType=AClass then
-      exit else
-      P := DeRef(ParentInfo);
-  result := false;
-end;
-{$else}
-asm // eax=PClassType edx=AClass
-        cmp     [eax].TClassType.ClassType, edx
-        jz      @3
-@2:     mov     eax, [eax].TClassType.ParentInfo
-        test    eax, eax
-        jz      @0
-@1:     mov     eax, [eax]
-        movzx   ecx, byte ptr[eax].TTypeInfo.Name
-        lea     eax, [eax + ecx].TTypeInfo.Name[1]
-        cmp     edx, [eax].TClassType.ClassType
-        jnz     @2
-@3:     mov     eax, 1
-@0:
-end;
-{$endif}
+{$endif NOVARIANTS}
 
 
 { TEnumType }
@@ -31391,14 +30787,8 @@ end;
 {$endif FPC_ENUMHASINNER}
 
 function TEnumType.GetEnumName(const Value): PShortString;
-var Ordinal: integer;
 begin
-  case OrdType of // MaxValue does not work e.g. with WordBool
-  otSByte, otUByte: Ordinal := byte(Value);
-  otSWord, otUWord: Ordinal := word(Value);
-  else              Ordinal := integer(Value);
-  end;
-  result := GetEnumNameOrd(Ordinal);
+  result := GetEnumNameOrd(FromOrdType(OrdType,@Value));
 end;
 
 function TEnumType.GetEnumNameOrd(Value: Integer): PShortString;
@@ -31408,8 +30798,8 @@ begin
   result := @NameList;
   if cardinal(Value)<=cardinal(MaxValue) then
     while Value>0 do begin
-      dec(Value);
       inc(PByte(result),ord(result^[0])+1);
+      dec(Value);
     end else
     result := @NULL_SHORTSTRING;
 end;
@@ -31560,35 +30950,21 @@ begin
 end;
 
 procedure TEnumType.GetEnumNameTrimedAll(var result: RawUTF8; const Prefix: RawUTF8;
-  quotedValues: boolean);
-var i: integer;
-    V: PShortString;
-    temp: TTextWriterStackBuffer;
+  quotedValues: boolean; const Suffix: RawUTF8);
 begin
-  with TTextWriter.CreateOwnedStream(temp) do
-  try
-    AddString(Prefix);
-    V := @NameList;
-    for i := MinValue to MaxValue do begin
-      if quotedValues then
-        Add('"');
-      AddTrimLeftLowerCase(V);
-      if quotedValues then
-        Add('"');
-      Add(',');
-      inc(PByte(V),length(V^)+1);
-    end;
-    CancelLastComma;
-    SetText(result);
-  finally
-    Free;
-  end;
+  GetEnumNameAll(result,Prefix,quotedValues,Suffix,{trimed=}true);
+end;
+
+function TEnumType.GetEnumNameAllAsJSONArray(TrimLeftLowerCase, UnCamelCased: boolean): RawUTF8;
+begin
+  GetEnumNameAll(result,'[',{quoted=}true,']',TrimLeftLowerCase,UnCamelCased);
 end;
 
 procedure TEnumType.GetEnumNameAll(var result: RawUTF8; const Prefix: RawUTF8;
-  quotedValues: boolean);
+  quotedValues: boolean; const Suffix: RawUTF8; trimedValues, unCamelCased: boolean);
 var i: integer;
     V: PShortString;
+    uncamel: string;
     temp: TTextWriterStackBuffer;
 begin
   with TTextWriter.CreateOwnedStream(temp) do
@@ -31598,7 +30974,11 @@ begin
     for i := MinValue to MaxValue do begin
       if quotedValues then
         Add('"');
-      if twoTrimLeftEnumSets in CustomOptions then
+      if unCamelCased then begin
+        GetCaptionFromTrimmed(V,uncamel);
+        AddNoJSONEscapeString(uncamel);
+      end else
+      if trimedValues then
         AddTrimLeftLowerCase(V) else
         AddShort(V^);
       if quotedValues then
@@ -31607,6 +30987,7 @@ begin
       inc(PByte(V),length(V^)+1);
     end;
     CancelLastComma;
+    AddString(Suffix);
     SetText(result);
   finally
     Free;
@@ -31618,6 +30999,7 @@ procedure TEnumType.GetEnumNameAll(var result: TRawUTF8DynArray;
 var max,i: integer;
     V: PShortString;
 begin
+  Finalize(result);
   max := MaxValue-MinValue;
   SetLength(result,max+1);
   V := @NameList;
@@ -31626,36 +31008,6 @@ begin
       result[i] := TrimLeftLowerCaseShort(V) else
       result[i] := RawUTF8(V^);
     inc(PByte(V),length(V^)+1);
-  end;
-end;
-
-function TEnumType.GetEnumNameAllAsJSONArray(TrimLeftLowerCase, UnCamelCased: boolean): RawUTF8;
-var i: integer;
-    V: PShortString;
-    uncamel: string;
-    temp: TTextWriterStackBuffer;
-begin
-  with TTextWriter.CreateOwnedStream(temp) do
-  try
-    Add('[');
-    V := @NameList;
-    for i := MinValue to MaxValue do begin
-      Add('"');
-      if UnCamelCased then begin
-        GetCaptionFromTrimmed(V,uncamel);
-        AddNoJSONEscapeString(uncamel);
-      end else
-        if TrimLeftLowerCase then
-          AddTrimLeftLowerCase(V) else
-          AddShort(V^);
-      Add('"',',');
-      inc(PByte(V),length(V^)+1);
-    end;
-    CancelLastComma;
-    Add(']');
-    SetText(result);
-  finally
-    Free;
   end;
 end;
 
@@ -31714,17 +31066,15 @@ end;
 
 function TEnumType.GetEnumNameTrimedValue(const EnumName: ShortString): Integer;
 begin
-  result := FindShortStringListTrimLowerCase(@NameList,MaxValue,@EnumName[1],ord(EnumName[0]));
-  if result<0 then
-    result := FindShortStringListExact(@NameList,MaxValue,@EnumName[1],ord(EnumName[0]));
+  result := GetEnumNameTrimedValue(@EnumName[1],ord(EnumName[0]));
 end;
 
-function TEnumType.GetEnumNameTrimedValue(Value: PUTF8Char): Integer;
-var ValueLen: integer;
+function TEnumType.GetEnumNameTrimedValue(Value: PUTF8Char; ValueLen: integer): Integer;
 begin
   if Value=nil then
     result := -1 else begin
-    ValueLen := StrLen(Value);
+    if ValueLen=0 then
+      ValueLen := StrLen(Value);
     result := FindShortStringListTrimLowerCase(@NameList,MaxValue,Value,ValueLen);
     if result<0 then
       result := FindShortStringListExact(@NameList,MaxValue,Value,ValueLen);
@@ -31733,22 +31083,12 @@ end;
 
 function TEnumType.SizeInStorageAsEnum: Integer;
 begin
-  case OrdType of // MaxValue does not work e.g. with WordBool
-  otSByte, otUByte: result := 1;
-  otSWord, otUWord: result := 2;
-  {$ifdef FPC_NEWRTTI}otSQWord, otUQWord: result := 8;{$endif}
-  else              result := 4;
-  end;
+  result := ORDTYPE_SIZE[OrdType]; // MaxValue does not work e.g. with WordBool
 end;
 
 procedure TEnumType.SetEnumFromOrdinal(out Value; Ordinal: Integer);
 begin
-  case OrdType of // MaxValue does not work e.g. with WordBool
-  otSByte, otUByte: byte(Value) := Ordinal;
-  otSWord, otUWord: word(Value) := Ordinal;
-  {$ifdef FPC_NEWRTTI}otSQWord, otUQWord: Int64(Value) := Ordinal;{$endif}
-  else              integer(Value) := Ordinal;
-  end;
+  ToOrdType(OrdType,@Value,Ordinal);  // MaxValue does not work e.g. with WordBool
 end;
 
 function TEnumType.SizeInStorageAsSet: Integer;
@@ -31760,6 +31100,465 @@ begin
   else    result := 0;
   end;
 end;
+
+
+{ TTypeInfo - not inlined methods }
+
+function TTypeInfo.ClassCreate: TObject;
+var instance: TClassInstance;
+begin
+  instance.Init(ClassType^.ClassType);
+  result := instance.CreateNew;
+end;
+
+function TTypeInfo.ClassFieldCount(onlyWithoutGetter: boolean): integer;
+begin
+  result := ClassFieldCountWithParents(ClassType^.ClassType,onlyWithoutGetter);
+end;
+
+function TTypeInfo.ClassSQLFieldType: TSQLFieldType;
+const T_: array[0..5{$ifndef LVCL}+1{$endif}] of TClass = (
+        TSQLRecordMany,TSQLRecord,TRawUTF8List,TStrings,TObjectList,TObject
+        {$ifndef LVCL},TCollection{$endif});
+var CT: PClassType;
+    C: TClass;
+    T: PClassArray;
+begin
+  CT := AlignTypeData(PAnsiChar(@Name[1])+ord(Name[0])); // inlined ClassType
+  C := CT^.ClassType;
+  T := @T_;
+  result := sftUnknown;
+  while true do // unrolled several InheritsFrom() calls
+    if C<>T[0] then
+    if C<>T[1] then
+    if (C<>T[2]) and (C<>T[3]) and (C<>T[4]){$ifndef LVCL}and (C<>T[6]){$endif} then
+      if CT^.ParentInfo<>nil then begin
+        if CT^.PropCount>0 then
+          result := sftObject; // identify any class with published properties
+        {$ifdef HASDIRECTTYPEINFO}
+        with PTypeInfo(CT^.ParentInfo)^ do
+        {$else} // circumvent weird Delphi inlining compiler random bug
+        with CT^.ParentInfo^^ do
+        {$endif} // get parent ClassType
+          CT := AlignTypeData(PAnsiChar(@Name[1])+ord(Name[0]));
+        C := CT^.ClassType;
+        if C<>T[5] then
+          continue else
+          break;
+      end else break
+    else begin
+      result := sftObject; // TStrings,TObjectList,TRawUTF8List or TCollection
+      break;
+    end else begin
+      result := sftID; // TSQLRecord field is pointer(RecordID), not an Instance
+      break;
+    end else begin
+      result := sftMany; // no data is stored here, but in a pivot table
+      break;
+    end;
+end;
+
+function TTypeInfo.InheritsFrom(AClass: TClass): boolean;
+{$ifdef FPC_OR_PUREPASCAL}
+var CT: PClassType;
+begin
+  CT := ClassType;
+  repeat
+    if CT^.ClassType={$ifndef FPC}pointer{$endif}(AClass) then begin
+      result := true;
+      exit;
+    end;
+    if CT^.ParentInfo = nil then
+      break else
+      CT := CT^.ParentInfo^.ClassType;
+  until CT = nil;
+  result := false;
+end;
+{$else}
+asm     // eax=PClassType edx=AClass
+@1:     movzx   ecx, byte ptr[eax].TTypeInfo.Name
+        lea     eax, [eax + ecx].TTypeInfo.Name[1]
+        cmp     edx, [eax].TClassType.ClassType
+        jz      @2
+        mov     eax, [eax].TClassType.ParentInfo
+        test    eax, eax
+        jz      @3 // no parent
+        mov     eax, [eax] // get parent type info
+        jmp     @1
+@3:     rep     ret
+@2:     mov     eax, 1
+end;
+{$endif}
+
+function TTypeInfo.GetSQLFieldType: TSQLFieldType;
+begin // very fast, thanks to the TypeInfo() compiler-generated function
+  case Kind of
+    tkInteger: begin
+      result := sftInteger; // works also for otSQWord,otUQWord
+      exit; // direct exit is faster in generated asm code
+    end;
+    tkInt64:
+      if (@self=TypeInfo(TRecordReference)) or
+         (@self=TypeInfo(TRecordReferenceToBeDeleted)) then begin
+        result := sftRecord;
+        exit;
+      end else
+      if @self=TypeInfo(TCreateTime) then begin
+        result := sftCreateTime;
+        exit;
+      end else
+      if @self=TypeInfo(TModTime) then begin
+        result := sftModTime;
+        exit;
+      end else
+      if @self=TypeInfo(TTimeLog) then begin
+        result := sftTimeLog;
+        exit;
+      end else
+      if @self=TypeInfo(TUnixTime) then begin
+        result := sftUnixTime;
+        exit;
+      end else
+      if @self=TypeInfo(TUnixMSTime) then begin
+        result := sftUnixMSTime;
+        exit;
+      end else
+      if @self=TypeInfo(TID) then begin
+        result := sftTID;
+        exit;
+      end else
+      if @self=TypeInfo(TSessionUserID) then begin
+        result := sftSessionUserID;
+        exit;
+      end else
+      if @self=TypeInfo(TRecordVersion) then begin
+        result := sftRecordVersion;
+        exit;
+      end else
+      if (ord(Name[1]) and $df=ord('T')) and // T...ID pattern in type name -> TID
+         (PWord(@Name[ord(Name[0])-1])^ and $dfdf=ord('I')+ord('D') shl 8) then begin
+        result := sftTID;
+        exit;
+      end else begin
+        result := sftInteger;
+        exit;
+      end;
+    {$ifdef FPC}
+    tkBool: begin
+      result := sftBoolean;
+      exit;
+    end;
+    tkQWord: begin
+      result := sftInteger;
+      exit;
+    end;
+    {$endif FPC}
+    tkSet: begin
+      result := sftSet;
+      exit;
+    end;
+    tkEnumeration:
+      {$ifndef FPC}
+      if @self=TypeInfo(Boolean) then begin
+        result := sftBoolean;
+        exit;
+      end else
+      {$endif FPC}
+      if @self=TypeInfo(WordBool) then begin // circumvent a Delphi RTTI bug
+        result := sftBoolean;
+        exit;
+      end else
+      begin
+        result := sftEnumerate;
+        exit;
+      end;
+    tkFloat:
+      if @self=TypeInfo(Currency) then begin
+        result := sftCurrency;
+        exit;
+      end else
+      if @self=TypeInfo(TDateTime) then begin
+        result := sftDateTime;
+        exit;
+      end else
+      if @self=TypeInfo(TDateTimeMS) then begin
+        result := sftDateTimeMS;
+        exit;
+      end else begin
+        result := sftFloat;
+        exit;
+      end;
+      {$ifdef FPC}tkLStringOld,{$endif} tkLString:
+      // do not use AnsiStringCodePage since AnsiString = GetAcp may change
+      if (@self=TypeInfo(TSQLRawBlob)) or
+         (@self=TypeInfo(RawByteString)) then begin
+        result := sftBlob;
+        exit;
+      end else
+      if @self=TypeInfo(WinAnsiString) then begin
+        result := sftAnsiText;
+        exit;
+      end else begin
+        result := sftUTF8Text; // CP_UTF8,CP_UTF16 and any other to UTF-8 text
+        exit;
+      end;
+    {$ifdef HASVARUSTRING}tkUString,{$endif} tkChar, tkWChar, tkWString: begin
+      result := sftUTF8Text;
+      exit;
+    end;
+    tkDynArray: begin
+      result := sftBlobDynArray;
+      exit;
+    end;
+    {$ifdef PUBLISHRECORD}
+    tkRecord{$ifdef FPC},tkObject{$endif}: begin
+      result := sftUTF8Custom;
+      exit;
+    end;
+    {$endif}
+    {$ifndef NOVARIANTS}
+    tkVariant: begin // this function does not need to handle sftNullable
+      result := sftVariant;
+      exit;
+    end;
+    {$endif}
+    tkClass: begin
+      result := ClassSQLFieldType;
+      exit;
+    end;
+    // note: tkString (shortstring) and tkInterface not handled
+    else begin
+      result := sftUnknown;
+      exit;
+    end;
+  end;
+end;
+
+function TTypeInfo.EnumBaseType: PEnumType;
+{$ifdef FPC}
+var base: PTypeInfo;
+begin
+  result := GetTypeData(self);
+  if Kind=tkBool then
+    exit; // circumvent diverse RTTI encoding
+  base := DeRef(result^.BaseType);
+  if (base<>nil) and (base<>@self) then // no redirection if already the base type
+    result := GetTypeData(base^);
+end;
+{$else}
+{$ifdef HASINLINENOTX86}
+begin
+  with PEnumType(@Name[ord(Name[0])+1])^.BaseType^^ do
+    result := @Name[ord(Name[0])+1];
+end;
+{$else}
+asm     // very fast code
+        movzx   edx, byte ptr[eax].TTypeInfo.Name
+        mov     eax, [eax + edx].TTypeInfo.Name[1].TEnumType.BaseType
+        mov     eax, [eax]
+        movzx   edx, byte ptr[eax].TTypeInfo.Name
+        lea     eax, [eax + edx].TTypeInfo.Name[1]
+end;
+{$endif}
+{$endif FPC}
+
+function TTypeInfo.SetEnumType: PEnumType;
+begin
+  if (@self=nil) or (Kind<>tkSet) then
+    result := nil else
+    {$ifdef FPC}
+    result := PTypeInfo(GetSetBaseEnum(@self))^.EnumBaseType;
+    {$else}
+    result := PPTypeInfo(PPointer(PtrUInt(@Name[ord(Name[0])+1])+SizeOf(TOrdType))^)^.EnumBaseType;
+    {$endif FPC}
+end;
+
+function TTypeInfo.DynArrayItemType(aDataSize: PInteger): PTypeInfo;
+begin
+  if @self=nil then
+    result := nil else
+    result := DynArrayTypeInfoToRecordInfo(@self,aDataSize);
+end;
+
+function TTypeInfo.DynArrayItemSize: integer;
+begin
+  if @self=nil then
+    result := 0 else
+    DynArrayTypeInfoToRecordInfo(@self,@result);
+end;
+
+function TTypeInfo.DynArraySQLFieldType: TSQLFieldType;
+var item: mORMot.PTypeInfo;
+begin
+  if @self=nil then
+    result := sftUnknown else begin
+    item := DynArrayTypeInfoToRecordInfo(@self);
+    if item=nil then
+      result := sftUnknown else
+      result := item^.GetSQLFieldType;
+  end;
+end;
+
+function TTypeInfo.AnsiStringCodePage: integer;
+begin
+  {$ifdef HASCODEPAGE}
+  if @self=TypeInfo(TSQLRawBlob) then
+    result := CP_SQLRAWBLOB else
+  if Kind=tkLString then // has tkLStringOld any codepage? -> UTF-8
+    result := PWord(GetTypeData(self))^ else
+  {$else}
+  if @self=TypeInfo(RawUTF8) then
+    result := CP_UTF8 else
+  if @self=TypeInfo(WinAnsiString) then
+    result := CODEPAGE_US else
+  if @self=TypeInfo(RawUnicode) then
+    result := CP_UTF16 else
+  if @self=TypeInfo(TSQLRawBlob) then
+    result := CP_SQLRAWBLOB else
+  if @self=TypeInfo(RawByteString) then
+    result := CP_RAWBYTESTRING else
+  if @self=TypeInfo(AnsiString) then
+    result := CP_ACP else
+  {$endif HASCODEPAGE}
+    result := CP_UTF8; // default is UTF-8
+end;
+
+function TTypeInfo.InterfaceGUID: PGUID;
+begin
+  if (@self=nil) or (Kind<>tkInterface) then
+    result := nil else
+    result := @InterfaceType^.IntfGuid;
+end;
+
+function TTypeInfo.InterfaceUnitName: PShortString;
+begin
+  if (@self=nil) or (Kind<>tkInterface) then
+    result := @NULL_SHORTSTRING else
+    result := @InterfaceType^.IntfUnit;
+end;
+
+function TTypeInfo.InterfaceAncestor: PTypeInfo;
+begin
+  if (@self=nil) or (Kind<>tkInterface) then
+    result := nil else
+    result := Deref(InterfaceType^.IntfParent);
+end;
+
+procedure TTypeInfo.InterfaceAncestors(out Ancestors: PTypeInfoDynArray;
+  OnlyImplementedBy: TInterfacedObjectClass;
+  out AncestorsImplementedEntry: TPointerDynArray);
+var n: integer;
+    nfo: PTypeInfo;
+    typ: PInterfaceTypeData;
+    entry: pointer;
+begin
+  if (@self=nil) or (Kind<>tkInterface) then
+    exit;
+  n := 0;
+  typ := InterfaceType;
+  repeat
+    if typ^.IntfParent=nil then
+      exit;
+    nfo := Deref(typ^.IntfParent);
+    if nfo=TypeInfo(IInterface) then
+      exit;
+    typ := nfo^.InterfaceType;
+    if ifHasGuid in typ^.IntfFlags then begin
+      if OnlyImplementedBy<>nil then begin
+        entry := OnlyImplementedBy.GetInterfaceEntry(typ^.IntfGuid);
+        if entry=nil then
+          continue;
+        SetLength(AncestorsImplementedEntry,n+1);
+        AncestorsImplementedEntry[n] := entry;
+      end;
+      SetLength(Ancestors,n+1);
+      Ancestors[n] := nfo;
+      inc(n);
+    end;
+  until false;
+end;
+
+{$ifdef FPC_PROVIDE_ATTR_TABLE}
+function TTypeInfo.AttributeTable: PFPCAttributeTable;
+begin
+  result := GetTypeDataClean(self);
+end;
+{$endif FPC_PROVIDE_ATTR_TABLE}
+
+
+{ TClassProp }
+
+function TClassProp.FieldProp(const PropName: shortstring): PPropInfo;
+var i: integer;
+begin
+  if @self<>nil then begin
+    result := @PropList;
+    for i := 1 to PropCount do
+      if IdemPropName(result^.Name,PropName) then
+        exit else
+        result := result^.Next;
+  end;
+  result := nil;
+end;
+
+
+{ TClassType }
+
+function TClassType.ClassProp: PClassProp;
+begin
+  if pointer(@self)<>nil then
+    result := AlignToPtr(@UnitName[ord(UnitName[0])+1]) else
+    result := nil; // avoid GPF
+end;
+
+function TClassType.RTTISize: integer;
+var C: PClassProp;
+    P: PPropInfo;
+    i: Integer;
+begin
+  result := 0;
+  C := ClassProp;
+  if C=nil then
+    exit;
+  P := @C^.PropList;
+  for i := 1 to C^.PropCount do
+    P := P^.Next;
+  result := PtrUInt(P)-PtrUInt(@self);
+end;
+
+function TClassType.InheritsFrom(AClass: TClass): boolean;
+{$ifdef FPC_OR_PUREPASCAL}
+var P: PTypeInfo;
+begin
+  result := true;
+  if ClassType=AClass then
+    exit;
+  P := DeRef(ParentInfo);
+  while P<>nil do
+    with P^.ClassType^ do
+    if ClassType=AClass then
+      exit else
+      P := DeRef(ParentInfo);
+  result := false;
+end;
+{$else}
+asm // eax=PClassType edx=AClass
+        cmp     [eax].TClassType.ClassType, edx
+        jz      @3
+@2:     mov     eax, [eax].TClassType.ParentInfo
+        test    eax, eax
+        jz      @0
+@1:     mov     eax, [eax]
+        movzx   ecx, byte ptr[eax].TTypeInfo.Name
+        lea     eax, [eax + ecx].TTypeInfo.Name[1]
+        cmp     edx, [eax].TClassType.ClassType
+        jnz     @2
+@3:     mov     eax, 1
+@0:
+end;
+{$endif}
+
+
 
 function SQLWhereIsEndClause(const Where: RawUTF8): boolean;
 begin
@@ -32225,11 +32024,14 @@ var Table: TSQLTableJSON;
     tmp: TSynTempBuffer; // work on a private copy
 begin
   tmp.Init(JSONTable);
-  Table := TSQLTableJSON.Create('',tmp.buf,tmp.len);
   try
-    FillFrom(Table,Row);
+    Table := TSQLTableJSON.Create('',tmp.buf,tmp.len);
+    try
+      FillFrom(Table,Row);
+    finally
+      Table.Free;
+    end;
   finally
-    Table.Free;
     tmp.Done;
   end;
 end;
@@ -32752,7 +32554,7 @@ begin
             tokenizer := copy(cname,15,100); // e.g. TSQLRecordFTS3Porter -> 'Porter'
           break;
         end;
-        c := c.ClassParent;
+        c := GetClassParent(c);
       until c=TSQLRecord;
       result := FormatUTF8('% tokenize=%)',[result,LowerCaseU(tokenizer)]);
     end;
@@ -32849,6 +32651,22 @@ begin
   end;
 end;
 
+function TSQLRecord.SameRecord(Reference: TSQLRecord): boolean;
+var i: integer;
+begin
+  result := false;
+  if (self=nil) or (Reference=nil) or
+     (PSQLRecordClass(Reference)^<>PSQLRecordClass(Self)^) or (Reference.fID<>fID) then
+    exit;
+  with RecordProps do
+    for i := 0 to high(SimpleFields) do
+      // compare not TSQLRawBlob/TSQLRecordMany fields
+      with SimpleFields[i] do
+        if CompareValue(self,Reference,false)<>0 then
+          exit; // properties don't have the same value
+  result := true;
+end;
+
 function TSQLRecord.SameValues(Reference: TSQLRecord): boolean;
 var O: TSQLPropInfo;
     i: integer;
@@ -32868,7 +32686,7 @@ begin
         if CompareValue(self,Reference,false)<>0 then
           exit; // properties don't have the same value
   end else begin
-    // comparaison of all properties of Reference against self
+    // comparison of all properties of Reference against self
     This := RecordProps;
     Ref := Reference.RecordProps;
     for i := 0 to high(Ref.SimpleFields) do
@@ -32881,22 +32699,6 @@ begin
         exit; // properties don't have the same value
     end;
   end;
-  result := true;
-end;
-
-function TSQLRecord.SameRecord(Reference: TSQLRecord): boolean;
-var i: integer;
-begin
-  result := false;
-  if (self=nil) or (Reference=nil) or
-     (PSQLRecordClass(Reference)^<>PSQLRecordClass(Self)^) or (Reference.fID<>fID) then
-    exit;
-  with RecordProps do
-    for i := 0 to high(SimpleFields) do
-      // compare not TSQLRawBlob/TSQLRecordMany fields
-      with SimpleFields[i] do
-        if CompareValue(self,Reference,false)<>0 then
-          exit; // properties don't have the same value
   result := true;
 end;
 
@@ -33010,8 +32812,8 @@ begin
   if props.DynArrayFieldsHasObjArray then
     for i := 0 to length(props.DynArrayFields)-1 do
       with props.DynArrayFields[i] do
-      if ObjArray<>nil then
-        ObjArrayClear(fPropInfo^.GetFieldAddr(self)^);
+        if ObjArray<>nil then
+          ObjArrayClear(fPropInfo^.GetFieldAddr(self)^);
   inherited;
 end;
 
@@ -34635,6 +34437,7 @@ function TSQLModel.GetTablesFromSQLSelect(const SQL: RawUTF8): TSQLRecordClassDy
 var t: TIntegerDynArray;
     n,i: integer;
 begin
+  result := nil;
   t := GetTableIndexesFromSQLSelect(SQL);
   n := length(t);
   if n=0 then
@@ -37400,7 +37203,7 @@ begin
   raise EORMException.CreateUTF8('BATCH not supported by %',[self]);
 end;
 
-{$ifdef ISDELPHI2010} // Delphi 2009 generics support is buggy :(
+{$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
 
 function TSQLRest.Service<T>: T;
 var service: TServiceFactory;
@@ -38118,6 +37921,11 @@ begin
   result := FindIniNameValue(pointer(OutHead),HEADER_CONTENT_TYPE_UPPER);
   if GuessJSONIfNoneSet and (result='') then
     result := JSON_CONTENT_TYPE_VAR;
+end;
+
+function TSQLRestURIParams.OutBodyTypeIsJson(GuessJSONIfNoneSet: boolean): boolean;
+begin
+  result := IdemPChar(pointer(OutBodyType(GuessJSONIfNoneSet)),JSON_CONTENT_TYPE_UPPER);
 end;
 
 function TSQLRestURIParams.Header(UpperName: PAnsiChar): RawUTF8;
@@ -38987,13 +38795,16 @@ begin
   if Call=nil then
     exit;
   InternalURI(Call^);
-  if OnIdleBackgroundThreadActive and not(isDestroying in fInternalState) then
+  if ((Sender=nil) or OnIdleBackgroundThreadActive) and
+      not(isDestroying in fInternalState) then
     if (Call^.OutStatus=HTTP_NOTIMPLEMENTED) and (isOpened in fInternalState) then begin
-      // InternalCheckOpen failed -> force recreate connection
-      InternalClose;
+      InternalClose; // force recreate connection
       Exclude(fInternalState,isOpened);
-      if OnIdleBackgroundThreadActive then
+      if ((Sender=nil) or OnIdleBackgroundThreadActive) then begin
         InternalURI(Call^); // try request again
+        if Call^.OutStatus<>HTTP_NOTIMPLEMENTED then
+          Include(fInternalState,isOpened);
+      end;
     end else
       Include(fInternalState,isOpened);
 end;
@@ -39034,12 +38845,14 @@ var retry: Integer;
 
   procedure CallInternalURI;
   begin
-    Call.Url := url;
+    Call.Url := url; // reset to allow proper re-sign
     if fSessionAuthentication<>nil then
       fSessionAuthentication.ClientSessionSign(Self,Call);
     Call.Method := method;
     if SendData<>nil then
       Call.InBody := SendData^;
+    if Assigned(fOnEncryptBody) then
+      fOnEncryptBody(self,Call.InBody,Call.InHead,Call.Url);
     {$ifndef LVCL}
     if Assigned(fOnIdle) then begin
       if fBackgroundThread=nil then
@@ -39049,20 +38862,9 @@ var retry: Integer;
         Call.OutStatus := HTTP_UNAVAILABLE;
     end else
     {$endif}
-    begin
-      if Assigned(fOnEncryptBody) then
-        fOnEncryptBody(self,Call.InBody,Call.InHead,Call.Url);
-      InternalURI(Call);
-      if not(isDestroying in fInternalState) then
-        if (Call.OutStatus=HTTP_NOTIMPLEMENTED) and (isOpened in fInternalState) then begin
-          InternalClose;     // force recreate connection
-          Exclude(fInternalState,isOpened);
-          InternalURI(Call); // try request again
-        end else
-          Include(fInternalState,isOpened);
-      if Assigned(fOnDecryptBody) then
-        fOnDecryptBody(self,Call.OutBody,Call.OutHead,Call.Url);
-    end;
+      OnBackgroundProcess({SenderThread=}nil,@Call);
+    if Assigned(fOnDecryptBody) then
+      fOnDecryptBody(self,Call.OutBody,Call.OutHead,Call.Url);
     result.Lo := Call.OutStatus;
     result.Hi := Call.OutInternalState;
     if Head<>nil then
@@ -40835,8 +40637,12 @@ begin
   if (self=nil) or (fSessionAuthentication=nil) then
     exit;
   fSessions.Safe.Lock;
-  ObjArrayClear(fSessionAuthentication);
-  fSessions.Safe.UnLock;
+  try
+    ObjArrayClear(fSessionAuthentication);
+    fHandleAuthentication := false;
+  finally
+    fSessions.Safe.UnLock;
+  end;
 end;
 
 function TSQLRestServer.ServiceMethodByPassAuthentication(const aMethodName: RawUTF8): integer;
@@ -41029,7 +40835,7 @@ begin
   inherited Create;
   Server := aServer;
   Call := @aCall;
-  Method := StringToMethod(aCall.method);;
+  Method := ToMethod(aCall.Method);;
   fThreadServer := @ServiceContext;
   fThreadServer^.Request := self;
 end;
@@ -42475,8 +42281,11 @@ begin
   VariantSaveJSON(Value,Escape,json);
   if MakeHumanReadable and (json<>'') and (json[1] in ['{','[']) then begin
     tmp.Init(json);
-    JSONBufferReformat(tmp.buf,json);
-    tmp.Done;
+    try
+      JSONBufferReformat(tmp.buf,json);
+    finally
+      tmp.Done;
+    end;
   end;
   Returns(json,Status,CustomHeader,Handle304NotModified);
 end;
@@ -43643,25 +43452,29 @@ end;
 
 function TSQLRestServer.SessionsAsJson: RawJSON;
 var i: integer;
+    W: TJSONSerializer;
     temp: TTextWriterStackBuffer;
 begin
   result := '';
   if (self=nil) or (fSessions.Count=0) then
     exit;
-  fSessions.Safe.Lock;
-  with TJSONSerializer.CreateOwnedStream(temp) do
+  W := TJSONSerializer.CreateOwnedStream(temp);
   try
-    Add('[');
-    for i := 0 to fSessions.Count-1 do begin
-      WriteObject(fSessions.List[i]);
-      Add(',');
+    fSessions.Safe.Lock;
+    try
+      W.Add('[');
+      for i := 0 to fSessions.Count-1 do begin
+        W.WriteObject(fSessions.List[i]);
+        W.Add(',');
+      end;
+      W.CancelLastComma;
+      W.Add(']');
+      W.SetText(RawUTF8(result));
+    finally
+      fSessions.Safe.UnLock;
     end;
-    CancelLastComma;
-    Add(']');
-    SetText(RawUTF8(result));
   finally
-    fSessions.Safe.UnLock;
-    Free;
+    W.Free;
   end;
 end;
 
@@ -44783,11 +44596,6 @@ begin
   result := GetEnumName(TypeInfo(TSQLRecordVirtualKind),ord(vk));
 end;
 
-function ToText(tk: TTypeKind): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TTypeKind),ord(tk));
-end;
-
 function ToText(e: TSQLEvent): PShortString;
 begin
   result := GetEnumName(TypeInfo(TSQLEvent),ord(e));
@@ -45047,19 +44855,17 @@ begin
   end;
 end;
 
-{$ALIGN ON}
 type
-    ACE_HEADER = record
-      AceType: BYTE;
-      AceFlags: BYTE;
-      AceSize: WORD;
-    end;
-    ACCESS_ALLOWED_ACE = record
-      Header: ACE_HEADER;
-      Mask: ACCESS_MASK;
-      SidStart: DWORD;
-    end;
-{$A8}
+  ACE_HEADER = record
+    AceType: BYTE;
+    AceFlags: BYTE;
+    AceSize: WORD;
+  end;
+  ACCESS_ALLOWED_ACE = record
+    Header: ACE_HEADER;
+    Mask: ACCESS_MASK;
+    SidStart: DWORD;
+  end;
 
 procedure InitializeSecurity(var SA: TSecurityAttributes; var SD);
 const
@@ -46301,13 +46107,14 @@ function TSQLRestStorageInMemory.FindWhereEqual(WhereField: integer;
   const WhereValue: RawUTF8; OnFind: TFindWhereEqualEvent; Dest: pointer;
   FoundLimit,FoundOffset: PtrInt; CaseInsensitive: boolean): PtrInt;
 var i, last, currentRow, found: PtrInt;
-    i32, err: integer;
-    i64: Int64;
+    v: Int64;
+    err: integer;
     P: TSQLPropInfo;
     nfo: PPropInfo;
     rec: PPtrUIntArray;
     Hash: TListFieldHash;
     offs: PtrUInt;
+    ot: TOrdType;
 
   function FoundOneAndReachedLimit: boolean;
   begin
@@ -46334,9 +46141,9 @@ begin
     FoundLimit := maxInt;
   if WhereField=SYNTABLESTATEMENTWHEREID then begin
     if FoundOffset<=0 then begin // omit first FoundOffset rows
-      i64 := GetInt64(pointer(WhereValue),err);
-      if (err=0) and (i64>0) then begin
-        i := IDToIndex(i64); // use fast O(log(n)) binary search
+      v := GetInt64(pointer(WhereValue),err);
+      if (err=0) and (v>0) then begin
+        i := IDToIndex(v); // use fast O(log(n)) binary search
         if i>=0 then begin
           if Assigned(OnFind) then
             OnFind(Dest,TSQLRecord(rec[i]),i);
@@ -46356,7 +46163,7 @@ begin
   Hash := UniqueFieldHash(WhereField);
   if Hash<>nil then begin
     if FoundOffset<=0 then begin // omit first FoundOffset rows, for ID unique field
-      P.SetValueVar(fSearchRec,WhereValue,false);
+      P.SetValueVar(fSearchRec,WhereValue,false); // find private fSearchRec value
       i := Hash.Find(fSearchRec);
       if i>=0 then begin
         if Assigned(OnFind) then
@@ -46370,43 +46177,44 @@ begin
   found := 0;
   currentRow := 0;
   last := fValue.Count-1;
-  if P.InheritsFrom(TSQLPropInfoRTTIInt32) then begin
-    // optimized search for 8/16/32-bit Integer values
-    i32 := GetInteger(pointer(WhereValue),err);
+  if P.InheritsFrom(TSQLPropInfoRTTIInt32) and (TSQLPropInfoRTTIInt32(P).PropInfo^.
+     PropType^.Kind in [tkInteger,tkEnumeration,tkSet]) then begin // 8/16/32-bit
+    v := GetInt64(pointer(WhereValue),err); // 64-bit for cardinal
     if err<>0 then
       exit;
     nfo := TSQLPropInfoRTTI(P).PropInfo;
     offs := TSQLPropInfoRTTI(P).fGetterIsFieldPropOffset;
-    if (offs<>0) and {$ifndef CPU64}(nfo^.PropType^.Kind=tkClass) or{$endif}
-       ((nfo^.PropType^.Kind=tkInteger)and(nfo^.PropType^.OrdType=otSLong)) then begin
-      // optimized version for fast retrieval of signed 32-bit Integer field value
-      for i := 0 to last do
-        if (PInteger(rec[i]+offs)^=i32) and FoundOneAndReachedLimit then
-          break;
-    end else
-    // 8-bit or 16-bit value, or there is a getter procedure -> use GetOrdProp()
+    if offs<>0 then begin // plain field with no getter
+      ot := nfo^.PropType^.OrdType;
+      if ot in [otSLong,otULong] then begin // handle very common 32-bit Integer field
+        for i := 0 to last do
+          if (PCardinal(rec[i]+offs)^=PCardinal(@v)^) and FoundOneAndReachedLimit then
+            break;
+      end else // inlined GetOrdProp() for 8-bit or 16-bit values
+        for i := 0 to last do
+          if (FromOrdType(ot,pointer(rec[i]+offs))=v) and FoundOneAndReachedLimit then
+            break;
+    end else // has getter -> use GetOrdProp()
     for i := 0 to last do
-      if (nfo^.GetOrdProp(TSQLRecord(rec[i]))=i32) and FoundOneAndReachedLimit then
+      if (nfo^.GetOrdProp(TSQLRecord(rec[i]))=v) and FoundOneAndReachedLimit then
         break;
   end else
-  if P.InheritsFrom(TSQLPropInfoRTTIInt64) then begin
-    // stored as one 64-bit Integer value -> optimized search
-    i64 := GetInt64(pointer(WhereValue),err);
+  if P.InheritsFrom(TSQLPropInfoRTTIInt64) then begin // 64-bit integer
+    v := GetInt64(pointer(WhereValue),err);
     if err<>0 then
       exit;
     nfo := TSQLPropInfoRTTI(P).PropInfo;
     offs := TSQLPropInfoRTTI(P).fGetterIsFieldPropOffset;
-    if offs<>0 then begin
+    if offs<>0 then begin // plain field with no getter
       for i := 0 to last do
-        if (PInt64(rec[i]+offs)^=i64) and FoundOneAndReachedLimit then
+        if (PInt64(rec[i]+offs)^=v) and FoundOneAndReachedLimit then
           break;
-    end else
+    end else // handle getter
     for i := 0 to last do
-      if (nfo^.GetInt64Prop(TSQLRecord(rec[i]))=i64) and FoundOneAndReachedLimit then
+      if (nfo^.GetInt64Prop(TSQLRecord(rec[i]))=v) and FoundOneAndReachedLimit then
         break;
-  end else begin
-    // generic search of any value, using fast CompareValue() overridden method
-    P.SetValueVar(fSearchRec,WhereValue,false);
+  end else begin // generic search using fast CompareValue() overridden methods
+    P.SetValueVar(fSearchRec,WhereValue,false); // compare to private fSearchRec
     for i := 0 to last do
       if (P.CompareValue(TSQLRecord(rec[i]),fSearchRec,CaseInsensitive)=0) and
          FoundOneAndReachedLimit then
@@ -46458,7 +46266,7 @@ end;
 
 procedure TSQLRestStorageInMemory.ForEach(WillModifyContent: boolean;
   OnEachProcess: TFindWhereEqualEvent; Dest: pointer);
-var i: integer;
+var i: PtrInt;
     rec: PSQLRecordArray;
 begin
   if (self=nil) or (fValue.Count=0) or not Assigned(OnEachProcess) then
@@ -46617,7 +46425,7 @@ begin
 end;
 
 function TSQLRestStorageInMemory.EngineList(const SQL: RawUTF8;
-  ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8;
+  ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8;
 // - GetJSONValues/FindWhereEqual will handle basic REST commands (not all SQL)
 // only valid SQL command is "SELECT Field1,Field2 FROM Table WHERE ID=120;",
 // i.e one Table SELECT with one optional "WHERE fieldname = value" statement
@@ -47170,7 +46978,7 @@ begin
     if i<0 then
       exit;
     // get result blob directly from RTTI property description
-    BlobField.GetLongStrProp(fValue.List[i],RawByteString(BlobData));
+    BlobField.GetLongStrProp(TSQLRecord(fValue.List[i]),RawByteString(BlobData));
     result := true;
   finally
     StorageUnLock;
@@ -48081,6 +47889,7 @@ begin
      fModel.Owner := self;
    end;
   fStoredClassProps := fModel.Props[aClass];
+  fStoredClassMapping := @fStoredClassProps.ExternalDB;
   fIsUnique := fStoredClassRecordProps.IsUniqueFieldsBits;
   fBasicSQLCount := 'SELECT COUNT(*) FROM '+fStoredClassRecordProps.SQLTableName;
   fBasicSQLHasRows[false] := 'SELECT RowID FROM '+fStoredClassRecordProps.SQLTableName+' LIMIT 1';
@@ -49066,7 +48875,7 @@ end;
 procedure CopyObject(aFrom, aTo: TObject);
 var P,P2: PPropInfo;
     i: integer;
-    C,C2: TClass;
+    Cfrom,Cto,C: TClass;
 begin
   if (aFrom=nil) or (aTo=nil) then
     exit;
@@ -49081,33 +48890,30 @@ begin
       CopyStrings(TStrings(aFrom),TStrings(aTo));
     exit;
   end;
-  C := aFrom.ClassType;
-  C2 := aTo.ClassType;
-  if C2.InheritsFrom(C) then
-    repeat // fast process of inherited PPropInfo
-      for i := 1 to InternalClassPropInfo(C,P) do begin
-        P^.CopyValue(aFrom,aTo);
-        P := P^.Next;
-      end;
-      C := C.ClassParent;
-    until C=TObject else
-  if C.InheritsFrom(C2) then
-    repeat // fast process of inherited PPropInfo
-      for i := 1 to InternalClassPropInfo(C2,P) do begin
-        P^.CopyValue(aFrom,aTo);
-        P := P^.Next;
-      end;
-      C2 := C2.ClassParent;
-    until C2=TObject else
-    repeat // slower lookup by property name
-      for i := 1 to InternalClassPropInfo(C,P) do begin
-        P2 := ClassFieldPropWithParents(C2,P^.Name);
+  Cfrom := aFrom.ClassType;
+  Cto := aTo.ClassType;
+  if Cto.InheritsFrom(Cfrom) then // C = most common hierarchy level
+    C := Cfrom else
+  if Cfrom.InheritsFrom(Cto) then
+    C := Cto else begin
+    repeat // no common inheritance -> slower lookup by property name
+      for i := 1 to InternalClassPropInfo(Cfrom,P) do begin
+        P2 := ClassFieldPropWithParents(Cto,P^.Name);
         if P2<>nil then
           P^.CopyValue(aFrom,aTo,P2);
         P := P^.Next;
       end;
-      C := C.ClassParent;
-    until C=TObject;
+      Cfrom := GetClassParent(Cfrom);
+    until Cfrom=TObject;
+    exit;
+  end;
+  repeat // fast process of inherited PPropInfo
+    for i := 1 to InternalClassPropInfo(C,P) do begin
+      P^.CopyValue(aFrom,aTo);
+      P := P^.Next;
+    end;
+    C := GetClassParent(C);
+  until C=TObject;
 end;
 
 function CopyObject(aFrom: TObject): TObject;
@@ -49157,39 +48963,45 @@ end;
 
 procedure WriteObject(Value: TObject; var IniContent: RawUTF8; const Section: RawUTF8;
   const SubCompName: RawUTF8);
-var P: PPropInfo;
+var CT: TClass;
+    P: PPropInfo;
     i, V: integer;
     Obj: TObject;
-    tmp: RawUTF8;
+    tmp,field: RawUTF8;
 begin
   if Value=nil then
     exit;
-  for i := 1 to InternalClassPropInfo(Value.ClassType,P) do begin
-    case P^.PropType^.Kind of
-      tkInt64{$ifdef FPC}, tkQWord{$endif}:
-        UpdateIniEntry(IniContent,Section,SubCompName+ToUTF8(P^.Name),
-          Int64ToUtf8(P^.GetInt64Prop(Value)));
-      {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger: begin
-        V := P^.GetOrdProp(Value);
-        //if V<>P^.Default then NO DEFAULT: update INI -> must override previous
-        UpdateIniEntry(IniContent,Section,SubCompName+ToUTF8(P^.Name),
-          Int32ToUtf8(V));
+  CT := Value.ClassType;
+  repeat
+    for i := 1 to InternalClassPropInfo(CT,P) do begin
+      field := SubCompName+ToUTF8(P^.Name);
+      case P^.PropType^.Kind of
+        tkInt64{$ifdef FPC}, tkQWord{$endif}:
+          UpdateIniEntry(IniContent,Section,field,
+            Int64ToUtf8(P^.GetInt64Prop(Value)));
+        {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger: begin
+          V := P^.GetOrdProp(Value);
+          //if V<>P^.Default then NO DEFAULT: update INI -> must override previous
+          UpdateIniEntry(IniContent,Section,field,
+            Int32ToUtf8(V));
+        end;
+        {$ifdef HASVARUSTRING}tkUString,{$endif} {$ifdef FPC}tkLStringOld,{$endif}
+        tkLString, tkWString: begin
+          P^.GetLongStrValue(Value,tmp);
+          UpdateIniEntry(IniContent,Section,field,tmp);
+        end;
+        tkClass:
+        if Section='' then begin // recursive call works only as plain object
+          Obj := P^.GetObjProp(Value);
+          if (Obj<>nil) and Obj.InheritsFrom(TPersistent) then
+            WriteObject(Value,IniContent,Section,field+'.');
+        end;
+        // tkString (shortstring) and tkInterface are not handled
       end;
-      {$ifdef HASVARUSTRING}tkUString,{$endif} {$ifdef FPC}tkAString,{$endif}
-      tkLString, tkWString: begin
-        P^.GetLongStrValue(Value,tmp);
-        UpdateIniEntry(IniContent,Section,SubCompName+ToUTF8(P^.Name),tmp);
-      end;
-      tkClass:
-      if Section='' then begin // recursive call works only as plain object
-        Obj := P^.GetObjProp(Value);
-        if (Obj<>nil) and Obj.InheritsFrom(TPersistent) then
-          WriteObject(Value,IniContent,Section,SubCompName+ToUTF8(P^.Name)+'.');
-      end;
-      // tkString (shortstring) and tkInterface are not handled
+      P := P^.Next;
     end;
-    P := P^.Next;
-  end;
+    CT := GetClassParent(CT);
+  until CT=TObject;
 end;
 
 function WriteObject(Value: TObject): RawUTF8;
@@ -49230,7 +49042,7 @@ begin
               exit;
         P1 := P1^.Next;
       end;
-      C1 := C1.ClassParent;
+      C1 := GetClassParent(C1);
     until C1=TObject;
     result := true;
   end;
@@ -49327,13 +49139,7 @@ begin
           aParser^.Kind := result; // default serialization from RTTI
           exit;
         end;
-        {$ifdef FPC}
-        aClassType := aClassType.ClassParent; // vmtParent slot is reference on FPC
-        {$else}
-        if PPointer(PtrInt(aClassType)+vmtParent)^<>nil then
-          aClassType := PPointer(PPointer(PtrInt(aClassType)+vmtParent)^)^ else
-          break;
-        {$endif}
+        aClassType := GetClassParent(aClassType);
         P := JSONCustomParsers.FindValue(aClassType);
         if (P<>nil) and (P^.Kind in [oCustomReaderWriter,oCustomPropName]) then begin
           aParser^ := P^; // copy from parent
@@ -49607,7 +49413,7 @@ begin
 end;
 
 class procedure TJSONSerializer.RegisterObjArrayForJSON(aDynArray: PTypeInfo;
-  aItem: TClass);
+  aItem: TClass; aReader: TDynArrayJSONCustomReader; aWriter: TDynArrayJSONCustomWriter);
 var serializer: ^TObjArraySerializer;
 begin
   if (aItem=nil) or (aDynArray^.DynArrayItemSize<>SizeOf(TObject)) then
@@ -49618,7 +49424,7 @@ begin
   serializer := pointer(ObjArraySerializers.TryAdd(aDynArray));
   if serializer=nil then
     exit; // avoid duplicate
-  serializer^ := TObjArraySerializer.Create(aDynArray,aItem);
+  serializer^ := TObjArraySerializer.Create(aDynArray,aItem,aReader,aWriter);
   TTextWriter.RegisterCustomJSONSerializer(
     aDynArray,serializer^.CustomReader,serializer^.CustomWriter);
 end;
@@ -49691,19 +49497,19 @@ begin
 end;
 
 function PropIsIDTypeCastedField(Prop: PPropInfo; IsObj: TJSONObject;
-  Value: TObject): boolean; // see [22ce911c715]
-begin
+  Value: TObject): boolean;
+begin // see [22ce911c715]
   if (Value<>nil) and (Prop^.PropType^.ClassSQLFieldType=sftID) then
-  case IsObj of
-  oSQLMany:
-    if IdemPropName(Prop^.Name,'source') or IdemPropName(Prop^.Name,'dest') then
-      result := true else
+    case IsObj of
+    oSQLMany:
+      if IdemPropName(Prop^.Name,'source') or IdemPropName(Prop^.Name,'dest') then
+        result := true else
+        result := not TSQLRecord(Value).fFill.JoinedFields;
+    oSQLRecord:
       result := not TSQLRecord(Value).fFill.JoinedFields;
-  oSQLRecord:
-    result := not TSQLRecord(Value).fFill.JoinedFields;
-  else result := false;
-  end else
-    result := false; // assume true instance by default
+    else result := false; // real instance for regular classes
+    end else
+    result := false; // assume real instance by default
 end;
 
 type
@@ -49958,15 +49764,14 @@ begin
     GetVariantFromJSON(PropValue,wasString,temp,@opt,false);
   end else
     GetVariantFromJSON(PropValue,wasString,temp,nil,false);
-  if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
-    P^.SetVariantProp(Value,temp);
+  P^.SetVariantProp(Value,temp);
 end;
 {$endif}
 
 procedure TJSONToObject.HandleProperty(var tmp: RawUTF8);
 var V: PtrInt;
     V64: Int64;
-    E: TSynExtended;
+    D: double;
     err: integer;
 begin
   PropValue := GetJSONFieldOrObjectOrArray(From,@wasString,@EndOfObject,
@@ -49981,16 +49786,14 @@ begin
         if not (j2oAllowInt64Hex in Options) or
            not HexDisplayToBin(PAnsiChar(PropValue),@V64,SizeOf(V64)) then
           exit;
-      if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
-        P^.SetInt64Prop(Value,V64);
+      P^.SetInt64Prop(Value,V64);
     end else begin
       if P^.PropType^.IsQWord then
         V64 := GetQWord(PropValue,err) else
         V64 := GetInt64(PropValue,err);
       if err<>0 then
         exit;
-      if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
-        P^.SetInt64Prop(Value,V64);
+      P^.SetInt64Prop(Value,V64);
     end;
   tkClass: begin
     if wasString or (P^.PropType^.ClassSQLFieldType<>sftID) then
@@ -49998,8 +49801,7 @@ begin
     V := GetInteger(PropValue,err);
     if err<>0 then
       exit; // invalid value
-    if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
-      P^.SetOrdProp(Value,V);
+    P^.SetOrdProp(Value,V);
   end;
   tkEnumeration: begin
     if wasString then begin // in case enum stored as string
@@ -50015,8 +49817,7 @@ begin
           V := 0 else
           exit; // invalid value
     end;
-    if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
-      P^.SetOrdProp(Value,V);
+    P^.SetOrdProp(Value,V);
   end;
   {$ifdef FPC} tkBool, {$endif}
   tkInteger, tkSet:
@@ -50026,15 +49827,13 @@ begin
       V := GetInteger(PropValue,err);
       if err<>0 then
         exit; // invalid value
-      if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
-        P^.SetOrdProp(Value,V);
+      P^.SetOrdProp(Value,V);
     end;
-  {$ifdef FPC}tkAString,{$endif}{$ifdef HASVARUSTRING}tkUString,{$endif}
+  {$ifdef FPC}tkLStringOld,{$endif}{$ifdef HASVARUSTRING}tkUString,{$endif}
   tkLString,tkWString: // handle all string types from temporary RawUTF8
     if wasString or (j2oIgnoreStringType in Options) then begin
       FastSetString(tmp,PropValue,PropValueLen);
-      if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
-        P^.SetLongStrValue(Value,tmp);
+      P^.SetLongStrValue(Value,tmp);
     end else
       exit;
   {$ifdef PUBLISHRECORD}
@@ -50043,26 +49842,24 @@ begin
   {$endif}
   {$ifndef NOVARIANTS}
   tkVariant:
-    HandleVariant;
+    HandleVariant; // dedicated method for a local temporary variant
   {$endif}
   tkFloat:
     if P^.TypeInfo=TypeInfo(TDateTime) then
       if wasString then begin
         if PInteger(PropValue)^ and $ffffff=JSON_SQLDATE_MAGIC then
           inc(PropValue,3); // ignore U+FFF1 pattern
-        if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
-          P^.SetFloatProp(Value,Iso8601ToDateTimePUTF8Char(PropValue,PropValueLen));
+        P^.SetDoubleProp(Value,Iso8601ToDateTimePUTF8Char(PropValue,PropValueLen));
       end else
         exit else
     if wasString then
       exit else
-    if (P^.TypeInfo=TypeInfo(Currency)) and P^.SetterIsField then
-      PInt64(P^.SetterAddr(Value))^ := StrToCurr64(PropValue) else begin
-      E := GetExtended(pointer(PropValue),err);
+    if P^.PropType^.FloatType=ftCurr then
+      P^.SetCurrencyProp(Value,StrToCurrency(pointer(PropValue))) else begin
+      D := GetExtended(pointer(PropValue),err);
       if err<>0 then
         exit else // invalid JSON content
-        if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
-          P^.SetFloatProp(Value,E);
+        P^.SetFloatProp(Value,D);
     end;
     else
       exit; // unhandled type
@@ -50203,14 +50000,12 @@ begin
         if From=nil then
           exit;
         FastSetString(U,Beg,From-Beg);
-        if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
-          P^.SetLongStrProp(Value,U);
+        P^.SetLongStrProp(Value,U);
       end else
       if (Kind=tkSet) and (From^='[') then begin // set as string array
         V := GetSetNameValue(P^.TypeInfo,From,EndOfObject);
         if From=nil then
           exit; // invalid '["setone","settwo"]' content
-        if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
           P^.SetOrdProp(Value,V);
         if EndOfObject='}' then
           break else
@@ -50296,80 +50091,30 @@ begin
 end;
 
 procedure ReadObject(Value: TObject; From: PUTF8Char; const SubCompName: RawUTF8);
-var P: PPropInfo;
-    i, V, err: integer;
-    V64: Int64;
-    E: TSynExtended;
+var CT: TClass;
+    P: PPropInfo;
+    i: integer;
     Obj: TObject;
-    UpperName: array[byte] of AnsiChar;
     U: RawUTF8;
-    {$ifndef NOVARIANTS}
-    VVariant: variant;
-    {$endif}
+    UpperName: array[byte] of AnsiChar;
 begin
   if Value=nil then // allow From=nil -> default values
     exit;
-  for i := 1 to InternalClassPropInfo(Value.ClassType,P) do begin
-    PWord(UpperCopyShort(UpperCopy255(UpperName,SubCompName),P^.Name))^ := ord('=');
-    U := FindIniNameValue(From,UpperName);
-    case P^.PropType^.Kind of
-      tkInt64: begin
-        {$ifndef FPC}if P^.PropType^.IsQWord then
-          V64 := GetQWord(pointer(U),err) else{$endif}
-          V64 := GetInt64(pointer(U),err);
-        if err=0 then
-          P^.SetInt64Prop(Value,V64); // pointer() to call typinfo
-      end;
-      {$ifdef FPC}tkQWord: begin
-        V64 := GetQWord(pointer(U),err);
-        if err=0 then
-          P^.SetInt64Prop(Value,V64); // pointer() to call typinfo
-      end;
-      {$endif}
-      {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger: begin
-        V := GetInteger(pointer(U),err);
-        if err=0 then
-          P^.SetOrdProp(Value,V) else // pointer() to call typinfo
-          if P^.Default<>longint($80000000) then
-            P^.SetOrdProp(Value,P^.Default);
-      end;
-      tkFloat:
-      if U<>'' then
-        if (P^.TypeInfo=TypeInfo(Currency)) and P^.SetterIsField then
-          PInt64(P^.SetterAddr(Value))^ := StrToCurr64(pointer(U)) else begin
-          E := GetExtended(pointer(U),err);
-          if err=0 then
-            P^.SetFloatProp(Value,E);
-        end;
-      {$ifdef FPC}tkAString,{$endif} tkLString:
-        P^.SetLongStrValue(Value,U);
-      tkWString:
-         P^.SetWideStrProp(Value,UTF8ToWideString(U));
-      {$ifdef HASVARUSTRING}
-      tkUString:
-         P^.SetUnicodeStrProp(Value,UTF8DecodeToUnicodeString(U));
-      {$endif}
-      tkDynArray:
-        P^.GetDynArray(Value).LoadFrom(pointer(BlobToTSQLRawBlob(U)));
-{$ifdef PUBLISHRECORD}
-      tkRecord{$ifdef FPC},tkObject{$endif}:
-        RecordLoadJSON(P^.GetFieldAddr(Value)^,pointer(U),P^.PropType^);
-{$endif PUBLISHRECORD}
-      tkClass: begin
+  CT := Value.ClassType;
+  repeat
+    for i := 1 to InternalClassPropInfo(CT,P) do begin
+      PWord(UpperCopyShort(UpperCopy255(UpperName,SubCompName),P^.Name))^ := ord('=');
+      U := FindIniNameValue(From,UpperName);
+      if P^.PropType^.Kind=tkClass then begin // recursive unserialization
         Obj := P^.GetObjProp(Value);
-        if {$ifdef MSWINDOWS}(PtrUInt(Obj)>=PtrUInt(SystemInfo.lpMinimumApplicationAddress)) and{$endif}
-           Obj.InheritsFrom(TPersistent) then
+        if (Obj<>nil) and ClassHasPublishedFields(PPointer(Obj)^)  then
           ReadObject(Obj,From,SubCompName+ToUTF8(P^.Name)+'.');
-      end;
-{$ifndef NOVARIANTS}
-      tkVariant: begin
-        VariantLoadJSON(VVariant,pointer(U));
-        P^.SetVariantProp(Value,VVariant);
-      end;
-{$endif} // tkString (shortstring) and tkInterface is not handled
+      end else
+        P^.SetFromText(Value,U,@JSON_OPTIONS[true],{allowdouble=}true);
+      P := P^.Next;
     end;
-    P := P^.Next;
-  end;
+    CT := GetClassParent(CT);
+  until CT=TObject;
 end;
 
 procedure ReadObject(Value: TObject; const FromContent,SubCompName: RawUTF8);
@@ -50395,16 +50140,16 @@ begin
   repeat
     for i := 1 to InternalClassPropInfo(Value.ClassType,p) do begin
       case p^.PropType^.Kind of
-        {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger:
-          if p^.Default<>longint($80000000) then
+        tkEnumeration,tkSet,tkInteger,tkChar,tkWChar{$ifdef FPC},tkBool{$endif}:
+          if p^.Default<>NO_DEFAULT then
             p^.SetOrdProp(Value,p^.Default);
         tkClass:
           SetDefaultValuesObject(p^.GetObjProp(Value));
       end;
       p := p^.Next;
     end;
-    c := c.ClassParent;
-  until c=nil;
+    c := GetClassParent(c);
+  until c=TObject;
 end;
 
 procedure ClearObject(Value: TObject; FreeAndNilNestedObjects: boolean=false);
@@ -50418,14 +50163,10 @@ begin
   repeat
     for i := 1 to InternalClassPropInfo(c,p) do begin
       p^.SetDefaultValue(Value,FreeAndNilNestedObjects);
-      {$ifdef HASINLINE}
       p := p^.Next;
-      {$else}
-      with p^ do p := @Name[ord(Name[0])+1];
-      {$endif}
     end;
-    c := c.ClassParent;
-  until c=nil;
+    c := GetClassParent(c);
+  until c=TObject;
 end;
 
 
@@ -50449,7 +50190,7 @@ begin
     {$endif LVCL}
     begin
       {$ifdef FPC}
-      C := C.ClassParent; // vmtParent slot is reference on FPC
+      C := GetClassParent(C);
       {$else}
       C := PPointer(PtrInt(C)+vmtParent)^;
       if C<>nil then
@@ -51158,7 +50899,7 @@ begin
 end;
 
 function TSQLRecordMany.IDWhereSQL(aClient: TSQLRest; aID: TID; isDest: boolean;
-  const aAndWhereSQL: RawUTF8=''): RawUTF8;
+  const aAndWhereSQL: RawUTF8): RawUTF8;
 const FieldName: array[boolean] of RawUTF8 = ('Source=','Dest=');
 begin
   if (self=nil) or (aID=0) or (fSourceID=nil) or (fDestID=nil) or
@@ -51768,10 +51509,6 @@ end;
 
 function TSQLRecordProperties.SQLAddField(FieldIndex: integer): RawUTF8;
 begin
-  if (self=nil) or (cardinal(FieldIndex)>=cardinal(Fields.Count)) then begin
-    result := '';
-    exit;
-  end;
   result := SQLFieldTypeToSQL(FieldIndex);
   if result='' then
     exit; // some fields won't have any column created in the database
@@ -52273,13 +52010,9 @@ var Added: boolean;
     CustomPropName: PShortString;
     IsObj: TJSONObject;
     WS: WideString;
-    {$ifdef HASVARUSTRING}
-    US: UnicodeString;
-    {$endif}
+    {$ifdef HASVARUSTRING} US: UnicodeString; {$endif}
     tmp: RawByteString;
-    {$ifndef NOVARIANTS}
-    VVariant: variant;
-    {$endif}
+    {$ifndef NOVARIANTS} VV: variant; {$endif}
 
   procedure HR(P: PPropInfo=nil);
   begin
@@ -52301,8 +52034,7 @@ var Added: boolean;
     Added := true;
   end;
   procedure WriteProp(P: PPropInfo);
-  var Ext: TSynExtended;
-      D64: double absolute Ext;
+  var D64: double;
       V64: Int64;
       Obj: TObject;
       V, c, codepage: integer;
@@ -52406,7 +52138,7 @@ var Added: boolean;
           Add('"');
         end;
       end; // no shortstring deserialization by now
-      {$ifdef FPC}tkAString,{$endif} tkLString:
+      {$ifdef FPC}tkLStringOld,{$endif} tkLString:
       if P^.TypeInfo=TypeInfo(RawJSON) then begin
         P^.GetLongStrProp(Value,tmp); // assume shortstring field is UTF-8 encoded
         if tmp<>'' then begin
@@ -52460,16 +52192,16 @@ var Added: boolean;
             Add('"');
           end;
         end else begin
-          Ext := P^.GetFloatProp(Value);
-          if not ((woDontStore0 in Options) and (Ext=0)) then begin
+          D64 := P^.GetFloatProp(Value);
+          if not ((woDontStore0 in Options) and (D64=0)) then begin
             HR(P);
-            Add(Ext,DOUBLE_PRECISION);
+            Add(D64,DOUBLE_PRECISION);
           end;
         end;
       end;
       {$ifdef HASVARUSTRING}
       tkUString: begin // write converted to UTF-8
-        US := P^.GetUnicodeStrProp(Value);
+        P^.GetUnicodeStrProp(Value,US);
         if (US<>'') or not (woDontStoreEmptyString in Options) then begin
           HR(P);
           Add('"');
@@ -52492,7 +52224,7 @@ var Added: boolean;
         if not ((woDontStore0 in Options) and (dyn.Count=0)) then begin
           HR(P);
           dynObjArray := P^.DynArrayIsObjArrayInstance;
-          if dynObjArray<>nil then begin
+          if (dynObjArray<>nil) and HasDefaultObjArrayWriter(dyn) then begin
             if dyn.Count=0 then begin
               if woHumanReadableEnumSetAsComment in Options then
                 dynObjArray^.SetCustomComment(CustomComment);
@@ -52510,9 +52242,9 @@ var Added: boolean;
               dec(fHumanReadableLevel);
               HR;
               Add(']');
-            end;
-          end else
-            AddDynArrayJSON(dyn);
+              end;
+            end else
+            AddDynArrayJSON(dyn); // not an ObjArray: record-based serialization
         end;
       end;
       {$ifdef PUBLISHRECORD}
@@ -52523,30 +52255,21 @@ var Added: boolean;
       {$endif}
       {$ifndef NOVARIANTS}
       tkVariant: begin
-        P^.GetVariantProp(Value,VVariant);
-        if not ((TVarData(VVariant).VType<=varNull) and (woDontStore0 in Options)) then begin
+        P^.GetVariantProp(Value,VV);
+        if not ((TVarData(VV).VType<=varNull) and (woDontStore0 in Options)) then begin
           HR(P);
-          AddVariant(VVariant,twJSONEscape); // stored as JSON, e.g. '1.234' or '"text"'
+          AddVariant(VV,twJSONEscape); // stored as JSON, e.g. '1.234' or '"text"'
         end;
       end;
-      {$endif}
+      {$endif NOVARIANTS}
       tkClass: begin
         Obj := P^.GetObjProp(Value);
-        case IsObj of
-        oSQLRecord,oSQLMany: // TSQLRecord or inherited
-          if PropIsIDTypeCastedField(P,IsObj,Value) then begin
-            HR(P);
-            Add(PtrInt(Obj)); // not true instances, but ID
-          end else
-          if Obj<>nil then begin
-            HR(P);
-            WriteObject(Obj,Options);
-          end;
-        else // TPersistent or any class defined with $M+
-          if Obj<>nil then begin
-            HR(P);
-            WriteObject(Obj,Options);
-          end;
+        if PropIsIDTypeCastedField(P,IsObj,Value) then begin
+          HR(P);
+          Add(PtrInt(Obj)); // not true instances, but ID
+        end else if Obj<>nil then begin
+          HR(P); // TPersistent or any class defined with $M+
+          WriteObject(Obj,Options);
         end;
       end;
       // tkString (shortstring) and tkInterface is not handled
@@ -52565,8 +52288,8 @@ var Added: boolean;
       end;
       if woDontStoreInherited in Options then
         break;
-      aClassType := aClassType.ClassParent;
-    until aClassType=nil;
+      aClassType := GetClassParent(aClassType);
+    until aClassType=TObject;
   end;
 
 var i, c: integer;
@@ -52721,21 +52444,6 @@ begin
   Add('}');
   if woFullExpand in Options then
     Add('}');
-end;
-
-procedure TJSONSerializer.AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
-  IncludeUnitName, IncludePointer: boolean);
-var info: PTypeInfo;
-begin
-  if IncludeUnitName then begin
-    info := PPointer(PPtrInt(Instance)^+vmtTypeInfo)^;
-    if info<>nil then begin // avoid GPF if not RTTI for this class
-      with info^ do
-        AddShort(PClassType(AlignTypeData(@Name[ord(Name[0])+1]))^.UnitName);
-      Add('.');
-    end;
-  end;
-  inherited AddInstancePointer(Instance,SepChar,IncludeUnitName,IncludePointer);
 end;
 
 procedure TJSONSerializer.SetSQLRecordOptions(Value: TJSONSerializerSQLRecordOptions);
@@ -54853,7 +54561,7 @@ const
   STACKOFFSET_NONE = -1;
 
   // ordinal values are stored within 64-bit buffer, and records in a RawUTF8
-  CONST_ARGS_TO_VAR: array[TServiceMethodValueType] of TServiceMethodValueVar = (
+  ARGS_TO_VAR: array[TServiceMethodValueType] of TServiceMethodValueVar = (
     smvvNone, smvvSelf, smvv64, smvv64, smvv64, smvv64, smvv64, smvv64, smvv64,
     smvv64, smvv64,
     smvvRawUTF8, smvvString, smvvRawUTF8, smvvWideString, smvv64, smvvRecord,
@@ -54862,7 +54570,7 @@ const
 
   {$ifdef CPU32}
   // always aligned to 8 bytes boundaries for 64-bit
-  CONST_ARGS_IN_STACK_SIZE: array[TServiceMethodValueType] of Cardinal = (
+  ARGS_IN_STACK_SIZE: array[TServiceMethodValueType] of Cardinal = (
      0,  PTRSIZ,PTRSIZ, PTRSIZ,PTRSIZ,PTRSIZ, PTRSIZ,    8,     8,      8,
  // None, Self, Boolean, Enum, Set,  Integer, Cardinal, Int64, Double, DateTime,
      8,       PTRSIZ,  PTRSIZ, PTRSIZ,        PTRSIZ,     0,      PTRSIZ,
@@ -54872,14 +54580,14 @@ const
  // Object, RawJSON, DynArray, Interface
   {$endif}
 
-  CONST_ARGS_RESULT_BY_REF: TServiceMethodValueTypes = [
+  ARGS_RESULT_BY_REF: TServiceMethodValueTypes = [
     smvRawUTF8, smvRawJSON, smvString, smvRawByteString, smvWideString, smvRecord,
     {$ifndef NOVARIANTS}smvVariant,{$endif} smvDynArray];
 
-  CONST_PSEUDO_RESULT_NAME: string[6] = 'Result';
-  CONST_PSEUDO_SELF_NAME: string[4] = 'Self';
-  CONST_INTEGER_NAME: string[7] = 'Integer';
-  CONST_CARDINAL_NAME: string[8] = 'Cardinal';
+  PSEUDO_RESULT_NAME: string[6] = 'Result';
+  PSEUDO_SELF_NAME: string[4] = 'Self';
+  INTEGER_NAME: string[7] = 'Integer';
+  CARDINAL_NAME: string[8] = 'Cardinal';
 
 type
   /// map the stack memory layout at TInterfacedObjectFake.FakeCall()
@@ -55235,7 +54943,7 @@ begin
   InternalProcess; // use an inner proc to ensure direct fld/fild FPU ops
   case resultType of // al/ax/eax/eax:edx/rax already in result
   {$ifdef HAS_FPREG}
-  smvDouble,smvDateTime: aCall.FPRegs[FPREG_FIRST] := PDouble(@result)^;
+  smvDouble,smvDateTime: aCall.FPRegs[FPREG_FIRST] := unaligned(PDouble(@result)^);
   {$else}
   smvDouble,smvDateTime: asm fld  qword ptr [result] end;  // in st(0)
   smvCurrency:           asm fild qword ptr [result] end;  // in st(0)
@@ -55428,11 +55136,11 @@ begin
   tkFloat:
     if (P=TypeInfo(TDateTime)) or (P=TypeInfo(TDateTimeMS)) then
       result := smvDateTime else
-    case P^.FloatType of
-      ftCurr: result := smvCurrency;
-      ftDoub: result := smvDouble;
-    end;
-  {$ifdef FPC}tkAString,{$endif} tkLString:
+      case P^.FloatType of
+        ftCurr: result := smvCurrency;
+        ftDoub: result := smvDouble;
+      end;
+  {$ifdef FPC}tkLStringOld,{$endif} tkLString:
     if P=TypeInfo(RawJSON) then
       result := smvRawJSON else
     if (P=TypeInfo(RawByteString)) or (P=TypeInfo(TSQLRawBlob)) then
@@ -55575,6 +55283,7 @@ class function TInterfaceFactory.GUID2TypeInfo(
   const aGUIDs: array of TGUID): PTypeInfoDynArray;
 var i: integer;
 begin
+  result := nil;
   SetLength(result,length(aGUIDs));
   for i := 0 to high(aGUIDs) do
     result[i] := GUID2TypeInfo(aGUIDs[i]);
@@ -55669,7 +55378,7 @@ begin
   fInterfaceName := ToUTF8(fInterfaceTypeInfo^.Name);
   fInterfaceURI := fInterfaceName;
   if fInterfaceURI[1] in ['i','I'] then
-    delete(fInterfaceURI,1,1);
+    delete(fInterfaceURI,1,1);  // as in TServiceFactory.Create
   // retrieve all interface methods (recursively including ancestors)
   fMethod.InitSpecific(TypeInfo(TServiceMethodDynArray),fMethods,djRawUTF8,
     @fMethodsCount,true);
@@ -55687,9 +55396,7 @@ begin
   // compute additional information for each method
   for m := 0 to fMethodsCount-1 do
   with fMethods[m] do begin
-    InterfaceDotMethodName := fInterfaceName+'.'+URI;
-    if InterfaceDotMethodName[1] in ['I','i'] then
-      delete(InterfaceDotMethodName,1,1); // as in TServiceFactory.Create
+    InterfaceDotMethodName := fInterfaceURI+'.'+URI;
     IsInherited := HierarchyLevel<>fAddMethodsLevel;
     ExecutionMethodIndex := m+RESERVED_VTABLE_SLOTS;
     ArgsInFirst := -1;
@@ -55776,6 +55483,24 @@ begin
              IdemPropNameU(URI,'CallbackReleased') then
             fMethodIndexCallbackReleased := m;
       end;
+    if ArgsResultIndex>=0 then
+      with Args[ArgsResultIndex] do
+      case ValueType of
+      smvNone, smvObject, smvInterface:
+        raise EInterfaceFactoryException.CreateUTF8('%.Create: I% unexpected result type %',
+          [self,InterfaceDotMethodName,ArgTypeName^]);
+      smvRecord:
+        if ArgTypeInfo=System.TypeInfo(TServiceCustomAnswer) then begin
+          for a := ArgsOutFirst to ArgsOutLast do
+            if Args[a].ValueDirection in [smdVar,smdOut] then
+              raise EInterfaceFactoryException.CreateUTF8('%.Create: I% '+
+                'var/out parameter "%" not allowed with TServiceCustomAnswer result',
+                [self,InterfaceDotMethodName,Args[a].ParamName^]);
+          ArgsResultIsServiceCustomAnswer := true;
+        end;
+      end;
+    if (ArgsInputValuesCount=1) and (Args[1].ValueType=smvRawByteString) then
+      ArgsInputIsOctetStream := true;
   end;
   // compute asm low-level layout of the parameters for each method
   for m := 0 to fMethodsCount-1 do
@@ -55794,13 +55519,13 @@ begin
       FPRegisterIdent := 0;
       ValueIsInFPR := false;
       {$endif HAS_FPREG}
-      ValueVar := CONST_ARGS_TO_VAR[ValueType];
+      ValueVar := ARGS_TO_VAR[ValueType];
       IndexVar := ArgsUsedCount[ValueVar];
       inc(ArgsUsedCount[ValueVar]);
       include(ArgsUsed,ValueType);
       if (ValueType in [smvRecord{$ifndef NOVARIANTS},smvVariant{$endif}]) or
          (ValueDirection in [smdVar,smdOut]) or
-         ((ValueDirection=smdResult) and (ValueType in CONST_ARGS_RESULT_BY_REF)) then
+         ((ValueDirection=smdResult) and (ValueType in ARGS_RESULT_BY_REF)) then
         Include(ValueKindAsm,vPassedByReference);
       case ValueType of
       smvInteger, smvCardinal, smvInt64:
@@ -55810,19 +55535,28 @@ begin
           Include(ValueKindAsm,vIsString);
         end else if ArgTypeInfo^.IsQWord then
           Include(ValueKindAsm,vIsQword);
+      smvDouble,smvDateTime: begin
+        {$ifdef HAS_FPREG}
+        ValueIsInFPR := not (vPassedByReference in ValueKindAsm);
+        {$endif HAS_FPREG}
+        if ValueType=smvDateTime then begin
+          include(ValueKindAsm,vIsString);
+          if ArgTypeInfo=System.TypeInfo(TDateTimeMS) then
+            include(ValueKindAsm,vIsDateTimeMS);
+        end;
+      end;
       smvRawUTF8..smvWideString:
         Include(ValueKindAsm,vIsString);
       smvDynArray: begin
         if ObjArraySerializers.Find(ArgTypeInfo)<>nil then
-          Include(ValueKindAsm,vIsObjArray);
+          Include(ValueKindAsm,vIsObjArray) else
+          if (ArgTypeInfo^.DynArraySQLFieldType in STRING_FIELDS) or
+             DynArrayItemTypeIsSimpleBinary(ShortStringToUTF8(ArgTypeName^)) then
+            Include(ValueKindAsm,vIsDynArrayString);
         DynArrayWrapper.Init(ArgTypeInfo,dummy);
         DynArrayWrapper.IsObjArray := vIsObjArray in ValueKindAsm;
-        DynArrayWrapper.HasCustomJSONParser;
+        DynArrayWrapper.HasCustomJSONParser; // set DynArrayWrapper.fParser
       end;
-      {$ifdef HAS_FPREG}
-      smvDouble,smvDateTime:
-        ValueIsInFPR := not (vPassedByReference in ValueKindAsm);
-      {$endif HAS_FPREG}
       end;
       case ValueType of
         smvBoolean:
@@ -55837,8 +55571,8 @@ begin
           SizeInStorage := ArgTypeInfo^.SetEnumType^.SizeInStorageAsSet;
           if SizeInStorage=0 then
             raise EInterfaceFactoryException.CreateUTF8(
-              '%.Create: % set too big in %.% method % parameter',
-              [self,ArgTypeName^,fInterfaceTypeInfo^.Name,URI,ParamName^]);
+              '%.Create: % set invalid SizeInStorage=% in %.% method % parameter',
+              [self,ArgTypeName^,SizeInStorage,fInterfaceTypeInfo^.Name,URI,ParamName^]);
         end;
         smvBinary: ; // already set SizeInStorage
         smvRecord:
@@ -55851,7 +55585,7 @@ begin
           SizeInStorage := PTRSIZ;
       end;
       if ValueDirection=smdResult then begin
-        if not (ValueType in CONST_ARGS_RESULT_BY_REF) then
+        if not (ValueType in ARGS_RESULT_BY_REF) then
           continue; // ordinal/real/class results are returned in CPU/FPU registers
         {$ifndef CPUX86}
         InStackOffset := STACKOFFSET_NONE;
@@ -55864,7 +55598,7 @@ begin
       if ValueDirection=smdConst then
         if ValueType=smvBinary then
           SizeInStack := SizeInBinary else
-          SizeInStack := CONST_ARGS_IN_STACK_SIZE[ValueType] else
+          SizeInStack := ARGS_IN_STACK_SIZE[ValueType] else
       {$endif CPU32}
         SizeInStack := PTRSIZ; // always aligned to 8 bytes boundaries for 64-bit
       if{$ifndef CPUARM}
@@ -55892,7 +55626,7 @@ begin
         InStackOffset := STACKOFFSET_NONE;
         {$ifndef CPUX86}
         if (ArgsResultIndex>=0) and (reg=PARAMREG_RESULT) and
-           (Args[ArgsResultIndex].ValueType in CONST_ARGS_RESULT_BY_REF) then begin
+           (Args[ArgsResultIndex].ValueType in ARGS_RESULT_BY_REF) then begin
           inc(reg); // this register is reserved for method result pointer
         end;
        {$endif CPUX86}
@@ -56005,6 +55739,15 @@ begin
   end;
 end;
 
+function TInterfaceFactory.FindMethod(const aMethodName: RawUTF8): PServiceMethod;
+var i: integer;
+begin
+  i := FindMethodIndex(aMethodName);
+  if i < 0 then
+    result := nil else
+    result := @fMethods[i];
+end;
+
 function TInterfaceFactory.FindFullMethodIndex(const aFullMethodName: RawUTF8;
   alsoSearchExactMethodName: boolean): integer;
 begin
@@ -56074,9 +55817,10 @@ end;
 {$ifdef FPC}
 {$ifdef CPUARM}
 procedure TInterfacedObjectFake.ArmFakeStub;
-var smetndx: pointer;
-    sd7, sd6, sd5, sd4, sd3, sd2, sd1, sd0: double;
-    sr3,sr2,sr1,sr0: pointer;
+var // warning: exact local variables order should match TFakeCallStack
+  smetndx: pointer;
+  sd7, sd6, sd5, sd4, sd3, sd2, sd1, sd0: double;
+  sr3,sr2,sr1,sr0: pointer;
 asm
   // get method index
   str  v1,smetndx
@@ -56104,9 +55848,10 @@ end;
 {$endif}
 {$ifdef CPUAARCH64}
 procedure TInterfacedObjectFake.AArch64FakeStub;
-var sx0, sx1, sx2, sx3, sx4, sx5, sx6, sx7: pointer;
-    sd0, sd1, sd2, sd3, sd4, sd5, sd6, sd7: double;
-    smetndx:pointer;
+var // warning: exact local variables order should match TFakeCallStack
+  sx0, sx1, sx2, sx3, sx4, sx5, sx6, sx7: pointer;
+  sd0, sd1, sd2, sd3, sd4, sd5, sd6, sd7: double;
+  smetndx:pointer;
 asm
   // get method index
   str  x9,smetndx
@@ -56141,7 +55886,7 @@ end;
 
 {$ifdef CPUX64}
 procedure x64FakeStub;
-var
+var // warning: exact local variables order should match TFakeCallStack
   smetndx,
   {$ifdef Linux}
   sxmm7, sxmm6, sxmm5, sxmm4,
@@ -56210,7 +55955,7 @@ const
   STUB_RELJMP = {$ifdef CPUARM}$7fffff{$else}$7fffffff{$endif}; // relative jmp
   STUB_INTERV = STUB_RELJMP+1; // try to reserve in closed stub interval
   STUB_ALIGN = QWord($ffffffffffff0000); // align to STUB_SIZE
-var start,stop,stub: PtrUInt;
+var start,stop,stub,dist: PtrUInt;
 begin
   stub := PtrUInt(@TInterfacedObjectFake.ArmFakeStub);
   if StubCallAllocMemLastStart<>0 then
@@ -56227,12 +55972,14 @@ begin
   while start<stop do begin // try whole -STUB_INTERV..+STUB_INTERV range
     inc(start,STUB_SIZE);
     result := fpmmap(pointer(start),STUB_SIZE,flProtect,MAP_PRIVATE or MAP_ANONYMOUS,-1,0);
-    if result<>MAP_FAILED then // close enough for a 24/32-bit relative jump?
-      if (PtrUInt(result)-stub<STUB_RELJMP) or (stub-PtrUInt(result)<STUB_RELJMP) then begin
+    if result<>MAP_FAILED then begin // close enough for a 24/32-bit relative jump?
+      dist := abs(stub-PtrUInt(result));
+      if dist<STUB_RELJMP then begin
         StubCallAllocMemLastStart := start;
         exit;
       end else
         fpmunmap(result,STUB_SIZE);
+    end;
   end;
   result := nil; // error
 end;
@@ -56341,7 +56088,7 @@ begin
           {$ifdef CPUARM}
           P^ := ($e3a040 shl 8)+i;  inc(P); // mov r4 (v1),{MethodIndex} : store method index in register
           tmp := ((PtrUInt(@TInterfacedObjectFake.ArmFakeStub)-PtrUInt(P)) shr 2)-2;
-          P^ := ($ea shl 24) + (tmp and $00FFFFFF); // branch ArmFakeStub (24bit relative, word aligned)
+          P^ := ($ea shl 24) + (tmp and $00ffffff); // branch ArmFakeStub (24bit relative, word aligned)
           inc(P);
           P^ := $e320f000; inc(P);
           {$endif CPUARM}
@@ -56392,6 +56139,29 @@ end;
 
 { TInterfaceFactoryRTTI }
 
+type
+  TMethodKind = (mkProcedure, mkFunction, mkConstructor, mkDestructor,
+    mkClassProcedure, mkClassFunction, mkClassConstructor, mkClassDestructor,
+    mkOperatorOverload{$ifndef FPC},{ Obsolete } mkSafeProcedure, mkSafeFunction{$endif});
+  {$ifndef FPC}
+  TIntfMethodEntryTail =
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}packed{$endif} record
+    {$ifdef FPC_NEWRTTI}
+    ResultType: PPTypeInfo;
+    CC: TCallingConvention;
+    Kind: TMethodKind;
+    ParamCount: Word;
+    StackSize: SizeInt;
+    Name: PShortString;
+    {$else}
+    Kind: TMethodKind;
+    CC: TCallingConvention;
+    ParamCount: Byte;
+    {Params: array[0..ParamCount - 1] of TVmtMethodParam;}
+    {$endif FPC_NEWRTTI}
+  end;
+  {$endif FPC}
+
 procedure TInterfaceFactoryRTTI.AddMethodsFromTypeInfo(aInterface: PTypeInfo);
 const
   {$ifdef FPC}
@@ -56405,10 +56175,10 @@ const
   {$endif FPC}
 var P: Pointer;
     {$ifdef FPC}
-    PI: TypInfo.PInterfaceData;
-    VMP: PVmtMethodParam;
-    methtable: PIntfMethodTable;
-    PME: PIntfMethodEntry;
+    PI: PFPCInterfaceData;  // low-level types redirected from SynFPCTypInfo
+    VMP: PFPCVmtMethodParam;
+    methtable: PFPCIntfMethodTable;
+    PME: PFPCIntfMethodEntry;
     PW: PWord;
     aResultType: PTypeInfo;
     argsindex: word;
@@ -56427,7 +56197,7 @@ var P: Pointer;
     m: integer;
     paramcounter: word;
     sm: PServiceMethod;
-    n: cardinal;
+    n,na: cardinal;
     aURI: RawUTF8;
 
   procedure RaiseError(const Format: RawUTF8; const Args: array of const);
@@ -56438,11 +56208,11 @@ var P: Pointer;
 
 begin
   // handle interface inheritance via recursive calls
-  P := aInterface^.ClassType;
+  P := GetTypeDataClean(aInterface^);
   {$ifdef FPC}
-  PI := TypInfo.PInterfaceData(GetFPCTypeData(pointer(aInterface)));
+  PI := P;
   if PI^.Parent<>nil then
-    Ancestor := Deref(mORMot.PPTypeInfo(PI^.Parent)) else
+    Ancestor := Deref(pointer(PI^.Parent)) else
   {$else}
   if PI^.IntfParent<>nil then
     Ancestor := Deref(PI^.IntfParent) else
@@ -56461,13 +56231,12 @@ begin
   if (PW^=$ffff) or (n=0) then
     exit; // no RTTI or no method at this level of interface
   {$else}
-  P := AlignToPtr(@PI^.IntfUnit[ord(PI^.IntfUnit[0])+1]);
+  P := @PI^.IntfUnit[ord(PI^.IntfUnit[0])+1];
   n := PW^;
   inc(PW);
   if (PW^=$ffff) or (n=0) then
     exit; // no RTTI or no method at this level of interface
   inc(PW);
-  p := aligntoptr(p);
   {$endif FPC}
   for m := 0 to n-1 do begin
     // retrieve method name, and add to the methods list (with hashing)
@@ -56481,31 +56250,32 @@ begin
       [fInterfaceTypeInfo^.Name,aURI,self]);
     sm^.HierarchyLevel := fAddMethodsLevel;
     {$ifndef FPC}
-    PS := AlignToPtr(@PS^[ord(PS^[0])+1]); // skip method name in Delphi
+    PS := @PS^[ord(PS^[0])+1]; // skip method name in Delphi
     {$endif FPC}
-    Kind := mORMot.TMethodKind(PME^.Kind);
+    Kind := TMethodKind(PME^.Kind);
     if TCallingConvention(PME^.CC)<>DEFCC then
       RaiseError('unhandled calling convention %',[SynCommons.GetEnumName(
         TypeInfo(TCallingConvention),ord(PME^.CC))^]);
     // retrieve method call arguments from RTTI
     n := PME^.ParamCount;
     {$ifndef FPC}
-    inc(PME); // skip ParamCount in Delphi
+    inc(PME); // PF now points to parameter flags for Delphi
     {$endif FPC}
+    na := n;
     if Kind=mkFunction then
-      SetLength(sm^.Args,n+1) else
-      SetLength(sm^.Args,n);
-    if length(sm^.Args)>MAX_METHOD_ARGS then
-       RaiseError('method has too many parameters: %>%',[Length(sm^.Args),MAX_METHOD_ARGS]);
+      inc(na); // function result is an addition output parameter
+    if na>MAX_METHOD_ARGS then
+       RaiseError('method has too many parameters: %>%',[na,MAX_METHOD_ARGS]);
+    SetLength(sm^.Args,na);
     {$ifdef FPC}
     aResultType := Deref(pointer(PME^.ResultType));
     if aResultType<>nil then
       with sm^.Args[n] do begin
-        ParamName := @CONST_PSEUDO_RESULT_NAME;
+        ParamName := @PSEUDO_RESULT_NAME;
         ValueDirection := smdResult;
         ArgTypeInfo := aResultType;
         if ArgTypeInfo=TypeInfo(Integer) then // under FPC integer->'longint'
-          ArgTypeName := @CONST_INTEGER_NAME else
+          ArgTypeName := @INTEGER_NAME else
           ArgTypeName := @ArgTypeInfo^.Name;
       end;
     argsindex := 0;
@@ -56537,7 +56307,7 @@ begin
                [ParamName^,ArgTypeName^]);
         end;
         if pfSelf in f then
-          ParamName := @CONST_PSEUDO_SELF_NAME else
+          ParamName := @PSEUDO_SELF_NAME else
           if pfResult in f then begin
             if (paramcounter<>n-1) or (High(sm^.Args)<>paramcounter+1) then begin
               // at least on ARM, function (result) is on paramcounter different position than on x86
@@ -56568,7 +56338,7 @@ begin
       if ValueDirection<>smdConst then
         sm^.ArgsOutNotResultLast := paramcounter;
       ParamName := PS;
-      PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
+      PS := @PS^[ord(PS^[0])+1];
       SetFromRTTI(PB);
       {$ifdef ISDELPHIXE}
       inc(PB,PW^); // skip custom attributes
@@ -56589,7 +56359,7 @@ begin
     // add a pseudo argument after all arguments for functions
     if Kind=mkFunction then
       with sm^.Args[n] do begin
-        ParamName := @CONST_PSEUDO_RESULT_NAME;
+        ParamName := @PSEUDO_RESULT_NAME;
         ValueDirection := smdResult;
         SetFromRTTI(PB);
       end;
@@ -56621,7 +56391,7 @@ begin
   na := length(aParams) div ARGPERARG;
   SetLength(meth^.Args,na+1); // leave Args[0]=self
   with meth^.Args[0] do begin
-    ParamName := @CONST_PSEUDO_SELF_NAME;
+    ParamName := @PSEUDO_SELF_NAME;
     ArgTypeInfo := fInterfaceTypeInfo;
     ArgTypeName := @ArgTypeInfo^.Name;
   end;
@@ -56646,9 +56416,9 @@ begin
     arg^.ArgTypeInfo := aParams[a*ARGPERARG+2].VPointer;
     {$ifdef FPC} // under FPC, TypeInfo(Integer/Cardinal)=TypeInfo(LongInt/LongWord)
     if arg^.ArgTypeInfo=TypeInfo(Integer) then
-      arg^.ArgTypeName := @CONST_INTEGER_NAME else
+      arg^.ArgTypeName := @INTEGER_NAME else
     if arg^.ArgTypeInfo=TypeInfo(Cardinal) then
-      arg^.ArgTypeName := @CONST_CARDINAL_NAME else
+      arg^.ArgTypeName := @CARDINAL_NAME else
     {$endif FPC}
       arg^.ArgTypeName := @arg^.ArgTypeInfo^.Name;
   end;
@@ -58304,14 +58074,14 @@ end;
 
 function TInterfaceResolverForSingleInterface.GetImplementationName: string;
 begin
-  if self=nil then
+  if (self=nil) or (fImplementation.ItemClass=nil) then
     result := '' else
     result := string(fImplementation.ItemClass.ClassName);
 end;
 
 function TInterfaceResolverForSingleInterface.GetOneInstance(out Obj): boolean;
 begin
-  if self=nil then
+  if (self=nil) or (fImplementation.ItemClass=nil) then
     result := false else
     // here we now that CreateInstance will implement the interface
     result := GetInterfaceFromEntry(CreateInstance,fImplementationEntry,Obj);
@@ -58321,6 +58091,8 @@ function TInterfaceResolverForSingleInterface.TryResolve(
   aInterface: PTypeInfo; out Obj): boolean;
 var i: integer;
 begin
+  if fImplementation.ItemClass=nil then
+    result := false else
   if fInterfaceTypeInfo=aInterface then
     result := GetInterfaceFromEntry(
       CreateInstance,fImplementationEntry,Obj) else begin
@@ -58339,16 +58111,13 @@ end;
 function TInterfaceResolverForSingleInterface.Implements(aInterface: PTypeInfo): boolean;
 var i: integer;
 begin
+  result := true;
   if fInterfaceTypeInfo=aInterface then
-    result := true else begin
-    // if not found exact interface, try any parent/ancestor interface
-    for i := 0 to length(fInterfaceAncestors)-1 do
-      if fInterfaceAncestors[i]=aInterface then begin
-        result := true;
-        exit;
-      end;
-    result := false;
-  end;
+    exit; // found exact interface
+  for i := 0 to length(fInterfaceAncestors)-1 do
+    if fInterfaceAncestors[i]=aInterface then
+      exit; // found any parent/ancestor interface
+  result := false;
 end;
 
 
@@ -58682,7 +58451,7 @@ begin
             [self,P^.Name,P^.PropType^.Name]);
       P := P^.Next;
     end;
-    CT := CT.ClassParent;
+    CT := GetClassParent(CT);
   until CT=TInjectableObject;
 end;
 
@@ -58726,7 +58495,6 @@ end;
 constructor TServiceFactory.Create(aRest: TSQLRest;
   aInterface: PTypeInfo; aInstanceCreation: TServiceInstanceImplementation;
   const aContractExpected: RawUTF8);
-var m,j: integer;
 begin
   // check supplied interface
   if (aRest=nil) or (aInterface=nil) then
@@ -58742,27 +58510,6 @@ begin
   if fRest.Model.GetTableIndex(fInterfaceURI)>=0 then
     raise EServiceException.CreateUTF8('%.Create: "%" interface name '+
       'is already used by a SQL table name',[self,fInterfaceURI]);
-  for m := 0 to fInterface.fMethodsCount-1 do
-  with fInterface.fMethods[m] do begin
-    if ArgsResultIndex>=0 then
-    with Args[ArgsResultIndex] do
-    case ValueType of
-    smvNone, smvObject, smvInterface:
-      raise EServiceException.CreateUTF8('%.Create: %.% unexpected result type %',
-        [self,fInterface.fInterfaceName,URI,ArgTypeName^]);
-    smvRecord:
-      if ArgTypeInfo=System.TypeInfo(TServiceCustomAnswer) then begin
-        for j := ArgsOutFirst to ArgsOutLast do
-          if Args[j].ValueDirection in [smdVar,smdOut] then
-            raise EServiceException.CreateUTF8('%.Create: %.% '+
-              'var/out parameter "%" not allowed with TServiceCustomAnswer result',
-              [self,fInterface.fInterfaceName,URI,Args[j].ParamName^]);
-        ArgsResultIsServiceCustomAnswer := true;
-      end;
-    end;
-    if (ArgsInputValuesCount=1) and (Args[1].ValueType=smvRawByteString) then
-      ArgsInputIsOctetStream := true;
-  end;
   SetLength(fExecution,fInterface.fMethodsCount);
   // compute interface signature (aka "contract"), serialized as a JSON object
   FormatUTF8('{"contract":"%","implementation":"%","methods":%}',
@@ -58858,7 +58605,7 @@ begin
               UID[j] := nil; // mark TGUID found
               break;
             end;
-      C := C.ClassParent;
+      C := GetClassParent(C);
     until C=nil;
   end;
   for j := 0 to high(aInterfaces) do
@@ -59177,6 +58924,7 @@ end;
 type
   PCallMethodArgs = ^TCallMethodArgs;
   {$ifdef FPC}
+  {$push}
   {$PACKRECORDS 16}
   {$endif}
   TCallMethodArgs = record
@@ -59190,14 +58938,12 @@ type
     resKind: TServiceMethodValueType;
   end;
   {$ifdef FPC}
-  {$PACKRECORDS DEFAULT}
+  {$pop}
   {$endif}
-
-procedure CallMethod(var Args: TCallMethodArgs);
 
 // ARM/AARCH64 code below provided by ALF, greatly inspired by pascalscript
 {$ifdef CPUARM}
-assembler; nostackframe;
+procedure CallMethod(var Args: TCallMethodArgs); assembler; nostackframe;
 label stack_loop,load_regs,asmcall_end,float_result;
 asm
    //name  r#(normally, darwin can differ)
@@ -59276,7 +59022,7 @@ end;
 {$endif CPUARM}
 
 {$ifdef CPUAARCH64}
-assembler; nostackframe;
+procedure CallMethod(var Args: TCallMethodArgs); assembler; nostackframe;
 label stack_loop,load_regs,asmcall_end,float_result;
 asm
    // inspired by pascal script
@@ -59353,9 +59099,9 @@ asmcall_end:
 end;
 {$endif CPUAARCH64}
 
-{$ifdef CPUX64} assembler;
-{$ifdef FPC}
-  nostackframe;
+{$ifdef CPUX64}
+procedure CallMethod(var Args: TCallMethodArgs); assembler;
+{$ifdef FPC} nostackframe;
 asm
         push    rbp
         push    r12
@@ -59433,16 +59179,30 @@ asm
 end;
 {$endif CPUX64}
 
-{$ifdef CPUX86} {$ifdef FPC}nostackframe; assembler;{$endif}
+{$ifdef ISDELPHI7ANDUP}{$WARN COMPARING_SIGNED_UNSIGNED OFF}{$endif}
+// disable W1023 FPC_STACKALIGNMENT (not possible on Delphi 6)
+
+{$ifdef CPUX86}
+
+{$ifdef DARWIN}
+  {$define REQUIREX86ALIGNEDSTACK16} // always require aligned stack on OSX
+{$else}
+  {$if defined(FPC_STACKALIGNMENT) and (FPC_STACKALIGNMENT=16)}
+  {$define REQUIREX86ALIGNEDSTACK16} // e.g. on i386-linux since SVN 43005-43014
+  {$ifend} // https://www.mail-archive.com/fpc-devel@lists.freepascal.org/msg38885.html
+{$endif DARWIN}
+
+procedure CallMethod(var Args: TCallMethodArgs); {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    esi
         push    ebp
         mov     ebp, esp
         mov     esi, Args
         // copy stack content (if any)
-        {$ifdef DARWIN} // require aligned stack
+        {$ifdef REQUIREX86ALIGNEDSTACK16}
+        add     esp, 16
         and     esp, -16
-        {$endif}
+        {$endif REQUIREX86ALIGNEDSTACK16}
         mov     eax, [esi].TCallMethodArgs.StackSize
         mov     edx, dword ptr[esi].TCallMethodArgs.StackAddr
         add     edx, eax // pascal/register convention = left-to-right
@@ -59477,6 +59237,8 @@ asm
         pop     esi
 end;
 {$endif CPUX86}
+
+{$ifdef ISDELPHI7ANDUP}{$WARN COMPARING_SIGNED_UNSIGNED ON}{$endif}
 
 procedure BackgroundExecuteProc(Call: pointer);
 var synch: PBackgroundLauncher absolute Call;
@@ -59838,8 +59600,7 @@ begin
     if not TSQLRestServer(Rest).Services.
        TryResolveInternal(fInterface.fInterfaceTypeInfo,dummyObj) then
       raise EInterfaceFactoryException.CreateUTF8(
-        'ickFromInjectedResolver: TryResolveInternal(%)=false',
-        [fInterface.fInterfaceName]);
+        'ickFromInjectedResolver: TryResolveInternal(%)=false',[fInterface.fInterfaceName]);
     result := TInterfacedObject(ObjectFromInterface(IInterface(dummyObj)));
     if AndIncreaseRefCount then // RefCount=1 after TryResolveInternal()
       AndIncreaseRefCount := false else
@@ -60400,7 +60161,7 @@ var PS: PShortString absolute P;
     PP: ^PPTypeInfo absolute P;
 begin
   ArgTypeName := PS;
-  PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
+  P := @PS^[ord(PS^[0])+1];
   if PP^=nil then
     {$ifndef ISDELPHI2010}
     if IdemPropName(ArgTypeName^,'TGUID') then
@@ -60415,11 +60176,11 @@ end;
 
 procedure TServiceMethodArgument.SerializeToContract(WR: TTextWriter);
 const
-  CONST_ARGDIRTOJSON: array[TServiceMethodValueDirection] of string[4] = (
+  ARGDIRTOJSON: array[TServiceMethodValueDirection] of string[4] = (
     // convert into generic in/out direction (assume result is out)
     'in','both','out','out');
   // AnsiString (Delphi <2009) may loose data depending on the client
-  CONST_ARGTYPETOJSON: array[TServiceMethodValueType] of string[8] = (
+  ARGTYPETOJSON: array[TServiceMethodValueType] of string[8] = (
     '??','self','boolean', '', '','integer','cardinal','int64',
     'double','datetime','currency','utf8','utf8','utf8','utf8','utf8','',
     {$ifndef NOVARIANTS}'variant',{$endif}'','json','','');
@@ -60427,11 +60188,11 @@ begin
   WR.AddShort('{"argument":"');
   WR.AddShort(ParamName^);
   WR.AddShort('","direction":"');
-  WR.AddShort(CONST_ARGDIRTOJSON[ValueDirection]);
+  WR.AddShort(ARGDIRTOJSON[ValueDirection]);
   WR.AddShort('","type":"');
-  if CONST_ARGTYPETOJSON[ValueType]='' then
+  if ARGTYPETOJSON[ValueType]='' then
     WR.AddShort(ArgTypeInfo^.Name) else
-    WR.AddShort(CONST_ARGTYPETOJSON[ValueType]);
+    WR.AddShort(ARGTYPETOJSON[ValueType]);
 {$ifdef SOA_DEBUG}
   WR.Add('"',',');
   WR.AddPropJSONInt64('index',IndexVar);
@@ -60465,7 +60226,7 @@ begin
   smvRawUTF8..smvWideString, smvObject..smvInterface:
     result := PPointer(V)^=nil;
   smvBinary, smvRecord:
-    result := IsZero(V,SizeInStorage);
+    result := IsZeroSmall(V,SizeInStorage);
   {$ifndef NOVARIANTS}
   smvVariant: result := PVarData(V)^.vtype<=varNull;
   {$endif}
@@ -60488,6 +60249,7 @@ var parser: TJSONToObject; // inlined JSONToObject()
     ValLen: integer;
     wasString: boolean;
     wrapper: TDynArray;
+label doint;
 begin
   result := true;
   case ValueType of
@@ -60514,20 +60276,29 @@ begin
       if R=nil then
         RaiseError('returned RawJSON');
     end;
-  smvBoolean..smvWideString: begin
+  smvDateTime: begin
+    Val := GetJSONField(R,R,@wasString,nil,@ValLen);
+    if (Val=nil) or (ValLen=0) then
+      PInt64(V)^ := 0 else
+      if wasString then
+        Iso8601ToDateTimePUTF8CharVar(Val,ValLen,PDateTime(V)^) else
+        unaligned(PDouble(V)^) := GetExtended(Val); // allow JSON number decoding
+  end;
+  smvBoolean..smvDouble, smvCurrency..smvWideString: begin
     Val := GetJSONField(R,R,@wasString,nil,@ValLen);
     if (Val=nil) or (wasString<>(vIsString in ValueKindAsm)) then begin
       RaiseError('missing or invalid value');
       exit;
     end;
     if (ValueType=smvBoolean) and (PInteger(Val)^=TRUE_LOW) then
-      Val := '1'; // handle also BOOL with SizeInStorage=2
+      Val := pointer(SmallUInt32UTF8[1]); // normalize 'true' to '1'
     case ValueType of
     smvBoolean, smvEnum, smvSet, smvCardinal:
-      case SizeInStorage of
+doint:case SizeInStorage of
       1: PByte(V)^     := GetCardinal(Val);
       2: PWord(V)^     := GetCardinal(Val);
       4: PCardinal(V)^ := GetCardinal(Val);
+      8: SetQWord(Val,PQWord(V)^);
       end;
     smvInteger:
       PInteger(V)^ := GetInteger(Val);
@@ -60535,8 +60306,8 @@ begin
       if vIsQword in ValueKindAsm then
         SetQWord(Val,PQWord(V)^) else
         SetInt64(Val,PInt64(V)^);
-    smvDouble,smvDateTime:
-      PDouble(V)^ := GetExtended(Val);
+    smvDouble:
+      unaligned(PDouble(V)^) := GetExtended(Val);
     smvCurrency:
       PInt64(V)^ := StrToCurr64(Val);
     smvRawUTF8:
@@ -60560,12 +60331,7 @@ begin
       if ValLen=SizeInStorage*2 then
         HexDisplayToBin(PAnsiChar(Val),PByte(V),SizeInStorage);
     end else // allow fallback to read plain numbers (e.g. on API upgrade)
-      case SizeInStorage of
-      1: PByte(V)^     := GetCardinal(Val);
-      2: PWord(V)^     := GetCardinal(Val);
-      4: PCardinal(V)^ := GetCardinal(Val);
-      8: SetQWord(Val,PQWord(V)^);
-      end;
+      goto doint;
   end;
   smvRecord: begin
     R := RecordLoadJSON(V^,R,ArgTypeInfo);
@@ -60598,7 +60364,6 @@ begin
   if vIsString in ValueKindAsm then
     WR.Add('"');
   case ValueType of
-  smvBoolean:   WR.Add(PBoolean(V)^);
   smvEnum..smvInt64:
   case SizeInStorage of
     1: WR.Add(PByte(V)^);
@@ -60610,7 +60375,9 @@ begin
          WR.AddQ(PQWord(V)^) else
          WR.Add(PInt64(V)^);
   end;
-  smvDouble, smvDateTime: WR.AddDouble(PDouble(V)^);
+  smvBoolean:    WR.Add(PBoolean(V)^);
+  smvDouble:     WR.AddDouble(unaligned(PDouble(V)^));
+  smvDateTime:   WR.AddDateTime(PDateTime(V)^,vIsDateTimeMS in ValueKindAsm);
   smvCurrency:   WR.AddCurr64(PInt64(V)^);
   smvRawUTF8:    WR.AddJSONEscape(PPointer(V)^);
   smvRawJSON:    WR.AddRawJSON(PRawJSON(V)^);
@@ -60621,7 +60388,7 @@ begin
                  {$endif}
   smvRawByteString: WR.WrBase64(PPointer(V)^,length(PRawBytestring(V)^),false);
   smvWideString: WR.AddJSONEscapeW(PPointer(V)^);
-  smvBinary:     if not IsZero(V,SizeInStorage) then
+  smvBinary:     if not IsZeroSmall(V,SizeInStorage) then // leave "" for zero
                    WR.AddBinToHexDisplayLower(V,SizeInStorage);
   smvObject:     WR.WriteObject(PPointer(V)^,ObjectOptions);
   smvInterface:  WR.AddShort('null'); // or written by InterfaceWrite()
@@ -60658,13 +60425,13 @@ begin
          UInt64ToUtf8(PQword(V)^,DestValue) else
          Int64ToUtf8(PInt64(V)^,DestValue);
   end;
-  smvDouble, smvDateTime:
-    ExtendedToStr(PDouble(V)^,DOUBLE_PRECISION,DestValue);
+  smvDouble:
+    ExtendedToStr(unaligned(PDouble(V)^),DOUBLE_PRECISION,DestValue);
   smvCurrency:
     Curr64ToStr(PInt64(V)^,DestValue);
   smvRawJSON:
     DestValue := PRawUTF8(V)^;
-  else begin // use generic AddJSON() method
+  else begin // use generic AddJSON() method for complex "..." content
     W := TJSONSerializer.CreateOwnedStream(temp);
     try
       AddJSON(W,V);
@@ -60741,7 +60508,7 @@ begin
          DestValue := PInt64(V)^;
   end;
   smvDouble, smvDateTime:
-    DestValue := PDouble(V)^;
+    DestValue := unaligned(PDouble(V)^);
   smvCurrency:
     DestValue := PCurrency(V)^;
   smvRawUTF8:
@@ -60883,7 +60650,7 @@ begin
       end;
       P := P^.Next;
     end;
-    aClass := aClass.ClassParent;
+    aClass := GetClassParent(aClass);
   until aClass=TObject;
 end;
 
@@ -61399,12 +61166,6 @@ end;
 
 { TServiceMethod }
 
-type
-  TDynArrayFake = record
-    Value: Pointer;
-    Wrapper: TDynArray;
-  end;
-
 function TServiceMethod.ArgIndex(ArgName: PUTF8Char; ArgNameLen: integer;
   Input: boolean): integer;
 begin
@@ -61480,9 +61241,69 @@ begin
   end;
 end;
 
+function TServiceMethod.ArgsCommandLineToObject(P: PUTF8Char;
+  Input, RaiseExceptionOnUnknownParam: boolean): RawUTF8;
+var i: integer;
+    W: TTextWriter;
+    B: PUTF8Char;
+    arginfo: PServiceMethodArgument;
+    arg, value: RawUTF8;
+    ok: boolean;
+    temp: TTextWriterStackBuffer;
+begin
+  W := TTextWriter.CreateOwnedStream(temp);
+  try
+    W.Add('{');
+    while (P<>nil) and GetNextFieldProp(P,arg) and (P<>nil) and (arg<>'') do begin
+      ok := true;
+      i := ArgIndex(pointer(arg),length(arg),Input);
+      if i<0 then
+        if RaiseExceptionOnUnknownParam then
+          raise EServiceException.CreateUTF8('Unexpected "%" parameter for %',
+            [arg,InterfaceDotMethodName]) else
+          ok := false;
+      arginfo := @Args[i];
+      if ok then
+        W.AddPropName(arginfo^.ParamName^);
+      if not (P^ in [':','=']) then
+        raise EServiceException.CreateUTF8('"%" parameter has no = for %',
+          [arg,InterfaceDotMethodName]);
+      P := GotoNextNotSpace(P+1);
+      if P^ in ['"','[','{'] then begin // name='"value"' or name='{somejson}'
+        B := P;
+        P := GotoEndJSONItem(P);
+        if P = nil then
+          raise EServiceException.CreateUTF8('%= parameter has invalid content for %',
+            [arg,InterfaceDotMethodName]);
+        if not ok then
+          continue;
+        W.AddNoJSONEscape(B,P-B);
+      end else begin // name=value
+        GetNextItem(P,' ',value);
+        if not ok then
+          continue;
+        if arginfo^.ValueType=smvDynArray then // write [value] or ["value"]
+          W.Add('[');
+        if arginfo^.ValueKindAsm*[vIsString,vIsDynArrayString]<>[] then
+          W.AddJSONString(value) else
+          W.AddNoJSONEscape(pointer(value),length(value));
+        if arginfo^.ValueType=smvDynArray then
+          W.Add(']');
+      end;
+      W.Add(',');
+    end;
+    W.CancelLastComma;
+    W.Add('}');
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
 function TServiceMethod.ArgsNames(Input: Boolean): TRawUTF8DynArray;
 var a,n: integer;
 begin
+  result := nil;
   if Input then begin
     SetLength(result,ArgsInputValuesCount);
     n := 0;
@@ -61509,10 +61330,12 @@ procedure TServiceMethod.ArgsStackAsDocVariant(const Values: TPPointerDynArray;
 var a: integer;
 begin
   if Input then begin
+    Dest.InitFast(ArgsInputValuesCount,dvObject);
     for a := ArgsInFirst to ArgsInLast do
       if Args[a].ValueDirection in [smdConst,smdVar] then
         Args[a].AddAsVariant(Dest,Values[a]);
   end else begin
+    Dest.InitFast(ArgsOutputValuesCount,dvObject);
     for a := ArgsOutFirst to ArgsOutLast do
       if Args[a].ValueDirection in [smdVar,smdOut,smdResult] then
         Args[a].AddAsVariant(Dest,Values[a]);
@@ -61776,7 +61599,7 @@ begin
             end;
             {$ifndef CPUX86}
             if FPRegisterIdent>0 then
-              call.FPRegs[FPRegisterIdent] := PDouble(Value)^;
+              call.FPRegs[FPRegisterIdent] := unaligned(PDouble(Value)^);
             {$endif}
             if (RegisterIdent>0) and (FPRegisterIdent>0) then
               raise EInterfaceFactoryException.CreateUTF8('Unexpected % reg=% FP=%',
@@ -62571,6 +62394,7 @@ var baseuri,uri,sent,resp,clientDrivenID,head,error,ct: RawUTF8;
     status,m: integer;
     service: PServiceMethod;
     ctxt: TSQLRestServerURIContextClientInvoke;
+    withinput: boolean;
     {$ifdef WITHLOG}
     log: ISynLog; // for Enter auto-leave to work with FPC
     p: RawUTF8;
@@ -62601,10 +62425,11 @@ begin
   if m<0 then
     service := nil else
     service := @fInterface.Methods[m];
+  withinput := ((service=nil) or ([smdConst,smdVar]*service^.HasSPIParams=[])) and
+    not(optNoLogInput in fExecution[m].Options);
   {$ifdef WITHLOG}
-  if (service=nil) or not((optNoLogInput in fExecution[m].Options) or
-     ([smdConst,smdVar]*service^.HasSPIParams<>[])) then
-    p := aParams;
+  if withinput then
+    p := aParams; // include non-sensitive input in log
   log := fRest.LogClass.Enter('InternalInvoke I%.%(%) %',
     [fInterfaceURI,aMethod,p,clientDrivenID],self);
   {$endif}
@@ -62637,6 +62462,8 @@ begin
           error := GetErrorMessage(status);
           if error<>'' then
             error := ' - '+error;
+          if not withinput then
+            sent := ''; // exclude sensitive input in error text
           aErrorMsg^ := FormatUTF8('URI % % returned status ''%'' (%%)',
             [uri,sent,resp,status,error]);
         end else
@@ -62646,8 +62473,8 @@ begin
     end;
     // decode JSON object
     {$ifdef WITHLOG}
-    if (service=nil) or not((optNoLogOutput in fExecution[m].Options) or
-       ([smdVar,smdOut,smdResult]*service^.HasSPIParams<>[])) then
+    if ((service=nil) or ([smdConst,smdVar]*service^.HasSPIParams=[])) and
+       not(optNoLogOutput in fExecution[m].Options) then
       with fRest.fLogFamily do
         if (sllServiceReturn in Level) and (resp<>'') then
           SynLog.Log(sllServiceReturn,resp,self,MAX_SIZE_RESPONSE_LOG);

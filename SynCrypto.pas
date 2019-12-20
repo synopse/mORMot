@@ -1,6 +1,6 @@
 /// fast cryptographic routines (hashing and cypher)
 // - implements AES,XOR,ADLER32,MD5,RC4,SHA1,SHA256,SHA384,SHA512,SHA3 and JWT
-// - optimized for speed (tuned assembler and AES-NI / PADLOCK support)
+// - optimized for speed (tuned assembler and SSE3/SSE4/AES-NI/PADLOCK support)
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynCrypto;
@@ -247,7 +247,7 @@ unit SynCrypto;
 
 interface
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 {.$define USEPADLOCK}
 
@@ -443,10 +443,8 @@ type
     function EncryptInit(const Key; KeySize: cardinal): boolean;
     /// encrypt an AES data block into another data block
     procedure Encrypt(const BI: TAESBlock; var BO: TAESBlock); overload;
-      {$ifdef FPC}inline;{$endif}
     /// encrypt an AES data block
     procedure Encrypt(var B: TAESBlock); overload;
-      {$ifdef FPC}inline;{$endif}
 
     /// Initialize AES contexts for uncypher
     // - first method to call before using this object for decryption
@@ -457,10 +455,8 @@ type
       const Key; KeySize: cardinal): boolean;
     /// decrypt an AES data block
     procedure Decrypt(var B: TAESBlock); overload;
-      {$ifdef FPC}inline;{$endif}
     /// decrypt an AES data block into another data block
     procedure Decrypt(const BI: TAESBlock; var BO: TAESBlock); overload;
-      {$ifdef FPC}inline;{$endif}
 
     /// Finalize AES contexts for both cypher and uncypher
     // - would fill the TAES instance with zeros, for safety
@@ -1139,6 +1135,8 @@ type
     function Random64: QWord;
     /// returns a floating-point random number in range [0..1]
     function RandomExt: TSynExtended;
+    /// returns a 64-bit floating-point random number in range [0..1]
+    function RandomDouble: double;
     /// computes a random ASCII password
     // - will contain uppercase/lower letters, digits and $.:()?%!-+*/@#
     // excluding ;,= to allow direct use in CSV content
@@ -1272,6 +1270,19 @@ procedure SetMainAESPRNG;
 // - you should not have to call this procedure, but faster and safer TAESPRNG
 procedure FillSystemRandom(Buffer: PByteArray; Len: integer; AllowBlocking: boolean);
 
+/// low-level function able to derivate a 0..1 floating-point from 128-bit of data
+// - used e.g. by TAESPRNG.RandomExt
+function Hash128ToExt({$ifdef FPC}constref{$else}const{$endif} r: THash128): TSynExtended;
+  {$ifdef FPC}inline;{$endif}
+
+/// low-level function able to derivate a 0..1 64-bit floating-point from 128-bit of data
+// - used e.g. by TAESPRNG.RandomDouble
+function Hash128ToDouble({$ifdef FPC}constref{$else}const{$endif} r: THash128): double;
+  {$ifdef FPC}inline;{$endif}
+
+/// low-level function able to derivate a 0..1 32-bit floating-point from 128-bit of data
+function Hash128ToSingle({$ifdef FPC}constref{$else}const{$endif} r: THash128): double;
+  {$ifdef FPC}inline;{$endif}
 
 type
   PSHA1Digest = ^TSHA1Digest;
@@ -1952,6 +1963,11 @@ procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
 // to be used for both Encryption and MAC
 procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
   var result: THash256DynArray; const saltdefault: RawByteString=''); overload;
+
+/// low-level anti-forensic diffusion of a memory buffer using SHA-256
+// - as used by TAESPRNG.AFSplit and TAESPRNG.AFUnSplit
+procedure AFDiffusion(buf,rnd: pointer; size: cardinal);
+
 
 /// direct SHA-3 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
@@ -2991,6 +3007,63 @@ begin
 end;
 {$endif}
 
+procedure AESBlockToShortString(const block: TAESBlock; out result: short32);
+begin
+  result[0] := #32;
+  SynCommons.BinToHex(@block,@result[1],16);
+end;
+
+function AESBlockToShortString(const block: TAESBlock): short32;
+begin
+  AESBlockToShortString(block,result);
+end;
+
+function AESBlockToString(const block: TAESBlock): RawUTF8;
+begin
+  FastSetString(result,nil,32);
+  SynCommons.BinToHex(@block,pointer(result),16);
+end;
+
+function MD5DigestToString(const D: TMD5Digest): RawUTF8;
+begin
+  BinToHexLower(@D,sizeof(D),result);
+end;
+
+function MD5StringToDigest(const Source: RawUTF8; out Dest: TMD5Digest): boolean;
+begin
+  result := SynCommons.HexToBin(pointer(Source), @Dest, sizeof(Dest));
+end;
+
+function SHA1DigestToString(const D: TSHA1Digest): RawUTF8;
+begin
+  BinToHexLower(@D,sizeof(D),result);
+end;
+
+function SHA1StringToDigest(const Source: RawUTF8; out Dest: TSHA1Digest): boolean;
+begin
+  result := SynCommons.HexToBin(pointer(Source), @Dest, sizeof(Dest));
+end;
+
+function SHA256DigestToString(const D: TSHA256Digest): RawUTF8;
+begin
+  BinToHexLower(@D,sizeof(D),result);
+end;
+
+function SHA256StringToDigest(const Source: RawUTF8; out Dest: TSHA256Digest): boolean;
+begin
+  result := SynCommons.HexToBin(pointer(Source), @Dest, sizeof(Dest));
+end;
+
+function SHA512DigestToString(const D: TSHA512Digest): RawUTF8;
+begin
+  BinToHexLower(@D, sizeof(D), result);
+end;
+
+function SHA384DigestToString(const D: TSHA384Digest): RawUTF8;
+begin
+  BinToHexLower(@D, sizeof(D), result);
+end;
+
 {$ifdef USEPADLOCK}
 
 const
@@ -3163,9 +3236,11 @@ const
 type
   TKeyArray = packed array[0..AESMaxRounds] of TAESBlock;
 
+  /// low-level content of TAES.Context (AESContextSize bytes)
+  // - is defined privately in the implementation section
+  // - don't change the structure below: it is fixed in the asm code
+  // -> use PUREPASCAL if you really have to change it
   TAESContext = packed record
-    // don't change the structure below: it is fixed in the asm code
-    // -> use PUREPASCAL if you really have to change it
     RK: TKeyArray;   // Key (encr. or decr.)
     IV: TAESBlock;   // IV or CTR
     buf: TAESBlock;  // Work buffer
@@ -11721,63 +11796,6 @@ begin
   MD5.Full(@Buffer,Len,result);
 end;
 
-function AESBlockToShortString(const block: TAESBlock): short32;
-begin
-  AESBlockToShortString(block,result);
-end;
-
-procedure AESBlockToShortString(const block: TAESBlock; out result: short32);
-begin
-  result[0] := #32;
-  SynCommons.BinToHex(@block,@result[1],16);
-end;
-
-function AESBlockToString(const block: TAESBlock): RawUTF8;
-begin
-  FastSetString(result,nil,32);
-  SynCommons.BinToHex(@block,pointer(result),16);
-end;
-
-function MD5DigestToString(const D: TMD5Digest): RawUTF8;
-begin
-  BinToHexLower(@D,sizeof(D),result);
-end;
-
-function MD5StringToDigest(const Source: RawUTF8; out Dest: TMD5Digest): boolean;
-begin
-  result := SynCommons.HexToBin(pointer(Source), @Dest, sizeof(Dest));
-end;
-
-function SHA1DigestToString(const D: TSHA1Digest): RawUTF8;
-begin
-  BinToHexLower(@D,sizeof(D),result);
-end;
-
-function SHA1StringToDigest(const Source: RawUTF8; out Dest: TSHA1Digest): boolean;
-begin
-  result := SynCommons.HexToBin(pointer(Source), @Dest, sizeof(Dest));
-end;
-
-function SHA256DigestToString(const D: TSHA256Digest): RawUTF8;
-begin
-  BinToHexLower(@D,sizeof(D),result);
-end;
-
-function SHA256StringToDigest(const Source: RawUTF8; out Dest: TSHA256Digest): boolean;
-begin
-  result := SynCommons.HexToBin(pointer(Source), @Dest, sizeof(Dest));
-end;
-
-function SHA512DigestToString(const D: TSHA512Digest): RawUTF8;
-begin
-  BinToHexLower(@D, sizeof(D), result);
-end;
-
-function SHA384DigestToString(const D: TSHA384Digest): RawUTF8;
-begin
-  BinToHexLower(@D, sizeof(D), result);
-end;
-
 function htdigest(const user, realm, pass: RawByteString): RawUTF8;
 // apache-compatible: agent007:download area:8364d0044ef57b3defcfa141e8f77b65
 //    hash=`echo -n "$user:$realm:$pass" | md5sum | cut -b -32`
@@ -12115,6 +12133,7 @@ end;
 function TAESAbstract.EncryptPKCS7(const Input: TBytes;
   IVAtBeginning: boolean): TBytes;
 begin
+  result := nil;
   SetLength(result,EncryptPKCS7Length(length(Input),IVAtBeginning));
   EncryptPKCS7Buffer(Pointer(Input),pointer(result),
     length(Input),length(result),IVAtBeginning);
@@ -13491,14 +13510,14 @@ begin
     finally
       FileClose(dev);
     end;
-  {$endif}
+  {$endif LINUX}
   {$ifdef MSWINDOWS}
   if CryptoAPI.Available then
     if CryptoAPI.AcquireContextA(prov,nil,nil,PROV_RSA_FULL,CRYPT_VERIFYCONTEXT) then begin
       fromos := CryptoAPI.GenRandom(prov,len,Buffer);
       CryptoAPI.ReleaseContext(prov,0);
     end;
-  {$endif}
+  {$endif MSWINDOWS}
   if fromos then
     exit;
   i := Len;
@@ -13659,6 +13678,8 @@ end;
 
 function TAESPRNG.FillRandomBytes(Len: integer): TBytes;
 begin
+  if Len<>length(result) then
+    result := nil;
   SetLength(result,Len);
   FillRandom(pointer(result),Len);
 end;
@@ -13695,12 +13716,39 @@ begin
   result := block.L xor block.H;
 end;
 
-function TAESPRNG.RandomExt: TSynExtended;
-const coeff: double = (1.0/$80000000)/$100000000;  // 2^-63
-var block: THash128Rec;
+function Hash128ToExt({$ifdef FPC}constref{$else}const{$endif} r: THash128): TSynExtended;
+const
+  COEFF64: TSynExtended = (1.0/$80000000)/$100000000;  // 2^-63
 begin
-  FillRandom(block.b);
-  result := ((block.Lo xor block.Hi) and $7fffffffffffffff)*coeff;
+  result := ((THash128Rec(r).Lo xor THash128Rec(r).Hi) and $7fffffffffffffff)*COEFF64;
+end;
+
+function Hash128ToDouble({$ifdef FPC}constref{$else}const{$endif} r: THash128): double;
+const
+  COEFF64: double = (1.0/$80000000)/$100000000;  // 2^-63
+begin
+  result := ((THash128Rec(r).Lo xor THash128Rec(r).Hi) and $7fffffffffffffff)*COEFF64;
+end;
+
+function Hash128ToSingle({$ifdef FPC}constref{$else}const{$endif} r: THash128): double;
+const
+  COEFF64: single = (1.0/$80000000)/$100000000;  // 2^-63
+begin
+  result := ((THash128Rec(r).Lo xor THash128Rec(r).Hi) and $7fffffffffffffff)*COEFF64;
+end;
+
+function TAESPRNG.RandomExt: TSynExtended;
+var block: THash128;
+begin
+  FillRandom(block);
+  result := Hash128ToExt(block);
+end;
+
+function TAESPRNG.RandomDouble: double;
+var block: THash128;
+begin
+  FillRandom(block);
+  result := Hash128ToDouble(block);
 end;
 
 function TAESPRNG.RandomPassword(Len: integer): RawUTF8;
@@ -13740,7 +13788,7 @@ begin
   result := MainAESPRNG;
 end;
 
-procedure _afdiffusesha256(buf,rnd: pointer; size: cardinal);
+procedure AFDiffusion(buf,rnd: pointer; size: cardinal);
 var sha: TSHA256;
     dig: TSHA256Digest;
     last, iv: cardinal;
@@ -13763,7 +13811,7 @@ begin
   sha.Update(@iv,SizeOf(iv));
   sha.Update(buf,size);
   sha.Final(dig);
-  MoveFast(dig,buf^,size);
+  MoveSmall(@dig,buf,size);
 end;
 
 function TAESPRNG.AFSplit(const Buffer; BufferBytes, StripesCount: integer): RawByteString;
@@ -13780,7 +13828,7 @@ begin
   SetLength(tmp,BufferBytes);
   for i := 1 to StripesCount do begin
     FillRandom(dst,BufferBytes);
-    _afdiffusesha256(pointer(tmp),dst,BufferBytes);
+    AFDiffusion(pointer(tmp),dst,BufferBytes);
     inc(PByte(dst),BufferBytes);
   end;
   XorMemory(dst,@Buffer,pointer(tmp),BufferBytes);
@@ -13805,7 +13853,7 @@ begin
   src := pointer(Split);
   SetLength(tmp,BufferBytes);
   for i := 2 to len div cardinal(BufferBytes) do begin
-    _afdiffusesha256(pointer(tmp),src,BufferBytes);
+    AFDiffusion(pointer(tmp),src,BufferBytes);
     inc(PByte(src),BufferBytes);
   end;
   XorMemory(@Buffer,src,pointer(tmp),BufferBytes);

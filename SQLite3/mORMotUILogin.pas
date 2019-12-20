@@ -83,7 +83,7 @@ unit mORMotUILogin;
 
 interface
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64
 
 uses
   {$ifdef MSWINDOWS}
@@ -959,7 +959,7 @@ begin
         for f := 1 to InternalClassPropInfo(CL,P) do begin
           with P^.PropType^{$ifndef HASDIRECTTYPEINFO}^{$endif} do
           if (Kind=tkClass) and ClassType^.InheritsFrom(TFont) then begin
-            Obj := pointer(P^.GetOrdValue(C));
+            Obj := P^.GetObjProp(C);
             if Obj<>nil then
               with TFont(Obj) do
               if Name<>DefaultFont.Name then begin

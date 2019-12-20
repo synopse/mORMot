@@ -32,6 +32,7 @@ unit SynGdiPlus;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Andre Heider (dhewg)
   - Pierre le Riche
   - sllimr7139
 
@@ -119,7 +120,7 @@ unit SynGdiPlus;
 
 }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -255,7 +256,87 @@ type
   end;
   PGdipBitmapData = ^TGdipBitmapData;
 
+  TGpipImageAttributes = Pointer;
+
+  TColorAdjustType = (
+    ColorAdjustTypeDefault,
+    ColorAdjustTypeBitmap,
+    ColorAdjustTypeBrush,
+    ColorAdjustTypePen,
+    ColorAdjustTypeText,
+    ColorAdjustTypeCount,
+    ColorAdjustTypeAny
+  );
+
+  TColorMatrix = packed array[0..4, 0..4] of Single;
+  PColorMatrix = ^TColorMatrix;
+
+  TColorMatrixFlags = (
+    ColorMatrixFlagsDefault,
+    ColorMatrixFlagsSkipGrays,
+    ColorMatrixFlagsAltGray
+  );
+
+  TColorChannelFlags = (
+    ColorChannelFlagsC,
+    ColorChannelFlagsM,
+    ColorChannelFlagsY,
+    ColorChannelFlagsK,
+    ColorChannelFlagsLast
+  );
+
+  TColorMap = packed record
+    oldColor: Cardinal;
+    newColor: Cardinal;
+  end;
+  PColorMap = ^TColorMap;
+
+  TWrapMode = (
+    WrapModeTile,
+    WrapModeTileFlipX,
+    WrapModeTileFlipY,
+    WrapModeTileFlipXY,
+    WrapModeClamp
+  );
+
+  TColorPalette = packed record
+    Flags: UINT;
+    Count: UINT;
+    Entries: array [0..0] of Cardinal;
+  end;
+  PColorPalette = ^TColorPalette;
+
 type
+  /// an object wrapper to handle gdi+ image attributes
+  TImageAttributes = class
+  private
+    fAttr: TGpipImageAttributes;
+  public
+    constructor Create; overload;
+    constructor Create(clone: TImageAttributes); overload;
+    destructor Destroy; override;
+    function SetToIdentity(adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
+    function Reset(adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
+    function SetColorMatrix(const colormatrix: TColorMatrix; flags: TColorMatrixFlags = ColorMatrixFlagsDefault; adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
+    function ClearColorMatrix(adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
+    function SetThreshold(threshold: Single; adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
+    function ClearThreshold(adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
+    function SetGamma(gamma: Single; adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
+    function ClearGamma(adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
+    function SetNoOp(adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
+    function ClearNoOp(adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
+    function SetColorKey(colorLow, colorHigh: Cardinal; adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
+    function ClearColorKey(adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
+    function SetOutputChannel(channelFlags: TColorChannelFlags; adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
+    function ClearOutputChannel(adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
+    function SetOutputChannelColorProfile(const colorProfileName: PWideChar; adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
+    function ClearOutputChannelColorProfile(adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
+    function SetRemapTable(mapSize: Cardinal; map: PColorMap; adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
+    function ClearRemapTable(adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
+    function SetWrapMode(wrap: TWrapMode; color: Cardinal = $ff000000; clamp: Boolean = false): TGdipStatus;
+    function GetAdjustedPalette(colorPalette: PColorPalette; colortype: TColorAdjustType): TGdipStatus;
+  end;
+
   /// an object wrapper to load dynamically a library
   TSynLibrary = class
   protected
@@ -288,7 +369,7 @@ type
     LoadImageFromFile: function(filename: PWideChar; out image: THandle): TGdipStatus; stdcall;
     DrawImageRect: function(graphics, image: THandle; x,y,width,height: integer): TGdipStatus; stdcall;
     DrawImageRectRect: function(graphics, image: THandle; xd,yd,wd,hd, xs,ys,ws,hs: integer;
-      u: TUnit=uPixel; imageAttributes: integer=0; callback: Pointer=nil;
+      u: TUnit=uPixel; imageAttributes: TGpipImageAttributes=nil; callback: Pointer=nil;
       calldata: Pointer=nil): TGdipStatus; stdcall;
 {$ifdef USEDPI}
     DrawImage: function(graphics, image: THandle; x,y: integer): TGdipStatus; stdcall;
@@ -311,6 +392,21 @@ type
     BitmapSetResolution: function(bitmap: THandle; XDPI,YDPI: single): TGdipStatus; stdcall;
     GetFrameCount: function(image: THandle; dimensionID: PGUID; var count: UINT): TGdipStatus; stdcall;
     SelectActiveFrame: function(image: THandle; dimensionID: PGUID; frameIndex: UINT): TGdipStatus; stdcall;
+    CreateImageAttributes: function(out imageattr: TGpipImageAttributes): TGdipStatus; stdcall;
+    CloneImageAttributes: function(imageattr: TGpipImageAttributes; out cloneImageattr: TGpipImageAttributes): TGdipStatus; stdcall;
+    DisposeImageAttributes: function(imageattr: TGpipImageAttributes): TGdipStatus; stdcall;
+    SetImageAttributesToIdentity: function(imageattr: TGpipImageAttributes; adjusttype: TColorAdjustType): TGdipStatus; stdcall;
+    ResetImageAttributes: function(imageattr: TGpipImageAttributes; adjusttype: TColorAdjustType): TGdipStatus; stdcall;
+    SetImageAttributesColorMatrix: function(imageattr: TGpipImageAttributes; colortype: TColorAdjustType; enableFlag: Bool; colorMatrix: PColorMatrix; grayMatrix: PColorMatrix; flags: TColorMatrixFlags): TGdipStatus; stdcall;
+    SetImageAttributesThreshold: function(imageattr: TGpipImageAttributes; colortype: TColorAdjustType; enableFlag: Bool; threshold: Single): TGdipStatus; stdcall;
+    SetImageAttributesGamma: function(imageattr: TGpipImageAttributes; colortype: TColorAdjustType; enableFlag: Bool; gamma: Single): TGdipStatus; stdcall;
+    SetImageAttributesNoOp: function(imageattr: TGpipImageAttributes; colortype: TColorAdjustType; enableFlag: Bool): TGdipStatus; stdcall;
+    SetImageAttributesColorKeys: function(imageattr: TGpipImageAttributes; colortype: TColorAdjustType; enableFlag: Bool; colorLow, colorHigh: Cardinal): TGdipStatus; stdcall;
+    SetImageAttributesOutputChannel: function(imageattr: TGpipImageAttributes; colortype: TColorAdjustType; enableFlag: Bool; channelFlags: TColorChannelFlags): TGdipStatus; stdcall;
+    SetImageAttributesOutputChannelColorProfile: function(imageattr: TGpipImageAttributes; colortype: TColorAdjustType; enableFlag: Bool; const colorProfileFilename: PWideChar): TGdipStatus; stdcall;
+    SetImageAttributesRemapTable: function(imageattr: TGpipImageAttributes; colortype: TColorAdjustType; enableFlag: Bool; mapSize: UINT; const map: PColorMap): TGdipStatus; stdcall;
+    SetImageAttributesWrapMode: function(imageattr: TGpipImageAttributes; wrap: TWrapMode; argb: Cardinal; clamp: Bool): TGdipStatus; stdcall;
+    GetImageAttributesAdjustedPalette: function(imageattr: TGpipImageAttributes; out colorPalette: PColorPalette; colortype: TColorAdjustType): TGdipStatus; stdcall;
   protected
     fToken: THandle;
     fStartupHook: record
@@ -420,7 +516,8 @@ type
     procedure Clear; override;
     {$endif}
     procedure Assign(Source: TPersistent); override;
-    procedure Draw(ACanvas: TCanvas; const Rect: TRect); override;
+    procedure Draw(ACanvas: TCanvas; const Rect: TRect); overload; override;
+    procedure Draw(ACanvas: TCanvas; const dst, src: TRect; attributes: TImageAttributes=nil; u: TUnit=uPixel); reintroduce; overload;
 {$ifdef USEDPI}
     /// since method use dpi -> can drop content if drawing with different dpi
     procedure DrawAt(ACanvas: TCanvas; X,Y: integer);
@@ -552,7 +649,7 @@ type
       frameUnit: TUnit; description: PWideChar; var out_metafile: THandle): TGdipStatus; stdcall;
     PlayRecord: function(metafile: THandle; RecType, flags, RecSize: cardinal; Rec: Pointer): TGdipStatus; stdcall;
     EnumerateMetaFile: function(graphics, metafile: THandle; Dest: PGdipRect;
-      callback, data: pointer; imageAttributes: integer=0): TGdipStatus; stdcall;
+      callback, data: pointer; imageAttributes: TGpipImageAttributes=nil): TGdipStatus; stdcall;
     ResetWorldTransform: function(graphics: THandle): TGdipStatus; stdcall;
     RotateTransform: function(graphics: THandle; angle: Single; order: Integer=0): TGdipStatus; stdcall;
     TranslateTransform: function(graphics: THandle; dx,dy: Single; order: integer=0): TGdipStatus; stdcall;
@@ -618,7 +715,10 @@ type
     // - if GDI+ is not available, it will use default GDI32 function
     procedure DrawAntiAliased(Source: TMetafile; Dest: HDC; R: TRect;
       aSmoothing: TSmoothingMode=smAntiAlias;
-      aTextRendering: TTextRenderingHint=trhClearTypeGridFit); override;
+      aTextRendering: TTextRenderingHint=trhClearTypeGridFit); overload; override;
+    procedure DrawAntiAliased(Source: TMetafile; Dest: HDC;
+      const dst, src: TRect; attributes: TImageAttributes=nil; u: TUnit=uPixel;
+      aSmoothing: TSmoothingMode=smAntiAlias; aTextRendering: TTextRenderingHint=trhClearTypeGridFit); overload;
     /// convert a supplied EMF metafile into a EMF+ (i.e. GDI+ metafile)
     // - i.e. allows antialiased drawing of the EMF metafile
     // - if GDI+ is not available or conversion failed, return 0
@@ -910,6 +1010,127 @@ const
   aclYellowGreen          = $FF9ACD32;
 }
 
+{ TImageAttributes }
+
+constructor TImageAttributes.Create;
+begin
+  inherited Create;
+  Gdip.CreateImageAttributes(fAttr);
+end;
+
+constructor TImageAttributes.Create(clone: TImageAttributes);
+begin
+  inherited Create;
+  Gdip.CloneImageAttributes(clone.fAttr, fAttr)
+end;
+
+destructor TImageAttributes.Destroy;
+begin
+  Gdip.DisposeImageAttributes(fAttr);
+  inherited;
+end;
+
+function TImageAttributes.SetToIdentity(adjusttype: TColorAdjustType): TGdipStatus;
+begin
+  result := Gdip.SetImageAttributesToIdentity(fAttr, adjusttype);
+end;
+
+function TImageAttributes.Reset(adjusttype: TColorAdjustType): TGdipStatus;
+begin
+  result := Gdip.ResetImageAttributes(fAttr, adjusttype);
+end;
+
+function TImageAttributes.SetColorMatrix(const colormatrix: TColorMatrix; flags: TColorMatrixFlags; adjusttype: TColorAdjustType): TGdipStatus;
+begin
+  result := Gdip.SetImageAttributesColorMatrix(fAttr, adjusttype, true, @colormatrix, nil, flags);
+end;
+
+function TImageAttributes.ClearColorMatrix(adjusttype: TColorAdjustType): TGdipStatus;
+begin
+  result := Gdip.SetImageAttributesColorMatrix(fAttr, adjusttype, false, nil, nil, ColorMatrixFlagsDefault);
+end;
+
+function TImageAttributes.SetThreshold(threshold: Single; adjusttype: TColorAdjustType): TGdipStatus;
+begin
+  result := Gdip.SetImageAttributesThreshold(fAttr, adjusttype, true, threshold);
+end;
+
+function TImageAttributes.ClearThreshold(adjusttype: TColorAdjustType): TGdipStatus;
+begin
+  result := Gdip.SetImageAttributesThreshold(fAttr, adjusttype, false, 0.0);
+end;
+
+function TImageAttributes.SetGamma(gamma: Single; adjusttype: TColorAdjustType): TGdipStatus;
+begin
+  result := Gdip.SetImageAttributesGamma(fAttr, adjusttype, true, gamma);
+end;
+
+function TImageAttributes.ClearGamma(adjusttype: TColorAdjustType): TGdipStatus;
+begin
+  result := Gdip.SetImageAttributesGamma(fAttr, adjusttype, false, 0.0);
+end;
+
+function TImageAttributes.SetNoOp(adjusttype: TColorAdjustType): TGdipStatus;
+begin
+  result := Gdip.SetImageAttributesNoOp(fAttr, adjusttype, true);
+end;
+
+function TImageAttributes.ClearNoOp(adjusttype: TColorAdjustType): TGdipStatus;
+begin
+  result := Gdip.SetImageAttributesNoOp(fAttr, adjusttype, false);
+end;
+
+function TImageAttributes.SetColorKey(colorLow, colorHigh: Cardinal; adjusttype: TColorAdjustType): TGdipStatus;
+begin
+  result := Gdip.SetImageAttributesColorKeys(fAttr, adjusttype, true, colorLow, colorHigh);
+end;
+
+function TImageAttributes.ClearColorKey(adjusttype: TColorAdjustType): TGdipStatus;
+begin
+  result := Gdip.SetImageAttributesColorKeys(fAttr, adjusttype, false, 0, 0);
+end;
+
+function TImageAttributes.SetOutputChannel(channelFlags: TColorChannelFlags; adjusttype: TColorAdjustType): TGdipStatus;
+begin
+  result := Gdip.SetImageAttributesOutputChannel(fAttr, adjusttype, true, channelFlags);
+end;
+
+function TImageAttributes.ClearOutputChannel(adjusttype: TColorAdjustType): TGdipStatus;
+begin
+  result := Gdip.SetImageAttributesOutputChannel(fAttr, adjusttype, false, ColorChannelFlagsLast);
+end;
+
+function TImageAttributes.SetOutputChannelColorProfile(const colorProfileName: PWideChar; adjusttype: TColorAdjustType): TGdipStatus;
+begin
+  result := Gdip.SetImageAttributesOutputChannelColorProfile(fAttr, adjusttype, true, colorProfileName);
+end;
+
+function TImageAttributes.ClearOutputChannelColorProfile(adjusttype: TColorAdjustType): TGdipStatus;
+begin
+  result := Gdip.SetImageAttributesOutputChannelColorProfile(fAttr, adjusttype, false, nil);
+end;
+
+function TImageAttributes.SetRemapTable(mapSize: Cardinal; map: PColorMap; adjusttype: TColorAdjustType): TGdipStatus;
+begin
+  result := Gdip.SetImageAttributesRemapTable(fAttr, adjusttype, true, mapSize, map);
+end;
+
+function TImageAttributes.ClearRemapTable(adjusttype: TColorAdjustType): TGdipStatus;
+begin
+  result := Gdip.SetImageAttributesRemapTable(fAttr, adjusttype, false, 0, nil);
+end;
+
+function TImageAttributes.SetWrapMode(wrap: TWrapMode; color: Cardinal; clamp: Boolean): TGdipStatus;
+begin
+  result := Gdip.SetImageAttributesWrapMode(fAttr, wrap, color, clamp);
+end;
+
+function TImageAttributes.GetAdjustedPalette(colorPalette: PColorPalette; colortype: TColorAdjustType): TGdipStatus;
+begin
+  result := Gdip.GetImageAttributesAdjustedPalette(fAttr, colorPalette, colortype);
+end;
+
+
 { TSynLibrary }
 
 function TSynLibrary.Exists: boolean;
@@ -1036,7 +1257,7 @@ const
 const
   FrameDimensionPage: TGUID = '{7462dc86-6180-4c7e-8e3f-ee7333a7a483}';
 
-  GdiPProcNames: array[0..18{$ifdef USEDPI}+1{$endif}
+  GdiPProcNames: array[0..33{$ifdef USEDPI}+1{$endif}
       {$ifdef USEENCODERS}+2{$endif}] of PChar =
     ('GdiplusStartup','GdiplusShutdown',
      'GdipDeleteGraphics','GdipCreateFromHDC',
@@ -1048,6 +1269,13 @@ const
 {$ifdef USEENCODERS} 'GdipGetImageEncodersSize','GdipGetImageEncoders', {$endif}
      'GdipCreateBitmapFromHBITMAP','GdipCreateBitmapFromGdiDib','GdipBitmapSetResolution',
      'GdipImageGetFrameCount','GdipImageSelectActiveFrame',
+     'GdipCreateImageAttributes', 'GdipCloneImageAttributes', 'GdipDisposeImageAttributes',
+     'GdipSetImageAttributesToIdentity', 'GdipResetImageAttributes',
+     'GdipSetImageAttributesColorMatrix', 'GdipSetImageAttributesThreshold',
+     'GdipSetImageAttributesGamma', 'GdipSetImageAttributesNoOp',
+     'GdipSetImageAttributesColorKeys', 'GdipSetImageAttributesOutputChannel',
+     'GdipSetImageAttributesOutputChannelColorProfile', 'GdipSetImageAttributesRemapTable',
+     'GdipSetImageAttributesWrapMode', 'GdipGetImageAttributesAdjustedPalette',
      nil);
 
 constructor TGDIPlus.Create(const aDllFileName: TFileName);
@@ -1246,6 +1474,25 @@ begin
   try
     Gdip.DrawImageRect(graphics, fImage,
       Rect.Left, Rect.Top, Rect.Right - Rect.Left, Rect.Bottom - Rect.Top);
+  finally
+    Gdip.DeleteGraphics(graphics);
+  end;
+end;
+
+procedure TSynPicture.Draw(ACanvas: TCanvas; const dst, src: TRect; attributes: TImageAttributes; u: TUnit);
+var graphics: THandle;
+    ia: TGpipImageAttributes;
+begin
+  if (self=nil) or not fHasContent or (fImage=0) or (ACanvas=nil) or not Gdip.Exists then
+    exit;
+  if Assigned(attributes) then
+    ia := attributes.fAttr else
+    ia := nil;
+  if (Gdip.CreateFromHDC(ACanvas.Handle,graphics)=stOk) and (graphics<>0) then
+  try
+    Gdip.DrawImageRectRect(graphics, fImage,
+      dst.Left, dst.Top, dst.Right - dst.Left, dst.Bottom - dst.Top,
+      src.Left, src.Top, src.Right - src.Left, src.Bottom - src.Top, u, ia);
   finally
     Gdip.DeleteGraphics(graphics);
   end;
@@ -1965,13 +2212,13 @@ var Size, typ: DWORD;
     tmp: array[byte] of char;
     k: HKey;
 begin
-  Result := '';
+  result := '';
   if RegOpenKeyEx(Key, pointer(Path), 0, KEY_QUERY_VALUE, k)=ERROR_SUCCESS then
   try
     Size := 250;
     typ := REG_SZ;
     if RegQueryValueEx(k, pointer(Value), nil, @typ, @tmp, @Size)=ERROR_SUCCESS then
-      Result := tmp;
+      result := tmp;
   finally
     RegCloseKey(k);
   end;
@@ -1986,7 +2233,7 @@ var FileName: string;
     FI: PVSFixedFileInfo;
     VerSize: cardinal;
 begin
-  Result := Cardinal(-1);
+  result := Cardinal(-1);
   // GetFileVersionInfo modifies the filename parameter data while parsing.
   // Copy the string const into a local variable to create a writeable copy.
   FileName := AFileName;
@@ -1998,7 +2245,7 @@ begin
     try
       if GetFileVersionInfo(PChar(FileName), Wnd, InfoSize, VerBuf) then
         if VerQueryValue(VerBuf, '\', Pointer(FI), VerSize) then
-          Result:= FI.dwFileVersionMS;
+          result := FI.dwFileVersionMS;
     finally
       FreeMem(VerBuf);
     end;
@@ -2474,6 +2721,30 @@ begin
   finally
     DeleteGraphics(graphics);
     DisposeImage(Img);
+  end;
+end;
+
+procedure TGDIPlusFull.DrawAntiAliased(Source: TMetafile; Dest: HDC;
+  const dst, src: TRect; attributes: TImageAttributes; u: TUnit;
+  aSmoothing: TSmoothingMode; aTextRendering: TTextRenderingHint);
+var Img, graphics: THandle;
+    ia: TGpipImageAttributes;
+begin
+  Img := ConvertToEmfPlus(Source,Dest,aSmoothing,aTextRendering);
+  if Img=0 then
+    inherited DrawAntiAliased(Source,Dest,dst,aSmoothing,aTextRendering) else begin
+    if Assigned(attributes) then
+      ia := attributes.fAttr else
+      ia:= nil;
+    try
+      CreateFromHDC(Dest,graphics);
+      DrawImageRectRect(graphics,Img,
+        dst.Left,dst.top,dst.Right-dst.Left,dst.Bottom-dst.Top,
+        src.Left,src.top,src.Right-src.Left,src.Bottom-src.Top, u, ia);
+    finally
+      DeleteGraphics(graphics);
+      DisposeImage(Img);
+    end;
   end;
 end;
 

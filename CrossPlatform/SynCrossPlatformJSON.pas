@@ -891,7 +891,7 @@ type
   TJSONParserKind = (
     kNone, kNull, kFalse, kTrue, kString, kInteger, kFloat, kObject, kArray);
 
-  /// used to parse any JSON content
+  /// SAX parser for any JSON content
   {$ifdef USEOBJECTINSTEADOFRECORD}
   TJSONParser = object
   {$else}
@@ -911,7 +911,7 @@ type
     function GetNextAlphaPropName(out fieldName: string): boolean;
     function ParseJSONObject(var Data: TJSONVariantData): boolean;
     function ParseJSONArray(var Data: TJSONVariantData): boolean;
-    procedure GetNextStringUnEscape(var str: string);
+    procedure AppendNextStringUnEscape(var str: string);
   end;
 
 procedure TJSONParser.Init(const aJSON: string; aIndex: integer);
@@ -959,7 +959,7 @@ begin
   result := false;
 end;
 
-procedure TJSONParser.GetNextStringUnEscape(var str: string);
+procedure TJSONParser.AppendNextStringUnEscape(var str: string);
 var c: char;
     u: string;
     unicode,err: integer;
@@ -1010,7 +1010,7 @@ begin
     '\': begin // need unescaping
       str := copy(JSON,Index,i-Index);
       Index := i;
-      GetNextStringUnEscape(str);
+      AppendNextStringUnEscape(str);
       result := true;
       exit;
     end;
@@ -1316,13 +1316,15 @@ begin
   result := PropInfo^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TDateTime);
 end;
 
+{$ifndef FPC}
 type
-  // used to map a TPropInfo.GetProc/SetProc and retrieve its kind
+  // used to map a TPropInfo.GetProc/SetProc and retrieve its kind on Delphi
   PropWrap = packed record
     FillBytes: array [0..SizeOf(Pointer)-2] of byte;
     /// = $ff for a field address, or =$fe for a virtual method
     Kind: byte;
   end;
+{$endif FPC}
 
 function IsBlob(PropInfo: TRTTIPropInfo): boolean;
   {$ifdef HASINLINE}inline;{$endif}

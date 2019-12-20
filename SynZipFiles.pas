@@ -61,7 +61,7 @@ unit SynZipFiles;
 
 interface
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64
 
 uses
 {$ifdef MSWINDOWS}
@@ -221,8 +221,8 @@ type
     function SameAs(const aEntry: TZipEntry): boolean;
     // test if algo is registered, perform crc32 check and create one instance
     function AlgoCreate(data: pointer; const FileName: TFileName): TSynCompressionAlgo;
-    function LocalHeader(ZipStart: PByteArray): PLocalFileHeader;
-    function LocalDataPosition(ZipStart: PByteArray): PtrUInt;
+    function LocalHeader(ZipStart: PAnsiChar): PLocalFileHeader;
+    function LocalDataPosition(ZipStart: PAnsiChar): PtrUInt;
   end;
 
   TZipCommon = class
@@ -265,18 +265,6 @@ const
   BLOBDATA_HEADSIZE = sizeof(TBlobData)-sizeof(AnsiChar); // databuf: AnsiChar
 
 type
-  {$ifdef UNICODE}TMemoryMap = record{$else}TMemoryMap = object{$endif}
-  // use mapped files: very fast + avoid unnecessary disk access
-  private
-    _map: cardinal;
-  public
-    buf: PByteArray;
-    _file,
-    _size: integer;
-    function DoMap(const aFileName: TFileName): boolean; // buf -> mapped file
-    procedure UnMap;
-  end;
-
   TZipReader = class(TZipCommon)
   protected
     fMap: TMemoryMap;
@@ -375,7 +363,6 @@ type
 
 var
   BlobDataNull: TBlobData;
-
   SynCompressionAlgos: TSynCompressionAlgos;
 
 
@@ -388,8 +375,6 @@ function GZRead(const aFileName: TFileName): RawByteString; overload;
 function GZRead(gz: PAnsiChar; gzLen: integer): RawByteString; overload;
 procedure GZRead(const aFileName: TFileName; aStream: TStream; StoreLen: boolean); overload;
 // direct uncompress .gz file into string or TStream
-
-procedure GetDate(out Y,M,D: cardinal);
 
 
 implementation
@@ -446,14 +431,14 @@ end;
 begin
   // 1. open aFileName
   inherited; // fFileName := aFileName;
-  Map.DoMap(fFileName);
-  if Map.buf=nil then exit;
+  Map.Map(fFileName);
+  if Map.Buffer=nil then exit;
   // 2. find last header, in order to reach the TFileHeader entries
-  if Map._size<sizeof(lhr^) then begin
+  if Map.Size<sizeof(lhr^) then begin
     Error('file too small');
     exit;
   end;
-  lhr := @Map.Buf[Map._Size-sizeof(lhr^)];
+  lhr := @Map.Buffer[Map.Size-sizeof(lhr^)];
   with lhr^ do begin
     if signature<>$06054b50 then begin
       Error('missing trailing signature');
@@ -464,7 +449,7 @@ begin
     LastHeaderPosition := headerOffset;
   end;
   // 3. read all TFileHeader entries and fill Entry[] with its values
-  H := @Map.Buf[LastHeaderPosition];
+  H := @Map.Buffer[LastHeaderPosition];
   for i := 0 to Count-1 do
   with H^ do begin
     if signature<>$02014b50 then begin
@@ -511,9 +496,9 @@ end;
 function TZipReader.GetBlobData(aIndex: integer): RawByteString;
 begin
   result := '';
-  if (self=nil) or (cardinal(aIndex)>=cardinal(Count)) or (Map.buf=nil) then
+  if (self=nil) or (cardinal(aIndex)>=cardinal(Count)) or (Map.Buffer=nil) then
     exit;
-  with Entry[aIndex], LocalHeader(Map.buf)^ do
+  with Entry[aIndex], LocalHeader(Map.Buffer)^ do
   if not Header.IsFolder then begin
     SetLength(result,fileInfo.zzipSize+BLOBDATA_HEADSIZE);
     with PBlobData(result)^ do begin
@@ -527,9 +512,9 @@ procedure TZipReader.GetBlobData(aIndex: integer; aStream: TStream);
 // put TBlobData in aStream
 var blob: TBlobData;
 begin
-  if (self=nil) or (aIndex<0) or (aIndex>=Count) or (Map.buf=nil) then
+  if (self=nil) or (aIndex<0) or (aIndex>=Count) or (Map.Buffer=nil) then
     aStream.WriteBuffer(BlobDataNull,BLOBDATA_HEADSIZE) else
-    with Entry[aIndex], LocalHeader(Map.buf)^ do begin
+    with Entry[aIndex], LocalHeader(Map.Buffer)^ do begin
       blob.SetFrom(fileInfo);
       aStream.WriteBuffer(blob,BLOBDATA_HEADSIZE);
       aStream.WriteBuffer(LocalData^,blob.dataSize);
@@ -540,9 +525,9 @@ function TZipReader.GetBuffer(aIndex: integer; out Dest: PAnsiChar): integer;
 begin
   result := 0;
   Dest := nil;
-  if (self=nil) or (aIndex<0) or (aIndex>=Count) or (Map.buf=nil) then
+  if (self=nil) or (aIndex<0) or (aIndex>=Count) or (Map.Buffer=nil) then
     exit;
-  with Entry[aIndex], LocalHeader(Map.buf)^, fileInfo do
+  with Entry[aIndex], LocalHeader(Map.Buffer)^, fileInfo do
   if not Header.IsFolder then begin
     result := zfullSize;
     if AlgoID<>0 then begin
@@ -583,9 +568,9 @@ var CRC: cardinal;
     L: cardinal;
 begin
   result := nil;
-  if (self=nil) or (aIndex<0) or (aIndex>=Count) or (Map.buf=nil) then
+  if (self=nil) or (aIndex<0) or (aIndex>=Count) or (Map.Buffer=nil) then
     exit;
-  with Entry[aIndex], LocalHeader(Map.buf)^ do
+  with Entry[aIndex], LocalHeader(Map.Buffer)^ do
   if not Header.IsFolder then begin
     result := LocalData;
     if aStream=nil then
@@ -638,9 +623,9 @@ end;
 function TZipReader.GetString(aIndex: integer): RawByteString;
 begin
   result := '';
-  if (self=nil) or (aIndex<0) or (aIndex>=Count) or (Map.buf=nil) then
+  if (self=nil) or (aIndex<0) or (aIndex>=Count) or (Map.Buffer=nil) then
     exit;
-  with Entry[aIndex], LocalHeader(Map.buf)^, fileInfo do
+  with Entry[aIndex], LocalHeader(Map.Buffer)^, fileInfo do
   if not Header.IsFolder then begin
     if AlgoID<>0 then begin // special algo
       with AlgoCreate(LocalData,FileName) do // crc32+algo object create
@@ -675,10 +660,10 @@ begin
     if not Entry[i].SameAs(aReader.Entry[i]) then
       exit;
   for i := 0 to Count-1 do
-    with Entry[i], LocalHeader(Map.buf)^ do
+    with Entry[i], LocalHeader(Map.Buffer)^ do
     if not Header.IsFolder then
     if not Comparemem(LocalData,
-       aReader.Entry[i].LocalHeader(aReader.Map.buf).LocalData,fileInfo.zzipSize) then
+       aReader.Entry[i].LocalHeader(aReader.Map.Buffer).LocalData,fileInfo.zzipSize) then
       exit;
   result := true;
 end;
@@ -1179,10 +1164,10 @@ end;
 function GZRead(const aFileName: TFileName): RawByteString; overload;
 var Map: TMemoryMap;
 begin
-  if not Map.DoMap(aFileName) then
+  if not Map.Map(aFileName) then
     result := '' else
     try
-      result := SynZipFiles.GzRead(pointer(Map.buf),Map._size);
+      result := SynZipFiles.GzRead(pointer(Map.Buffer),Map.Size);
     finally
       Map.UnMap;
     end;
@@ -1205,21 +1190,21 @@ procedure GZRead(const aFileName: TFileName; aStream: TStream; StoreLen: boolean
 var Map: TMemoryMap;
     Len: integer;
 begin
-  if not Map.DoMap(aFileName) then begin
+  if not Map.Map(aFileName) then begin
     if StoreLen then
-      aStream.WriteBuffer(Map.Buf,4); // no file -> store len=0
+      aStream.WriteBuffer(Map.Buffer,4); // no file -> store len=0
   end else
     try
-      if PCardinal(Map.buf)^<>$88B1F then begin
+      if PCardinal(Map.Buffer)^<>$88B1F then begin
         if StoreLen then
-          aStream.WriteBuffer(Map._Size,4);
-        aStream.WriteBuffer(Map.buf^,Map._size); // not a .gz -> store as is
+          aStream.WriteBuffer(Map.Size,4);
+        aStream.WriteBuffer(Map.Buffer^,Map.Size); // not a .gz -> store as is
       end else begin
-        Len := pInteger(@Map.buf[Map._size-4])^; // .gz -> uncompress
+        Len := pInteger(@Map.Buffer[Map.Size-4])^; // .gz -> uncompress
         assert(Len>=0);
         if StoreLen then
           aStream.WriteBuffer(Len,4);
-        UnCompressStream(@Map.buf[10],Map._size-18,aStream,nil);
+        UnCompressStream(@Map.Buffer[10],Map.Size-18,aStream,nil);
       end;
     finally
       Map.UnMap;
@@ -1265,11 +1250,11 @@ begin
   if (Count=AppendTo.Count) or (firstDeleted=AppendTo.Count-1) then begin
   // no delete or only the last one: append to end of file
     fFileName := AppendTo.fFileName;
-    if AppendTo.Map.buf=nil then // AppendTo file doesn't exists
+    if AppendTo.Map.Buffer=nil then // AppendTo file doesn't exists
       outFile := TFileStream.Create(fFileName,fmCreate) // new void file
     else begin // AppendTo file exists
       with AppendTo.Entry[Count-1] do
-        posi := LocalDataPosition(AppendTo.Map.buf)+Header.fileInfo.zzipSize;
+        posi := LocalDataPosition(AppendTo.Map.Buffer)+Header.fileInfo.zzipSize;
       AppendTo.Map.UnMap; // outFile seek to end of AppendTo file data
       outFile := TFileStream.Create(fFileName,fmOpenReadWrite);
       outFile.Position := posi;
@@ -1403,11 +1388,11 @@ begin
   // 3. write last header
   outFile.WriteBuffer(lhr,sizeof(lhr));
   // 4. truncate and close file
-{$ifdef MSWINDOWS}
-  SetEndOfFile(outFile.Handle);
-{$else}
+  {$ifdef KYLIX3}
   ftruncate(outFile.Handle, outFile.seek(0,soFromCurrent));
-{$endif}
+  {$else}
+  SetEndOfFile(outFile.Handle);
+  {$endif}
   if forceFileAge<>0 then
     FileSetDate(outFile.Handle,forceFileAge);
   outFile.Free;
@@ -1427,14 +1412,14 @@ procedure TZipWriter.AddFile(const aFileName: TFileName; const aZipName: RawUTF8
 // direct compress or store of a file content, using memory mapped file
 var Map: TMemoryMap;
 begin
-  if not Map.doMap(aFileName) then exit;
-  if Map._size<64 then
+  if not Map.Map(aFileName) then exit;
+  if Map.Size<64 then
     CompressionLevel := -1; // store if too small
   ZipCreate(aZipName,CompressionLevel,0,Algorithm); // initialize Zip object
   Entry[Count].Header.fileInfo.zlastMod :=
-    {$ifdef MSWINDOWS}FileGetDate(Map._file){$else}
-    DateTimeToFileDateWindows(FileDateToDateTime(FileGetDate(Map._file))){$endif};
-  Zip.WriteOnce(Map.buf^,Map._size);
+    {$ifdef MSWINDOWS}FileGetDate(Map.FileHandle){$else}
+    DateTimeToFileDateWindows(FileDateToDateTime(FileGetDate(Map.FileHandle))){$endif};
+  Zip.WriteOnce(Map.Buffer^,Map.Size);
   Map.UnMap;
   ZipClose;
 end;
@@ -1500,7 +1485,7 @@ begin
       sign := $04034b50; outFile.Write(sign,4);
       outFile.WriteBuffer(fileInfo,sizeof(fileInfo)); // save new fileInfo
       outFile.WriteBuffer(ZipName[1],fileInfo.nameLen); // append file name
-      outFile.WriteBuffer(E^.LocalHeader(aReader.Map.buf).LocalData^,fileInfo.zzipSize); // data copy
+      outFile.WriteBuffer(E^.LocalHeader(aReader.Map.Buffer).LocalData^,fileInfo.zzipSize); // data copy
     end;
   end;
   inc(fCount);
@@ -1621,7 +1606,7 @@ begin
   with Reader.Entry[n] do // read Values[] from last Entry[]:
   if (ZipName='-index-') and (Header.fileInfo.zzipMethod=0) then begin
     Count := n;
-    LoadValues(LocalHeader(Reader.Map.buf).LocalData);
+    LoadValues(LocalHeader(Reader.Map.Buffer).LocalData);
     Reader.DeleteLastEntry; // ignore '-index-' from now
   end else begin
     Count := 0;
@@ -1846,39 +1831,15 @@ begin
      Header.fileInfo.SameAs(@aEntry.Header.fileInfo);
 end;
 
-function TZipEntry.LocalHeader(ZipStart: PByteArray): PLocalFileHeader;
+function TZipEntry.LocalHeader(ZipStart: PAnsiChar): PLocalFileHeader;
 begin
   result := @ZipStart[Header.localHeadOff];
 end;
 
-function TZipEntry.LocalDataPosition(ZipStart: PByteArray): PtrUInt;
+function TZipEntry.LocalDataPosition(ZipStart: PAnsiChar): PtrUInt;
 begin
   with LocalHeader(ZipStart)^ do
     result := PtrUInt(LocalData)-PtrUInt(ZipStart);
-end;
-
-
-procedure GetDate(out Y,M,D: cardinal);
-{$IFDEF MSWINDOWS}
-var SystemTime: TSystemTime;
-begin
-  GetLocalTime(SystemTime);
-  with SystemTime do begin
-    Y := wYear;
-    M := wMonth;
-    D := wDay;
-  end;
-{$ELSE} // LINUX:
-var T: TTime_T;
-    UT: TUnixTime;
-begin
-  __time(@T);
-  localtime_r(
-  localtime_r(@T, UT);
-  Y := UT.tm_year + 1900;
-  M := UT.tm_mon + 1;
-  D := UT.tm_mday;
-{$ENDIF}
 end;
 
 
@@ -2073,47 +2034,5 @@ begin
   end;
 end;
 
-
-{ TMemoryMap }
-
-function TMemoryMap.DoMap(const aFileName: TFileName): boolean;
-begin
-  _file := FileOpen(aFileName,fmOpenRead or fmShareDenyWrite);
-  buf := nil;
-  result := _file>=0;
-  if not result then begin
-    _size := 0;
-    exit;
-  end;
-  _size := FileSeek(_file,0,2); // from end -> return File Size
-  if _size=0 then begin
-    FileClose(_file);
-    _file := 0;
-  end else begin
-    FileSeek(_file,0,0); // from beginning
-    _map := CreateFileMapping(_file, nil, PAGE_READONLY, 0, 0, nil);
-    if _map<>0 then
-      buf := MapViewOfFile(_map, FILE_MAP_READ, 0, 0, 0) else begin
-      result := false;
-      _size := 0;
-    end;
-  end;
-end;
-
-procedure TMemoryMap.UnMap;
-begin
-  if buf<>nil then begin
-    UnmapViewOfFile(buf);
-    CloseHandle(_map);
-    buf := nil; // mark unmapped
-  end;
-  if _file<>0 then begin
-    FileClose(_file);
-    _file := 0;
-  end;
-end;
-
-initialization
-  fillchar(BlobDataNull,sizeof(TBlobData),0);
 
 end.

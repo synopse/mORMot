@@ -1,10 +1,18 @@
 unit SourceCodeRepMain;
 
+{$I ../../../Synopse.inc}
+
 interface
 
 uses
-  SynCommons,
+  {$IFNDEF FPC}
   Windows,
+  {$ELSE}
+  LCLIntf,
+  LCLType,
+  LMessages,
+  {$ENDIF}
+  SynCommons,
   Messages,
   SysUtils,
   Variants,
@@ -20,6 +28,9 @@ const
   VERSION = '1.18';
 
 type
+
+  { TMainForm }
+
   TMainForm = class(TForm)
     mmoStatus: TMemo;
     lbl1: TLabel;
@@ -56,8 +67,8 @@ type
     fDevPath: TFileName;
     fGitExe: TFileName;
     fGitRepository: TFileName;
-    function ExecAndWait(const Command, CurrentDir: TFileName; Visibility:
-      Word; Timeout: DWORD): integer;
+    function Exec(const folder, exe, arg1, arg2, arg3, arg4, arg5: TFileName;
+      exeisshell: boolean=true; wait: boolean=true): boolean;
     procedure ReadStatus;
   public
     { Public declarations }
@@ -68,86 +79,131 @@ var
 
 implementation
 
-{$R *.dfm}
+uses
+  mORMotService; // for cross-platform RunProcess()
 
-{$R Vista.res}
+{$IFNDEF FPC}
+  {$R *.dfm}
+{$ELSE}
+  {$R *.lfm}
+{$ENDIF}
 
-function TMainForm.ExecAndWait(const Command, CurrentDir: TFileName;
-  Visibility: Word; Timeout: DWORD): integer;
+{$ifdef MSWINDOWS}
+  {$R ..\..\..\vista.RES} // includes Win10 manifest - use .RES for linux cross-compilation
+const
+  SHELL = '.bat';
+  SHELLEXE = 'cmd.exe';
+  GITDEF = 'git.exe';
+  REPFOSSIL = 'd:\dev\fossil\lib';
+  REPLIB = 'd:\dev\lib';
+  REPGITHUB = 'd:\dev\github\';
+{$else}
+const
+  SHELL = '.sh';
+  GITDEF = '/usr/bin/git';
 var
-  StartupInfo: TStartupInfo;
-  ProcessInfo: TProcessInformation;
-  endTix: Int64;
-begin
-  FillChar(StartupInfo, SizeOf(TStartupInfo), 0);
-  with StartupInfo do begin
-    cb := SizeOf(TStartupInfo);
-    dwFlags := STARTF_USESHOWWINDOW or STARTF_FORCEONFEEDBACK;
-    wShowWindow := visibility;
+  REPFOSSIL: TFileName;
+  REPLIB: TFileName;
+  REPGITHUB: TFileName;
+{$endif}
+
+function TMainForm.Exec(const folder, exe, arg1, arg2, arg3, arg4, arg5: TFileName;
+  exeisshell, wait: boolean): boolean;
+var
+  bak, path: TFileName;
+  {$ifdef MSWINDOWS}
+  function q(const a: TFileName): TFileName;
+  begin
+    result := '"' + a + '"'; // paranoid quote for safety
   end;
-  if CreateProcess(nil, pointer(Command), nil, nil, False, NORMAL_PRIORITY_CLASS,
-    nil, pointer(CurrentDir), StartupInfo, ProcessInfo) then
-  try
-    Enabled := false;
-    Screen.Cursor := crHourGlass;
-    if Timeout = INFINITE then
-      TimeOut := 5 * 60 * 1000; // 5 minutes execution time seems enough
-    endTix := GetTickCount64 + Timeout;
-    repeat
-      Application.ProcessMessages;
-      result := WaitForSingleObject(ProcessInfo.hProcess, 100);
-    until (result = WAIT_OBJECT_0) or (GetTickCount64 > endTix);
-  finally
-    Enabled := true;
-    Screen.Cursor := crDefault;
-  end
+  {$else}
+  type q = TFileName;
+  {$endif}
+begin
+  if folder <> '' then begin
+    bak := GetCurrentDir;
+    SetCurrentDir(folder);
+  end;
+  if exeisshell then
+    path := fBatPath + exe + SHELL
   else
-    result := GetLastError;
+    path := exe;
+  screen.Cursor := crHourGlass;
+  try
+    result := RunProcess(path, q(arg1), wait, q(arg2), q(arg3), q(arg4), q(arg5)) = 0;
+  finally
+    if bak <> '' then
+      SetCurrentDir(bak);
+    screen.Cursor := crDefault;
+  end;
 end;
 
 procedure TMainForm.ReadStatus;
-var status: RawUTF8;
+var
+  statusfile: TFileName;
+  status: RawUTF8;
 begin
-  ExecAndWait(fBatPath + 'FossilStatus.bat "' + fBatPath + 'status.txt"',
-    fFossilRepository, SW_HIDE, 10000);
-  status := StringFromFile(fBatPath + 'status.txt');
+  statusfile := fBatPath + 'status.txt';
+  DeleteFile(statusfile);
+  if not Exec(fFossilRepository, 'FossilStatus', statusfile, '', '', '', '') then
+    status := 'error executing FossilStatus script'
+  else
+    status := StringFromFile(statusfile);
+  {$ifdef MSWINDOWS}
   if PosEx(#13#10, status) = 0 then
     status := StringReplaceAll(status, #10, #13#10);
+  {$endif}
   mmoStatus.Text := UTF8ToString(status);
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
+{$ifdef MSWINDOWS}
 begin
+{$else}
+var
+  dev: TFileName;
+begin
+  dev := GetSystemPath(spUserDocuments) + 'dev/';
+  REPFOSSIL := dev + 'fossil/lib';
+  REPLIB := dev + 'lib';
+  REPGITHUB := dev + 'github/';
+{$endif}
   fBatPath := ExeVersion.ProgramFilePath;
-  if not FileExists(fBatPath + 'FossilStatus.bat') then // from exe sub-folder?
+  if not FileExists(fBatPath + 'FossilStatus' + SHELL) then // from exe sub-folder?
     fBatPath := ExtractFilePath(ExcludeTrailingPathDelimiter(fBatPath));
-  if not FileExists(fBatPath + 'FossilStatus.bat') then
-    ShowMessage('Missing .bat files');
+  if not FileExists(fBatPath + 'FossilStatus' + SHELL) then // from exe sub-folder?
+    fBatPath := ExtractFilePath(ExcludeTrailingPathDelimiter(fBatPath));
+  if not FileExists(fBatPath + 'FossilStatus' + SHELL) then
+    ShowMessage('Missing *' + SHELL +' files');
   fFossilRepository := GetEnvironmentVariable('SYN_FOSSILREPO_PATH');
   if fFossilRepository = '' then
-    fFossilRepository := 'c:\progs\fossil\lib';
+    fFossilRepository := REPFOSSIL;
   fDevPath := GetEnvironmentVariable('SYN_DEVPATH');
   if fDevPath = '' then
-    if DirectoryExists('d:\dev\lib') then
-      fDevPath := 'd:\dev\lib' else
+    if DirectoryExists(REPLIB) then
+      fDevPath := REPLIB else
       fDevPath := fFossilRepository;
   fGitExe := GetEnvironmentVariable('GIT_PATH');
   if fGitExe = '' then begin
+    {$ifdef MSWINDOWS}
     fGitExe := 'c:\Program Files (x86)\Git\bin\git.exe';
     if not FileExists(fGitExe) then
-      fGitExe := 'c:\Program Files\Git\bin\git.exe';
+    {$endif}
+      fGitExe := GITDEF;
   end;
   fGitRepository := GetEnvironmentVariable('SYN_GITREPO_PATH');
   if fGitRepository = '' then
-    fGitRepository := 'd:\dev\github\mORMot';
+    fGitRepository := REPGITHUB + 'mORMot';
   if not DirectoryExists(fFossilRepository) then begin
     ShowMessage('Please set Fossil Repository Name or environment variable SYN_FOSSILREPO_PATH');
     Close;
   end else if not DirectoryExists(fGitRepository) then begin
     ShowMessage('Please set Git Repository Path or environment variable SYN_GITREPO_PATH');
     Close;
-  end else if not FileExists(fGitExe) then begin
-    ShowMessage('Please install git to ' + fGitExe + ' or set environment variable GIT_PATH');
+  end else if ((fGitExe <> GITDEF) and not FileExists(fGitExe)) or
+       ((fGitExe = GITDEF) and
+        not Exec(fGitRepository, GITDEF, 'status', '', '', '', '', {isshell=}false)) then begin
+    ShowMessage('Please install Git or set environment variable GIT_PATH');
     Close;
   end else
     ReadStatus;
@@ -175,21 +231,17 @@ begin
     exit;
   end;
   if chkFossilPull.Checked then
-    ExecAndWait(FormatString('%FossilUpdate.bat "%" %',
-      [fBatPath, DescFile, Integer(chkFossilPush.Checked)]),
-      fFossilRepository, SW_SHOWNORMAL, INFINITE);
-  VersionText := UnQuoteSQLString(StringFromFile(fDevPath + '\SynopseCommit.inc'));
+    Exec(fFossilRepository, 'FossilUpdate', '', '', '', '', '');
+  VersionText := UnQuoteSQLString(StringFromFile(fDevPath + PathDelim + 'SynopseCommit.inc'));
   VersionText := GetCSVItem(pointer(VersionText), 2, '.');
   VersionNumber := GetCardinalDef(pointer(VersionText), 255);
   inc(VersionNumber);
   VersionText := '''' + VERSION + '.' + UInt32ToUtf8(VersionNumber) + ''''#13#10;
-  FileFromString(VersionText, fDevPath + '\SynopseCommit.inc');
-  FileFromString(VersionText, fFossilRepository + '\SynopseCommit.inc');
+  FileFromString(VersionText, fDevPath + PathDelim +'SynopseCommit.inc');
+  FileFromString(VersionText, fFossilRepository + PathDelim +'SynopseCommit.inc');
   DescFile := fBatPath + 'desc.txt';
-  FileFromString('{' + IntToStr(VersionNumber) + '} ' + Desc, DescFile);
-  ExecAndWait(FormatString('%FossilCommit.bat "%" %', [fBatPath, DescFile,
-    Integer(chkFossilPush.Checked)]),
-    fFossilRepository, SW_SHOWNORMAL, INFINITE);
+  FileFromString('{' + ToUTF8(VersionNumber) + '} ' + Desc, DescFile);
+  Exec(fFossilRepository, 'FossilCommit', DescFile, IntToStr(ord(chkFossilPush.Checked)), fFossilRepository, '', '');
   btnRefreshStatus.Click;
 end;
 
@@ -231,10 +283,6 @@ begin
     end;
     exit;
   end;
-  if not FileExists(fGitExe) then begin
-    ShowMessage('git.exe not found');
-    exit;
-  end;
   if not DirectoryExists(fGitRepository) then begin
     ShowMessage('Please set Git Repository Name');
     exit;
@@ -242,20 +290,18 @@ begin
   DescFile := fBatPath + 'desc.txt';
   FileFromString(Desc, DescFile);
   if Sender = btnGitAll then
-    BatchFile := 'GitCommitAll.bat'
+    BatchFile := 'GitCommitAll'
   else if Sender = btnSynProject then
-    BatchFile := 'GitCommitSynProject.bat'
+    BatchFile := 'GitCommitSynProject'
   else if Sender = btnSynPdf then
-    BatchFile := 'GitCommitSynPdf.bat'
+    BatchFile := 'GitCommitSynPdf'
   else if Sender = btnDMustache then
-    BatchFile := 'GitCommitDMustache.bat'
+    BatchFile := 'GitCommitDMustache'
   else if Sender = btnLVCL then
-    BatchFile := 'GitCommitLVCL.bat'
+    BatchFile := 'GitCommitLVCL'
   else
-    BatchFile := 'GitCommit.bat';
-  ExecAndWait(FormatString('%% "%" "%" "%" "%" "%"', [fBatPath, BatchFile,
-    fFossilRepository, fGitRepository, fGitExe, DescFile, fDevPath]),
-    fGitRepository, SW_SHOWNORMAL, INFINITE);
+    BatchFile := 'GitCommit';
+  Exec(fGitRepository, BatchFile, fFossilRepository, fGitRepository, fGitExe, DescFile, fDevPath);
   mmoDescription.SetFocus; // ReadStatus not necessary if git only
 end;
 
@@ -268,18 +314,27 @@ end;
 
 procedure TMainForm.btnGitShellClick(Sender: TObject);
 begin
-  ExecAndWait(FormatString('%GitShell.bat  "%"', [fBatPath, ExtractFilePath(fGitExe)]),
-    fGitRepository, SW_SHOWNORMAL, INFINITE);
+  {$ifdef MSWINDOWS}
+  Exec(fGitRepository, SHELLEXE, '', '', '', '', '');
+  {$else}
+  Exec(fGitRepository, '/usr/bin/meld', fGitRepository, fDevPath, '', '', '', false, false);
+  {$endif}
 end;
 
 procedure TMainForm.btnFossilShellClick(Sender: TObject);
 begin
-  ExecAndWait('cmd.exe', fFossilRepository, SW_SHOWNORMAL, INFINITE);
+  {$ifdef MSWINDOWS}
+  Exec(fFossilRepository, SHELLEXE, '', '', '', '', '');
+  {$else}
+  Exec(fFossilRepository, '/usr/bin/meld', fFossilRepository, fDevPath, '', '', '', false, false);
+  {$endif}
 end;
 
 procedure TMainForm.btnTestsClick(Sender: TObject);
 begin
-  ExecAndWait(fDevPath + '\compilpil.bat', fDevPath, SW_SHOWNORMAL, INFINITE);
+  {$ifdef MSWINDOWS}
+  Exec(fDevPath, 'compilpil', '', '', '', '', '');
+  {$endif}
 end;
 
 procedure TMainForm.btnCopyLinkClick(Sender: TObject);
