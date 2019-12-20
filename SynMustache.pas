@@ -424,7 +424,6 @@ const
   /// this constant can be used to define as JSON a tag value as separator
   NULL_OR_COMMA: array[boolean] of RawUTF8 = ('null','","');
 
-
 implementation
 
 function KindToText(Kind: TSynMustacheTagKind): PShortString;
@@ -434,6 +433,8 @@ end;
 
 type
   TSynMustacheParser = class
+  private
+    function CountContinuousChar(const aStringPtr: PUTF8Char; const aSymbol: AnsiChar): Integer;
   protected
     fTagStart, fTagStop: word;
     fPos, fPosMin, fPosMax, fPosTagStart: PUTF8Char;
@@ -463,6 +464,8 @@ var
 
 procedure TSynMustacheParser.AddTag(aKind: TSynMustacheTagKind;
   aStart, aEnd: PUTF8Char);
+var
+  mismatchedSymbolCount: Integer;
 begin
   if (aStart=nil) or (aEnd=nil) then begin
     aStart := fScanStart;
@@ -503,6 +506,18 @@ begin
       TextLen := aEnd-aStart;
     end;
     else begin
+      // Ediwn Yip: 2019-12-20
+      // Ensure the tag value includes the closing '}'  if it's a JSON object string
+      if aKind = mtVariableUnescape then begin
+        mismatchedSymbolCount := CountContinuousChar(fScanEnd, '}')
+          - CountContinuousChar(fPosTagStart, '{');
+        if mismatchedSymbolCount > 0 then
+        begin
+          Inc(fScanEnd, mismatchedSymbolCount);
+          aEnd := fScanEnd;
+        end;
+      end;
+      // Edwin Yip END
       TextStart := fPosTagStart;
       TextLen := aEnd-fPosTagStart;
       // superfluous in-tag whitespace should be ignored
@@ -515,6 +530,20 @@ begin
     end;
   end;
   inc(fTagCount);
+end;
+
+function TSynMustacheParser.CountContinuousChar(const aStringPtr: PUTF8Char; const aSymbol: AnsiChar):
+    Integer;
+var
+  p: PUTF8Char;
+begin
+  Result := 0;
+  p := aStringPtr;
+  while (PAnsiChar(p)^ = aSymbol) and (p < fPosMax) do
+  begin
+    Inc(Result);
+    Inc(p);
+  end;
 end;
 
 constructor TSynMustacheParser.Create(Template: TSynMustache;
