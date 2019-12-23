@@ -72,7 +72,7 @@ type
   /// identify the {{mustache}} tag kind
   // - mtVariable if the tag is a variable - e.g. {{myValue}} - or an Expression
   // Helper - e.g. {{helperName valueName}}
-  // - mtVariableUnescaped to unescape the variable HTML - e.g.
+  // - mtVariableUnescape, mtVariableUnescapeAmp to unescape the variable HTML - e.g.
   // {{{myRawValue}}} or {{& name}}
   // - mtSection and mtInvertedSection for sections beginning - e.g.
   // {{#person}} or {{^person}}
@@ -86,7 +86,7 @@ type
   // - mtTranslate for content i18n via a callback - e.g. {{"English text}}
   // - mtText for all text that appears outside a symbol
   TSynMustacheTagKind = (
-    mtVariable, mtVariableUnescape,
+    mtVariable, mtVariableUnescape, mtVariableUnescapeAmp,
     mtSection, mtInvertedSection, mtSectionEnd,
     mtComment, mtPartial, mtSetPartial, mtSetDelimiter, mtTranslate, mtText);
 
@@ -433,8 +433,6 @@ end;
 
 type
   TSynMustacheParser = class
-  private
-    function CountContinuousChar(const aStringPtr: PUTF8Char; const aSymbol: AnsiChar): Integer;
   protected
     fTagStart, fTagStop: word;
     fPos, fPosMin, fPosMax, fPosTagStart: PUTF8Char;
@@ -465,7 +463,7 @@ var
 procedure TSynMustacheParser.AddTag(aKind: TSynMustacheTagKind;
   aStart, aEnd: PUTF8Char);
 var
-  mismatchedSymbolCount: Integer;
+  P: PUTF8Char;
 begin
   if (aStart=nil) or (aEnd=nil) then begin
     aStart := fScanStart;
@@ -491,6 +489,22 @@ begin
                   dec(TextLen);
         end;
     end;
+    mtVariable, mtVariableUnescape, mtVariableUnescapeAmp: begin
+      // handle JSON object/array with nested } e.g. as {{helper [{a:{a:1,b:2}}]}}
+      P := PosChar(aStart,' ');
+      if (P<>nil) and (P<aEnd) then begin
+        P := GotoNextNotSpaceSameLine(P+1);
+        if P^ in ['{','['] then begin
+          P := GotoNextJSONObjectOrArray(P);
+          if P<>nil then begin
+            aEnd := P;
+            fPos := P;
+            if not Scan(fTagStop) then
+              raise ESynMustache.CreateUTF8('Unfinished {{%',[aStart]);
+          end;
+        end;
+      end;
+    end;
     end;
   end;
   if aEnd<=aStart then
@@ -506,25 +520,13 @@ begin
       TextLen := aEnd-aStart;
     end;
     else begin
-      // Ediwn Yip: 2019-12-20
-      // Ensure the tag value includes the closing '}'  if it's a JSON object string
-      if aKind = mtVariableUnescape then begin
-        mismatchedSymbolCount := CountContinuousChar(fScanEnd, '}')
-          - CountContinuousChar(fPosTagStart, '{');
-        if mismatchedSymbolCount > 0 then
-        begin
-          Inc(fScanEnd, mismatchedSymbolCount);
-          aEnd := fScanEnd;
-        end;
-      end;
-      // Edwin Yip END
       TextStart := fPosTagStart;
       TextLen := aEnd-fPosTagStart;
       // superfluous in-tag whitespace should be ignored
       while (aStart<aEnd) and (aStart^<=' ') do inc(aStart);
       while (aEnd>aStart) and (aEnd[-1]<=' ') do dec(aEnd);
       if aEnd=aStart then
-        raise ESynMustache.CreateFmt('Void %s identifier',[KindToText(aKind)^]);
+        raise ESynMustache.CreateUTF8('Void % identifier',[KindToText(aKind)^]);
       SetString(Value,PAnsiChar(aStart),aEnd-aStart);
     end;
     end;
@@ -532,28 +534,14 @@ begin
   inc(fTagCount);
 end;
 
-function TSynMustacheParser.CountContinuousChar(const aStringPtr: PUTF8Char; const aSymbol: AnsiChar):
-    Integer;
-var
-  p: PUTF8Char;
-begin
-  Result := 0;
-  p := aStringPtr;
-  while (PAnsiChar(p)^ = aSymbol) and (p < fPosMax) do
-  begin
-    Inc(Result);
-    Inc(p);
-  end;
-end;
-
 constructor TSynMustacheParser.Create(Template: TSynMustache;
   const DelimiterStart, DelimiterStop: RawUTF8);
 begin
   fTemplate := Template;
   if length(DelimiterStart)<>2 then
-    raise ESynMustache.CreateFmt('DelimiterStart="%s"',[DelimiterStart]);
+    raise ESynMustache.CreateUTF8('DelimiterStart="%"',[DelimiterStart]);
   if length(DelimiterStop)<>2 then
-    raise ESynMustache.CreateFmt('DelimiterStop="%s"',[DelimiterStop]);
+    raise ESynMustache.CreateUTF8('DelimiterStop="%"',[DelimiterStop]);
   fTagStart := PWord(DelimiterStart)^;
   fTagStop := PWord(DelimiterStop)^;
 end;
@@ -617,8 +605,8 @@ begin
     Symbol := fPos^;
     case Symbol of
     '=': Kind := mtSetDelimiter;
-    '{',
-    '&': Kind := mtVariableUnescape;
+    '{': Kind := mtVariableUnescape;
+    '&': Kind := mtVariableUnescapeAmp;
     '#': Kind := mtSection;
     '^': Kind := mtInvertedSection;
     '/': Kind := mtSectionEnd;
@@ -631,7 +619,7 @@ begin
     if Kind<>mtVariable then
       inc(fPos);
     if not Scan(fTagStop) then
-      raise ESynMustache.CreateFmt('Unfinished {{tag "%s"',[fPos]);
+      raise ESynMustache.CreateUTF8('Unfinished {{tag "%"',[fPos]);
     case Kind of
     mtSetDelimiter: begin
       if (fScanEnd-fScanStart<>6) or (fScanEnd[-1]<>'=') then
@@ -641,7 +629,7 @@ begin
       continue; // do not call AddTag(mtSetDelimiter)
     end;
     mtVariableUnescape:
-      if (Symbol='{') and (fTagStop=32125) and (PWord(fPos-1)^=32125) then
+      if (Symbol='{') and (fTagStop=$7d7d) and (PWord(fPos-1)^=$7d7d) then
         inc(fPos); // {{{name}}} -> point after }}}
     end;
     AddTag(Kind);
@@ -673,17 +661,17 @@ begin
               end;
               break;
             end else
-              raise ESynMustache.CreateFmt('Got {{/%s}}, expected {{/%s}}',
+              raise ESynMustache.CreateUTF8('Got {{/%}}, expected {{/%}}',
                 [Value,fTemplate.fTags[j].Value]);
         end;
         end;
       if SectionOppositeIndex<0 then
-        raise ESynMustache.CreateFmt('Missing section end {{/%s}}',[Value]);
+        raise ESynMustache.CreateUTF8('Missing section end {{/%}}',[Value]);
     end;
     mtSectionEnd: begin
       dec(secCount);
       if SectionOppositeIndex<0 then
-        raise ESynMustache.CreateFmt('Unexpected section end {{/%s}}',[Value]);
+        raise ESynMustache.CreateUTF8('Unexpected section end {{/%}}',[Value]);
     end;
   end;
   SetLength(fTemplate.fTags,fTagCount);
@@ -790,7 +778,7 @@ begin
          Context.fWriter.AddNoJSONEscape(TextStart,TextLen);
       mtVariable:
         Context.AppendValue(Value,false);
-      mtVariableUnescape:
+      mtVariableUnescape, mtVariableUnescapeAmp:
         Context.AppendValue(Value,true);
       mtSection:
         case Context.AppendSection(Value) of
@@ -832,7 +820,7 @@ begin
         if TextLen<>0 then
           Context.TranslateBlock(TextStart,TextLen);
       else
-        raise ESynMustache.CreateFmt('Kind=%s not implemented yet',
+        raise ESynMustache.CreateUTF8('Kind=% not implemented yet',
           [KindToText(fTags[TagStart].Kind)^]);
       end;
       inc(TagStart);
@@ -964,7 +952,7 @@ end;
 class function TSynMustache.HelpersGetStandardList(const aNames: array of RawUTF8;
   const aEvents: array of TSynMustacheHelperEvent): TSynMustacheHelpers;
 begin
-  result := HelpersGetStandardList;
+  result := copy(HelpersGetStandardList); // don't affect global HelpersStandardList
   HelperAdd(result,aNames,aEvents);
 end;
 

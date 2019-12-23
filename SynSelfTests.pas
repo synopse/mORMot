@@ -414,6 +414,7 @@ type
 {$ifndef NOVARIANTS}
   protected
     procedure MustacheTranslate(var English: string);
+    procedure MustacheHelper(const Value: variant; out result: variant);
 {$endif}
   published
 {$ifndef DELPHI5OROLDER}
@@ -6510,6 +6511,7 @@ var mustacheJson: RawByteString;
     mustacheJsonFileName: TFileName;
     doc: variant;
     html: RawUTF8;
+    helpers: TSynMustacheHelpers;
     guid: TGUID;
     spec,i: integer;
 begin
@@ -6575,6 +6577,16 @@ begin
   Check(mustache.SectionMaxCount=1);
   html := mustache.RenderJSON('{person2:2}');
   Check(html='Shown.Also shown!end');
+  helpers := mustache.HelpersGetStandardList(['jsonhelper'], [MustacheHelper]);
+  mustache := TSynMustache.Parse('{{jsonhelper {a:"a",b:10}}}');
+  html := mustache.RenderJSON('', nil, helpers);
+  Check(html='a=a,b=10');
+  mustache := TSynMustache.Parse('{{jsonhelper {a:1,b:2} }},titi');
+  html := mustache.RenderJSON('', nil, helpers);
+  Check(html='a=1,b=2,titi');
+  mustache := TSynMustache.Parse('{{jsonhelper {a:1,nested:{c:{d:[1,2]}},b:10}}}}toto');
+  html := mustache.RenderJSON('', nil, helpers);
+  Check(html='a=1,b=10}toto');
   mustache := TSynMustache.Parse('{{#a}}'#$A'{{one}}'#$A'{{/a}}'#$A);
   html := mustache.RenderJSON('{a:{one:1}}');
   Check(html='1'#$A);
@@ -6682,6 +6694,12 @@ begin
     English := 'Bonjour' else
   if English='You have just won' then
     English := 'Vous venez de gagner';
+end;
+
+procedure TTestLowLevelTypes.MustacheHelper(const Value: variant; out result: variant);
+begin
+  with _Safe(Value)^ do
+    result := RawUTF8ToVariant(FormatUTF8('a=%,b=%',[U['a'],I['b']]));
 end;
 
 {$endif NOVARIANTS}
