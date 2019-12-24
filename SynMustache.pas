@@ -501,6 +501,8 @@ begin
             fPos := P;
             if not Scan(fTagStop) then
               raise ESynMustache.CreateUTF8('Unfinished {{%',[aStart]);
+            if (aKind=mtVariableUnescape) and (fTagStop=$7d7d) and (PWord(fPos-1)^=$7d7d) then
+              inc(fPos); // {{{name}}} -> point after }}}
           end;
         end;
       end;

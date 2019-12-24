@@ -6581,6 +6581,12 @@ begin
   mustache := TSynMustache.Parse('{{jsonhelper {a:"a",b:10}}}');
   html := mustache.RenderJSON('', nil, helpers);
   Check(html='a=a,b=10');
+  mustache := TSynMustache.Parse('{{jsonhelper {a:"b",b:10} }}');
+  html := mustache.RenderJSON('', nil, helpers);
+  Check(html='a=b,b=10');
+  mustache := TSynMustache.Parse('{{{jsonhelper {a:"a",b:1}}}}');
+  html := mustache.RenderJSON('', nil, helpers);
+  check(html='a=a,b=1');
   mustache := TSynMustache.Parse('{{jsonhelper {a:1,b:2} }},titi');
   html := mustache.RenderJSON('', nil, helpers);
   Check(html='a=1,b=2,titi');
