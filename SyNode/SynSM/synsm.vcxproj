@@ -102,6 +102,7 @@
       <PreprocessorDefinitions>DEBUG;_DEBUG;_WINDOWS;_USRDLL;SYNSM_EXPORTS;MOZ_HAS_MOZGLUE;EXPORT_JS_API;_CRT_SECURE_NO_WARNINGS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>include;..\..\..\gecko-inst\debug\include</AdditionalIncludeDirectories>
+      <UndefinePreprocessorDefinitions>_CRT_NONSTDC_NO_DEPRECATE</UndefinePreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -140,6 +141,7 @@
       <AdditionalIncludeDirectories>include;..\..\..\gecko-inst\release\include</AdditionalIncludeDirectories>
       <OmitFramePointers>true</OmitFramePointers>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <UndefinePreprocessorDefinitions>_CRT_NONSTDC_NO_DEPRECATE</UndefinePreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

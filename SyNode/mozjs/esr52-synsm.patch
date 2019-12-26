@@ -1,16 +1,3 @@
-diff --git a/js/public/Utility.h b/js/public/Utility.h
-index 68de3004abf5..9b2434eab977 100644
---- a/js/public/Utility.h
-+++ b/js/public/Utility.h
-@@ -260,7 +260,7 @@ static inline void js_free(void* p)
- static inline char* js_strdup(const char* s)
- {
-     JS_OOM_POSSIBLY_FAIL();
--    return strdup(s);
-+    return _strdup(s);
- }
- #endif/* JS_USE_CUSTOM_ALLOCATOR */
- 
 diff --git a/js/src/moz.build b/js/src/moz.build
 index 1162cb70c1eb..c6c400a6f7bd 100644
 --- a/js/src/moz.build
