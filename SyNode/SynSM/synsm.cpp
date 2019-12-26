@@ -1,5 +1,10 @@
-#include "SynSM.h"
+#ifdef _WINDOWS
+#include "stdafx.h"
+#endif
 
+#include "synsm.h"
+
+#include <jsapi.h>
 #include <jsfriendapi.h>
 #include <js/Date.h>
 #include <js/Initialization.h>
