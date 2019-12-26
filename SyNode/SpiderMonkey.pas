@@ -2009,7 +2009,7 @@ const
 function SimpleVariantToJSval(cx: PJSContext; val: Variant): jsval;
 
 const
-  SpiderMonkeyLib = 'SynSM'{$IFDEF MSWINDOWS} + '.dll'{$ENDIF};
+  SpiderMonkeyLib = 'synsm'{$IFDEF MSWINDOWS} + '.dll'{$ENDIF};
 
  /// Initialize SpiderMonkey, returning true only if initialization succeeded.
  // Once this method has succeeded, it is safe to call JS_NewRuntime and other
