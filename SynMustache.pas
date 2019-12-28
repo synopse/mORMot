@@ -323,11 +323,13 @@ type
     destructor Destroy; override;
     /// register one Expression Helper callback for a given list of helpers
     // - i.e. to let aEvent process {{aName value}} tags
-    // - the supplied name will be first checked in the current list
+    // - the supplied name will be checked against the current list, and replace
+    // any existing entry
     class procedure HelperAdd(var Helpers: TSynMustacheHelpers;
       const aName: RawUTF8; aEvent: TSynMustacheHelperEvent); overload;
-    /// register several Expression Helper callback for a given list of helpers
-    // - warning: the supplied name won't be checked in the current list
+    /// register several Expression Helper callbacks for a given list of helpers
+    // - the supplied names will be checked against the current list, and replace
+    // any existing entry
     class procedure HelperAdd(var Helpers: TSynMustacheHelpers;
       const aNames: array of RawUTF8; const aEvents: array of TSynMustacheHelperEvent); overload;
     /// unregister one Expression Helper callback for a given list of helpers
@@ -883,7 +885,7 @@ end;
 
 class procedure TSynMustache.HelperAdd(var Helpers: TSynMustacheHelpers;
   const aName: RawUTF8; aEvent: TSynMustacheHelperEvent);
-var n,i: integer;
+var n,i: PtrInt;
 begin
   n := length(Helpers);
   for i := 0 to n-1 do
@@ -898,23 +900,17 @@ end;
 
 class procedure TSynMustache.HelperAdd(var Helpers: TSynMustacheHelpers;
   const aNames: array of RawUTF8; const aEvents: array of TSynMustacheHelperEvent);
-var n,count,i: integer;
+var n,i: PtrInt;
 begin
   n := length(aNames);
-  if n<>length(aEvents) then
-    exit;
-  count := length(Helpers);
-  SetLength(Helpers,count+n);
-  for i := 0 to n-1 do
-  with Helpers[count+i] do begin
-    Name := aNames[i];
-    Event := aEvents[i];
-  end;
+  if n=length(aEvents) then
+    for i := 0 to n-1 do
+      HelperAdd(Helpers,aNames[i],aEvents[i]);
 end;
 
 class procedure TSynMustache.HelperDelete(var Helpers: TSynMustacheHelpers;
   const aName: RawUTF8);
-var n,i,j: integer;
+var n,i,j: PtrInt;
 begin
   n := length(Helpers);
   for i := 0 to n-1 do

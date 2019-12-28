@@ -6577,7 +6577,8 @@ begin
   Check(mustache.SectionMaxCount=1);
   html := mustache.RenderJSON('{person2:2}');
   Check(html='Shown.Also shown!end');
-  helpers := mustache.HelpersGetStandardList(['jsonhelper'], [MustacheHelper]);
+  Check(helpers=nil,'compiler initialized');
+  mustache.HelperAdd(helpers, 'jsonhelper', MustacheHelper);
   mustache := TSynMustache.Parse('{{jsonhelper {a:"a",b:10}}}');
   html := mustache.RenderJSON('', nil, helpers);
   Check(html='a=a,b=10');
