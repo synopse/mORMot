@@ -22,6 +22,7 @@ Contributors
   Cheemeng
   CoMPi
   Damien (ddemars)
+  Darian Miller
   Daniel Kuettner
   David Mead (MDW)
   Delphinium (louisyeow)

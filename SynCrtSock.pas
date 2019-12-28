@@ -31,6 +31,7 @@ unit SynCrtSock;
   Contributor(s):
   - Alfred Glaenzer (alf)
   - Cybexr
+  - Darian Miller
   - EMartin
   - Eric Grange
   - Eugene Ilyin
@@ -2492,16 +2493,17 @@ type
     function InternalRetrieveAnswer(var Header,Encoding,AcceptEncoding, Data: SockString): integer; override;
     procedure InternalCloseRequest; override;
     procedure InternalAddHeader(const hdr: SockString); override;
-    function GetCACertFile:SockString;
-    procedure SetCACertFile(const aCertFile:SockString);
+    function GetCACertFile: SockString;
+    procedure SetCACertFile(const aCertFile: SockString);
   public
     /// returns TRUE if the class is actually supported on this system
     class function IsAvailable: boolean; override;
     /// release the connection
     destructor Destroy; override;
-
-    property CACertFile:SockString read GetCACertFile write SetCACertFile;
+    /// allow to set a CA certification file without touching the client certification
+    property CACertFile: SockString read GetCACertFile write SetCACertFile;
     /// set the client SSL certification details
+    // - see CACertFile if you don't want to change the whole client cert info
     // - used e.g. as
     // ! UseClientCertificate('testcert.pem','cacert.pem','testkey.pem','pass');
     procedure UseClientCertificate(
@@ -11510,12 +11512,12 @@ begin
   inherited;
 end;
 
-function TCurlHTTP.GetCACertFile:SockString;
+function TCurlHTTP.GetCACertFile: SockString;
 begin
   Result := fSSL.CACertFile;
 end;
 
-procedure TCurlHTTP.SetCACertFile(const aCertFile:SockString);
+procedure TCurlHTTP.SetCACertFile(const aCertFile: SockString);
 begin
   fSSL.CACertFile := aCertFile;
 end;
@@ -11558,9 +11560,8 @@ begin
         curl.easy_setopt(fHandle,coCAInfo,pointer(fSSL.CACertFile));
         curl.easy_setopt(fHandle,coSSLVerifyPeer,1);
       end
-      else if fSSL.CACertFile <> '' then begin
+      else if fSSL.CACertFile<>'' then
         curl.easy_setopt(fHandle,coCAInfo,pointer(fSSL.CACertFile));
-      end;
     end;
   curl.easy_setopt(fHandle,coUserAgent,pointer(fExtendedOptions.UserAgent));
   curl.easy_setopt(fHandle,coWriteFunction,@CurlWriteRawByteString);
