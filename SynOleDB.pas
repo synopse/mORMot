@@ -120,6 +120,8 @@ unit SynOleDB;
 
 interface
 
+{$ifdef MSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
+
 uses
   Windows,
   {$ifdef ISDELPHIXE2}System.Win.ComObj,{$else}ComObj,{$endif}
@@ -3240,4 +3242,11 @@ finalization
   if OleDBCoinitialized<>0 then
     SynDBLog.Add.Log(sllError,'Missing TOleDBConnection.Destroy call = %',
       OleDBCoInitialized);
+
+{$else}
+
+implementation
+
+{$endif MSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
+
 end.

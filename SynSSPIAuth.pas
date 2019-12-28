@@ -73,6 +73,8 @@ unit SynSSPIAuth;
 
 interface
 
+{$ifdef MSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
+
 uses
   Windows,
   SysUtils,
@@ -364,4 +366,11 @@ end;
 
 initialization
   ServerForceNTLM(False);
+
+{$else}
+
+implementation
+
+{$endif MSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
+
 end.

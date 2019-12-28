@@ -56,6 +56,8 @@ unit SynSSPI;
 
 interface
 
+{$ifdef MSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
+
 uses
   Windows,
   SysUtils;
@@ -580,5 +582,11 @@ begin
   FreeSecurityContext(fContext.CtxHandle);
   FreeCredentialsContext(fContext.CredHandle);
 end;
+
+{$else}
+
+implementation // compiles as void unit for non-Windows
+
+{$endif MSWINDOWS}
 
 end.
