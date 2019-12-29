@@ -634,6 +634,7 @@ begin
   fLock := TMutex.Create;
   fConnection := TIdHTTP.Create(nil);
   fOpaqueConnection := fConnection;
+  fConnection.UseNagle := False; 
   fConnection.HTTPOptions := fConnection.HTTPOptions+[hoKeepOrigProtocol];
   fConnection.ConnectTimeout := fParameters.ConnectionTimeOut;
   fConnection.ReadTimeout := fParameters.ReceiveTimeout;
