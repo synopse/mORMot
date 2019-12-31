@@ -5,7 +5,7 @@ unit SynLZ;
 {
     This file is part of Synopse SynLZ Compression.
 
-    Synopse SynLZ Compression. Copyright (C) 2019 Arnaud Bouchez
+    Synopse SynLZ Compression. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -24,7 +24,7 @@ unit SynLZ;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -74,7 +74,7 @@ unit SynLZ;
     under the License.
 
     The Initial Developer of the Original Code is Arnaud Bouchez.
-    This work is Copyright (C)2008-2019 Arnaud Bouchez - https://synopse.info
+    This work is Copyright (C) 2020 Arnaud Bouchez - https://synopse.info
 
     Implementation notes:
     - this format is NOT stream compatible with any lz* official format
