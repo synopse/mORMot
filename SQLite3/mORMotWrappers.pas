@@ -383,7 +383,7 @@ const
     '{"type":"object"}', //FIXME! //wRawJSON
     '{"type":"string","format":"binary"}','{"type":"string"}', //wBlob,wGUID
     '', '', '', '', //wCustomAnswer, wRecord, wArray, wVariant
-    '', '', '', '' //wObject, wSQLRecord, wInterface, wRecordVersion
+    '', SWI64, '', '' //wObject, wSQLRecord, wInterface, wRecordVersion
    ));
   TYPES_ORM: array[TSQLFieldType] of TWrapperType =
     (wUnknown,        // sftUnknown
@@ -485,7 +485,7 @@ var t,f,s,n: integer;
     hasRecord: boolean;
     fields,services: TDocVariantData;
     field,rec: variant;
-    srv: TServiceFactory;
+    srv: TServiceFactoryServer;
     uri: RawUTF8;
     source: TFileName;
     src: PChar;
@@ -553,7 +553,7 @@ begin
   // compute SOA information
   if fServer.Services.Count>0 then begin
     for s := 0 to fServer.Services.Count-1 do begin
-      srv := fServer.Services.Index(s);
+      srv := fServer.Services.Index(s) as TServiceFactoryServer;
       if fServer.Services.ExpectMangledURI then
         uri := srv.InterfaceMangledURI else
         uri := srv.InterfaceURI;
@@ -567,6 +567,12 @@ begin
           'instanceCreationName',GetEnumNameTrimed(
             TypeInfo(TServiceInstanceImplementation),InstanceCreation),
           'methods',ContextFromMethods(InterfaceFactory),
+          'bypassAuthentication',ByPassAuthentication,
+          'resultAsJSONObject',ResultAsJSONObject,
+          'resultAsJSONObjectWithoutResult',ResultAsJSONObjectWithoutResult and
+            (InstanceCreation in SERVICE_IMPLEMENTATION_NOID),
+          'resultAsXMLObject',ResultAsXMLObject,
+          'timeoutSec',TimeoutSec,
           'serviceDescription',fDescriptions.GetValueOrNull(InterfaceFactory.InterfaceName)]);
       if srv.InstanceCreation=sicClientDriven then
         rec.isClientDriven := true;
@@ -644,14 +650,19 @@ end;
 function TWrapperContext.ContextFromMethod(const meth: TServiceMethod): variant;
 const
   VERB_DELPHI: array[boolean] of string[9] = ('procedure','function');
+var d: variant;
 begin
   with meth do begin
     result := _ObjFast(['methodName',URI, 'methodIndex',ExecutionMethodIndex,
       'verb',VERB_DELPHI[ArgsResultIndex>=0],
       'args',ContextArgsFromMethod(meth),
       'argsOutputCount',ArgsOutputValuesCount]);
-    if self<>nil then // can be called as TWraperContext(nil).ContextFromMethod
-      result.methodDescription := fDescriptions.GetValueOrNull(InterfaceDotMethodName);
+    if self<>nil then  begin// can be called as TWraperContext(nil).ContextFromMethod
+      d := fDescriptions.GetValueOrNull(InterfaceDotMethodName);
+      if VarIsEmptyOrNull(d) then
+        RawUTF8ToVariant(InterfaceDotMethodName,d);
+      result.methodDescription := d;
+    end;
     if ArgsInFirst>=0 then
       result.hasInParams := true;
     if ArgsOutFirst>=0 then begin
@@ -1041,9 +1052,10 @@ begin
   // compute the Model information as JSON
   result := _ObjFast(['time',NowToString, 'year',CurrentYear,
     'mORMotVersion',SYNOPSE_FRAMEWORK_VERSION,
-    'exeVersion',ExeVersion.Version.Detailed,
-    'exeInfo',ExeVersion.ProgramFullSpec,
-    'orm',variant(fORM),
+    'exeVersion',VarStringOrNull(StringToUTF8(ExeVersion.Version.DetailedOrVoid)),
+    'exeInfo',ExeVersion.Version.VersionInfo,
+    'exeName',ExeVersion.ProgramName,
+    'hasorm',fORM.Count>0, 'orm',variant(fORM),
     'soa',fSOA]);
   if fServer<>nil then
     _ObjAddProps(['root',fServer.Model.Root],result);
