@@ -995,26 +995,31 @@ end;
 
 class procedure TSynMustache.ToJSON(const Value: variant; out result: variant);
 begin
-  RawUTF8ToVariant(JSONReformat(VariantToUTF8(Value)),result);
+  if not VarIsEmptyOrNull(Value) then
+    RawUTF8ToVariant(JSONReformat(VariantToUTF8(Value)),result);
 end;
 
 class procedure TSynMustache.JSONQuote(const Value: variant; out result: variant);
 var json: RawUTF8;
 begin
-  QuotedStrJSON(VariantToUTF8(Value),json);
-  RawUTF8ToVariant(json,result);
+  if not VarIsEmptyOrNull(Value) then // avoid to return "null"
+    VariantToUTF8(Value,json);
+  RawUTF8ToVariant(QuotedStrJSON(json),result);
 end;
 
 class procedure TSynMustache.JSONQuoteURI(const Value: variant; out result: variant);
 var json: RawUTF8;
 begin
-  QuotedStrJSON(VariantToUTF8(Value),json);
-  RawUTF8ToVariant(UrlEncode(json),result);
+  if not VarIsEmptyOrNull(Value) then // avoid to return "null"
+    VariantToUTF8(Value,json);
+  RawUTF8ToVariant(UrlEncode(QuotedStrJSON(json)),result);
 end;
 
 class procedure TSynMustache.WikiToHtml(const Value: variant; out result: variant);
 var txt: RawUTF8;
 begin
+  if VarIsEmptyOrNull(Value) then // avoid to return 'null'
+    exit;
   txt := VariantToUTF8(Value);
   if txt<>'' then
     with TTextWriter.CreateOwnedStream do
@@ -1046,6 +1051,8 @@ var tmp: RawUTF8;
     short: PUTF8Char;
 begin
   VariantToUTF8(Value,tmp,wasString);
+  if not wasString then
+    exit;
   short := TrimLeftLowerCase(tmp);
   RawUTF8ToVariant(short,StrLen(short),result);
 end;
@@ -1056,6 +1063,8 @@ var tmp: RawUTF8;
     i,L: integer;
 begin
   VariantToUTF8(Value,tmp,wasString);
+  if not wasString then
+    exit;
   L := length(tmp);
   for i := 1 to L do
     if not (tmp[i] in ['a'..'z']) then begin
