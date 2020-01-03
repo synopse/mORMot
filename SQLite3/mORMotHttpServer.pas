@@ -966,7 +966,7 @@ begin
     end;
     if fHosts.Count>0 then begin
       hostroot := FindIniNameValue(pointer(Ctxt.InHeaders),'HOST: ');
-      i := PosEx(':',hostroot);
+      i := PosExChar(':',hostroot);
       if i>0 then
         SetLength(hostroot,i-1); // trim any port
       if hostroot<>'' then // e.g. 'Host: project1.com' -> 'root1'
@@ -978,9 +978,9 @@ begin
         if Ctxt.URL[1]='/' then
           call.Url := hostroot+Ctxt.URL else
           call.Url := hostroot+'/'+Ctxt.URL else
-      if Ctxt.URL[1]='/' then
-        call.Url := copy(Ctxt.URL,2,maxInt) else
-        call.Url := Ctxt.URL;
+      if (Ctxt.URL<>'') and (Ctxt.URL[1]='/') then
+          call.Url := copy(Ctxt.URL,2,maxInt) else
+          call.Url := Ctxt.URL;
     // search and call any matching TSQLRestServer instance
     result := HTTP_NOTFOUND; // page not found by default (in case of wrong URL)
     serv := nil;
