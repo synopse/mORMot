@@ -1406,12 +1406,14 @@ function VariantCompareI(const V1,V2: variant): PtrInt;
 /// convert any Variant into UTF-8 encoded String
 // - use VariantSaveJSON() instead if you need a conversion to JSON with
 // custom parameters
+// - note: null will be returned as 'null'
 function VariantToUTF8(const V: Variant): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any Variant into UTF-8 encoded String
 // - use VariantSaveJSON() instead if you need a conversion to JSON with
 // custom parameters
+// - note: null will be returned as 'null'
 function ToUTF8(const V: Variant): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -13137,7 +13139,7 @@ type
     function DetailedOrVoid: string;
     /// returns the version information of this exe file as text
     // - includes FileName (without path), Detailed and BuildDateTime properties
-    // - e.g. 'myprogram.exe 3.1.0.123 2016-06-14 19:07:55'
+    // - e.g. 'myprogram.exe 3.1.0.123 (2016-06-14 19:07:55)'
     function VersionInfo: RawUTF8;
     /// returns a ready-to-use User-Agent header with exe name, version and OS
     // - e.g. 'myprogram/3.1.0.123W32' for myprogram running on Win32
@@ -13485,7 +13487,7 @@ type
     // - e.g. 'Test' for 'c:\pathto\Test.exe'
     ProgramName: RawUTF8;
     /// the main executable details, as used e.g. by TSynLog
-    // - e.g. 'C:\Dev\lib\SQLite3\exe\TestSQL3.exe 0.0.0.0 (2011-03-29 11:09:06)'
+    // - e.g. 'C:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.123 (2011-03-29 11:09:06)'
     ProgramFullSpec: RawUTF8;
     /// the main executable file name (including full path)
     // - same as paramstr(0)
@@ -39292,14 +39294,14 @@ end;
 
 function TFileVersion.DetailedOrVoid: string;
 begin
-  if (self=nil) or (fDetailed='0.0.0.0') then
+  if (self=nil) or (Major or Minor or Release or Build=0) then
     result := '' else
     result := fDetailed;
 end;
 
 function TFileVersion.VersionInfo: RawUTF8;
 begin
-  FormatUTF8('% % %',[ExtractFileName(fFileName),fDetailed,BuildDateTimeString],result);
+  FormatUTF8('% % (%)',[ExtractFileName(fFileName),DetailedOrVoid,BuildDateTimeString],result);
 end;
 
 function TFileVersion.UserAgent: RawUTF8;
