@@ -42804,7 +42804,7 @@ begin
               Ctxt.Error(E,'',[],HTTP_SERVERERROR);
       end;
     end;
-    // 4. returns expected result to the client and update Server statistics
+    // 4. return expected result to the client and update Server statistics
     if StatusCodeIsSuccess(Call.OutStatus) then begin
       outcomingfile := false;
       if Call.OutBody<>'' then begin
