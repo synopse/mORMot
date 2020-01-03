@@ -878,6 +878,59 @@ begin
   end;
 end;
 
+/// convert passed string into buffer. Buffer data will be in code page cp
+function cpFrom(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+var
+  encoding: Cardinal;
+  tmp: RawByteString;
+  uStr: RawUTF8;
+  convertor: TSynAnsiConvert;
+
+  _str: PJSString;
+
+  buf: PJSRootedObject;
+  bufData: Pointer;
+  proto: PJSRootedObject;
+  val: jsval;
+const
+  sInvalidCall = 'usage: cpFrom(str: String, encoding: Integer)';
+begin
+  try
+    Result := True;
+
+    if (argc < 2) or (not vp.argv^[0].isString) or (not vp.argv^[1].isNumber) then
+      raise ESMException.Create(sInvalidCall);
+    encoding := vp.argv^[1].asInteger;
+    convertor := TSynAnsiConvert.Engine(encoding);
+    if convertor = nil then
+      raise ESMException.Create('Invalid or unknown code page');
+    _str := vp.argv[0].asJSString;
+    uStr := _str.ToUTF8(cx);
+    tmp := convertor.UTF8ToAnsi(uStr);
+    proto := cx.NewRootedObject(vp.thisObject[cx].ReservedSlot[0].asObject.Ctor[cx]);
+    try
+      val.asInteger := length(tmp);
+      buf := cx.NewRootedObject(cx.New(proto.ptr, 1, @val));
+      try
+        bufData := buf.ptr.GetUint8ArrayData;
+        vp.rval := buf.ptr.ToJSValue;
+      finally
+        cx.FreeRootedObject(buf);
+      end;
+      MoveFast(pointer(tmp)^, bufData^, length(tmp));
+    finally
+      cx.FreeRootedObject(proto);
+    end;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+end;
+
 function byteLengthUtf8(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
   in_argv: PjsvalVector;
@@ -1836,20 +1889,21 @@ begin
   obj := cx.NewRootedObject(cx.NewObject(@BufferBinding_class));
 
   obj.ptr.DefineFunction(cx, 'setupBufferJS', setupBufferJS, 0, props);
-  obj.ptr.DefineFunction(cx, 'createFromString', createFromString, 0, props);
+  obj.ptr.DefineFunction(cx, 'createFromString', createFromString, 2, props);
+  obj.ptr.DefineFunction(cx, 'cpFrom', cpFrom, 2, props);
 
-  obj.ptr.DefineFunction(cx, 'byteLengthUtf8', byteLengthUtf8, 0, props);
-  obj.ptr.DefineFunction(cx, 'compare', compare, 0, props);
+  obj.ptr.DefineFunction(cx, 'byteLengthUtf8', byteLengthUtf8, 1, props);
+  obj.ptr.DefineFunction(cx, 'compare', compare, 2, props);
   obj.ptr.DefineFunction(cx, 'compareOffset', compareOffset, 0, props);
   obj.ptr.DefineFunction(cx, 'fill', fill, 0, props);
   obj.ptr.DefineFunction(cx, 'indexOfBuffer', indexOfBuffer, 0, props);
   obj.ptr.DefineFunction(cx, 'indexOfNumber', indexOfNumber, 0, props);
   obj.ptr.DefineFunction(cx, 'indexOfString', indexOfString, 0, props);
 
-  obj.ptr.DefineFunction(cx, 'readDoubleBE', readDoubleBE, 0, props);
-  obj.ptr.DefineFunction(cx, 'readDoubleLE', readDoubleLE, 0, props);
-  obj.ptr.DefineFunction(cx, 'readFloatBE', readFloatBE, 0, props);
-  obj.ptr.DefineFunction(cx, 'readFloatLE', readFloatLE, 0, props);
+  obj.ptr.DefineFunction(cx, 'readDoubleBE', readDoubleBE, 2, props);
+  obj.ptr.DefineFunction(cx, 'readDoubleLE', readDoubleLE, 2, props);
+  obj.ptr.DefineFunction(cx, 'readFloatBE', readFloatBE, 2, props);
+  obj.ptr.DefineFunction(cx, 'readFloatLE', readFloatLE, 2, props);
 
   obj.ptr.DefineFunction(cx, 'writeDoubleBE', writeDoubleBE, 0, props);
   obj.ptr.DefineFunction(cx, 'writeDoubleLE', writeDoubleLE, 0, props);
