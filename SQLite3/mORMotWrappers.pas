@@ -1286,7 +1286,7 @@ begin
   end else begin
     SetLength(SearchPath,length(Path));
     for i := 0 to high(Path) do
-      SearchPath[i] := Path[i];
+      SearchPath[i] := ExpandFileName(Path[i]); // also convert \ if needed on FPC
   end;
 end;
 
