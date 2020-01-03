@@ -3102,7 +3102,11 @@ procedure QuotedStr(const S: RawUTF8; Quote: AnsiChar; var result: RawUTF8); ove
 /// convert a buffered text content into a JSON string
 // - with proper escaping of the content, and surounding " characters
 procedure QuotedStrJSON(const aText: RawUTF8; var result: RawUTF8;
-  const aPrefix: RawUTF8=''; const aSuffix: RawUTF8='');
+  const aPrefix: RawUTF8=''; const aSuffix: RawUTF8=''); overload;
+
+/// convert a buffered text content into a JSON string
+// - with proper escaping of the content, and surounding " characters
+function QuotedStrJSON(const aText: RawUTF8): RawUTF8; overload; {$ifdef HASINLINE}inline;{$endif}
 
 /// unquote a SQL-compatible string
 // - the first character in P^ must be either ' or " then internal double quotes
@@ -13765,6 +13769,9 @@ function VarDataIsEmptyOrNull(VarData: pointer): Boolean;
 // - any other value (e.g. integer) would be considered as not void
 function VarIsVoid(const V: Variant): boolean;
 
+/// returns a supplied string as variant, or null if v is void ('')
+function VarStringOrNull(const v: RawUTF8): variant;
+
 type
   TVarDataTypes = set of 0..255;
 
@@ -23022,6 +23029,11 @@ begin
       Free;
     end else
     result := aPrefix+'"'+aText+'"'+aSuffix;
+end;
+
+function QuotedStrJSON(const aText: RawUTF8): RawUTF8;
+begin
+  QuotedStrJSON(aText,result,'','');
 end;
 
 function GotoEndOfJSONString(P: PUTF8Char): PUTF8Char;
@@ -44113,6 +44125,12 @@ begin
     end;
 end;
 
+function VarStringOrNull(const v: RawUTF8): variant;
+begin
+  if v='' then
+    SetVariantNull(result) else
+    RawUTF8ToVariant(v,result);
+end;
 
 {$ifndef NOVARIANTS}
 
