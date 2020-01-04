@@ -2,30 +2,36 @@
  * HTTP client.
  * @example
  *
- var http = require('http');
- var request = http.request({
+ const http = require('http')
+ let request = http.request({
     //alternative to host/port/path is
-    //URL: 'http://localhost:888/getAppInfo',
+    //URL: 'http://localhost:8881/getAppInfo',
     host: 'localhost', port: '80', path: '/getAppInfo',
     method: 'POST',
     sendTimeout: 30000, receiveTimeout: 30000,
     keepAlive: true,
     compressionEnable: true
- });
- request.write('Add string to response');
- var fileContent = fs.readFileSync('d:\binaryFile.txt'); // return ArrayBuffer, since encoding not passed
- request.write(fileContent, 'base64'); // write file content as base64 encoded string
- var response = request.end();
+ })
+ const fileContent = fs.readFileSync('d:\binaryFile.txt') // return ArrayBuffer, since encoding not passed
+ // in case of multiple request to the same host better to reuse existed request (up to x30 times faster)
+ for (let i = 0; i < 100; i++) {
+   request.setPath(`/getAppInfo?nc=${i}`)
+   request.write('Add string to response')
+   request.write(fileContent, 'base64') // write file content as base64 encoded string
+   let response = request.end()
+   console.log(response.statusCode)
+ }
 
- var http = require('http');
- var assert = require('assert');
- var DOMParser = require('xmldom').DOMParser;
+
+ const http = require('http')
+ const assert = require('assert')
+ const DOMParser = require('xmldom').DOMParser
  // set global proxy settings if client is behind a proxy
  // http.setGlobalProxyConfiguration('proxy.main:3249', 'localhost');
- var resp = http.get('https://synopse.info/fossil/wiki/Synopse+OpenSource');
+ let resp = http.get('https://synopse.info/fossil/wiki/Synopse+OpenSource')
  // check we are actually behind a proxy
  // assert.ok(resp.headers('via').startsWith('1.1 proxy.main'), 'proxy used');
- var index = resp.read();
+ let index = resp.read()
  console.log(index);
  // var doc = new DOMParser().parseFromString(index);
  // assert.ok(doc.documentElement.textContent.startsWith('mORMot'), 'got mORMot from mORMot');
@@ -122,19 +128,16 @@ exports.setGlobalConnectionDefaults = function setGlobalConnectionDefaults (defa
  * @return {ClientRequest}
  */
 exports.request = function request (options) {
-  var
-        parsedURL
   if (typeof options === 'string') {
     options = url.parse(options)
     options.host = options.hostname
   } else if (options.URL) {
-    parsedURL = url.parse(options.URL)
+    let parsedURL = url.parse(options.URL)
     Object.assign(options, parsedURL)
     options.host = options.hostname
   } else if (options.server) {
-    var host_port = options.server.split(':')
+    let host_port = options.server.split(':')
     options.host = host_port[0]
-
     options.port = host_port[1]
   }
   if (!options.host) {
@@ -160,7 +163,7 @@ exports.request = function request (options) {
   options.method = options.method || 'GET'
   return new ClientRequest(options)
 }
-var request = exports.request
+const request = exports.request
 
 function forEachSorted (obj, iterator, context) {
   var keys = Object.keys(obj).sort()
@@ -183,7 +186,7 @@ exports.buildURL = function buildURL (url, params) {
   if (!params) {
     return url
   }
-  var parts = []
+  let parts = []
   forEachSorted(params, function (value, key) {
     if (value == null) {
       return
@@ -202,7 +205,7 @@ exports.buildURL = function buildURL (url, params) {
   return url + ((url.indexOf('?') == -1) ? '?' : '&') + parts.join('&')
 }
 
-var buildUrl = exports.buildURL
+const buildUrl = exports.buildURL
 
 /**
  * Since most requests are GET requests without bodies, we provides this convenience method.
@@ -247,7 +250,7 @@ function ClientRequest (options) {
     )
   _http.keepAlive = options.keepAlive ? 1 : 0
 
-    // add EventEmitter to process object
+  // add EventEmitter for nodeJS compatibility
   EventEmitter.call(this)
   util._extend(this, EventEmitter.prototype)
 
@@ -303,8 +306,8 @@ ClientRequest.prototype.end = function (data, encoding) {
   }
   let msg = new IncomingMessage(_http)
   if (!this.emit('response', msg) ||
-        !msg.emit('data', new Buffer(msg.read(msg.encoding === 'binary' ? 'bin' : msg.encoding === 'utf8' ? 'utf-8' : msg.encoding)).toString(msg.encoding)) ||
-        !msg.emit('end')) {
+    (msg.listenerCount('data') && !msg.emit('data', new Buffer(msg.read(msg.encoding === 'binary' ? 'bin' : msg.encoding === 'utf8' ? 'utf-8' : msg.encoding)).toString(msg.encoding))) ||
+    !msg.emit('end')) {
     return msg
   }
 }
@@ -420,16 +423,13 @@ IncomingMessage.prototype.read = function (encoding) {
  * @private
  */
 IncomingMessage.prototype.__doParseHeaders = function () {
-  var
-        h, hObj, hPart
-
   if (!this._parsedHeaders) {
-    h = this._http.responseHeaders.split(CRLF)
-    hObj = {}
+    let h = this._http.responseHeaders.split(CRLF)
+    let hObj = {}
     h.forEach(function (header) {
       if (header) {
-        hPart = header.split(': ', 2)
-        if (hPart.length = 2) { hObj[hPart[0].toLowerCase()] = hPart[1] }
+        let hPart = header.split(': ', 2)
+        if (hPart.length === 2) { hObj[hPart[0].toLowerCase()] = hPart[1] }
       }
     })
     this._parsedHeaders = hObj

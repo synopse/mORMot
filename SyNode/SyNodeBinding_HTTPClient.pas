@@ -46,7 +46,6 @@ type
     function writeEnd(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;
     function read(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;
 
-    //function doRequest(const URL: RawUTF8; const ContentType: RawUTF8 = ''): boolean;
     function doRequest(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;
 
     property method: RawUTF8 read FMethod write FMethod;
@@ -146,7 +145,6 @@ begin
   inherited Destroy;
 end;
 
-//function THTTPClient.doRequest(const URL: RawUTF8; const ContentType: RawUTF8 = ''): boolean;
 function THTTPClient.doRequest(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;
 var
   URL: SockString;
@@ -188,12 +186,6 @@ begin
     end;
   end;
 end;
-
-//function THTTPClient.request(const URL, data: RawUTF8): boolean;
-//begin
-//  FInData := data;
-//  Result := doRequest(URL);
-//end;
 
 function THTTPClient.sendFile(const URL: RawUTF8; aFileName: string): boolean;
 var
