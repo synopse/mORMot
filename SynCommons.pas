@@ -7907,8 +7907,8 @@ type
   /// class of our simple writer to a Stream, specialized for the TEXT format
   TTextWriterClass = class of TTextWriter;
 
-  /// the potential places were TTextWriter.HtmlEscape should process
-  // proper HTML string escaping
+  /// the potential places were TTextWriter.AddHtmlEscape should process
+  // proper HTML string escaping, unless hfNone is used
   // $  < > & "  ->   &lt; &gt; &amp; &quote;
   // by default (hfAnyWhere)
   // $  < > &  ->   &lt; &gt; &amp;
@@ -7916,7 +7916,7 @@ type
   // $  & "  ->   &amp; &quote;
   // within HTML attributes (hfWithinAttributes)
   TTextWriterHTMLFormat = (
-    hfAnyWhere, hfOutsideAttributes, hfWithinAttributes);
+    hfNone, hfAnyWhere, hfOutsideAttributes, hfWithinAttributes);
 
   /// available global options for a TTextWriter instance
   // - TTextWriter.WriteObject() method behavior would be set via their own
@@ -8089,6 +8089,8 @@ type
 
     /// append one ASCII char to the buffer
     procedure Add(c: AnsiChar); overload; {$ifdef HASINLINE}inline;{$endif}
+    /// append one ASCII char to the buffer, if not already there as LastChar
+    procedure AddOnce(c: AnsiChar); overload; {$ifdef HASINLINE}inline;{$endif}
     /// append two chars to the buffer
     procedure Add(c1,c2: AnsiChar); overload; {$ifdef HASINLINE}inline;{$endif}
     {$ifndef CPU64} // already implemented by Add(Value: PtrInt) method
@@ -8345,9 +8347,22 @@ type
     procedure AddHtmlEscapeUTF8(const Text: RawUTF8;
       Fmt: TTextWriterHTMLFormat=hfAnyWhere);
     /// convert some wiki-like text into proper HTML
-    // - convert all #13#10 into <p>...</p>, *..* into <i>..</i> and +..+ into
-    // <b>..</b>, then escape http:// as <a href=...> and any HTML special chars
-    procedure AddHtmlEscapeWiki(P: PUTF8Char);
+    // - convert all #13#10 into <p>...</p>, *..* into <em>..</em>, +..+ into
+    // <strong>..</strong>, `...` into <code>...</code>, escape http:// as
+    // <a href=...>; then escape any HTML special chars as specified with esc
+    procedure AddHtmlEscapeWiki(P: PUTF8Char; esc: TTextWriterHTMLFormat=hfOutsideAttributes);
+    /// convert minimal Markdown text into proper HTML
+    // - see https://enterprise.github.com/downloads/en/markdown-cheatsheet.pdf
+    // - convert all #13#10 into <p>...</p>, *..* into <em>..</em>, **..** into
+    // <strong>..</strong>, `...` into <code>...</code>, backslash espaces \\
+    // \* \_ and so on, [title](http://...) and detect plain http:// as
+    // <a href=...>
+    // - create unordered lists from trailing * + - chars, blockquotes from
+    // trailing > char, and code line from 4 initial spaces
+    // - as with default Markdown, won't escape HTML special chars (i.e. you can
+    // write plain HTML in the supplied text) unless esc is set otherwise
+    // - only inline-style links and images are supported yet (not reference-style)
+    procedure AddHtmlEscapeMarkdown(P: PUTF8Char; esc: TTextWriterHTMLFormat=hfNone);
     /// append some chars, escaping all XML special chars as expected
     // - i.e.   < > & " '  as   &lt; &gt; &amp; &quote; &apos;
     // - and all control chars (i.e. #1..#31) as &#..;
@@ -11086,6 +11101,14 @@ function ByteToHex(P: PAnsiChar; Value: byte): PAnsiChar;
 // - ensure the destination buffer contains at least max*3+3 bytes, which is
 // always the case when using LogEscape() and its local TLogEscape variable
 function EscapeBuffer(s,d: PAnsiChar; len,max: integer): PAnsiChar;
+
+/// escape some wiki-marked text into HTML
+// - follow TTextWriter.AddHtmlEscapeWiki syntax
+function HtmlEscapeWiki(const wiki: RawUTF8; esc: TTextWriterHTMLFormat=hfOutsideAttributes): RawUTF8;
+
+/// escape some Markdown-marked text into HTML
+// - follow TTextWriter.AddHtmlEscapeMarkdown syntax
+function HtmlEscapeMarkdown(const md: RawUTF8; esc: TTextWriterHTMLFormat=hfNone): RawUTF8;
 
 const
   /// maximum size, in bytes, of a TLogEscape / LogEscape() buffer
@@ -52008,6 +52031,16 @@ begin
   inc(B);
 end;
 
+procedure TTextWriter.AddOnce(c: AnsiChar);
+begin
+  if (B>=fTempBuf) and (B^=c) then
+    exit; // no duplicate
+  if B>=BEnd then
+    FlushToStream;
+  B[1] := c;
+  inc(B);
+end;
+
 procedure TTextWriter.Add(c1, c2: AnsiChar);
 begin
   if BEnd-B<=1 then
@@ -53473,86 +53506,65 @@ begin
   inc(B);
 end;
 
+const
+  HTML_ESC: array[hfAnyWhere..high(TTextWriterHTMLFormat)] of TSynAnsicharSet = (
+    [#0,'&','"','<','>'],[#0,'&','<','>'],[#0,'&','"']);
+
 procedure TTextWriter.AddHtmlEscape(Text: PUTF8Char; Fmt: TTextWriterHTMLFormat);
-var i,beg: PtrInt;
+var B: PUTF8Char;
+    esc: ^TSynAnsicharSet;
 begin
   if Text=nil then
     exit;
-  i := 0;
+  if Fmt=hfNone then begin
+    AddNoJSONEscape(Text);
+    exit;
+  end;
+  esc := @HTML_ESC[Fmt];
   repeat
-    beg := i;
-    case Fmt of
-    hfAnyWhere:
-      while true do
-        if Text[i] in [#0,'&','"','<','>'] then
-          break else
-          inc(i);
-    hfOutsideAttributes:
-      while true do
-        if Text[i] in [#0,'&','<','>'] then
-          break else
-          inc(i);
-    hfWithinAttributes:
-      while true do
-        if Text[i] in [#0,'&','"'] then
-          break else
-          inc(i);
+    B := Text;
+    while not(Text^ in esc^) do
+      inc(Text);
+    AddNoJSONEscape(B,Text-B);
+    case Text^ of
+    #0: exit;
+    '<': AddShort('&lt;');
+    '>': AddShort('&gt;');
+    '&': AddShort('&amp;');
+    '"': AddShort('&quot;');
     end;
-    AddNoJSONEscape(Text+beg,i-beg);
-    repeat
-      case Text[i] of
-      #0: exit;
-      '<': AddShort('&lt;');
-      '>': AddShort('&gt;');
-      '&': AddShort('&amp;');
-      '"': AddShort('&quot;');
-      else break;
-      end;
-      inc(i);
-    until false;
-  until false;
+    inc(Text);
+  until Text^=#0;
 end;
 
 procedure TTextWriter.AddHtmlEscape(Text: PUTF8Char; TextLen: PtrInt;
   Fmt: TTextWriterHTMLFormat);
-var i,beg: PtrInt;
+var B: PUTF8Char;
+    esc: ^TSynAnsicharSet;
 begin
   if (Text=nil) or (TextLen<=0) then
     exit;
-  i := 0;
+  if Fmt=hfNone then begin
+    AddNoJSONEscape(Text,TextLen);
+    exit;
+  end;
+  inc(TextLen,PtrInt(Text)); // TextLen = final PtrInt(Text)
+  esc := @HTML_ESC[Fmt];
   repeat
-    beg := i;
-    case Fmt of
-    hfAnyWhere:
-      while i<TextLen do
-        if Text[i] in [#0,'&','"','<','>'] then
-          break else
-          inc(i);
-    hfOutsideAttributes:
-      while i<TextLen do
-        if Text[i] in [#0,'&','<','>'] then
-          break else
-          inc(i);
-    hfWithinAttributes:
-      while i<TextLen do
-        if Text[i] in [#0,'&','"'] then
-          break else
-          inc(i);
+    B := Text;
+    while (PtrInt(Text)<TextLen) and not(Text^ in esc^) do
+      inc(Text);
+    AddNoJSONEscape(B,Text-B);
+    if PtrInt(Text)=TextLen then
+      exit;
+    case Text^ of
+    #0: exit;
+    '<': AddShort('&lt;');
+    '>': AddShort('&gt;');
+    '&': AddShort('&amp;');
+    '"': AddShort('&quot;');
     end;
-    AddNoJSONEscape(Text+beg,i-beg);
-    repeat
-      if i=TextLen then
-        exit;
-      case Text[i] of
-      #0: exit;
-      '<': AddShort('&lt;');
-      '>': AddShort('&gt;');
-      '&': AddShort('&amp;');
-      '"': AddShort('&quot;');
-      else break;
-      end;
-      inc(i);
-    until false;
+    inc(Text);
   until false;
 end;
 
@@ -53566,62 +53578,316 @@ begin
   AddHtmlEscape(pointer(Text),length(Text),Fmt);
 end;
 
-procedure TTextWriter.AddHtmlEscapeWiki(P: PUTF8Char);
-var B: PUTF8Char;
-    bold,italic: boolean;
-  procedure Toggle(var value: Boolean; HtmlChar: AnsiChar);
-  begin
-    Add('<');
-    if value then
-      Add('/');
-    Add(HtmlChar,'>');
-    value := not value;
+type
+  TTextWriterEscapeStyle = (tweBold,tweItalic,tweCode);
+  TTextWriterEscapeLineStyle = (
+    twlNone,twlParagraph,twlOrderedList,twlUnorderedList,twlBlockquote,twlCode4,twlCode3);
+  TTextWriterEscape = object
+    P,B,P2,B2: PUTF8Char;
+    W: TTextWriter;
+    fmt: TTextWriterHTMLFormat;
+    st: set of TTextWriterEscapeStyle;
+    lst: TTextWriterEscapeLineStyle;
+    procedure Start(dest: TTextWriter; src: PUTF8Char; esc: TTextWriterHTMLFormat);
+    function ProcessText(const stopchars: TSynByteSet): AnsiChar;
+    procedure ProcessHRef;
+    function ProcessLink: boolean;
+    procedure Toggle(style: TTextWriterEscapeStyle);
+    procedure SetLine(style: TTextWriterEscapeLineStyle);
+    procedure EndOfParagraph;
+    procedure NewMarkdownLine;
+    procedure AddHtmlEscapeWiki(dest: TTextWriter; src: PUTF8Char; esc: TTextWriterHTMLFormat);
+    procedure AddHtmlEscapeMarkdown(dest: TTextWriter; src: PUTF8Char; esc: TTextWriterHTMLFormat);
   end;
-  procedure EndOfParagraph;
-  begin
-    if bold then
-      Toggle(bold,'B');
-    if italic then
-      Toggle(italic,'I');
-    AddShort('</p>');
-  end;
+
+procedure TTextWriterEscape.Start(dest: TTextWriter; src: PUTF8Char; esc: TTextWriterHTMLFormat);
 begin
-  bold := false;
-  italic := false;
-  AddShort('<p>');
+  P := src;
+  W := dest;
+  fmt := esc;
+  st := [];
+  lst := twlNone;
+end;
+
+function IsHttpOrHttps(P: PUTF8Char): boolean; {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := (PCardinal(P)^=ord('h')+ord('t')shl 8+ord('t') shl 16+ord('p')shl 24) and
+   ((PCardinal(P+4)^ and $ffffff=ord(':')+ord('/')shl 8+ord('/') shl 16) or
+    (PCardinal(P+4)^=ord('s')+ord(':')shl 8+ord('/') shl 16+ord('/')shl 24));
+end;
+
+function TTextWriterEscape.ProcessText(const stopchars: TSynByteSet): AnsiChar;
+begin
+  if P=nil then begin
+    result := #0;
+    exit;
+  end;
+  B := P;
+  while not(ord(P^) in stopchars) and not IsHttpOrHttps(P) do
+    inc(P);
+  W.AddHtmlEscape(B,P-B,fmt);
+  result := P^;
+end;
+
+procedure TTextWriterEscape.ProcessHRef;
+begin
+  B := P;
+  while P^>' ' do inc(P);
+  W.AddShort('<a href="');
+  W.AddHtmlEscape(B,P-B,hfWithinAttributes);
+  W.AddShort('" rel="nofollow">');
+  W.AddHtmlEscape(B,P-B);
+  W.AddShort('</a>');
+end;
+
+function TTextWriterEscape.ProcessLink: boolean;
+begin
+  inc(P);
+  B2 := P;
+  while not (P^ in [#0,']']) do inc(P);
+  P2 := P;
+  if PWord(P)^=ord(']')+ord('(')shl 8 then begin
+    inc(P,2);
+    B := P;
+    while not (P^ in [#0,')']) do inc(P);
+    if P^=')' then begin // [GitHub](https://github.com)
+      result := true;
+      exit;
+    end;
+  end;
+  P := B2; // rollback
+  result := false;
+end;
+
+procedure TTextWriterEscape.Toggle(style: TTextWriterEscapeStyle);
+const HTML: array[tweBold..tweCode] of string[7] = ('strong>','em>','code>');
+begin
+  W.Add('<');
+  if style in st then begin
+    W.Add('/');
+    exclude(st,style);
+  end else
+    include(st,style);
+  W.AddShort(HTML[style]);
+end;
+
+procedure TTextWriterEscape.EndOfParagraph;
+begin
+  if tweBold in st then
+    Toggle(tweBold);
+  if tweItalic in st then
+    Toggle(tweItalic);
   if P<>nil then
-    repeat
-      B := P;
-      while not (ord(P^) in [0,13,10,ord('*'),ord('+')]) do
-        if (P^='h') and IdemPChar(P+1,'TTP://') then
-          break else
-          inc(P);
-      AddHtmlEscape(B,P-B,hfOutsideAttributes);
-      case ord(P^) of
-      0: break;
-      10,13: begin
-        EndOfParagraph;
-        AddShort('<p>');
-        while P[1] in [#10,#13] do inc(P);
-      end;
-      ord('*'):
-        Toggle(italic,'I');
-      ord('+'):
-        Toggle(bold,'B');
-      ord('h'): begin
-        B := P;
-        while P^>' ' do inc(P);
-        AddShort('<a href=');
-        AddHtmlEscape(B,P-B);
-        Add('>');
-        AddHtmlEscape(B,P-B);
-        AddShort('</a>');
-        continue;
-      end;
-      end;
+    if PWord(P)^=$0a0d then
+      inc(P,2) else
       inc(P);
-    until P^=#0;
+end;
+
+procedure TTextWriterEscape.SetLine(style: TTextWriterEscapeLineStyle);
+const HTML: array[twlParagraph..twlCode3] of string[5] = ('p>','li>','li>','p>','code>','code>');
+      HTML2: array[twlOrderedList..twlCode3] of string[11] = ('ol>','ul>','blockquote>','pre>','pre>');
+begin
+  if lst>=low(HTML) then begin
+    if (lst<twlCode4) or (lst<>style) then begin
+      W.Add('<','/');
+      W.AddShort(HTML[lst]);
+    end;
+    if (lst>=low(HTML2)) and (lst<>style) then begin
+      W.Add('<','/');
+      W.AddShort(HTML2[lst]);
+    end;
+  end;
+  if style>=low(HTML) then begin
+    if (style>=low(HTML2)) and (lst<>style) then begin
+      W.Add('<');
+      W.AddShort(HTML2[style]);
+    end;
+    if (style<twlCode4) or (lst<>style) then begin
+      W.Add('<');
+      W.AddShort(HTML[style]);
+    end;
+  end;
+  lst := style;
+end;
+
+procedure TTextWriterEscape.NewMarkdownLine;
+label none;
+var c: cardinal;
+begin
+  if P=nil then
+    exit;
+  c := PCardinal(P)^;
+  if c and $ffffff=ord('`')+ord('`')shl 8+ord('`')shl 16 then begin
+    inc(P,3);
+    if lst=twlCode3 then begin
+      lst := twlCode4; // to close </code></pre>
+      NewMarkdownLine;
+      exit;
+    end;
+    SetLine(twlCode3);
+  end;
+  if lst=twlCode3 then
+    exit; // no prefix process within ``` code blocks
+  if c=$20202020 then begin
+    SetLine(twlCode4);
+    inc(P,4);
+    exit;
+  end;
+  P := GotoNextNotSpaceSameLine(P); // don't implement nested levels yet
+  case P^ of
+    '*','+','-':
+      if P[1]=' ' then
+        SetLine(twlUnorderedList) else
+        goto none;
+    '1'..'9': begin // first should be 1. then any ##. number to continue
+      B := P;
+      repeat inc(P) until not (P^ in ['0'..'9']);
+      if (P^='.') and ((lst=twlOrderedList) or (PWord(B)^=ord('1')+ord('.')shl 8)) then
+        SetLine(twlOrderedList) else begin
+        P := B;
+none:   if lst=twlParagraph then begin
+          c := PWord(P)^; // detect blank line to separate paragraphs
+          if c=$0a0d then
+            inc(P,2) else
+          if c and $ff=$0a then
+            inc(P) else begin
+            W.AddOnce(' ');
+            exit;
+          end;
+        end;
+        SetLine(twlParagraph);
+        exit;
+      end;
+    end;
+    '>':
+      if P[1]=' ' then
+        SetLine(twlBlockquote) else
+        goto none;
+    else
+      goto none;
+  end;
+  P := GotoNextNotSpaceSameLine(P+1);
+end;
+
+procedure TTextWriterEscape.AddHtmlEscapeWiki(dest: TTextWriter; src: PUTF8Char;
+  esc: TTextWriterHTMLFormat);
+begin
+  Start(dest,src,esc);
+  SetLine(twlParagraph);
+  repeat
+    case ProcessText([0,10,13,ord('*'),ord('+'),ord('`'),ord('\')]) of
+    #0: break;
+    #10,#13: begin
+      EndOfParagraph;
+      SetLine(twlParagraph);
+      continue;
+    end;
+    '\': if P[1] in ['\','`','*','+'] then begin
+        inc(P);
+        W.Add(P^);
+      end else
+        W.Add('\');
+    '*':
+      Toggle(tweItalic);
+    '+':
+      Toggle(tweBold);
+    '`':
+      Toggle(tweCode);
+    'h': begin
+      ProcessHRef;
+      continue;
+    end;
+    end;
+    inc(P);
+  until false;
   EndOfParagraph;
+  SetLine(twlNone);
+end;
+
+procedure TTextWriterEscape.AddHtmlEscapeMarkdown(dest: TTextWriter;
+  src: PUTF8Char; esc: TTextWriterHTMLFormat);
+begin
+  Start(dest,src,esc);
+  NewMarkDownLine;
+  repeat
+    if lst>=twlCode4 then // no Markdown tags within code blocks
+      if ProcessText([0,10,13])=#0 then
+        break else begin
+        if PWord(P)^=$0a0d then
+          inc(P,2) else
+          inc(P);
+        W.AddCR; // keep LF within <pre>
+        NewMarkdownLine;
+        continue;
+      end else
+    case ProcessText([0,10,13,ord('*'),ord('_'),ord('`'),ord('\'),ord('['),ord('!')]) of
+    #0: break;
+    #10,#13: begin
+      EndOfParagraph;
+      NewMarkdownLine;
+      continue;
+    end;
+    '\': if P[1] in ['\','`','*','_','[',']','{','}','(',')','#','+','-','.','!'] then begin
+      inc(P);
+      W.Add(P^); // backslash escape
+    end else
+      W.Add('\');
+    '*','_':
+      if P[1]=P[0] then begin
+        inc(P); // **This text will be bold** or __This text will be bold__
+        Toggle(tweBold);
+      end else  // *This text will be italic* or _This text will be italic_
+        Toggle(tweItalic);
+    '`':
+      Toggle(tweCode);  // `This text will be code`
+    '[':
+       if ProcessLink then begin // [GitHub](https://github.com)
+         W.AddShort('<a href="');
+         W.AddHtmlEscape(B,P-B,hfWithinAttributes);
+         if IsHttpOrHttps(B) then
+           W.AddShort('" rel="nofollow">') else
+           W.Add('"','>');
+         W.AddHtmlEscape(B2,P2-B2,fmt);
+         W.AddShort('</a>'); // no continune -> need inc(P) over ending )
+       end else
+         W.Add('['); // not a true link -> just append
+    '!': begin
+      if P[1]='[' then begin
+       inc(P);
+       if ProcessLink then begin
+         W.AddShort('<img alt="');
+         W.AddHtmlEscape(B2,P2-B2,hfWithinAttributes);
+         W.AddShort('" src="');
+         W.AddNoJSONEscape(B,P-B);
+         W.AddShort('">');
+         inc(P);
+         continue;
+       end;
+       dec(P);
+      end;
+      W.Add('!'); // not a true image
+    end;
+    'h': begin
+      ProcessHRef;
+      continue;
+    end;
+    end;
+    inc(P);
+  until false;
+  EndOfParagraph;
+  SetLine(twlNone);
+end;
+
+procedure TTextWriter.AddHtmlEscapeWiki(P: PUTF8Char; esc: TTextWriterHTMLFormat);
+var doesc: TTextWriterEscape;
+begin
+  doesc.AddHtmlEscapeWiki(self,P,esc);
+end;
+
+procedure TTextWriter.AddHtmlEscapeMarkdown(P: PUTF8Char; esc: TTextWriterHTMLFormat);
+var doesc: TTextWriterEscape;
+begin
+  doesc.AddHtmlEscapeMarkdown(self,P,esc);
 end;
 
 procedure TTextWriter.AddXmlEscape(Text: PUTF8Char);
@@ -56207,6 +56473,30 @@ begin
     finally
       Free;
     end;
+end;
+
+function HtmlEscapeWiki(const wiki: RawUTF8; esc: TTextWriterHTMLFormat): RawUTF8;
+var temp: TTextWriterStackBuffer;
+begin
+  with TTextWriter.CreateOwnedStream(temp) do
+  try
+    AddHtmlEscapeWiki(pointer(wiki),esc);
+    SetText(result);
+  finally
+    Free;
+  end;
+end;
+
+function HtmlEscapeMarkdown(const md: RawUTF8; esc: TTextWriterHTMLFormat): RawUTF8;
+var temp: TTextWriterStackBuffer;
+begin
+  with TTextWriter.CreateOwnedStream(temp) do
+  try
+    AddHtmlEscapeMarkdown(pointer(md),esc);
+    SetText(result);
+  finally
+    Free;
+  end;
 end;
 
 function JSONToXML(const JSON: RawUTF8; const Header: RawUTF8;

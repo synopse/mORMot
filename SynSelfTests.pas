@@ -426,6 +426,8 @@ type
     procedure UrlEncoding;
     /// some low-level JSON encoding/decoding
     procedure EncodeDecodeJSON;
+    /// HTML generation from Wiki Or Markdown syntax
+    procedure WikiMarkdownToHtml;
 {$ifndef NOVARIANTS}
     /// some low-level variant process
     procedure Variants;
@@ -8416,6 +8418,65 @@ begin
   {$endif}
 end;
 
+procedure TTestLowLevelTypes.WikiMarkdownToHtml;
+begin
+  // wiki
+  CheckEqual(HtmlEscapeWiki('test'),'<p>test</p>');
+  CheckEqual(HtmlEscapeWiki('te<b>st'),'<p>te&lt;b&gt;st</p>');
+  CheckEqual(HtmlEscapeWiki('t *e* st'),'<p>t <em>e</em> st</p>');
+  CheckEqual(HtmlEscapeWiki('t*e*st'),'<p>t<em>e</em>st</p>');
+  CheckEqual(HtmlEscapeWiki('t\*e\*st'),'<p>t*e*st</p>');
+  CheckEqual(HtmlEscapeWiki('t\*e*st'),'<p>t*e<em>st</em></p>');
+  CheckEqual(HtmlEscapeWiki('t +e+ st'),'<p>t <strong>e</strong> st</p>');
+  CheckEqual(HtmlEscapeWiki('t+e+st'),'<p>t<strong>e</strong>st</p>');
+  CheckEqual(HtmlEscapeWiki('t `e` st'),'<p>t <code>e</code> st</p>');
+  CheckEqual(HtmlEscapeWiki('t`e`st'),'<p>t<code>e</code>st</p>');
+  CheckEqual(HtmlEscapeWiki('https://test'),'<p><a href="https://test" rel="nofollow">https://test</a></p>');
+  CheckEqual(HtmlEscapeWiki('test'#13#10'click on http://coucouc.net toto'),
+    '<p>test</p><p>click on <a href="http://coucouc.net" rel="nofollow">http://coucouc.net</a> toto</p>');
+  // Markdown
+  CheckEqual(HtmlEscapeMarkdown('test'),'<p>test</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#13#10'toto'),'<p>test toto</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#13#10#13#10'toto'),'<p>test</p><p>toto</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#10#10'toto'),'<p>test</p><p>toto</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#10#10#10'toto'),'<p>test</p><p> toto</p>');
+  CheckEqual(HtmlEscapeMarkdown('te<b>st'),'<p>te<b>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('te<b>st',hfOutsideAttributes),'<p>te&lt;b&gt;st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t *e* st'),'<p>t <em>e</em> st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t*e*st'),'<p>t<em>e</em>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t\*e\*st'),'<p>t*e*st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t\*e*st'),'<p>t*e<em>st</em></p>');
+  CheckEqual(HtmlEscapeMarkdown('t **e** st'),'<p>t <strong>e</strong> st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t**e**st'),'<p>t<strong>e</strong>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t _e_ st'),'<p>t <em>e</em> st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t_e_st'),'<p>t<em>e</em>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t\_e\_st'),'<p>t_e_st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t\_e_st'),'<p>t_e<em>st</em></p>');
+  CheckEqual(HtmlEscapeMarkdown('t __e__ st'),'<p>t <strong>e</strong> st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t__e__st'),'<p>t<strong>e</strong>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t `e` st'),'<p>t <code>e</code> st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t`e`st'),'<p>t<code>e</code>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#13#10'click on http://coucouc.net toto'),
+    '<p>test click on <a href="http://coucouc.net" rel="nofollow">http://coucouc.net</a> toto</p>');
+  CheckEqual(HtmlEscapeMarkdown('[toto](http://coucou.net) titi'),
+    '<p><a href="http://coucou.net" rel="nofollow">toto</a> titi</p>');
+  CheckEqual(HtmlEscapeMarkdown('blabla ![img](static/img.jpg) blibli'),
+    '<p>blabla <img alt="img" src="static/img.jpg"> blibli</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#13#10'    a*=10*2'#10'    b=20'#13#10'ended'),
+    '<p>test</p><pre><code>a*=10*2'#$D#$A'b=20'#$D#$A'</code></pre><p>ended</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#13#10'``` a*=10*2'#10'  b=20'#13#10'```ended'),
+    '<p>test</p><pre><code> a*=10*2'#$D#$A'  b=20'#$D#$A'</code></pre><p>ended</p>');
+  CheckEqual(HtmlEscapeMarkdown('*te*st'#13#10'* one'#13#10'* two'#13#10'end'),
+    '<p><em>te</em>st</p><ul><li>one</li><li>two</li></ul><p>end</p>');
+  CheckEqual(HtmlEscapeMarkdown('+test'#13#10'+ one'#13#10'- two'#13#10'end'),
+    '<p>+test</p><ul><li>one</li><li>two</li></ul><p>end</p>');
+  CheckEqual(HtmlEscapeMarkdown('1test'#13#10'1. one'#13#10'2. two'#13#10'end'),
+    '<p>1test</p><ol><li>one</li><li>two</li></ol><p>end</p>');
+  CheckEqual(HtmlEscapeMarkdown('1test'#13#10'1. one'#13#10'7. two'#13#10'3. three'#13#10'4end'),
+    '<p>1test</p><ol><li>one</li><li>two</li><li>three</li></ol><p>4end</p>');
+  CheckEqual(HtmlEscapeMarkdown('1test'#13#10'1. one'#13#10'2. two'#13#10'+ one'#13#10'- two'#13#10'end'),
+    '<p>1test</p><ol><li>one</li><li>two</li></ol><ul><li>one</li><li>two</li></ul><p>end</p>');
+end;
 
 {$ifndef DELPHI5OROLDER}
 {$ifndef LVCL}
