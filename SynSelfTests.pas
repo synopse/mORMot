@@ -8456,6 +8456,7 @@ begin
   CheckEqual(HtmlEscapeMarkdown('t__e__st'),'<p>t<strong>e</strong>st</p>');
   CheckEqual(HtmlEscapeMarkdown('t `e` st'),'<p>t <code>e</code> st</p>');
   CheckEqual(HtmlEscapeMarkdown('t`e`st'),'<p>t<code>e</code>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t***e***st'),'<p>t<strong><em>e</strong></em>st</p>');
   CheckEqual(HtmlEscapeMarkdown('test'#13#10'click on http://coucouc.net toto'),
     '<p>test click on <a href="http://coucouc.net" rel="nofollow">http://coucouc.net</a> toto</p>');
   CheckEqual(HtmlEscapeMarkdown('[toto](http://coucou.net) titi'),
@@ -8476,6 +8477,10 @@ begin
     '<p>1test</p><ol><li>one</li><li>two</li><li>three</li></ol><p>4end</p>');
   CheckEqual(HtmlEscapeMarkdown('1test'#13#10'1. one'#13#10'2. two'#13#10'+ one'#13#10'- two'#13#10'end'),
     '<p>1test</p><ol><li>one</li><li>two</li></ol><ul><li>one</li><li>two</li></ul><p>end</p>');
+  CheckEqual(HtmlEscapeMarkdown('>test'#13#10'> quote'),
+    '<p>>test</p><blockquote><p>quote</p></blockquote>');
+  CheckEqual(HtmlEscapeMarkdown('>test'#13#10'> quote1'#10'> quote2'#13#10'end'),
+    '<p>>test</p><blockquote><p>quote1</p><p>quote2</p></blockquote><p>end</p>');
 end;
 
 {$ifndef DELPHI5OROLDER}
