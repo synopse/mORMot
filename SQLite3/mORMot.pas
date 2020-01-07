@@ -6,7 +6,7 @@ unit mORMot;
 (*
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMot;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -2851,6 +2851,7 @@ type
 
   /// a wrapper containing a RTTI property definition
   // - used for direct Delphi / UTF-8 SQL type mapping/conversion
+  // - doesn't depend on RTL's TypInfo unit, to enhance cross-compiler support
   {$ifdef UNICODE}TPropInfo = record{$else}TPropInfo = object{$endif}
   public
     /// raw retrieval of the property read access definition
@@ -4291,7 +4292,10 @@ type
     // - then you can use ObjArrayAdd/ObjArrayFind/ObjArrayDelete to manage
     // the stored items, and never forget to call ObjArrayClear to release
     // the memory
-    class procedure RegisterObjArrayForJSON(aDynArray: PTypeInfo; aItem: TClass); overload;
+    // - will use the default published properties serializer, unless you specify
+    // your custom Reader/Write callbacks
+    class procedure RegisterObjArrayForJSON(aDynArray: PTypeInfo;
+      aItem: TClass; aReader: TDynArrayJSONCustomReader=nil; aWriter: TDynArrayJSONCustomWriter=nil);overload;
     /// let T*ObjArray dynamic arrays be used for storage of class instances
     // - will allow JSON serialization and unserialization of the registered
     // dynamic array property defined in any TPersistent or TSQLRecord
@@ -23813,21 +23817,43 @@ end;
 
 type
   TObjArraySerializer = class(TPointerClassHashed)
+  protected
+    procedure DefaultCustomWriter(const aWriter: TTextWriter; const aValue);
+    function DefaultCustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
   public
     Instance: TClassInstance;
-    constructor Create(aInfo: pointer; aItem: TClass); reintroduce;
-    procedure CustomWriter(const aWriter: TTextWriter; const aValue);
-    function CustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
+    CustomReader: TDynArrayJSONCustomReader;
+    CustomWriter: TDynArrayJSONCustomWriter;
+    constructor Create(aInfo: pointer; aItem: TClass;
+      aReader: TDynArrayJSONCustomReader; aWriter: TDynArrayJSONCustomWriter); reintroduce;
   end;
   PTObjArraySerializer = ^TObjArraySerializer;
 
-constructor TObjArraySerializer.Create(aInfo: pointer; aItem: TClass);
+constructor TObjArraySerializer.Create(aInfo: pointer; aItem: TClass;
+  aReader: TDynArrayJSONCustomReader; aWriter: TDynArrayJSONCustomWriter);
 begin
   inherited Create(aInfo);
   Instance.Init(aItem);
+  if Assigned(aReader) then
+    CustomReader := aReader else
+    CustomReader := DefaultCustomReader;
+  if Assigned(aWriter) then
+    CustomWriter := aWriter else
+    CustomWriter := DefaultCustomWriter;
 end;
 
-procedure TObjArraySerializer.CustomWriter(const aWriter: TTextWriter; const aValue);
+function HasDefaultObjArrayWriter(var dyn: TDynArray): boolean;
+var CustomReader: TDynArrayJSONCustomReader;
+    CustomWriter, DefaultWriter: TDynArrayJSONCustomWriter;
+begin
+  result := TTextWriter.GetCustomJSONParser(dyn,CustomReader,CustomWriter);
+  if result then begin
+    DefaultWriter := TObjArraySerializer(nil).DefaultCustomWriter;
+    result := PMethod(@CustomWriter)^.Code=PMethod(@DefaultWriter)^.Code;
+  end;
+end;
+
+procedure TObjArraySerializer.DefaultCustomWriter(const aWriter: TTextWriter; const aValue);
 var opt: TTextWriterWriteObjectOptions;
 begin
   if twoEnumSetsAsTextInRecord in aWriter.CustomOptions then
@@ -23838,7 +23864,7 @@ begin
   aWriter.WriteObject(TObject(aValue),opt);
 end;
 
-function TObjArraySerializer.CustomReader(P: PUTF8Char; var aValue;
+function TObjArraySerializer.DefaultCustomReader(P: PUTF8Char; var aValue;
   out aValid: Boolean): PUTF8Char;
 begin
   if TObject(aValue)=nil then
@@ -23866,11 +23892,11 @@ begin
     raise EModelException.CreateUTF8('%.Create(%) getter!',[self,fPropType^.Name]);
   fWrapper.Init(fPropType,dummy);
   fWrapper.IsObjArray := fObjArray<>nil;
-  fWrapper.HasCustomJSONParser;
+  fWrapper.HasCustomJSONParser; // set fWrapper.fParser
 end;
 
 procedure TSQLPropInfoRTTIDynArray.GetDynArray(Instance: TObject; var result: TDynArray);
-begin
+begin // fast assignment of fWrapper pre-initialized RTTI
   result.InitFrom(fWrapper,pointer(PtrUInt(Instance)+fGetterIsFieldPropOffset)^);
 end;
 
@@ -42778,7 +42804,7 @@ begin
               Ctxt.Error(E,'',[],HTTP_SERVERERROR);
       end;
     end;
-    // 4. returns expected result to the client and update Server statistics
+    // 4. return expected result to the client and update Server statistics
     if StatusCodeIsSuccess(Call.OutStatus) then begin
       outcomingfile := false;
       if Call.OutBody<>'' then begin
@@ -49387,7 +49413,7 @@ begin
 end;
 
 class procedure TJSONSerializer.RegisterObjArrayForJSON(aDynArray: PTypeInfo;
-  aItem: TClass);
+  aItem: TClass; aReader: TDynArrayJSONCustomReader; aWriter: TDynArrayJSONCustomWriter);
 var serializer: ^TObjArraySerializer;
 begin
   if (aItem=nil) or (aDynArray^.DynArrayItemSize<>SizeOf(TObject)) then
@@ -49398,7 +49424,7 @@ begin
   serializer := pointer(ObjArraySerializers.TryAdd(aDynArray));
   if serializer=nil then
     exit; // avoid duplicate
-  serializer^ := TObjArraySerializer.Create(aDynArray,aItem);
+  serializer^ := TObjArraySerializer.Create(aDynArray,aItem,aReader,aWriter);
   TTextWriter.RegisterCustomJSONSerializer(
     aDynArray,serializer^.CustomReader,serializer^.CustomWriter);
 end;
@@ -52198,7 +52224,7 @@ var Added: boolean;
         if not ((woDontStore0 in Options) and (dyn.Count=0)) then begin
           HR(P);
           dynObjArray := P^.DynArrayIsObjArrayInstance;
-          if dynObjArray<>nil then begin
+          if (dynObjArray<>nil) and HasDefaultObjArrayWriter(dyn) then begin
             if dyn.Count=0 then begin
               if woHumanReadableEnumSetAsComment in Options then
                 dynObjArray^.SetCustomComment(CustomComment);
@@ -52216,9 +52242,9 @@ var Added: boolean;
               dec(fHumanReadableLevel);
               HR;
               Add(']');
-            end;
-          end else
-            AddDynArrayJSON(dyn);
+              end;
+            end else
+            AddDynArrayJSON(dyn); // not an ObjArray: record-based serialization
         end;
       end;
       {$ifdef PUBLISHRECORD}
@@ -55529,7 +55555,7 @@ begin
             Include(ValueKindAsm,vIsDynArrayString);
         DynArrayWrapper.Init(ArgTypeInfo,dummy);
         DynArrayWrapper.IsObjArray := vIsObjArray in ValueKindAsm;
-        DynArrayWrapper.HasCustomJSONParser;
+        DynArrayWrapper.HasCustomJSONParser; // set DynArrayWrapper.fParser
       end;
       end;
       case ValueType of

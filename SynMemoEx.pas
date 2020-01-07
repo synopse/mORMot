@@ -5,7 +5,7 @@ unit SynMemoEx;
 {
     This file is part of Synopse extended TMemo
 
-    Synopse SynMemoEx. Copyright (C) 2019 Arnaud Bouchez
+    Synopse SynMemoEx. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -24,7 +24,7 @@ unit SynMemoEx;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -1362,7 +1362,7 @@ begin
         if Assigned(_Text) then
         begin
           {$ifdef UNICODE}
-          if fmt = CF_TEXT then
+          if fmt in [CF_TEXT, CF_UNICODETEXT] then
             Txt := _Text
           else
             Txt := UnicodeString(AnsiString(PAnsiChar(_Text)));

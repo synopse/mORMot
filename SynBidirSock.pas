@@ -6,7 +6,7 @@ unit SynBidirSock;
 {
     This file is part of the Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynBidirSock;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -360,6 +360,7 @@ type
   TAsynchServer = class(TAsynchConnections)
   protected
     fServer: TCrtSocket;
+    fExecuteFinished: boolean;
     procedure Execute; override;
   public
     /// run the TCP server, listening on a supplied IP port
@@ -3713,10 +3714,15 @@ begin
 end;
 
 destructor TAsynchServer.Destroy;
+var endtix: Int64;
 begin
   Terminate;
   fServer.Close; // shutdown the socket to unlock Accept() in Execute
+  DirectShutdown(CallServer('127.0.0.1',fServer.Port,false,cslTCP,1));
+  endtix := GetTickCount64+10000;
   inherited Destroy;
+  while not fExecuteFinished and (GetTickCount64<endtix) do
+    sleep(1); // wait for Execute to be finalized (unlikely)
   fServer.Free;
 end;
 
@@ -3758,6 +3764,7 @@ begin
       fLog.Add.Log(sllWarning,'Execute raised a % -> terminate %',
         [E.ClassType,fProcessName],self);
   end;
+  fExecuteFinished := true;
 end;
 
 

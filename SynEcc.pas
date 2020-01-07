@@ -6,7 +6,7 @@ unit SynEcc;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynEcc;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -1900,7 +1900,11 @@ end;
       {$L static\x86_64-win64\eccwin64O1.o}
     {$endif}
     {$ifdef ECC_O2}
+      {$ifdef FPC}
       {$L static\x86_64-win64\eccwin64O2.o}
+      {$else}
+      {$L SynEcc64O2.o} // same file as static\x86_64-win64\eccwin64O2.o
+      {$endif}
     {$endif}
     {$ifdef ECC_O3}
       {$L static\x86_64-win64\eccwin64O3.o}

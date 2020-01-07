@@ -6,7 +6,7 @@ unit SynSelfTests;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynSelfTests;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -414,6 +414,7 @@ type
 {$ifndef NOVARIANTS}
   protected
     procedure MustacheTranslate(var English: string);
+    procedure MustacheHelper(const Value: variant; out result: variant);
 {$endif}
   published
 {$ifndef DELPHI5OROLDER}
@@ -425,6 +426,8 @@ type
     procedure UrlEncoding;
     /// some low-level JSON encoding/decoding
     procedure EncodeDecodeJSON;
+    /// HTML generation from Wiki Or Markdown syntax
+    procedure WikiMarkdownToHtml;
 {$ifndef NOVARIANTS}
     /// some low-level variant process
     procedure Variants;
@@ -4340,7 +4343,7 @@ var i, j, k, len, lenup100, CP, L: integer;
     WS: WideString;
     SU: SynUnicode;
     str: string;
-    U, res, Up,Up2: RawUTF8;
+    U,U2, res, Up,Up2: RawUTF8;
     arr: TRawUTF8DynArray;
     PB: PByte;
     {$ifndef DELPHI5OROLDER}
@@ -4441,6 +4444,34 @@ begin
   Check(GetUnQuoteCSVItem('"""one,',0,',','"')='');
   Check(FormatUTF8('abcd',[U],[WS])='abcd');
 {$endif}
+  U := QuotedStr('','"');
+  Check(U='""');
+  U := QuotedStr('abc','"');
+  Check(U='"abc"');
+  U := QuotedStr('a"c','"');
+  Check(U='"a""c"');
+  U := QuotedStr('abcd"efg','"');
+  Check(U='"abcd""efg"');
+  U := QuotedStr('abcd""efg','"');
+  Check(U='"abcd""""efg"');
+  U := QuotedStr('abcd"e"fg"','"');
+  Check(U='"abcd""e""fg"""');
+  U := QuotedStr('"abcd"efg','"');
+  Check(U='"""abcd""efg"');
+  U := QuotedStr('','#'); // also test for custom quote
+  Check(U='##');
+  U := QuotedStr('abc','#');
+  Check(U='#abc#');
+  U := QuotedStr('a#c','#');
+  Check(U='#a##c#');
+  U := QuotedStr('abcd#efg','#');
+  Check(U='#abcd##efg#');
+  U := QuotedStr('abcd##efg','#');
+  Check(U='#abcd####efg#');
+  U := QuotedStr('abcd#e#fg#','#');
+  Check(U='#abcd##e##fg###');
+  U := QuotedStr('#abcd#efg','#');
+  Check(U='###abcd##efg#');
   for i := 0 to 1000 do begin
     len := i*5;
     W := RandomAnsi7(len);
@@ -4521,7 +4552,7 @@ begin
     Check(IsWinAnsi(pointer(Unic),length(Unic)shr 1)=WA);
     Check(IsWinAnsiU(pointer(U))=WA);
     Up := SynCommons.UpperCase(U);
-    Check(SynCommons.UpperCase(LowerCase(U))=Up);
+    Check(SynCommons.UpperCase(SynCommons.LowerCase(U))=Up);
     Check(UTF8IComp(pointer(U),pointer(U))=0);
     Check(UTF8IComp(pointer(U),pointer(Up))=0);
     Check(UTF8ILComp(pointer(U),pointer(U),length(U),length(U))=0);
@@ -4543,7 +4574,8 @@ begin
     Check(kr32(0,pointer(U),length(U))=kr32reference(pointer(U),length(U)));
     if U='' then
       continue;
-    Check(UnQuoteSQLStringVar(pointer(QuotedStr(U,'"')),res)<>nil);
+    U2 := QuotedStr(U,'"');
+    Check(UnQuoteSQLStringVar(pointer(U2),res)<>nil);
     Check(res=U);
     Check(not IsZero(pointer(W),length(W)));
     FillCharFast(pointer(W)^,length(W),0);
@@ -6481,6 +6513,7 @@ var mustacheJson: RawByteString;
     mustacheJsonFileName: TFileName;
     doc: variant;
     html: RawUTF8;
+    helpers: TSynMustacheHelpers;
     guid: TGUID;
     spec,i: integer;
 begin
@@ -6546,6 +6579,23 @@ begin
   Check(mustache.SectionMaxCount=1);
   html := mustache.RenderJSON('{person2:2}');
   Check(html='Shown.Also shown!end');
+  Check(helpers=nil,'compiler initialized');
+  mustache.HelperAdd(helpers, 'jsonhelper', MustacheHelper);
+  mustache := TSynMustache.Parse('{{jsonhelper {a:"a",b:10}}}');
+  html := mustache.RenderJSON('', nil, helpers);
+  Check(html='a=a,b=10');
+  mustache := TSynMustache.Parse('{{jsonhelper {a:"b",b:10} }}');
+  html := mustache.RenderJSON('', nil, helpers);
+  Check(html='a=b,b=10');
+  mustache := TSynMustache.Parse('{{{jsonhelper {a:"a",b:1}}}}');
+  html := mustache.RenderJSON('', nil, helpers);
+  check(html='a=a,b=1');
+  mustache := TSynMustache.Parse('{{jsonhelper {a:1,b:2} }},titi');
+  html := mustache.RenderJSON('', nil, helpers);
+  Check(html='a=1,b=2,titi');
+  mustache := TSynMustache.Parse('{{jsonhelper {a:1,nested:{c:{d:[1,2]}},b:10}}}}toto');
+  html := mustache.RenderJSON('', nil, helpers);
+  Check(html='a=1,b=10}toto');
   mustache := TSynMustache.Parse('{{#a}}'#$A'{{one}}'#$A'{{/a}}'#$A);
   html := mustache.RenderJSON('{a:{one:1}}');
   Check(html='1'#$A);
@@ -6653,6 +6703,12 @@ begin
     English := 'Bonjour' else
   if English='You have just won' then
     English := 'Vous venez de gagner';
+end;
+
+procedure TTestLowLevelTypes.MustacheHelper(const Value: variant; out result: variant);
+begin
+  with _Safe(Value)^ do
+    result := RawUTF8ToVariant(FormatUTF8('a=%,b=%',[U['a'],I['b']]));
 end;
 
 {$endif NOVARIANTS}
@@ -8362,6 +8418,70 @@ begin
   {$endif}
 end;
 
+procedure TTestLowLevelTypes.WikiMarkdownToHtml;
+begin
+  // wiki
+  CheckEqual(HtmlEscapeWiki('test'),'<p>test</p>');
+  CheckEqual(HtmlEscapeWiki('te<b>st'),'<p>te&lt;b&gt;st</p>');
+  CheckEqual(HtmlEscapeWiki('t *e* st'),'<p>t <em>e</em> st</p>');
+  CheckEqual(HtmlEscapeWiki('t*e*st'),'<p>t<em>e</em>st</p>');
+  CheckEqual(HtmlEscapeWiki('t\*e\*st'),'<p>t*e*st</p>');
+  CheckEqual(HtmlEscapeWiki('t\*e*st'),'<p>t*e<em>st</em></p>');
+  CheckEqual(HtmlEscapeWiki('t +e+ st'),'<p>t <strong>e</strong> st</p>');
+  CheckEqual(HtmlEscapeWiki('t+e+st'),'<p>t<strong>e</strong>st</p>');
+  CheckEqual(HtmlEscapeWiki('t `e` st'),'<p>t <code>e</code> st</p>');
+  CheckEqual(HtmlEscapeWiki('t`e`st'),'<p>t<code>e</code>st</p>');
+  CheckEqual(HtmlEscapeWiki('https://test'),'<p><a href="https://test" rel="nofollow">https://test</a></p>');
+  CheckEqual(HtmlEscapeWiki('test'#13#10'click on http://coucouc.net toto'),
+    '<p>test</p><p>click on <a href="http://coucouc.net" rel="nofollow">http://coucouc.net</a> toto</p>');
+  // Markdown
+  CheckEqual(HtmlEscapeMarkdown('test'),'<p>test</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#13#10'toto'),'<p>test toto</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#13#10#13#10'toto'),'<p>test</p><p>toto</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#10#10'toto'),'<p>test</p><p>toto</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#10#10#10'toto'),'<p>test</p><p> toto</p>');
+  CheckEqual(HtmlEscapeMarkdown('te<b>st'),'<p>te<b>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('te<b>st',hfOutsideAttributes),'<p>te&lt;b&gt;st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t *e* st'),'<p>t <em>e</em> st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t*e*st'),'<p>t<em>e</em>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t\*e\*st'),'<p>t*e*st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t\*e*st'),'<p>t*e<em>st</em></p>');
+  CheckEqual(HtmlEscapeMarkdown('t **e** st'),'<p>t <strong>e</strong> st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t**e**st'),'<p>t<strong>e</strong>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t _e_ st'),'<p>t <em>e</em> st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t_e_st'),'<p>t<em>e</em>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t\_e\_st'),'<p>t_e_st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t\_e_st'),'<p>t_e<em>st</em></p>');
+  CheckEqual(HtmlEscapeMarkdown('t __e__ st'),'<p>t <strong>e</strong> st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t__e__st'),'<p>t<strong>e</strong>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t `e` st'),'<p>t <code>e</code> st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t`e`st'),'<p>t<code>e</code>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t***e***st'),'<p>t<strong><em>e</strong></em>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#13#10'click on http://coucouc.net toto'),
+    '<p>test click on <a href="http://coucouc.net" rel="nofollow">http://coucouc.net</a> toto</p>');
+  CheckEqual(HtmlEscapeMarkdown('[toto](http://coucou.net) titi'),
+    '<p><a href="http://coucou.net" rel="nofollow">toto</a> titi</p>');
+  CheckEqual(HtmlEscapeMarkdown('blabla ![img](static/img.jpg) blibli'),
+    '<p>blabla <img alt="img" src="static/img.jpg"> blibli</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#13#10'    a*=10*2'#10'    b=20'#13#10'ended'),
+    '<p>test</p><pre><code>a*=10*2'#$D#$A'b=20'#$D#$A'</code></pre><p>ended</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#13#10'``` a*=10*2'#10'  b=20'#13#10'```ended'),
+    '<p>test</p><pre><code> a*=10*2'#$D#$A'  b=20'#$D#$A'</code></pre><p>ended</p>');
+  CheckEqual(HtmlEscapeMarkdown('*te*st'#13#10'* one'#13#10'* two'#13#10'end'),
+    '<p><em>te</em>st</p><ul><li>one</li><li>two</li></ul><p>end</p>');
+  CheckEqual(HtmlEscapeMarkdown('+test'#13#10'+ one'#13#10'- two'#13#10'end'),
+    '<p>+test</p><ul><li>one</li><li>two</li></ul><p>end</p>');
+  CheckEqual(HtmlEscapeMarkdown('1test'#13#10'1. one'#13#10'2. two'#13#10'end'),
+    '<p>1test</p><ol><li>one</li><li>two</li></ol><p>end</p>');
+  CheckEqual(HtmlEscapeMarkdown('1test'#13#10'1. one'#13#10'7. two'#13#10'3. three'#13#10'4end'),
+    '<p>1test</p><ol><li>one</li><li>two</li><li>three</li></ol><p>4end</p>');
+  CheckEqual(HtmlEscapeMarkdown('1test'#13#10'1. one'#13#10'2. two'#13#10'+ one'#13#10'- two'#13#10'end'),
+    '<p>1test</p><ol><li>one</li><li>two</li></ol><ul><li>one</li><li>two</li></ul><p>end</p>');
+  CheckEqual(HtmlEscapeMarkdown('>test'#13#10'> quote'),
+    '<p>>test</p><blockquote><p>quote</p></blockquote>');
+  CheckEqual(HtmlEscapeMarkdown('>test'#13#10'> quote1'#10'> quote2'#13#10'end'),
+    '<p>>test</p><blockquote><p>quote1</p><p>quote2</p></blockquote><p>end</p>');
+end;
 
 {$ifndef DELPHI5OROLDER}
 {$ifndef LVCL}
@@ -13070,28 +13190,28 @@ type
   end;
 
 procedure TestMasterSlaveRecordVersion(Test: TSynTestCase; const DBExt: TFileName);
-procedure TestMasterSlave(Master,Slave: TSQLRestServer; SynchronizeFromMaster: TSQLRest);
-var res: TRecordVersion;
-    Rec1,Rec2: TSQLRecordPeopleVersioned;
-begin
-  if SynchronizeFromMaster<>nil then
-    res := Slave.RecordVersionSynchronizeSlave(TSQLRecordPeopleVersioned,SynchronizeFromMaster,500) else
-    res := Slave.RecordVersionCurrent;
-  Test.Check(res=Master.RecordVersionCurrent);
-  Rec1 := TSQLRecordPeopleVersioned.CreateAndFillPrepare(Master,'order by ID','*');
-  Rec2 := TSQLRecordPeopleVersioned.CreateAndFillPrepare(Slave,'order by ID','*');
-  try
-    Test.Check(Rec1.FillTable.RowCount=Rec2.FillTable.RowCount);
-    while Rec1.FillOne do begin
-      Test.Check(Rec2.FillOne);
-      Test.Check(Rec1.SameRecord(Rec2),'simple fields');
-      Test.Check(Rec1.Version=Rec2.Version);
+  procedure TestMasterSlave(Master,Slave: TSQLRestServer; SynchronizeFromMaster: TSQLRest);
+  var res: TRecordVersion;
+      Rec1,Rec2: TSQLRecordPeopleVersioned;
+  begin
+    if SynchronizeFromMaster<>nil then
+      res := Slave.RecordVersionSynchronizeSlave(TSQLRecordPeopleVersioned,SynchronizeFromMaster,500) else
+      res := Slave.RecordVersionCurrent;
+    Test.Check(res=Master.RecordVersionCurrent);
+    Rec1 := TSQLRecordPeopleVersioned.CreateAndFillPrepare(Master,'order by ID','*');
+    Rec2 := TSQLRecordPeopleVersioned.CreateAndFillPrepare(Slave,'order by ID','*');
+    try
+      Test.Check(Rec1.FillTable.RowCount=Rec2.FillTable.RowCount);
+      while Rec1.FillOne do begin
+        Test.Check(Rec2.FillOne);
+        Test.Check(Rec1.SameRecord(Rec2),'simple fields');
+        Test.Check(Rec1.Version=Rec2.Version);
+      end;
+    finally
+      Rec1.Free;
+      Rec2.Free;
     end;
-  finally
-    Rec1.Free;
-    Rec2.Free;
   end;
-end;
 var Model: TSQLModel;
     Master,Slave1,Slave2: TSQLRestServerDB;
     MasterAccess: TSQLRestClientURI;
@@ -13100,31 +13220,33 @@ var Model: TSQLModel;
     Slave2Callback: IServiceRecordVersionCallback;
     i,n: integer;
     timeout: Int64;
-function CreateServer(const DBFileName: TFileName; DeleteDBFile: boolean): TSQLRestServerDB;
-begin
-  if DeleteDBFile then
-    DeleteFile(DBFileName);
-  result := TSQLRestServerDB.Create(Model,DBFileName,false,'');
-  result.DB.Synchronous := smOff;
-  result.DB.LockingMode := lmExclusive;
-  result.CreateMissingTables;
-end;
-procedure CreateMaster(DeleteDBFile: boolean);
-var serv: TSQLHttpServer;
-    ws: TSQLHttpClientWebsockets;
-begin
-  Master := CreateServer('testversion'+DBExt,DeleteDBFile);
-  if Test is TTestBidirectionalRemoteConnection then begin
-    serv := TTestBidirectionalRemoteConnection(Test).fHttpServer;
-    Test.Check(serv.AddServer(Master));
-    serv.WebSocketsEnable(Master,'key2').Settings.SetFullLog;
-    ws := TSQLHttpClientWebsockets.Create('127.0.0.1',HTTP_DEFAULTPORT,Model);
-    ws.WebSockets.Settings.SetFullLog;
-    Test.Check(ws.WebSocketsUpgrade('key2')='');
-    MasterAccess := ws;
-  end else
-    MasterAccess := TSQLRestClientDB.Create(Master);
-end;
+  function CreateServer(const DBFileName: TFileName; DeleteDBFile: boolean): TSQLRestServerDB;
+  begin
+    if DeleteDBFile then
+      DeleteFile(DBFileName);
+    result := TSQLRestServerDB.Create(TSQLModel.Create(Model),DBFileName,false,'');
+    result.Model.Owner := result;
+    result.DB.Synchronous := smOff;
+    result.DB.LockingMode := lmExclusive;
+    result.CreateMissingTables;
+  end;
+  procedure CreateMaster(DeleteDBFile: boolean);
+  var serv: TSQLHttpServer;
+      ws: TSQLHttpClientWebsockets;
+  begin
+    Master := CreateServer('testversion'+DBExt,DeleteDBFile);
+    if Test is TTestBidirectionalRemoteConnection then begin
+      serv := TTestBidirectionalRemoteConnection(Test).fHttpServer;
+      Test.Check(serv.AddServer(Master));
+      serv.WebSocketsEnable(Master,'key2').Settings.SetFullLog;
+      ws := TSQLHttpClientWebsockets.Create('127.0.0.1',HTTP_DEFAULTPORT,TSQLModel.Create(Model));
+      ws.Model.Owner := ws;
+      ws.WebSockets.Settings.SetFullLog;
+      Test.Check(ws.WebSocketsUpgrade('key2')='');
+      MasterAccess := ws;
+    end else
+      MasterAccess := TSQLRestClientDB.Create(Master);
+  end;
 begin
   Model := TSQLModel.Create(
     [TSQLRecordPeople,TSQLRecordPeopleVersioned,TSQLRecordTableDeleted],'root0');
