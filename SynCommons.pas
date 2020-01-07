@@ -8361,7 +8361,8 @@ type
     // trailing > char, and code line from 4 initial spaces
     // - as with default Markdown, won't escape HTML special chars (i.e. you can
     // write plain HTML in the supplied text) unless esc is set otherwise
-    // - only inline-style links and images are supported yet (not reference-style)
+    // - only inline-style links and images are supported yet (not reference-style);
+    // tables aren't supported either
     procedure AddHtmlEscapeMarkdown(P: PUTF8Char; esc: TTextWriterHTMLFormat=hfNone);
     /// append some chars, escaping all XML special chars as expected
     // - i.e.   < > & " '  as   &lt; &gt; &amp; &quote; &apos;
@@ -44665,18 +44666,16 @@ procedure TSynInvokeableVariantType.Lookup(var Dest: TVarData; const V: TVarData
 var itemName: RawUTF8;
     Handler: TSynInvokeableVariantType;
     DestVar,LookupVar: TVarData;
-    docv: word;
 begin
   Dest.VType := varEmpty; // left to Unassigned if not found
   DestVar := V;
   while DestVar.VType=varByRef or varVariant do
     DestVar := PVarData(DestVar.VPointer)^;
-  docv := DocVariantVType;
   repeat
     GetNextItem(FullName,'.',itemName);
     if itemName='' then
       exit;
-    if DestVar.VType=docv then begin
+    if DestVar.VType=DocVariantVType then begin
       if not TDocVariantData(DestVar).GetVarData(itemName,DestVar) then
         exit;
     end else
@@ -44697,7 +44696,7 @@ begin
       exit;
     while DestVar.VType=varByRef or varVariant do
       DestVar := PVarData(DestVar.VPointer)^;
-    if (DestVar.VType=docv) and
+    if (DestVar.VType=DocVariantVType) and
        (TDocVariantData(DestVar).VCount=0) then
       DestVar.VType := varNull; // recognize void TDocVariant as null
     if FullName=nil then begin // found full name scope
