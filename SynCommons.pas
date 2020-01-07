@@ -17197,6 +17197,9 @@ begin
 end;
 {$endif FPC}
 
+const
+  MOVESMALL_MAX = 32;
+
 procedure MoveSmall(Source, Dest: Pointer; Count: PtrUInt);
 begin
   dec(PtrUInt(Source),PtrUInt(Dest));
@@ -23002,7 +23005,7 @@ begin
     P[L] := Quote;
   end else begin
     dualquotes := ord(Quote)+ord(Quote)shl 8;
-    MoveSmall(pointer(s),P,quote1);
+    Move(pointer(s)^,P^,quote1);
     inc(P,quote1);
     P^ := Quote;
     inc(P);
@@ -23811,7 +23814,7 @@ Txt:  len := F-FDeb;
       inc(F,2);
     end;
     L := {$ifdef FPC}_LStrLen(tmp[i]){$else}PInteger(PtrInt(tmp[i])-SizeOf(integer))^{$endif};
-    {$ifdef HASINLINE}if L<128 then
+    {$ifdef HASINLINE}if L<MOVESMALL_MAX then
       MoveSmall(pointer(tmp[i]),F,L) else{$endif}
       {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(tmp[i])^,F^,L);
     inc(F,L);
@@ -36575,7 +36578,7 @@ procedure RCU(var src,dst; len: integer);
 begin
   if len>0 then
     repeat
-      MoveSmall(@src,@dst,len);
+      MoveSmall(@src,@dst,len); // per-byte inlined copy
       ReadBarrier;
     until CompareMemSmall(@src,@dst,len);
 end;
@@ -40601,7 +40604,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
         itemsize := itemsize*2;
       {$endif}
       result := pointer(ToVarUInt32(itemsize,pointer(dest)));
-      {$ifdef HASINLINE}if itemsize<128 then
+      {$ifdef HASINLINE}if itemsize<MOVESMALL_MAX then
         MoveSmall(pointer(P^),result,itemsize) else{$endif}
         {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(P^)^,result^,itemsize);
       inc(result,itemsize);
@@ -44361,7 +44364,7 @@ begin
       end;
       Dest := pointer(ToVarUInt32(LenBytes,pointer(Dest)));
       if LenBytes>0 then begin // direct raw copy
-        {$ifdef HASINLINE}if LenBytes<128 then
+        {$ifdef HASINLINE}if LenBytes<MOVESMALL_MAX then
           MoveSmall(VAny,Dest,LenBytes) else{$endif}
           {$ifdef FPC}Move{$else}MoveFast{$endif}(PPtrUInt(VAny)^,Dest^,LenBytes);
         inc(Dest,LenBytes);
@@ -53997,7 +54000,7 @@ begin
         i := Len;
       // add UTF-8 bytes
       if i>0 then begin
-        {$ifdef HASINLINE}if i<128 then
+        {$ifdef HASINLINE}if i<MOVESMALL_MAX then
           MoveSmall(P,B,i) else{$endif}
           {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,B^,i);
         inc(B,i);
@@ -54317,7 +54320,7 @@ noesc:c := i;
       dec(Len,c);
       if BEnd-B<=i then
         AddNoJSONEscape(P,i) else begin
-        {$ifdef HASINLINE}if i<128 then
+        {$ifdef HASINLINE}if i<MOVESMALL_MAX then
           MoveSmall(P,B+1,i) else{$endif}
           {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,B[1],i);
         inc(B,i);
@@ -60500,7 +60503,7 @@ begin
       exit;
     end;
   end;
-  {$ifdef HASINLINE}if DataLen<64 then
+  {$ifdef HASINLINE}if DataLen<MOVESMALL_MAX then
     MoveSmall(Data,@fBuffer^[fPos],DataLen) else{$endif}
     {$ifdef FPC}Move{$else}MoveFast{$endif}(Data^,fBuffer^[fPos],DataLen);
   inc(fPos,DataLen);
