@@ -1034,17 +1034,17 @@ end;
 
 class procedure TSynMustache.WikiToHtml(const Value: variant; out result: variant);
 begin
-  ToHtml(hfAnyWhere); // will call HtmlEscapeWiki()
+  ToHtml(Value,result,hfAnyWhere); // will call HtmlEscapeWiki()
 end;
 
 class procedure TSynMustache.MarkdownToHtml(const Value: variant; out result: variant);
 begin
-  ToHtml(hfNone); // default Markdown is to allow HTML tags
+  ToHtml(Value,result,hfNone); // default Markdown is to allow HTML tags
 end;
 
 class procedure TSynMustache.SimpleToHtml(const Value: variant; out result: variant);
 begin
-  ToHtml(hfOutsideAttributes); // escape HTML tags
+  ToHtml(Value,result,hfOutsideAttributes); // escape HTML tags
 end;
 
 class procedure TSynMustache.BlobToBase64(const Value: variant; out result: variant);
