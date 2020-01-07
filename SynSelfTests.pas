@@ -9473,7 +9473,7 @@ begin
     check(length(EMOJI_UTF8[e])=4);
     P := Pointer(EMOJI_UTF8[e]);
     checkEqual(NextUTF8UCS4(P),$1f5ff+ord(e));
-    FormatUTF8(':smile :%: ok',[EMOJI_TEXT[e]],tmp);
+    FormatUTF8(':smile % ok',[EMOJI_TAG[e]],tmp);
     P := pointer(tmp);
     check(EmojiParseDots(P)=eNone);
     check(IdemPChar(P,'SMILE :'));
@@ -9481,7 +9481,8 @@ begin
     check(P^=':');
     check(EmojiParseDots(P)=e);
     check(IdemPChar(P,' OK'));
-    checkEqual(EmojiToDots(' '+EMOJI_UTF8[e]+' '),' :'+EMOJI_TEXT[e]+': ');
+    checkEqual(EmojiToDots(EMOJI_UTF8[e]),EMOJI_TAG[e]);
+    checkEqual(EmojiToDots(' '+EMOJI_UTF8[e]+' '),' '+EMOJI_TAG[e]+' ');
     checkEqual(EmojiToDots(EmojiFromDots(tmp)),tmp);
   end;
   tmp := ':) :( :JoY: :o :|';

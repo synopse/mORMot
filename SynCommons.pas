@@ -13117,6 +13117,9 @@ var
   /// github/Markdown compatible text of Emojis
   // - e.g. 'grinning' or 'person_with_pouting_face'
   EMOJI_TEXT: array[TEmoji] of RawUTF8;
+  /// github/Markdown compatible tag of Emojis, including trailing and ending :
+  // - e.g. ':grinning:' or ':person_with_pouting_face:'
+  EMOJI_TAG: array[TEmoji] of RawUTF8;
   /// the Unicode character matching a given Emoji, after UTF-8 encoding
   EMOJI_UTF8: array[TEmoji] of RawUTF8;
   /// low-level access to TEmoji RTTI - used when inlining EmojiFromText()
@@ -61739,11 +61742,8 @@ begin
         break;
       B := P;
       c := NextUTF8UCS4(P)-$1f5ff;
-      if c<=cardinal(high(TEmoji)) then begin
-        W.Add(':');
-        W.AddNoJSONEscapeUTF8(EMOJI_TEXT[TEmoji(c)]);
-        W.Add(':');
-      end else
+      if c<=cardinal(high(TEmoji)) then
+        W.AddNoJSONEscapeUTF8(EMOJI_TAG[TEmoji(c)]) else
         W.AddNoJSONEscape(B,P-B);
     until P^=#0;
 end;
@@ -63808,6 +63808,7 @@ begin
   EMOJI_TEXT[eNone] := '';
   for e := succ(low(e)) to high(e) do begin
     LowerCaseSelf(EMOJI_TEXT[e]);
+    EMOJI_TAG[e] := ':'+EMOJI_TEXT[e]+':';
     SetLength(EMOJI_UTF8[e],4);
     UCS4ToUTF8(ord(e)+$1f5ff,pointer(EMOJI_UTF8[e]));
   end;
