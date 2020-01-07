@@ -242,7 +242,6 @@
     {$define ISFPC32}
   {$endif}
   {$ifdef VER3_2}
-    {$define FPC_PROVIDE_ATTR_TABLE}
     {$define ISFPC27}
     {$define ISFPC30}
     {$define ISFPC32}
