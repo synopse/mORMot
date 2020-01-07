@@ -61708,24 +61708,27 @@ end;
 function EmojiParseDots(var P: PUTF8Char; W: TTextWriter): TEmoji;
 var c: PUTF8Char;
 begin
-  result := eNone;
   inc(P); // ignore trailing ':'
   c := P;
-  if (c[1]<=' ') and (c[-2]<=' ') and (c^ in ['('..'|']) then
-    result := EMOJI_AFTERDOTS[c^]; // e.g. :)
-  if result=eNone then begin
-    while c^ in ['a'..'z','A'..'Z','_'] do
-      inc(c);
-    if c^=':' then // try e.g. :joy_cat:
-      result := TEmoji(FindShortStringListTrimLowerCase(EMOJI_RTTI,ord(high(TEmoji))-1,P,c-P)+1);
+  if c[-2]<=' ' then begin
+    result := eNone;
+    if (c[1]<=' ') and (c^ in ['('..'|']) then
+      result := EMOJI_AFTERDOTS[c^]; // e.g. :)
+    if result=eNone then begin
+      while c^ in ['a'..'z','A'..'Z','_'] do
+        inc(c);
+      if (c^=':') and (c[1]<=' ') then // try e.g. :joy_cat:
+        result := TEmoji(FindShortStringListTrimLowerCase(EMOJI_RTTI,ord(high(TEmoji))-1,P,c-P)+1);
+    end;
+    if result<>eNone then begin
+      P := c+1; // continue parsing after the Emoji text
+      if W<>nil then
+        W.AddNoJSONEscape(pointer(EMOJI_UTF8[result]),4);
+      exit;
+    end;
   end;
-  if result<>eNone then begin
-    P := c+1; // continue parsing after the Emoji text
-    if W<>nil then
-      W.AddNoJSONEscape(pointer(EMOJI_UTF8[result]),4);
-  end else
-    if W<>nil then
-      W.Add(':');
+  if W<>nil then
+    W.Add(':');
 end;
 
 procedure EmojiToDots(P: PUTF8Char; W: TTextWriter);

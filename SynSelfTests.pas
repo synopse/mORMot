@@ -8436,6 +8436,10 @@ begin
     '<p>test</p><p>click on <a href="http://coucouc.net" rel="nofollow">http://coucouc.net</a> toto</p>');
   CheckEqual(HtmlEscapeWiki(':test: :) joy:'),'<p>:test: '+EMOJI_UTF8[eSmiley]+' joy:</p>');
   CheckEqual(HtmlEscapeWiki(':innocent: smile'),'<p>'+EMOJI_UTF8[eInnocent]+' smile</p>');
+  CheckEqual(HtmlEscapeWiki(':test: :) a:joy:'),'<p>:test: '+EMOJI_UTF8[eSmiley]+' a:joy:</p>');
+  CheckEqual(HtmlEscapeWiki(':test: :)'),'<p>:test: '+EMOJI_UTF8[eSmiley]+'</p>');
+  CheckEqual(HtmlEscapeWiki(':test: (:)'),'<p>:test: (:)</p>');
+  CheckEqual(HtmlEscapeWiki(':test: :))'),'<p>:test: :))</p>');
   // Markdown
   CheckEqual(HtmlEscapeMarkdown('test'),'<p>test</p>');
   CheckEqual(HtmlEscapeMarkdown('test'#13#10'toto'),'<p>test toto</p>');
@@ -8485,6 +8489,8 @@ begin
     '<p>>test</p><blockquote><p>quote1</p><p>quote2</p></blockquote><p>end</p>');
   CheckEqual(HtmlEscapeMarkdown(':test: :) joy:'),'<p>:test: '+EMOJI_UTF8[eSmiley]+' joy:</p>');
   CheckEqual(HtmlEscapeMarkdown(':innocent: :joy'),'<p>'+EMOJI_UTF8[eInnocent]+' :joy</p>');
+  CheckEqual(HtmlEscapeMarkdown(':test: :)'),'<p>:test: '+EMOJI_UTF8[eSmiley]+'</p>');
+  CheckEqual(HtmlEscapeMarkdown(':test: (:)'),'<p>:test: (:)</p>');
 end;
 
 {$ifndef DELPHI5OROLDER}
