@@ -1024,14 +1024,14 @@ procedure ToHtml(const Value: variant; var result: variant; fmt: TTextWriterHTML
 var txt: RawUTF8;
     d: PDocVariantData;
 begin
-  d := _Safe(Value); // handle {{{MarkdownToHtml content,browserhasnoemoji,nohtmlescape}}}
+  d := _Safe(Value); // {{{MarkdownToHtml content,browserhasnoemoji,nohtmlescape}}}
   if (dvoIsArray in d^.Options) and (d^.Count>=2) then begin
     if VarIsEmptyOrNull(d^.Values[0]) then
       exit;
     VariantToUTF8(d^.Values[0],txt);
-    if not VarIsEmptyOrNull(d^.Values[1]) then
+    if not VarIsVoid(d^.Values[1]) then
       exclude(fmt,heEmojiToUTF8);
-    if (d^.Count=3) and not VarIsEmptyOrNull(d^.Values[2]) then
+    if (d^.Count=3) and not VarIsVoid(d^.Values[2]) then
       exclude(fmt,heHtmlEscape);
   end else // {{{MarkdownToHtml content}}}
     if VarIsEmptyOrNull(Value) then
