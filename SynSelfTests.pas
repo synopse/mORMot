@@ -8434,6 +8434,12 @@ begin
   CheckEqual(HtmlEscapeWiki('https://test'),'<p><a href="https://test" rel="nofollow">https://test</a></p>');
   CheckEqual(HtmlEscapeWiki('test'#13#10'click on http://coucouc.net toto'),
     '<p>test</p><p>click on <a href="http://coucouc.net" rel="nofollow">http://coucouc.net</a> toto</p>');
+  CheckEqual(HtmlEscapeWiki(':test: :) joy:'),'<p>:test: '+EMOJI_UTF8[eSmiley]+' joy:</p>');
+  CheckEqual(HtmlEscapeWiki(':innocent: smile'),'<p>'+EMOJI_UTF8[eInnocent]+' smile</p>');
+  CheckEqual(HtmlEscapeWiki(':test: :) a:joy:'),'<p>:test: '+EMOJI_UTF8[eSmiley]+' a:joy:</p>');
+  CheckEqual(HtmlEscapeWiki(':test: :)'),'<p>:test: '+EMOJI_UTF8[eSmiley]+'</p>');
+  CheckEqual(HtmlEscapeWiki(':test: (:)'),'<p>:test: (:)</p>');
+  CheckEqual(HtmlEscapeWiki(':test: :))'),'<p>:test: :))</p>');
   // Markdown
   CheckEqual(HtmlEscapeMarkdown('test'),'<p>test</p>');
   CheckEqual(HtmlEscapeMarkdown('test'#13#10'toto'),'<p>test toto</p>');
@@ -8481,6 +8487,10 @@ begin
     '<p>>test</p><blockquote><p>quote</p></blockquote>');
   CheckEqual(HtmlEscapeMarkdown('>test'#13#10'> quote1'#10'> quote2'#13#10'end'),
     '<p>>test</p><blockquote><p>quote1</p><p>quote2</p></blockquote><p>end</p>');
+  CheckEqual(HtmlEscapeMarkdown(':test: :) joy:'),'<p>:test: '+EMOJI_UTF8[eSmiley]+' joy:</p>');
+  CheckEqual(HtmlEscapeMarkdown(':innocent: :joy'),'<p>'+EMOJI_UTF8[eInnocent]+' :joy</p>');
+  CheckEqual(HtmlEscapeMarkdown(':test: :)'),'<p>:test: '+EMOJI_UTF8[eSmiley]+'</p>');
+  CheckEqual(HtmlEscapeMarkdown(':test: (:)'),'<p>:test: (:)</p>');
 end;
 
 {$ifndef DELPHI5OROLDER}
@@ -9454,7 +9464,49 @@ var i: Integer;
     astext: boolean;
     P: PUTF8Char;
     eoo: AnsiChar;
+    e: TEmoji;
 begin
+  check(EMOJI_UTF8[eNone]='');
+  checkEqual(BinToHex(EMOJI_UTF8[eGrinning]),'F09F9880');
+  checkEqual(BinToHex(EMOJI_UTF8[ePray]),'F09F998F');
+  check(EmojiFromText(Pointer(EMOJI_UTF8[eGrinning]),4)=eNone);
+  check(EmojiFromText(nil,0)=eNone);
+  checkEqual(EmojiToDots('toto'),'toto');
+  for e := low(e) to high(e) do begin
+    check(EmojiFromText(pointer(EMOJI_TEXT[e]),length(EMOJI_TEXT[e]))=e);
+    if e=eNone then
+      continue;
+    check(length(EMOJI_UTF8[e])=4);
+    P := Pointer(EMOJI_UTF8[e]);
+    checkEqual(NextUTF8UCS4(P),$1f5ff+ord(e));
+    FormatUTF8(':smile % ok',[EMOJI_TAG[e]],tmp);
+    P := pointer(tmp);
+    check(EmojiParseDots(P)=eNone);
+    check(IdemPChar(P,'SMILE :'));
+    inc(P,6);
+    check(P^=':');
+    check(EmojiParseDots(P)=e);
+    check(IdemPChar(P,' OK'));
+    checkEqual(EmojiToDots(EMOJI_UTF8[e]),EMOJI_TAG[e]);
+    checkEqual(EmojiToDots(' '+EMOJI_UTF8[e]+' '),' '+EMOJI_TAG[e]+' ');
+    checkEqual(EmojiToDots(EmojiFromDots(tmp)),tmp);
+  end;
+  tmp := ':) :( :JoY: :o :|';
+  P := pointer(tmp);
+  check(EmojiParseDots(P)=eSmiley);
+  check(P^=' ');
+  inc(P);
+  check(EmojiParseDots(P)=eFrowning);
+  check(IdemPChar(P,' :JOY:'));
+  inc(P);
+  check(EmojiParseDots(P)=eJoy);
+  check(P^=' ');
+  inc(P);
+  check(EmojiParseDots(P)=eOpen_mouth);
+  check(P^=' ');
+  inc(P);
+  check(EmojiParseDots(P)=eExpressionless);
+  check(P^=#0);
   with PTypeInfo(TypeInfo(TSynLogInfo))^.EnumBaseType^ do
     for i := 0 to integer(high(TSynLogInfo)) do begin
 {$ifdef VERBOSE}writeln(i,' ',GetEnumName(i)^, ' ',GetEnumNameTrimed(i));{$endif}

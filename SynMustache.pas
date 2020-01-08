@@ -283,6 +283,8 @@ type
     class procedure JSONQuote(const Value: variant; out result: variant);
     class procedure JSONQuoteURI(const Value: variant; out result: variant);
     class procedure WikiToHtml(const Value: variant; out result: variant);
+    class procedure MarkdownToHtml(const Value: variant; out result: variant);
+    class procedure SimpleToHtml(const Value: variant; out result: variant);
     class procedure Lower(const Value: variant; out result: variant);
     class procedure Upper(const Value: variant; out result: variant);
     class procedure EnumTrim(const Value: variant; out result: variant);
@@ -341,7 +343,9 @@ type
     /// returns a list of most used static Expression Helpers
     // - registered helpers are DateTimeToText, DateToText, DateFmt, TimeLogToText,
     // BlobToBase64, JSONQuote, JSONQuoteURI, ToJSON, EnumTrim, EnumTrimRight,
-    // Lower, Upper, PowerOfTwo, Equals (expecting two parameters) and WikiToHtml
+    // Lower, Upper, PowerOfTwo, Equals (expecting two parameters), MarkdownToHtml,
+    // SimpleToHtml (Markdown with no HTML pass-through) and WikiToHtml
+    // (following TTextWriter.AddHtmlEscapeWiki syntax)
     // - an additional #if helper is also registered, which would allow runtime
     // view logic, via = < > <= >= <> operators over two values:
     // $ {{#if .,"=",123}}  {{#if Total,">",1000}}  {{#if info,"<>",""}}
@@ -583,7 +587,7 @@ var i: integer;
 begin
   if start=finish then
     result := true else begin
-    i := PosEx(' ',start);
+    i := PosExChar(' ',start);
     result := (i>0) and IdemPropNameU(finish,pointer(start),i-1);
   end;
 end;
@@ -805,7 +809,7 @@ begin
         end;
       mtSectionEnd:
         if (fTags[SectionOppositeIndex].Kind in [mtSection,mtInvertedSection]) and
-           (Value[1]<>'-') and (PosEx(' ',fTags[SectionOppositeIndex].Value)=0) then
+           (Value[1]<>'-') and (PosExChar(' ',fTags[SectionOppositeIndex].Value)=0) then
           Context.PopContext;
       mtComment:
         ; // just ignored
@@ -939,11 +943,11 @@ begin
   if HelpersStandardList=nil then
     HelperAdd(HelpersStandardList,
       ['DateTimeToText','DateToText','DateFmt','TimeLogToText','JSONQuote','JSONQuoteURI',
-       'ToJSON','WikiToHtml','BlobToBase64','EnumTrim','EnumTrimRight','PowerOfTwo',
-       'Equals','If','NewGUID','ExtractFileName','Lower','Upper'],
+       'ToJSON','MarkdownToHtml','SimpleToHtml','WikiToHtml','BlobToBase64','EnumTrim',
+       'EnumTrimRight','PowerOfTwo','Equals','If','NewGUID','ExtractFileName','Lower','Upper'],
       [DateTimeToText,DateToText,DateFmt,TimeLogToText,JSONQuote,JSONQuoteURI,
-       ToJSON,WikiToHtml,BlobToBase64,EnumTrim,EnumTrimRight,PowerOfTwo,
-       Equals_,If_,NewGUID,ExtractFileName,Lower,Upper]);
+       ToJSON,MarkdownToHtml,SimpleToHtml,WikiToHtml,BlobToBase64,EnumTrim,EnumTrimRight,
+       PowerOfTwo,Equals_,If_,NewGUID,ExtractFileName,Lower,Upper]);
   result := HelpersStandardList;
 end;
 
@@ -1015,21 +1019,32 @@ begin
   RawUTF8ToVariant(UrlEncode(QuotedStrJSON(json)),result);
 end;
 
-class procedure TSynMustache.WikiToHtml(const Value: variant; out result: variant);
+procedure ToHtml(const Value: variant; var result: variant; fmt: TTextWriterHTMLFormat);
 var txt: RawUTF8;
 begin
   if VarIsEmptyOrNull(Value) then // avoid to return 'null'
     exit;
-  txt := VariantToUTF8(Value);
+  VariantToUTF8(Value,txt);
   if txt<>'' then
-    with TTextWriter.CreateOwnedStream do
-    try
-      AddHtmlEscapeWiki(pointer(txt));
-      SetText(txt);
-    finally
-      Free;
-    end;
+    if fmt=hfAnyWhere then
+      txt := HtmlEscapeWiki(txt,hfOutsideAttributes) else
+      txt := HtmlEscapeMarkdown(txt,fmt);
   RawUTF8ToVariant(txt,result);
+end;
+
+class procedure TSynMustache.WikiToHtml(const Value: variant; out result: variant);
+begin
+  ToHtml(Value,result,hfAnyWhere); // will call HtmlEscapeWiki()
+end;
+
+class procedure TSynMustache.MarkdownToHtml(const Value: variant; out result: variant);
+begin
+  ToHtml(Value,result,hfNone); // default Markdown is to allow HTML tags
+end;
+
+class procedure TSynMustache.SimpleToHtml(const Value: variant; out result: variant);
+begin
+  ToHtml(Value,result,hfOutsideAttributes); // escape HTML tags
 end;
 
 class procedure TSynMustache.BlobToBase64(const Value: variant; out result: variant);
@@ -1241,8 +1256,8 @@ var i,space,helper: Integer;
       end else begin
         for j := 1 to length(valnam) do
           case valnam[j] of
-          ' ':  break; // allows {{helper1 helper2 value}} recursive calls
-          ',': begin // {{helper value,123,"constant"}}
+          ' ': break; // allows {{helper1 helper2 value}} recursive calls
+          ',': begin  // {{helper value,123,"constant"}}
             CSVToRawUTF8DynArray(Pointer(valnam),names,',',true); // TODO: handle 123,"a,b,c"
             valArr.InitFast;
             for k := 0 to High(names) do
@@ -1283,7 +1298,7 @@ begin
         Value := Document;
       exit;
     end;
-  space := PosEx(' ',ValueName);
+  space := PosExChar(' ',ValueName);
   if space>1 then begin // {{helper value}}
     helper := TSynMustache.HelperFind(Helpers,pointer(ValueName),space-1);
     if helper>=0 then begin

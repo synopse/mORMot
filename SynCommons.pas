@@ -8361,7 +8361,8 @@ type
     // trailing > char, and code line from 4 initial spaces
     // - as with default Markdown, won't escape HTML special chars (i.e. you can
     // write plain HTML in the supplied text) unless esc is set otherwise
-    // - only inline-style links and images are supported yet (not reference-style)
+    // - only inline-style links and images are supported yet (not reference-style);
+    // tables aren't supported either
     procedure AddHtmlEscapeMarkdown(P: PUTF8Char; esc: TTextWriterHTMLFormat=hfNone);
     /// append some chars, escaping all XML special chars as expected
     // - i.e.   < > & " '  as   &lt; &gt; &amp; &quote; &apos;
@@ -13091,6 +13092,68 @@ const
 
 {$endif OPT4AMD}
 
+type
+  /// map the first Unicode page of Emojis, from U+1F600 to U+1F64F
+  // - naming comes from github/Markdown :identifiers:
+  TEmoji = (eNone,
+     eGrinning, eGrin, eJoy, eSmiley, eSmile, eSweat_smile,
+     eLaughing, eInnocent, eSmiling_imp, eWink, eBlush, eYum, eRelieved,
+     eHeart_eyes, eSunglasses, eSmirk, eNeutral_face, eExpressionless,
+     eUnamused, eSweat, ePensive,eConfused, eConfounded, eKissing,
+     eKissing_heart, eKissing_smiling_eyes, eKissing_closed_eyes,
+     eStuck_out_tongue, eStuck_out_tongue_winking_eye,
+     eStuck_out_tongue_closed_eyes, eDisappointed, eWorried, eAngry,
+     ePout, eCry, ePersevere, eTriumph, eDisappointed_relieved, eFrowning,
+     eAnguished, eFearful, eWeary, eSleepy, eTired_face, eGrimacing, eSob,
+     eOpen_mouth, eHushed, eCold_sweat, eScream, eAstonished, eFlushed,
+     eSleeping, eDizzy_face, eNo_mouth, eMask, eSmile_cat, eJoy_cat, eSmiley_cat,
+     eHeart_eyes_cat, eSmirk_cat, eKissing_cat, ePouting_cat, eCrying_cat_face,
+     eScream_cat, eSlightly_frowning_face, eSlightly_smiling_face,
+     eUpside_down_face, eRoll_eyes, eNo_good, oOk_woman, eBow, eSee_no_evil,
+     eHear_no_evil, eSpeak_no_evil, eRaising_hand, eRaised_hands,
+     eFrowning_woman, ePerson_with_pouting_face, ePray);
+
+var
+  /// github/Markdown compatible text of Emojis
+  // - e.g. 'grinning' or 'person_with_pouting_face'
+  EMOJI_TEXT: array[TEmoji] of RawUTF8;
+  /// github/Markdown compatible tag of Emojis, including trailing and ending :
+  // - e.g. ':grinning:' or ':person_with_pouting_face:'
+  EMOJI_TAG: array[TEmoji] of RawUTF8;
+  /// the Unicode character matching a given Emoji, after UTF-8 encoding
+  EMOJI_UTF8: array[TEmoji] of RawUTF8;
+  /// low-level access to TEmoji RTTI - used when inlining EmojiFromText()
+  EMOJI_RTTI: PShortString;
+  /// to recognize simple :) :( :| :/ :D :o :p :s characters as smilleys
+  EMOJI_AFTERDOTS: array['('..'|'] of TEmoji;
+
+/// recognize github/Markdown compatible text of Emojis
+// - for instance 'sunglasses' text buffer will return eSunglasses
+// - returns eNone if no case-insensitive match was found
+function EmojiFromText(P: PUTF8Char; len: PtrInt): TEmoji;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// low-level parser of github/Markdown compatible text of Emojis
+// - supplied P^ should point to ':'
+// - will append the recognized UTF-8 Emoji if P contains e.g. :joy: or :)
+// - will append ':' if no Emoji text is recognized, and return eNone
+// - will try both EMOJI_AFTERDOTS[] and EMOJI_RTTI[] reference set
+// - if W is nil, won't append anything, but just return the recognized TEmoji
+function EmojiParseDots(var P: PUTF8Char; W: TTextWriter=nil): TEmoji;
+
+/// low-level conversion of UTF-8 Emoji sequences into github/Markdown :identifiers:
+procedure EmojiToDots(P: PUTF8Char; W: TTextWriter); overload;
+
+/// conversion of UTF-8 Emoji sequences into github/Markdown :identifiers:
+function EmojiToDots(const text: RawUTF8): RawUTF8; overload;
+
+/// low-level conversion of github/Markdown :identifiers: into UTF-8 Emoji sequences
+procedure EmojiFromDots(P: PUTF8Char; W: TTextWriter); overload;
+
+/// conversion of github/Markdown :identifiers: into UTF-8 Emoji sequences
+function EmojiFromDots(const text: RawUTF8): RawUTF8; overload;
+
+
 {$M+} // to have existing RTTI for published properties
 type
   /// used to retrieve version information from any EXE
@@ -17195,6 +17258,9 @@ begin
     VarClearProc(PVarData(p)^);
 end;
 {$endif FPC}
+
+const
+  MOVESMALL_MAX = 32;
 
 procedure MoveSmall(Source, Dest: Pointer; Count: PtrUInt);
 begin
@@ -23001,7 +23067,7 @@ begin
     P[L] := Quote;
   end else begin
     dualquotes := ord(Quote)+ord(Quote)shl 8;
-    MoveSmall(pointer(s),P,quote1);
+    Move(pointer(s)^,P^,quote1);
     inc(P,quote1);
     P^ := Quote;
     inc(P);
@@ -23810,7 +23876,7 @@ Txt:  len := F-FDeb;
       inc(F,2);
     end;
     L := {$ifdef FPC}_LStrLen(tmp[i]){$else}PInteger(PtrInt(tmp[i])-SizeOf(integer))^{$endif};
-    {$ifdef HASINLINE}if L<128 then
+    {$ifdef HASINLINE}if L<MOVESMALL_MAX then
       MoveSmall(pointer(tmp[i]),F,L) else{$endif}
       {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(tmp[i])^,F^,L);
     inc(F,L);
@@ -36574,7 +36640,7 @@ procedure RCU(var src,dst; len: integer);
 begin
   if len>0 then
     repeat
-      MoveSmall(@src,@dst,len);
+      MoveSmall(@src,@dst,len); // per-byte inlined copy
       ReadBarrier;
     until CompareMemSmall(@src,@dst,len);
 end;
@@ -40600,7 +40666,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
         itemsize := itemsize*2;
       {$endif}
       result := pointer(ToVarUInt32(itemsize,pointer(dest)));
-      {$ifdef HASINLINE}if itemsize<128 then
+      {$ifdef HASINLINE}if itemsize<MOVESMALL_MAX then
         MoveSmall(pointer(P^),result,itemsize) else{$endif}
         {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(P^)^,result^,itemsize);
       inc(result,itemsize);
@@ -44360,7 +44426,7 @@ begin
       end;
       Dest := pointer(ToVarUInt32(LenBytes,pointer(Dest)));
       if LenBytes>0 then begin // direct raw copy
-        {$ifdef HASINLINE}if LenBytes<128 then
+        {$ifdef HASINLINE}if LenBytes<MOVESMALL_MAX then
           MoveSmall(VAny,Dest,LenBytes) else{$endif}
           {$ifdef FPC}Move{$else}MoveFast{$endif}(PPtrUInt(VAny)^,Dest^,LenBytes);
         inc(Dest,LenBytes);
@@ -44665,18 +44731,16 @@ procedure TSynInvokeableVariantType.Lookup(var Dest: TVarData; const V: TVarData
 var itemName: RawUTF8;
     Handler: TSynInvokeableVariantType;
     DestVar,LookupVar: TVarData;
-    docv: word;
 begin
   Dest.VType := varEmpty; // left to Unassigned if not found
   DestVar := V;
   while DestVar.VType=varByRef or varVariant do
     DestVar := PVarData(DestVar.VPointer)^;
-  docv := DocVariantVType;
   repeat
     GetNextItem(FullName,'.',itemName);
     if itemName='' then
       exit;
-    if DestVar.VType=docv then begin
+    if DestVar.VType=DocVariantVType then begin
       if not TDocVariantData(DestVar).GetVarData(itemName,DestVar) then
         exit;
     end else
@@ -44697,7 +44761,7 @@ begin
       exit;
     while DestVar.VType=varByRef or varVariant do
       DestVar := PVarData(DestVar.VPointer)^;
-    if (DestVar.VType=docv) and
+    if (DestVar.VType=DocVariantVType) and
        (TDocVariantData(DestVar).VCount=0) then
       DestVar.VType := varNull; // recognize void TDocVariant as null
     if FullName=nil then begin // found full name scope
@@ -53775,7 +53839,7 @@ begin
   Start(dest,src,esc);
   SetLine(twlParagraph);
   repeat
-    case ProcessText([0,10,13,ord('*'),ord('+'),ord('`'),ord('\')]) of
+    case ProcessText([0,10,13,ord('*'),ord('+'),ord('`'),ord('\'),ord(':')]) of
     #0: break;
     #10,#13: begin
       EndOfParagraph;
@@ -53795,6 +53859,10 @@ begin
       Toggle(tweCode);
     'h': begin
       ProcessHRef;
+      continue;
+    end;
+    ':': begin
+      EmojiParseDots(P,W);
       continue;
     end;
     end;
@@ -53820,7 +53888,7 @@ begin
         NewMarkdownLine;
         continue;
       end else
-    case ProcessText([0,10,13,ord('*'),ord('_'),ord('`'),ord('\'),ord('['),ord('!')]) of
+    case ProcessText([0,10,13,ord('*'),ord('_'),ord('`'),ord('\'),ord('['),ord('!'),ord(':')]) of
     #0: break;
     #10,#13: begin
       EndOfParagraph;
@@ -53869,6 +53937,10 @@ begin
     end;
     'h': begin
       ProcessHRef;
+      continue;
+    end;
+    ':': begin
+      EmojiParseDots(P,W);
       continue;
     end;
     end;
@@ -53998,7 +54070,7 @@ begin
         i := Len;
       // add UTF-8 bytes
       if i>0 then begin
-        {$ifdef HASINLINE}if i<128 then
+        {$ifdef HASINLINE}if i<MOVESMALL_MAX then
           MoveSmall(P,B,i) else{$endif}
           {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,B^,i);
         inc(B,i);
@@ -54318,7 +54390,7 @@ noesc:c := i;
       dec(Len,c);
       if BEnd-B<=i then
         AddNoJSONEscape(P,i) else begin
-        {$ifdef HASINLINE}if i<128 then
+        {$ifdef HASINLINE}if i<MOVESMALL_MAX then
           MoveSmall(P,B+1,i) else{$endif}
           {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,B[1],i);
         inc(B,i);
@@ -60501,7 +60573,7 @@ begin
       exit;
     end;
   end;
-  {$ifdef HASINLINE}if DataLen<64 then
+  {$ifdef HASINLINE}if DataLen<MOVESMALL_MAX then
     MoveSmall(Data,@fBuffer^[fPos],DataLen) else{$endif}
     {$ifdef FPC}Move{$else}MoveFast{$endif}(Data^,fBuffer^[fPos],DataLen);
   inc(fPos,DataLen);
@@ -61628,6 +61700,101 @@ begin
 end;
 
 
+function EmojiFromText(P: PUTF8Char; len: PtrInt): TEmoji;
+begin // RTTI has shortstrings in adjacent L1 cache lines -> faster than EMOJI_TEXT[]
+  result := TEmoji(FindShortStringListTrimLowerCase(EMOJI_RTTI,ord(high(TEmoji))-1,P,len)+1);
+end;
+
+function EmojiParseDots(var P: PUTF8Char; W: TTextWriter): TEmoji;
+var c: PUTF8Char;
+begin
+  inc(P); // ignore trailing ':'
+  c := P;
+  if c[-2]<=' ' then begin
+    result := eNone;
+    if (c[1]<=' ') and (c^ in ['('..'|']) then
+      result := EMOJI_AFTERDOTS[c^]; // e.g. :)
+    if result=eNone then begin
+      while c^ in ['a'..'z','A'..'Z','_'] do
+        inc(c);
+      if (c^=':') and (c[1]<=' ') then // try e.g. :joy_cat:
+        result := TEmoji(FindShortStringListTrimLowerCase(EMOJI_RTTI,ord(high(TEmoji))-1,P,c-P)+1);
+    end;
+    if result<>eNone then begin
+      P := c+1; // continue parsing after the Emoji text
+      if W<>nil then
+        W.AddNoJSONEscape(pointer(EMOJI_UTF8[result]),4);
+      exit;
+    end;
+  end;
+  if W<>nil then
+    W.Add(':');
+end;
+
+procedure EmojiToDots(P: PUTF8Char; W: TTextWriter);
+var B: PUTF8Char;
+    c: cardinal;
+begin
+  if (P<>nil) and (W<>nil) then
+    repeat
+      B := P;
+      while (P^<>#0) and (PWord(P)^<>$9ff0) do
+        inc(P);
+      W.AddNoJSONEscape(B,P-B);
+      if P^=#0 then
+        break;
+      B := P;
+      c := NextUTF8UCS4(P)-$1f5ff;
+      if c<=cardinal(high(TEmoji)) then
+        W.AddNoJSONEscapeUTF8(EMOJI_TAG[TEmoji(c)]) else
+        W.AddNoJSONEscape(B,P-B);
+    until P^=#0;
+end;
+
+function EmojiToDots(const text: RawUTF8): RawUTF8;
+var W: TTextWriter;
+    tmp: TTextWriterStackBuffer;
+begin
+  if PosExChar(#$f0,text)=0 then begin
+    result := text; // no smiley UTF-8 for sure
+    exit;
+  end;
+  W := TTextWriter.CreateOwnedStream(tmp);
+  try
+    EmojiToDots(pointer(text),W);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+procedure EmojiFromDots(P: PUTF8Char; W: TTextWriter); overload;
+var B: PUTF8Char;
+begin
+  if (P<>nil) and (W<>nil) then
+    repeat
+      B := P;
+      while not(P^ in [#0,':']) do
+        inc(P);
+      W.AddNoJSONEscape(B,P-B);
+      if P^=#0 then
+        break;
+      EmojiParseDots(P,W);
+    until P^=#0;
+end;
+
+function EmojiFromDots(const text: RawUTF8): RawUTF8; overload;
+var W: TTextWriter;
+    tmp: TTextWriterStackBuffer;
+begin
+  W := TTextWriter.CreateOwnedStream(tmp);
+  try
+    EmojiFromDots(pointer(text),W);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
 
 function PropNameValid(P: PUTF8Char): boolean;
 begin
@@ -63549,6 +63716,7 @@ var i,n: integer;
     crc: cardinal;
     tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
+    e: TEmoji;
 {$ifdef OWNNORMTOUPPER}
     d: integer;
 const n2u: array[138..255] of byte =
@@ -63595,7 +63763,6 @@ begin
   for i := ord('a') to ord('z') do
     dec(NormToUpperAnsi7Byte[i],32);
   {$ifdef OWNNORMTOUPPER}
-  // initialize custom NormToUpper[] and NormToLower[] arrays
   MoveFast(NormToUpperAnsi7,NormToUpper,138);
   MoveFast(n2u,NormToUpperByte[138],SizeOf(n2u));
   for i := 0 to 255 do begin
@@ -63605,7 +63772,6 @@ begin
     NormToLowerByte[i] := d;
   end;
   {$endif OWNNORMTOUPPER}
-  // code below is 55 bytes long, therefore shorter than a const array
   FillcharFast(ConvertHexToBin[0],SizeOf(ConvertHexToBin),255); // all to 255
   v := 0;
   for i := ord('0') to ord('9') do begin
@@ -63639,16 +63805,35 @@ begin
   for i := 0 to 127 do
     if i in JSON_ESCAPE then
       JSON_ESCAPE_BYTE[i] := true;
-  // initialize our internaly used TSynAnsiConvert engines
-  TSynAnsiConvert.Engine(0);
-  // initialize tables for crc32cfast() and SymmetricEncrypt/FillRandom
+  EMOJI_RTTI := GetEnumInfo(TypeInfo(TEmoji),n);
+  inc(PByte(EMOJI_RTTI),ord(EMOJI_RTTI^[0])+1); // eNone
+  GetEnumTrimmedNames(TypeInfo(TEmoji),@EMOJI_TEXT);
+  EMOJI_TEXT[eNone] := '';
+  for e := succ(low(e)) to high(e) do begin
+    LowerCaseSelf(EMOJI_TEXT[e]);
+    EMOJI_TAG[e] := ':'+EMOJI_TEXT[e]+':';
+    SetLength(EMOJI_UTF8[e],4);
+    UCS4ToUTF8(ord(e)+$1f5ff,pointer(EMOJI_UTF8[e]));
+  end;
+  EMOJI_AFTERDOTS[')'] := eSmiley;
+  EMOJI_AFTERDOTS['('] := eFrowning;
+  EMOJI_AFTERDOTS['|'] := eExpressionless;
+  EMOJI_AFTERDOTS['/'] := eConfused;
+  EMOJI_AFTERDOTS['D'] := eLaughing;
+  EMOJI_AFTERDOTS['o'] := eOpen_mouth;
+  EMOJI_AFTERDOTS['O'] := eOpen_mouth;
+  EMOJI_AFTERDOTS['p'] := eYum;
+  EMOJI_AFTERDOTS['P'] := eYum;
+  EMOJI_AFTERDOTS['s'] := eScream;
+  EMOJI_AFTERDOTS['S'] := eScream;
+  TSynAnsiConvert.Engine(0); // define CurrentAnsi/WinAnsi/UTF8AnsiConvert
   for i := 0 to 255 do begin
     crc := i;
     for n := 1 to 8 do
       if (crc and 1)<>0 then // polynom is not the same as with zlib's crc32()
         crc := (crc shr 1) xor $82f63b78 else
         crc := crc shr 1;
-    crc32ctab[0,i] := crc;
+    crc32ctab[0,i] := crc; // for crc32cfast() and SymmetricEncrypt/FillRandom
   end;
   for i := 0 to 255 do begin
     crc := crc32ctab[0,i];
@@ -63785,6 +63970,7 @@ initialization
   assert(SizeOf(TSynSystemTime)=SizeOf(TSystemTime));
   assert(SizeOf(TSynSystemTime)=SizeOf(THash128));
   Assert(SizeOf(TOperatingSystemVersion)=SizeOf(integer));
+  Assert(ord(high(TEmoji))=$4f+1);
   {$ifdef MSWINDOWS}
   {$ifndef CPU64}
   Assert(SizeOf(TFileTime)=SizeOf(Int64)); // see e.g. FileTimeToInt64
