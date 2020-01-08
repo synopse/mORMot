@@ -797,7 +797,9 @@ begin
     nfo := StoredClassRecordProps.Fields.List[f];
     if nfo.SQLFieldType in COPIABLE_FIELDS then begin // ignore sftMany
       SQL := fStoredClassMapping^.ExtFieldNames[f];
-      if fProperties.IsSQLKeyword(SQL) then begin
+      if rpmQuoteFieldName in options then
+        fStoredClassMapping^.MapField(nfo.Name,'"'+SQL+'"')
+      else if fProperties.IsSQLKeyword(SQL) then begin
         log.Log(sllWarning,'%.%: Field name "%" is not compatible with %',
           [fStoredClass,nfo.Name,SQL,fProperties.DBMSEngineName],self);
         if rpmAutoMapKeywordFields in options then begin
@@ -805,8 +807,7 @@ begin
           fStoredClassMapping^.MapField(nfo.Name,SQL+'_');
         end else
           log.Log(sllWarning,'-> you should better use MapAutoKeywordFields',self);
-      end else if rpmQuoteFieldName in options then
-        fStoredClassMapping^.MapField(nfo.Name,'"'+SQL+'"');
+      end;
     end;
   end;
   // create corresponding external table if necessary, and retrieve its fields info
