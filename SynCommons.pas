@@ -53671,8 +53671,8 @@ type
     procedure SetLine(style: TTextWriterEscapeLineStyle);
     procedure EndOfParagraph;
     procedure NewMarkdownLine;
-    procedure AddHtmlEscapeWiki(dest: TTextWriter; src: PUTF8Char; esc: TTextWriterHTMLEscape);
-    procedure AddHtmlEscapeMarkdown(dest: TTextWriter; src: PUTF8Char; esc: TTextWriterHTMLEscape);
+    procedure AddHtmlEscapeWiki(dest: TTextWriter; src: PUTF8Char; escape: TTextWriterHTMLEscape);
+    procedure AddHtmlEscapeMarkdown(dest: TTextWriter; src: PUTF8Char; escape: TTextWriterHTMLEscape);
   end;
 
 procedure TTextWriterEscape.Start(dest: TTextWriter; src: PUTF8Char; escape: TTextWriterHTMLEscape);
@@ -53857,9 +53857,9 @@ none:   if lst=twlParagraph then begin
 end;
 
 procedure TTextWriterEscape.AddHtmlEscapeWiki(dest: TTextWriter; src: PUTF8Char;
-  esc: TTextWriterHTMLEscape);
+  escape: TTextWriterHTMLEscape);
 begin
-  Start(dest,src,esc);
+  Start(dest,src,escape);
   SetLine(twlParagraph);
   repeat
     case ProcessText([0,10,13,ord('*'),ord('+'),ord('`'),ord('\'),ord(':')]) of
@@ -53896,9 +53896,9 @@ begin
 end;
 
 procedure TTextWriterEscape.AddHtmlEscapeMarkdown(dest: TTextWriter;
-  src: PUTF8Char; esc: TTextWriterHTMLEscape);
+  src: PUTF8Char; escape: TTextWriterHTMLEscape);
 begin
-  Start(dest,src,esc);
+  Start(dest,src,escape);
   NewMarkDownLine;
   repeat
     if lst>=twlCode4 then // no Markdown tags within code blocks
@@ -61731,10 +61731,10 @@ end;
 function EmojiParseDots(var P: PUTF8Char; W: TTextWriter): TEmoji;
 var c: PUTF8Char;
 begin
+  result := eNone;
   inc(P); // ignore trailing ':'
   c := P;
   if c[-2]<=' ' then begin
-    result := eNone;
     if (c[1]<=' ') and (c^ in ['('..'|']) then
       result := EMOJI_AFTERDOTS[c^]; // e.g. :)
     if result=eNone then begin
