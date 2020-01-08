@@ -6,7 +6,7 @@ unit mORMotMVC;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotMVC;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -186,11 +186,11 @@ type
     // optionally creating void templates for any missing view
     constructor Create(aInterface: PTypeInfo; aLogClass: TSynLogClass=nil;
       aExtensionForNotExistingTemplate: TFileName=''); overload;
-    /// will add the supplied Expression Helpers definition
+    /// define the supplied Expression Helpers definition
     // - returns self so that may be called in a fluent interface
     function RegisterExpressionHelpers(const aNames: array of RawUTF8;
       const aEvents: array of TSynMustacheHelperEvent): TMVCViewsMustache;
-    /// will add Expression Helpers for some ORM tables
+    /// define Expression Helpers for some ORM tables
     // - e.g. to read a TSQLMyRecord from its ID value and put its fields
     // in the current rendering data context, you can write:
     // ! aView.RegisterExpressionHelpersForTables(aServer,[TSQLMyRecord]);
@@ -199,7 +199,7 @@ type
     // - returns self so that may be called in a fluent interface
     function RegisterExpressionHelpersForTables(aRest: TSQLRest;
       const aTables: array of TSQLRecordClass): TMVCViewsMustache; overload;
-    /// will add Expression Helpers for all ORM tables of the supplied model
+    /// define Expression Helpers for all ORM tables of the supplied model
     // - e.g. to read a TSQLMyRecord from its ID value and put its fields
     // in the current rendering data context, you can write:
     // ! aView.RegisterExpressionHelpersForTables(aServer);
@@ -208,11 +208,13 @@ type
     // - returns self so that may be called in a fluent interface
     function RegisterExpressionHelpersForTables(
       aRest: TSQLRest): TMVCViewsMustache; overload;
-    /// will add some Expression Helpers for hashing
+    /// define some Expression Helpers for hashing
     // - i.e. md5, sha1 and sha256 hashing
     // - would allow e.g. to compute a Gravatar URI via:
     // ! <img src=http://www.gravatar.com/avatar/{{md5 email}}?s=200></img>
+    // - returns self so that may be called in a fluent interface
     function RegisterExpressionHelpersForCrypto: TMVCViewsMustache;
+
     /// finalize the instance
     destructor Destroy; override;
   end;

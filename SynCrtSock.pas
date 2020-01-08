@@ -6,7 +6,7 @@ unit SynCrtSock;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,12 +25,13 @@ unit SynCrtSock;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
   - Alfred Glaenzer (alf)
   - Cybexr
+  - Darian Miller
   - EMartin
   - Eric Grange
   - Eugene Ilyin
@@ -425,7 +426,7 @@ type
     fBytesIn: Int64;
     fBytesOut: Int64;
     fSocketLayer: TCrtSocketLayer;
-    fSockInEof, fTLS: boolean;
+    fSockInEof, fTLS, fWasBind: boolean;
     // updated by every SockSend() call
     fSndBuf: SockString;
     fSndBufLen: integer;
@@ -2492,12 +2493,17 @@ type
     function InternalRetrieveAnswer(var Header,Encoding,AcceptEncoding, Data: SockString): integer; override;
     procedure InternalCloseRequest; override;
     procedure InternalAddHeader(const hdr: SockString); override;
+    function GetCACertFile: SockString;
+    procedure SetCACertFile(const aCertFile: SockString);
   public
     /// returns TRUE if the class is actually supported on this system
     class function IsAvailable: boolean; override;
     /// release the connection
     destructor Destroy; override;
+    /// allow to set a CA certification file without touching the client certification
+    property CACertFile: SockString read GetCACertFile write SetCACertFile;
     /// set the client SSL certification details
+    // - see CACertFile if you don't want to change the whole client cert info
     // - used e.g. as
     // ! UseClientCertificate('testcert.pem','cacert.pem','testkey.pem','pass');
     procedure UseClientCertificate(
@@ -2822,7 +2828,7 @@ function CallServer(const Server, Port: SockString; doBind: boolean;
 function GetRemoteIP(aClientSock: TSocket): SockString;
 
 /// low-level direct shutdown of a given socket
-procedure DirectShutdown(sock: TSocket);
+procedure DirectShutdown(sock: TSocket; rdwr: boolean=false);
 
 /// low-level change of a socket to be in non-blocking mode
 // - used e.g. by TPollAsynchSockets.Start
@@ -4796,6 +4802,8 @@ type
 
 procedure TCrtSocket.Close;
 begin
+  if self=nil then
+    exit;
   fSndBufLen := 0; // always reset (e.g. in case of further Open)
   if (SockIn<>nil) or (SockOut<>nil) then begin
     ioresult; // reset ioresult value if SockIn/SockOut were used
@@ -4814,7 +4822,7 @@ begin
   if fSecure.Initialized then
     fSecure.BeforeDisconnection(fSock);
   {$endif MSWINDOWS}
-  DirectShutdown(fSock);
+  DirectShutdown(fSock,{rdwr=}fWasBind);
   fSock := -1; // don't change Server or Port, since may try to reconnect
 end;
 
@@ -4844,6 +4852,7 @@ const BINDTXT: array[boolean] of string[4] = ('open','bind');
         'Another process may be currently listening to this port!');
 begin
   fSocketLayer := aLayer;
+  fWasBind := doBind;
   if aSock<0 then begin
     if (aPort='') and (aLayer<>cslUNIX) then
       fPort := DEFAULT_PORT[aTLS] else // default port is 80/443 (HTTP/S)
@@ -6031,16 +6040,17 @@ begin
   Terminate; // set Terminated := true for THttpServerResp.Execute
   if fThreadPool<>nil then
     fThreadPool.fTerminated := true; // notify background process
-  // force Accept() to return and terminate - shutdown(Sock.Sock) is not enough
-  if (Sock<>nil) and (Sock.Sock>0) and not fExecuteFinished then
-    DirectShutdown(CallServer('localhost',Sock.Port,false,cslTCP,1));
+  if not fExecuteFinished then begin
+    Sock.Close; // shutdown the socket to unlock Accept() in Execute
+    DirectShutdown(CallServer('127.0.0.1',Sock.Port,false,cslTCP,1));
+  end;
   endtix := GetTick64+20000;
   EnterCriticalSection(fProcessCS);
   if fInternalHttpServerRespList<>nil then begin
     for i := 0 to fInternalHttpServerRespList.Count-1 do begin
       resp := fInternalHttpServerRespList.List[i];
       resp.Terminate;
-      DirectShutdown(resp.fServerSock.Sock);
+      DirectShutdown(resp.fServerSock.Sock,{rdwr=}true);
     end;
     repeat // wait for all THttpServerResp.Execute to be finished
       if (fInternalHttpServerRespList.Count=0) and fExecuteFinished then
@@ -6847,11 +6857,12 @@ begin
   end;
 end;
 
-procedure DirectShutdown(sock: TSocket);
+procedure DirectShutdown(sock: TSocket; rdwr: boolean);
+const SHUT_: array[boolean] of integer = (SHUT_RD, SHUT_RDWR);
 begin
   if sock<=0 then
     exit;
-  Shutdown(sock,SHUT_WR);
+  Shutdown(sock,SHUT_[rdwr]); // SHUT_RD doesn't unlock accept() on Linux
   CloseSocket(sock); // SO_LINGER usually set to 5 or 10 seconds
 end;
 
@@ -11501,6 +11512,17 @@ begin
   inherited;
 end;
 
+function TCurlHTTP.GetCACertFile: SockString;
+begin
+  Result := fSSL.CACertFile;
+end;
+
+procedure TCurlHTTP.SetCACertFile(const aCertFile: SockString);
+begin
+  fSSL.CACertFile := aCertFile;
+end;
+
+
 procedure TCurlHTTP.UseClientCertificate(
   const aCertFile, aCACertFile, aKeyName, aPassPhrase: SockString);
 begin
@@ -11537,7 +11559,9 @@ begin
         curl.easy_setopt(fHandle,coSSLKey,pointer(fSSL.KeyName));
         curl.easy_setopt(fHandle,coCAInfo,pointer(fSSL.CACertFile));
         curl.easy_setopt(fHandle,coSSLVerifyPeer,1);
-      end;
+      end
+      else if fSSL.CACertFile<>'' then
+        curl.easy_setopt(fHandle,coCAInfo,pointer(fSSL.CACertFile));
     end;
   curl.easy_setopt(fHandle,coUserAgent,pointer(fExtendedOptions.UserAgent));
   curl.easy_setopt(fHandle,coWriteFunction,@CurlWriteRawByteString);

@@ -6,7 +6,7 @@ unit SynMustache;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynMustache;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -72,7 +72,7 @@ type
   /// identify the {{mustache}} tag kind
   // - mtVariable if the tag is a variable - e.g. {{myValue}} - or an Expression
   // Helper - e.g. {{helperName valueName}}
-  // - mtVariableUnescaped to unescape the variable HTML - e.g.
+  // - mtVariableUnescape, mtVariableUnescapeAmp to unescape the variable HTML - e.g.
   // {{{myRawValue}}} or {{& name}}
   // - mtSection and mtInvertedSection for sections beginning - e.g.
   // {{#person}} or {{^person}}
@@ -86,7 +86,7 @@ type
   // - mtTranslate for content i18n via a callback - e.g. {{"English text}}
   // - mtText for all text that appears outside a symbol
   TSynMustacheTagKind = (
-    mtVariable, mtVariableUnescape,
+    mtVariable, mtVariableUnescape, mtVariableUnescapeAmp,
     mtSection, mtInvertedSection, mtSectionEnd,
     mtComment, mtPartial, mtSetPartial, mtSetDelimiter, mtTranslate, mtText);
 
@@ -283,6 +283,8 @@ type
     class procedure JSONQuote(const Value: variant; out result: variant);
     class procedure JSONQuoteURI(const Value: variant; out result: variant);
     class procedure WikiToHtml(const Value: variant; out result: variant);
+    class procedure MarkdownToHtml(const Value: variant; out result: variant);
+    class procedure SimpleToHtml(const Value: variant; out result: variant);
     class procedure Lower(const Value: variant; out result: variant);
     class procedure Upper(const Value: variant; out result: variant);
     class procedure EnumTrim(const Value: variant; out result: variant);
@@ -323,11 +325,13 @@ type
     destructor Destroy; override;
     /// register one Expression Helper callback for a given list of helpers
     // - i.e. to let aEvent process {{aName value}} tags
-    // - the supplied name will be first checked in the current list
+    // - the supplied name will be checked against the current list, and replace
+    // any existing entry
     class procedure HelperAdd(var Helpers: TSynMustacheHelpers;
       const aName: RawUTF8; aEvent: TSynMustacheHelperEvent); overload;
-    /// register several Expression Helper callback for a given list of helpers
-    // - warning: the supplied name won't be checked in the current list
+    /// register several Expression Helper callbacks for a given list of helpers
+    // - the supplied names will be checked against the current list, and replace
+    // any existing entry
     class procedure HelperAdd(var Helpers: TSynMustacheHelpers;
       const aNames: array of RawUTF8; const aEvents: array of TSynMustacheHelperEvent); overload;
     /// unregister one Expression Helper callback for a given list of helpers
@@ -339,7 +343,9 @@ type
     /// returns a list of most used static Expression Helpers
     // - registered helpers are DateTimeToText, DateToText, DateFmt, TimeLogToText,
     // BlobToBase64, JSONQuote, JSONQuoteURI, ToJSON, EnumTrim, EnumTrimRight,
-    // Lower, Upper, PowerOfTwo, Equals (expecting two parameters) and WikiToHtml
+    // Lower, Upper, PowerOfTwo, Equals (expecting two parameters), MarkdownToHtml,
+    // SimpleToHtml (Markdown with no HTML pass-through) and WikiToHtml
+    // (following TTextWriter.AddHtmlEscapeWiki syntax)
     // - an additional #if helper is also registered, which would allow runtime
     // view logic, via = < > <= >= <> operators over two values:
     // $ {{#if .,"=",123}}  {{#if Total,">",1000}}  {{#if info,"<>",""}}
@@ -424,7 +430,6 @@ const
   /// this constant can be used to define as JSON a tag value as separator
   NULL_OR_COMMA: array[boolean] of RawUTF8 = ('null','","');
 
-
 implementation
 
 function KindToText(Kind: TSynMustacheTagKind): PShortString;
@@ -463,6 +468,8 @@ var
 
 procedure TSynMustacheParser.AddTag(aKind: TSynMustacheTagKind;
   aStart, aEnd: PUTF8Char);
+var
+  P: PUTF8Char;
 begin
   if (aStart=nil) or (aEnd=nil) then begin
     aStart := fScanStart;
@@ -488,6 +495,24 @@ begin
                   dec(TextLen);
         end;
     end;
+    mtVariable, mtVariableUnescape, mtVariableUnescapeAmp: begin
+      // handle JSON object/array with nested } e.g. as {{helper [{a:{a:1,b:2}}]}}
+      P := PosChar(aStart,' ');
+      if (P<>nil) and (P<aEnd) then begin
+        P := GotoNextNotSpaceSameLine(P+1);
+        if P^ in ['{','['] then begin
+          P := GotoNextJSONObjectOrArray(P);
+          if P<>nil then begin
+            aEnd := P;
+            fPos := P;
+            if not Scan(fTagStop) then
+              raise ESynMustache.CreateUTF8('Unfinished {{%',[aStart]);
+            if (aKind=mtVariableUnescape) and (fTagStop=$7d7d) and (PWord(fPos-1)^=$7d7d) then
+              inc(fPos); // {{{name}}} -> point after }}}
+          end;
+        end;
+      end;
+    end;
     end;
   end;
   if aEnd<=aStart then
@@ -509,7 +534,7 @@ begin
       while (aStart<aEnd) and (aStart^<=' ') do inc(aStart);
       while (aEnd>aStart) and (aEnd[-1]<=' ') do dec(aEnd);
       if aEnd=aStart then
-        raise ESynMustache.CreateFmt('Void %s identifier',[KindToText(aKind)^]);
+        raise ESynMustache.CreateUTF8('Void % identifier',[KindToText(aKind)^]);
       SetString(Value,PAnsiChar(aStart),aEnd-aStart);
     end;
     end;
@@ -522,9 +547,9 @@ constructor TSynMustacheParser.Create(Template: TSynMustache;
 begin
   fTemplate := Template;
   if length(DelimiterStart)<>2 then
-    raise ESynMustache.CreateFmt('DelimiterStart="%s"',[DelimiterStart]);
+    raise ESynMustache.CreateUTF8('DelimiterStart="%"',[DelimiterStart]);
   if length(DelimiterStop)<>2 then
-    raise ESynMustache.CreateFmt('DelimiterStop="%s"',[DelimiterStop]);
+    raise ESynMustache.CreateUTF8('DelimiterStop="%"',[DelimiterStop]);
   fTagStart := PWord(DelimiterStart)^;
   fTagStop := PWord(DelimiterStop)^;
 end;
@@ -562,7 +587,7 @@ var i: integer;
 begin
   if start=finish then
     result := true else begin
-    i := PosEx(' ',start);
+    i := PosExChar(' ',start);
     result := (i>0) and IdemPropNameU(finish,pointer(start),i-1);
   end;
 end;
@@ -588,8 +613,8 @@ begin
     Symbol := fPos^;
     case Symbol of
     '=': Kind := mtSetDelimiter;
-    '{',
-    '&': Kind := mtVariableUnescape;
+    '{': Kind := mtVariableUnescape;
+    '&': Kind := mtVariableUnescapeAmp;
     '#': Kind := mtSection;
     '^': Kind := mtInvertedSection;
     '/': Kind := mtSectionEnd;
@@ -602,7 +627,7 @@ begin
     if Kind<>mtVariable then
       inc(fPos);
     if not Scan(fTagStop) then
-      raise ESynMustache.CreateFmt('Unfinished {{tag "%s"',[fPos]);
+      raise ESynMustache.CreateUTF8('Unfinished {{tag "%"',[fPos]);
     case Kind of
     mtSetDelimiter: begin
       if (fScanEnd-fScanStart<>6) or (fScanEnd[-1]<>'=') then
@@ -612,7 +637,7 @@ begin
       continue; // do not call AddTag(mtSetDelimiter)
     end;
     mtVariableUnescape:
-      if (Symbol='{') and (fTagStop=32125) and (PWord(fPos-1)^=32125) then
+      if (Symbol='{') and (fTagStop=$7d7d) and (PWord(fPos-1)^=$7d7d) then
         inc(fPos); // {{{name}}} -> point after }}}
     end;
     AddTag(Kind);
@@ -644,17 +669,17 @@ begin
               end;
               break;
             end else
-              raise ESynMustache.CreateFmt('Got {{/%s}}, expected {{/%s}}',
+              raise ESynMustache.CreateUTF8('Got {{/%}}, expected {{/%}}',
                 [Value,fTemplate.fTags[j].Value]);
         end;
         end;
       if SectionOppositeIndex<0 then
-        raise ESynMustache.CreateFmt('Missing section end {{/%s}}',[Value]);
+        raise ESynMustache.CreateUTF8('Missing section end {{/%}}',[Value]);
     end;
     mtSectionEnd: begin
       dec(secCount);
       if SectionOppositeIndex<0 then
-        raise ESynMustache.CreateFmt('Unexpected section end {{/%s}}',[Value]);
+        raise ESynMustache.CreateUTF8('Unexpected section end {{/%}}',[Value]);
     end;
   end;
   SetLength(fTemplate.fTags,fTagCount);
@@ -761,7 +786,7 @@ begin
          Context.fWriter.AddNoJSONEscape(TextStart,TextLen);
       mtVariable:
         Context.AppendValue(Value,false);
-      mtVariableUnescape:
+      mtVariableUnescape, mtVariableUnescapeAmp:
         Context.AppendValue(Value,true);
       mtSection:
         case Context.AppendSection(Value) of
@@ -784,7 +809,7 @@ begin
         end;
       mtSectionEnd:
         if (fTags[SectionOppositeIndex].Kind in [mtSection,mtInvertedSection]) and
-           (Value[1]<>'-') and (PosEx(' ',fTags[SectionOppositeIndex].Value)=0) then
+           (Value[1]<>'-') and (PosExChar(' ',fTags[SectionOppositeIndex].Value)=0) then
           Context.PopContext;
       mtComment:
         ; // just ignored
@@ -803,7 +828,7 @@ begin
         if TextLen<>0 then
           Context.TranslateBlock(TextStart,TextLen);
       else
-        raise ESynMustache.CreateFmt('Kind=%s not implemented yet',
+        raise ESynMustache.CreateUTF8('Kind=% not implemented yet',
           [KindToText(fTags[TagStart].Kind)^]);
       end;
       inc(TagStart);
@@ -864,7 +889,7 @@ end;
 
 class procedure TSynMustache.HelperAdd(var Helpers: TSynMustacheHelpers;
   const aName: RawUTF8; aEvent: TSynMustacheHelperEvent);
-var n,i: integer;
+var n,i: PtrInt;
 begin
   n := length(Helpers);
   for i := 0 to n-1 do
@@ -879,23 +904,17 @@ end;
 
 class procedure TSynMustache.HelperAdd(var Helpers: TSynMustacheHelpers;
   const aNames: array of RawUTF8; const aEvents: array of TSynMustacheHelperEvent);
-var n,count,i: integer;
+var n,i: PtrInt;
 begin
   n := length(aNames);
-  if n<>length(aEvents) then
-    exit;
-  count := length(Helpers);
-  SetLength(Helpers,count+n);
-  for i := 0 to n-1 do
-  with Helpers[count+i] do begin
-    Name := aNames[i];
-    Event := aEvents[i];
-  end;
+  if n=length(aEvents) then
+    for i := 0 to n-1 do
+      HelperAdd(Helpers,aNames[i],aEvents[i]);
 end;
 
 class procedure TSynMustache.HelperDelete(var Helpers: TSynMustacheHelpers;
   const aName: RawUTF8);
-var n,i,j: integer;
+var n,i,j: PtrInt;
 begin
   n := length(Helpers);
   for i := 0 to n-1 do
@@ -924,18 +943,18 @@ begin
   if HelpersStandardList=nil then
     HelperAdd(HelpersStandardList,
       ['DateTimeToText','DateToText','DateFmt','TimeLogToText','JSONQuote','JSONQuoteURI',
-       'ToJSON','WikiToHtml','BlobToBase64','EnumTrim','EnumTrimRight','PowerOfTwo',
-       'Equals','If','NewGUID','ExtractFileName','Lower','Upper'],
+       'ToJSON','MarkdownToHtml','SimpleToHtml','WikiToHtml','BlobToBase64','EnumTrim',
+       'EnumTrimRight','PowerOfTwo','Equals','If','NewGUID','ExtractFileName','Lower','Upper'],
       [DateTimeToText,DateToText,DateFmt,TimeLogToText,JSONQuote,JSONQuoteURI,
-       ToJSON,WikiToHtml,BlobToBase64,EnumTrim,EnumTrimRight,PowerOfTwo,
-       Equals_,If_,NewGUID,ExtractFileName,Lower,Upper]);
+       ToJSON,MarkdownToHtml,SimpleToHtml,WikiToHtml,BlobToBase64,EnumTrim,EnumTrimRight,
+       PowerOfTwo,Equals_,If_,NewGUID,ExtractFileName,Lower,Upper]);
   result := HelpersStandardList;
 end;
 
 class function TSynMustache.HelpersGetStandardList(const aNames: array of RawUTF8;
   const aEvents: array of TSynMustacheHelperEvent): TSynMustacheHelpers;
 begin
-  result := HelpersGetStandardList;
+  result := copy(HelpersGetStandardList); // don't affect global HelpersStandardList
   HelperAdd(result,aNames,aEvents);
 end;
 
@@ -980,36 +999,52 @@ end;
 
 class procedure TSynMustache.ToJSON(const Value: variant; out result: variant);
 begin
-  RawUTF8ToVariant(JSONReformat(VariantToUTF8(Value)),result);
+  if not VarIsEmptyOrNull(Value) then
+    RawUTF8ToVariant(JSONReformat(VariantToUTF8(Value)),result);
 end;
 
 class procedure TSynMustache.JSONQuote(const Value: variant; out result: variant);
 var json: RawUTF8;
 begin
-  QuotedStrJSON(VariantToUTF8(Value),json);
-  RawUTF8ToVariant(json,result);
+  if not VarIsEmptyOrNull(Value) then // avoid to return "null"
+    VariantToUTF8(Value,json);
+  RawUTF8ToVariant(QuotedStrJSON(json),result);
 end;
 
 class procedure TSynMustache.JSONQuoteURI(const Value: variant; out result: variant);
 var json: RawUTF8;
 begin
-  QuotedStrJSON(VariantToUTF8(Value),json);
-  RawUTF8ToVariant(UrlEncode(json),result);
+  if not VarIsEmptyOrNull(Value) then // avoid to return "null"
+    VariantToUTF8(Value,json);
+  RawUTF8ToVariant(UrlEncode(QuotedStrJSON(json)),result);
+end;
+
+procedure ToHtml(const Value: variant; var result: variant; fmt: TTextWriterHTMLFormat);
+var txt: RawUTF8;
+begin
+  if VarIsEmptyOrNull(Value) then // avoid to return 'null'
+    exit;
+  VariantToUTF8(Value,txt);
+  if txt<>'' then
+    if fmt=hfAnyWhere then
+      txt := HtmlEscapeWiki(txt,hfOutsideAttributes) else
+      txt := HtmlEscapeMarkdown(txt,fmt);
+  RawUTF8ToVariant(txt,result);
 end;
 
 class procedure TSynMustache.WikiToHtml(const Value: variant; out result: variant);
-var txt: RawUTF8;
 begin
-  txt := VariantToUTF8(Value);
-  if txt<>'' then
-    with TTextWriter.CreateOwnedStream do
-    try
-      AddHtmlEscapeWiki(pointer(txt));
-      SetText(txt);
-    finally
-      Free;
-    end;
-  RawUTF8ToVariant(txt,result);
+  ToHtml(Value,result,hfAnyWhere); // will call HtmlEscapeWiki()
+end;
+
+class procedure TSynMustache.MarkdownToHtml(const Value: variant; out result: variant);
+begin
+  ToHtml(Value,result,hfNone); // default Markdown is to allow HTML tags
+end;
+
+class procedure TSynMustache.SimpleToHtml(const Value: variant; out result: variant);
+begin
+  ToHtml(Value,result,hfOutsideAttributes); // escape HTML tags
 end;
 
 class procedure TSynMustache.BlobToBase64(const Value: variant; out result: variant);
@@ -1031,6 +1066,8 @@ var tmp: RawUTF8;
     short: PUTF8Char;
 begin
   VariantToUTF8(Value,tmp,wasString);
+  if not wasString then
+    exit;
   short := TrimLeftLowerCase(tmp);
   RawUTF8ToVariant(short,StrLen(short),result);
 end;
@@ -1041,6 +1078,8 @@ var tmp: RawUTF8;
     i,L: integer;
 begin
   VariantToUTF8(Value,tmp,wasString);
+  if not wasString then
+    exit;
   L := length(tmp);
   for i := 1 to L do
     if not (tmp[i] in ['a'..'z']) then begin
@@ -1217,8 +1256,8 @@ var i,space,helper: Integer;
       end else begin
         for j := 1 to length(valnam) do
           case valnam[j] of
-          ' ':  break; // allows {{helper1 helper2 value}} recursive calls
-          ',': begin // {{helper value,123,"constant"}}
+          ' ': break; // allows {{helper1 helper2 value}} recursive calls
+          ',': begin  // {{helper value,123,"constant"}}
             CSVToRawUTF8DynArray(Pointer(valnam),names,',',true); // TODO: handle 123,"a,b,c"
             valArr.InitFast;
             for k := 0 to High(names) do
@@ -1259,7 +1298,7 @@ begin
         Value := Document;
       exit;
     end;
-  space := PosEx(' ',ValueName);
+  space := PosExChar(' ',ValueName);
   if space>1 then begin // {{helper value}}
     helper := TSynMustache.HelperFind(Helpers,pointer(ValueName),space-1);
     if helper>=0 then begin

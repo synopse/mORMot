@@ -28,7 +28,7 @@ HtmlSideBar=Overview/Meet the mORMot:SOURCE,Download/How to install:TITL_113,API
 ; the sidebar first links, for html export
 
 {\b Document License}
-{\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2019 Arnaud Bouchez.\line Synopse Informatique - @https://synopse.info
+{\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2020 Arnaud Bouchez.\line Synopse Informatique - @https://synopse.info
 The {\i Synopse mORMot Framework Source Code} is licensed under GPL / LGPL / MPL licensing terms, free to be included in any application.
 ;This documentation has been generated using {\i Synopse SynProject} - @https://synopse.info/fossil/wiki?name=SynProject
 ;This document is a free document; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
@@ -12709,7 +12709,7 @@ Internal partials (one of the {\f1\fs20 SynMustache} extensions), can be defined
 !  // now html='1'#$A'234','internal partials'
 :    Expression Helpers
 {\i @**Expression Helper@s} are an extension to the standard {\i Mustache} definition. They allow to define your own set of functions which will be called during the rendering, to transform one value from the context into a value to be rendered.
-{\f1\fs20 TSynMustache.HelpersGetStandardList} will return a list of standard static helpers, able to convert {\f1\fs20 @*TDateTime@} or {\f1\fs20 @*TTimeLog@} values into text, or convert any value into its @*JSON@ representation. The current list of registered helpers are {\f1\fs20 DateTimeToText}, {\f1\fs20 DateToText}, {\f1\fs20 DateFmt}, {\f1\fs20 TimeLogToText}, {\f1\fs20 BlobToBase64}, {\f1\fs20 JSONQuote}, {\f1\fs20 JSONQuoteURI}, {\f1\fs20 ToJSON}, {\f1\fs20 EnumTrim}, {\f1\fs20 EnumTrimRight}, {\f1\fs20 PowerOfTwo} , {\f1\fs20 Equals}, {\f1\fs20 If} and {\f1\fs20 WikiToHtml}. For instance, {\f1\fs20 \{\{TimeLogToText CreatedAt\}\}} will convert a {\f1\fs20 TCreateTime} field value into ready-to-be-displayed text.
+{\f1\fs20 TSynMustache.HelpersGetStandardList} will return a list of standard static helpers, able to convert {\f1\fs20 @*TDateTime@} or {\f1\fs20 @*TTimeLog@} values into text, or convert any value into its @*JSON@ representation. The current list of registered helpers are {\f1\fs20 DateTimeToText}, {\f1\fs20 DateToText}, {\f1\fs20 DateFmt}, {\f1\fs20 TimeLogToText}, {\f1\fs20 BlobToBase64}, {\f1\fs20 JSONQuote}, {\f1\fs20 JSONQuoteURI}, {\f1\fs20 ToJSON}, {\f1\fs20 EnumTrim}, {\f1\fs20 EnumTrimRight}, {\f1\fs20 PowerOfTwo} , {\f1\fs20 Equals}, {\f1\fs20 If}, {\f1\fs20 MarkdownToHtml}, {\f1\fs20 SimpleToHtml} and {\f1\fs20 WikiToHtml}. For instance, {\f1\fs20 \{\{TimeLogToText CreatedAt\}\}} will convert a {\f1\fs20 TCreateTime} field value into ready-to-be-displayed text.
 The mustache tag syntax is  {\f1\fs20 \{\{helpername value\}\}}. The supplied {\f1\fs20 value} parameter may be a variable name in the current context, or could be a constant number ({\f1\fs20 \{\{helpername 123\}\}}), a constant JSON string ({\f1\fs20 \{\{helpername "constant text"\}\}}), a JSON array ({\f1\fs20 \{\{helpername [1,2,3]\}\}}) or a JSON object ({\f1\fs20 \{\{helpername \{name:"john",age:24\}\}\}}). The value could be also a comma-seperated set of values, which will be translated into a corresponding JSON array, the values being extracted from the current context, as with {\f1\fs20 \{\{DateFmt DateValue,"dd/mm/yyy"\}\}}.
 You could call recursively the helpers, just like you nest functions: {\f1\fs20 \{\{helper1 helper2 value\}\}} will call {\f1\fs20 helper2} with the supplied {\f1\fs20 value}, which result will be passed as value to {\f1\fs20 helper1}.
 But you can create your own list of registered {\i Expression Helpers}, even including some business logic, to compute any data during rendering, via {\f1\fs20 TSynMustache.HelperAdd} methods.
@@ -12760,6 +12760,8 @@ This latest syntax may it pretty convenient to work with. Of course, since {\i M
 ${{#isNumber6}} Welcome, number six! {{/isNumber6}}
 ${{#showLoyaltyMessage}} Thanks for your income: your loyalty will be rewarded. {{/#showLoyaltyMessage}}
 ${{#showWarning}} Warning: {{info}} {{/#showWarning}}
+Helpers can be used to convert some {\i @*wiki@} or {\i @*markdown@} content into plain HTML, for instance, in the MVC blog sample, a {\f1\fs20 ContentHtml} boolean flag defines if a content (here the {\f1\fs20 abstract} text field) is already HTML-encoded, or if it needs to be converted via the {\f1\fs20 WikiToHtml} helper:
+${{#ContentHtml}}{{{abstract}}}{{/ContentHtml}}{{^ContentHtml}}{{{WikiToHtml abstract}}}{{/ContentHtml}}
 The framework also offers some built-in optional {\i Helpers} tied to its @*ORM@, if you create a MVC @*web application@ using {\f1\fs20 mORMotMVC.pas} - see @108@ - you can register a set of {\i Expression Helpers} to let your {\i Mustache} view retrieve a given {\f1\fs20 TSQLRecord}, from its ID, or display a given instance fields in an auto-generated table.
 For instance, you may write:
 ! aMVCMustacheView.RegisterExpressionHelpersForTables(aRestServer,[TSQLMyRecord]);
@@ -18450,7 +18452,7 @@ But please do not forget to put somewhere in your credit window or documentation
 For instance, if you select the MPL license, here are the requirements:
 - You accept the license terms with no restriction - see @http://www.mozilla.org/MPL/2.0/FAQ.html for additional information;
 - You have to publish any modified unit (e.g. {\f1\fs20 SynTaskDialog.pas}) in a public web site (e.g. {\f1\fs20 http://SoftwareCompany.com/MPL}), with a description of applied modifications, and no removal of the original license header in source code;
-- You make appear some notice available in the program (About box, documentation, online help), stating e.g.\line {\i This software uses some third-party code of the Synopse mORMot framework (C) 2019 Arnaud Bouchez - {\f1\fs20 https://synopse.info} - under Mozilla Public License 1.1; modified source code is available at {\f1\fs20 http://SoftwareCompany.com/MPL}.}
+- You make appear some notice available in the program (About box, documentation, online help), stating e.g.\line {\i This software uses some third-party code of the Synopse mORMot framework (C) 2020 Arnaud Bouchez - {\f1\fs20 https://synopse.info} - under Mozilla Public License 1.1; modified source code is available at {\f1\fs20 http://SoftwareCompany.com/MPL}.}
 : Derivate Open Source works
 If you want to include part of the framework source code in your own open-source project, you may publish it with a comment similar to this one (as included in the great {\i DelphiWebScript} project by Eric Grange - @http://code.google.com/p/dwscript ):
 ${
@@ -18463,7 +18465,7 @@ $
 $    Sample based on official mORMot's sample
 $    "SQLite3\Samples\09 - HttpApi web server\HttpApiServer.dpr"
 $
-$    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+$    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
 $      Synopse Informatique - https://synopse.info
 $
 $    Original tri-license: MPL 1.1/GPL 2.0/LGPL 2.1

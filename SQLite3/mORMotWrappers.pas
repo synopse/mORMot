@@ -6,7 +6,7 @@ unit mORMotWrappers;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotWrappers;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s) (for this unit and the .mustache templates):
@@ -383,7 +383,7 @@ const
     '{"type":"object"}', //FIXME! //wRawJSON
     '{"type":"string","format":"binary"}','{"type":"string"}', //wBlob,wGUID
     '', '', '', '', //wCustomAnswer, wRecord, wArray, wVariant
-    '', '', '', '' //wObject, wSQLRecord, wInterface, wRecordVersion
+    '', SWI64, '', '' //wObject, wSQLRecord, wInterface, wRecordVersion
    ));
   TYPES_ORM: array[TSQLFieldType] of TWrapperType =
     (wUnknown,        // sftUnknown
@@ -485,7 +485,7 @@ var t,f,s,n: integer;
     hasRecord: boolean;
     fields,services: TDocVariantData;
     field,rec: variant;
-    srv: TServiceFactory;
+    srv: TServiceFactoryServer;
     uri: RawUTF8;
     source: TFileName;
     src: PChar;
@@ -553,7 +553,7 @@ begin
   // compute SOA information
   if fServer.Services.Count>0 then begin
     for s := 0 to fServer.Services.Count-1 do begin
-      srv := fServer.Services.Index(s);
+      srv := fServer.Services.Index(s) as TServiceFactoryServer;
       if fServer.Services.ExpectMangledURI then
         uri := srv.InterfaceMangledURI else
         uri := srv.InterfaceURI;
@@ -567,6 +567,12 @@ begin
           'instanceCreationName',GetEnumNameTrimed(
             TypeInfo(TServiceInstanceImplementation),InstanceCreation),
           'methods',ContextFromMethods(InterfaceFactory),
+          'bypassAuthentication',ByPassAuthentication,
+          'resultAsJSONObject',ResultAsJSONObject,
+          'resultAsJSONObjectWithoutResult',ResultAsJSONObjectWithoutResult and
+            (InstanceCreation in SERVICE_IMPLEMENTATION_NOID),
+          'resultAsXMLObject',ResultAsXMLObject,
+          'timeoutSec',TimeoutSec,
           'serviceDescription',fDescriptions.GetValueOrNull(InterfaceFactory.InterfaceName)]);
       if srv.InstanceCreation=sicClientDriven then
         rec.isClientDriven := true;
@@ -644,14 +650,19 @@ end;
 function TWrapperContext.ContextFromMethod(const meth: TServiceMethod): variant;
 const
   VERB_DELPHI: array[boolean] of string[9] = ('procedure','function');
+var d: variant;
 begin
   with meth do begin
     result := _ObjFast(['methodName',URI, 'methodIndex',ExecutionMethodIndex,
       'verb',VERB_DELPHI[ArgsResultIndex>=0],
       'args',ContextArgsFromMethod(meth),
       'argsOutputCount',ArgsOutputValuesCount]);
-    if self<>nil then // can be called as TWraperContext(nil).ContextFromMethod
-      result.methodDescription := fDescriptions.GetValueOrNull(InterfaceDotMethodName);
+    if self<>nil then  begin// can be called as TWraperContext(nil).ContextFromMethod
+      d := fDescriptions.GetValueOrNull(InterfaceDotMethodName);
+      if VarIsEmptyOrNull(d) then
+        RawUTF8ToVariant(InterfaceDotMethodName,d);
+      result.methodDescription := d;
+    end;
     if ArgsInFirst>=0 then
       result.hasInParams := true;
     if ArgsOutFirst>=0 then begin
@@ -1041,9 +1052,10 @@ begin
   // compute the Model information as JSON
   result := _ObjFast(['time',NowToString, 'year',CurrentYear,
     'mORMotVersion',SYNOPSE_FRAMEWORK_VERSION,
-    'exeVersion',ExeVersion.Version.Detailed,
-    'exeInfo',ExeVersion.ProgramFullSpec,
-    'orm',variant(fORM),
+    'exeVersion',VarStringOrNull(StringToUTF8(ExeVersion.Version.DetailedOrVoid)),
+    'exeInfo',ExeVersion.Version.VersionInfo,
+    'exeName',ExeVersion.ProgramName,
+    'hasorm',fORM.Count>0, 'orm',variant(fORM),
     'soa',fSOA]);
   if fServer<>nil then
     _ObjAddProps(['root',fServer.Model.Root],result);
@@ -1124,61 +1136,59 @@ begin // URI is e.g. GET http://localhost:888/root/wrapper/Delphi/UnitName.pas
       templateFound := i;
       break;
     end;
-  if templateFound<0 then begin
-    Ctxt.Error('Please copy some .mustache files in the expected folder (e.g. %)',
-      [ExpandFileName(Path[0])]);
-    exit;
-  end;
-  context := ContextFromModel(Ctxt.Server,SourcePath,Descriptions);
-  context.uri := Ctxt.URIWithoutSignature;
-  if llfHttps in Ctxt.Call^.LowLevelFlags then begin
-    context.protocol := 'https';
-    context.https := true;
-  end else
-    context.protocol := 'http';
-  host := Ctxt.InHeader['host'];
-  if host<>'' then
-    context.host := host;
-  port := GetInteger(pointer(split(host,':',host)));
-  if port=0 then
-    port := 80;
-  context.port := port;
-  if IdemPropNameU(Ctxt.URIBlobFieldName,'context') then begin
-    Ctxt.Returns(JSONReformat(VariantToUTF8(context),jsonUnquotedPropName),200,
-      TEXT_CONTENT_TYPE_HEADER);
-    exit;
-  end;
-  root := Ctxt.Server.Model.Root;
-  if Ctxt.URIBlobFieldName='' then begin
-    result := '<html><title>mORMot Wrappers</title>'+
-      '<body style="font-family:verdana;"><h1>Generated Code/Doc Wrappers</h1>'+
-      '<hr><h2>Available Templates:</h2><ul>';
-    repeat
-      Split(StringToUTF8(SR.Name),'.',templateName,templateExt);
-      templateTitle := templateName;
-      i := PosEx('-',templateName);
-      if i>0 then begin
-        SetLength(templateTitle,i-1);
-        savedName := copy(templateName,i+1,maxInt);
-      end else
-        savedName := 'mORMotClient';
-      Split(templateExt,'.',templateExt);
-      uri := FormatUTF8('<a href=/%/wrapper/%/%.%',
-        [root,templateName,savedName,templateExt]);
-      result := FormatUTF8(
-       '%<li><b>%</b><br><i>%.%</i>  -  %>download as file</a>  -  '+
-       '%.txt>see as text</a> - %.mustache>see template</a></li><br>',
-       [result,templateTitle,savedName,templateExt,uri,uri,uri]);
-    until FindNext(SR)<>0;
+  if templateFound<0 then
+    Ctxt.Error('Please copy some .mustache files in the expected folder (e.g. %)',[Path[0]]) else
+  try
+    context := ContextFromModel(Ctxt.Server,SourcePath,Descriptions);
+    context.uri := Ctxt.URIWithoutSignature;
+    if llfHttps in Ctxt.Call^.LowLevelFlags then begin
+      context.protocol := 'https';
+      context.https := true;
+    end else
+      context.protocol := 'http';
+    host := Ctxt.InHeader['host'];
+    if host<>'' then
+      context.host := host;
+    port := GetInteger(pointer(split(host,':',host)));
+    if port=0 then
+      port := 80;
+    context.port := port;
+    if IdemPropNameU(Ctxt.URIBlobFieldName,'context') then begin
+      Ctxt.ReturnsJson(context,200,{304=}true,twNone,{humanreadable=}true);
+      exit;
+    end;
+    root := Ctxt.Server.Model.Root;
+    if Ctxt.URIBlobFieldName='' then begin
+      result := '<html><title>mORMot Wrappers</title>'+
+        '<body style="font-family:verdana;"><h1>Generated Code/Doc Wrappers</h1>'+
+        '<hr><h2>Available Templates:</h2><ul>';
+      repeat
+        Split(StringToUTF8(SR.Name),'.',templateName,templateExt);
+        templateTitle := templateName;
+        i := PosEx('-',templateName);
+        if i>0 then begin
+          SetLength(templateTitle,i-1);
+          savedName := copy(templateName,i+1,maxInt);
+        end else
+          savedName := 'mORMotClient';
+        Split(templateExt,'.',templateExt);
+        uri := FormatUTF8('<a href=/%/wrapper/%/%.%',
+          [root,templateName,savedName,templateExt]);
+        result := FormatUTF8(
+         '%<li><b>%</b><br><i>%.%</i>  -  %>download as file</a>  -  '+
+         '%.txt>see as text</a> - %.mustache>see template</a></li><br>',
+         [result,templateTitle,savedName,templateExt,uri,uri,uri]);
+      until FindNext(SR)<>0;
+      result := FormatUTF8('%</ul><p>You can also retrieve the corresponding '+
+        '<a href=/%/wrapper/context>template context</a>.<hr><p>Generated by a '+
+        '<a href=http://mormot.net>Synopse <i>mORMot</i> '+SYNOPSE_FRAMEWORK_VERSION+
+        '</a> server.',[result,root]);
+      Ctxt.Returns(result,HTTP_SUCCESS,HTML_CONTENT_TYPE_HEADER);
+      exit;
+    end;
+  finally
     FindClose(SR);
-    result := FormatUTF8('%</ul><p>You can also retrieve the corresponding '+
-      '<a href=/%/wrapper/context>template context</a>.<hr><p>Generated by a '+
-      '<a href=http://mormot.net>Synopse <i>mORMot</i> '+SYNOPSE_FRAMEWORK_VERSION+
-      '</a> server.',[result,root]);
-    Ctxt.Returns(result,HTTP_SUCCESS,HTML_CONTENT_TYPE_HEADER);
-    exit;
-  end else
-    FindClose(SR);
+  end;
   Split(Ctxt.URIBlobFieldName,'/',templateName,unitName);
   Split(unitName,'.',unitName,templateExt);
   if PosEx('.',templateExt)>0 then begin // see as text
@@ -1286,7 +1296,7 @@ begin
   end else begin
     SetLength(SearchPath,length(Path));
     for i := 0 to high(Path) do
-      SearchPath[i] := Path[i];
+      SearchPath[i] := ExpandFileName(Path[i]); // also convert \ if needed on FPC
   end;
 end;
 
