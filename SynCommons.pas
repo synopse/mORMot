@@ -7918,6 +7918,13 @@ type
   TTextWriterHTMLFormat = (
     hfNone, hfAnyWhere, hfOutsideAttributes, hfWithinAttributes);
 
+  /// tune TTextWriter.AddHtmlEscapeWiki/AddHtmlEscapeMarkdown process
+  // - heHtmlEscape will escape any HTML special chars, e.g. & into &amp;
+  // - heEmojiToUTF8 will convert any Emoji text into UTF-8 Unicode character,
+  // recognizing e.g. :joy: or :) in the text
+  TTextWriterHTMLEscape = set of (
+    heHtmlEscape, heEmojiToUTF8);
+
   /// available global options for a TTextWriter instance
   // - TTextWriter.WriteObject() method behavior would be set via their own
   // TTextWriterWriteObjectOptions, and work in conjunction with those settings
@@ -8348,9 +8355,11 @@ type
       Fmt: TTextWriterHTMLFormat=hfAnyWhere);
     /// convert some wiki-like text into proper HTML
     // - convert all #13#10 into <p>...</p>, *..* into <em>..</em>, +..+ into
-    // <strong>..</strong>, `...` into <code>...</code>, escape http:// as
-    // <a href=...>; then escape any HTML special chars as specified with esc
-    procedure AddHtmlEscapeWiki(P: PUTF8Char; esc: TTextWriterHTMLFormat=hfOutsideAttributes);
+    // <strong>..</strong>, `..` into <code>..</code>, and http://... as
+    // <a href=http://...>
+    // - escape any HTML special chars, and Emoji tags as specified with esc
+    procedure AddHtmlEscapeWiki(P: PUTF8Char;
+      esc: TTextWriterHTMLEscape=[heHtmlEscape,heEmojiToUTF8]);
     /// convert minimal Markdown text into proper HTML
     // - see https://enterprise.github.com/downloads/en/markdown-cheatsheet.pdf
     // - convert all #13#10 into <p>...</p>, *..* into <em>..</em>, **..** into
@@ -8363,7 +8372,7 @@ type
     // write plain HTML in the supplied text) unless esc is set otherwise
     // - only inline-style links and images are supported yet (not reference-style);
     // tables aren't supported either
-    procedure AddHtmlEscapeMarkdown(P: PUTF8Char; esc: TTextWriterHTMLFormat=hfNone);
+    procedure AddHtmlEscapeMarkdown(P: PUTF8Char; esc: TTextWriterHTMLEscape=[heEmojiToUTF8]);
     /// append some chars, escaping all XML special chars as expected
     // - i.e.   < > & " '  as   &lt; &gt; &amp; &quote; &apos;
     // - and all control chars (i.e. #1..#31) as &#..;
@@ -11105,11 +11114,11 @@ function EscapeBuffer(s,d: PAnsiChar; len,max: integer): PAnsiChar;
 
 /// escape some wiki-marked text into HTML
 // - follow TTextWriter.AddHtmlEscapeWiki syntax
-function HtmlEscapeWiki(const wiki: RawUTF8; esc: TTextWriterHTMLFormat=hfOutsideAttributes): RawUTF8;
+function HtmlEscapeWiki(const wiki: RawUTF8; esc: TTextWriterHTMLEscape=[heHtmlEscape,heEmojiToUTF8]): RawUTF8;
 
 /// escape some Markdown-marked text into HTML
 // - follow TTextWriter.AddHtmlEscapeMarkdown syntax
-function HtmlEscapeMarkdown(const md: RawUTF8; esc: TTextWriterHTMLFormat=hfNone): RawUTF8;
+function HtmlEscapeMarkdown(const md: RawUTF8; esc: TTextWriterHTMLEscape=[heEmojiToUTF8]): RawUTF8;
 
 const
   /// maximum size, in bytes, of a TLogEscape / LogEscape() buffer
@@ -53649,27 +53658,32 @@ type
   TTextWriterEscape = object
     P,B,P2,B2: PUTF8Char;
     W: TTextWriter;
-    fmt: TTextWriterHTMLFormat;
     st: set of TTextWriterEscapeStyle;
+    fmt: TTextWriterHTMLFormat;
+    esc: TTextWriterHTMLEscape;
     lst: TTextWriterEscapeLineStyle;
-    procedure Start(dest: TTextWriter; src: PUTF8Char; esc: TTextWriterHTMLFormat);
+    procedure Start(dest: TTextWriter; src: PUTF8Char; escape: TTextWriterHTMLEscape);
     function ProcessText(const stopchars: TSynByteSet): AnsiChar;
     procedure ProcessHRef;
     function ProcessLink: boolean;
+    procedure ProcessEmoji; {$ifdef HASINLINE}inline;{$endif}
     procedure Toggle(style: TTextWriterEscapeStyle);
     procedure SetLine(style: TTextWriterEscapeLineStyle);
     procedure EndOfParagraph;
     procedure NewMarkdownLine;
-    procedure AddHtmlEscapeWiki(dest: TTextWriter; src: PUTF8Char; esc: TTextWriterHTMLFormat);
-    procedure AddHtmlEscapeMarkdown(dest: TTextWriter; src: PUTF8Char; esc: TTextWriterHTMLFormat);
+    procedure AddHtmlEscapeWiki(dest: TTextWriter; src: PUTF8Char; esc: TTextWriterHTMLEscape);
+    procedure AddHtmlEscapeMarkdown(dest: TTextWriter; src: PUTF8Char; esc: TTextWriterHTMLEscape);
   end;
 
-procedure TTextWriterEscape.Start(dest: TTextWriter; src: PUTF8Char; esc: TTextWriterHTMLFormat);
+procedure TTextWriterEscape.Start(dest: TTextWriter; src: PUTF8Char; escape: TTextWriterHTMLEscape);
 begin
   P := src;
   W := dest;
-  fmt := esc;
   st := [];
+  if heHtmlEscape in escape then
+    fmt := hfOutsideAttributes else
+    fmt := hfNone;
+  esc := escape;
   lst := twlNone;
 end;
 
@@ -53721,6 +53735,15 @@ begin
   end;
   P := B2; // rollback
   result := false;
+end;
+
+procedure TTextWriterEscape.ProcessEmoji;
+begin
+  if heEmojiToUTF8 in esc then
+    EmojiParseDots(P,W) else begin
+    W.Add(':');
+    inc(P);
+  end;
 end;
 
 procedure TTextWriterEscape.Toggle(style: TTextWriterEscapeStyle);
@@ -53834,7 +53857,7 @@ none:   if lst=twlParagraph then begin
 end;
 
 procedure TTextWriterEscape.AddHtmlEscapeWiki(dest: TTextWriter; src: PUTF8Char;
-  esc: TTextWriterHTMLFormat);
+  esc: TTextWriterHTMLEscape);
 begin
   Start(dest,src,esc);
   SetLine(twlParagraph);
@@ -53862,7 +53885,7 @@ begin
       continue;
     end;
     ':': begin
-      EmojiParseDots(P,W);
+      ProcessEmoji;
       continue;
     end;
     end;
@@ -53873,7 +53896,7 @@ begin
 end;
 
 procedure TTextWriterEscape.AddHtmlEscapeMarkdown(dest: TTextWriter;
-  src: PUTF8Char; esc: TTextWriterHTMLFormat);
+  src: PUTF8Char; esc: TTextWriterHTMLEscape);
 begin
   Start(dest,src,esc);
   NewMarkDownLine;
@@ -53940,7 +53963,7 @@ begin
       continue;
     end;
     ':': begin
-      EmojiParseDots(P,W);
+      ProcessEmoji;
       continue;
     end;
     end;
@@ -53950,13 +53973,13 @@ begin
   SetLine(twlNone);
 end;
 
-procedure TTextWriter.AddHtmlEscapeWiki(P: PUTF8Char; esc: TTextWriterHTMLFormat);
+procedure TTextWriter.AddHtmlEscapeWiki(P: PUTF8Char; esc: TTextWriterHTMLEscape);
 var doesc: TTextWriterEscape;
 begin
   doesc.AddHtmlEscapeWiki(self,P,esc);
 end;
 
-procedure TTextWriter.AddHtmlEscapeMarkdown(P: PUTF8Char; esc: TTextWriterHTMLFormat);
+procedure TTextWriter.AddHtmlEscapeMarkdown(P: PUTF8Char; esc: TTextWriterHTMLEscape);
 var doesc: TTextWriterEscape;
 begin
   doesc.AddHtmlEscapeMarkdown(self,P,esc);
@@ -56547,7 +56570,7 @@ begin
     end;
 end;
 
-function HtmlEscapeWiki(const wiki: RawUTF8; esc: TTextWriterHTMLFormat): RawUTF8;
+function HtmlEscapeWiki(const wiki: RawUTF8; esc: TTextWriterHTMLEscape): RawUTF8;
 var temp: TTextWriterStackBuffer;
 begin
   with TTextWriter.CreateOwnedStream(temp) do
@@ -56559,7 +56582,7 @@ begin
   end;
 end;
 
-function HtmlEscapeMarkdown(const md: RawUTF8; esc: TTextWriterHTMLFormat): RawUTF8;
+function HtmlEscapeMarkdown(const md: RawUTF8; esc: TTextWriterHTMLEscape): RawUTF8;
 var temp: TTextWriterStackBuffer;
 begin
   with TTextWriter.CreateOwnedStream(temp) do
@@ -61718,7 +61741,7 @@ begin
       while c^ in ['a'..'z','A'..'Z','_'] do
         inc(c);
       if (c^=':') and (c[1]<=' ') then // try e.g. :joy_cat:
-        result := TEmoji(FindShortStringListTrimLowerCase(EMOJI_RTTI,ord(high(TEmoji))-1,P,c-P)+1);
+        result := EmojiFromText(P,c-P);
     end;
     if result<>eNone then begin
       P := c+1; // continue parsing after the Emoji text
@@ -61768,7 +61791,7 @@ begin
   end;
 end;
 
-procedure EmojiFromDots(P: PUTF8Char; W: TTextWriter); overload;
+procedure EmojiFromDots(P: PUTF8Char; W: TTextWriter);
 var B: PUTF8Char;
 begin
   if (P<>nil) and (W<>nil) then
@@ -61783,7 +61806,7 @@ begin
     until P^=#0;
 end;
 
-function EmojiFromDots(const text: RawUTF8): RawUTF8; overload;
+function EmojiFromDots(const text: RawUTF8): RawUTF8;
 var W: TTextWriter;
     tmp: TTextWriterStackBuffer;
 begin

@@ -1019,32 +1019,44 @@ begin
   RawUTF8ToVariant(UrlEncode(QuotedStrJSON(json)),result);
 end;
 
-procedure ToHtml(const Value: variant; var result: variant; fmt: TTextWriterHTMLFormat);
+procedure ToHtml(const Value: variant; var result: variant; fmt: TTextWriterHTMLEscape;
+  wiki: boolean=false);
 var txt: RawUTF8;
+    d: PDocVariantData;
 begin
-  if VarIsEmptyOrNull(Value) then // avoid to return 'null'
-    exit;
-  VariantToUTF8(Value,txt);
+  d := _Safe(Value); // handle {{{MarkdownToHtml content,browserhasnoemoji,nohtmlescape}}}
+  if (dvoIsArray in d^.Options) and (d^.Count>=2) then begin
+    if VarIsEmptyOrNull(d^.Values[0]) then
+      exit;
+    VariantToUTF8(d^.Values[0],txt);
+    if not VarIsEmptyOrNull(d^.Values[1]) then
+      exclude(fmt,heEmojiToUTF8);
+    if (d^.Count=3) and not VarIsEmptyOrNull(d^.Values[2]) then
+      exclude(fmt,heHtmlEscape);
+  end else // {{{MarkdownToHtml content}}}
+    if VarIsEmptyOrNull(Value) then
+      exit else
+      VariantToUTF8(Value,txt);
   if txt<>'' then
-    if fmt=hfAnyWhere then
-      txt := HtmlEscapeWiki(txt,hfOutsideAttributes) else
+    if wiki then
+      txt := HtmlEscapeWiki(txt,fmt) else
       txt := HtmlEscapeMarkdown(txt,fmt);
   RawUTF8ToVariant(txt,result);
 end;
 
 class procedure TSynMustache.WikiToHtml(const Value: variant; out result: variant);
 begin
-  ToHtml(Value,result,hfAnyWhere); // will call HtmlEscapeWiki()
+  ToHtml(Value,result,[heHtmlEscape,heEmojiToUTF8],{wiki=}true);
 end;
 
 class procedure TSynMustache.MarkdownToHtml(const Value: variant; out result: variant);
 begin
-  ToHtml(Value,result,hfNone); // default Markdown is to allow HTML tags
+  ToHtml(Value,result,[heEmojiToUTF8]); // default Markdown is to allow HTML tags
 end;
 
 class procedure TSynMustache.SimpleToHtml(const Value: variant; out result: variant);
 begin
-  ToHtml(Value,result,hfOutsideAttributes); // escape HTML tags
+  ToHtml(Value,result,[heHtmlEscape,heEmojiToUTF8]);
 end;
 
 class procedure TSynMustache.BlobToBase64(const Value: variant; out result: variant);

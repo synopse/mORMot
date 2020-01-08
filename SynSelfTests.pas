@@ -8447,7 +8447,7 @@ begin
   CheckEqual(HtmlEscapeMarkdown('test'#10#10'toto'),'<p>test</p><p>toto</p>');
   CheckEqual(HtmlEscapeMarkdown('test'#10#10#10'toto'),'<p>test</p><p> toto</p>');
   CheckEqual(HtmlEscapeMarkdown('te<b>st'),'<p>te<b>st</p>');
-  CheckEqual(HtmlEscapeMarkdown('te<b>st',hfOutsideAttributes),'<p>te&lt;b&gt;st</p>');
+  CheckEqual(HtmlEscapeMarkdown('te<b>st',[heHtmlEscape]),'<p>te&lt;b&gt;st</p>');
   CheckEqual(HtmlEscapeMarkdown('t *e* st'),'<p>t <em>e</em> st</p>');
   CheckEqual(HtmlEscapeMarkdown('t*e*st'),'<p>t<em>e</em>st</p>');
   CheckEqual(HtmlEscapeMarkdown('t\*e\*st'),'<p>t*e*st</p>');
