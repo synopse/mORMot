@@ -6,7 +6,7 @@ unit SynDB;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -302,7 +302,7 @@ unit SynDB;
   - added property stripSemicolon to strip last semicolon in query (default = true)
 }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -737,7 +737,7 @@ type
     // ! var Row: Variant;
     // ! (...)
     // !  with MyConnProps.Execute('select * from table where name=?',[aName]) do begin
-    // !    Row := RowDaa;
+    // !    Row := RowData;
     // !    while Step do
     // !      writeln(Row.FirstName,Row.BirthDate);
     // !  end;
@@ -3197,6 +3197,7 @@ type
     fResultCount: integer;
     fParam: TDynArrayHashed;
     fParamCount: Integer;
+    fTag: PtrInt;
     function GetIsEmpty: Boolean;
     function GetActive: Boolean;
     function GetFieldCount: integer;
@@ -3289,6 +3290,9 @@ type
     /// non VCL property to access the internal SynDB prepared statement
     // - is nil if the TQuery is not prepared (e.g. after Close)
     property PreparedSQLDBStatement: ISQLDBStatement read fPrepared;
+    /// user-customizable number attached to this instance
+    // - for compatibility with TComponent
+    property Tag: PtrInt read fTag write fTag;
   end;
 
 {$endif EMULATES_TQUERY}
@@ -3648,9 +3652,9 @@ begin
     varDate:     result := Ansi7ToString(DateTimeToIso8601Text(VDate,' '));
     varString:   result := UTF8ToString(RawUTF8(VAny));
     {$ifdef HASVARUSTRING}
-    varUString:  result := UnicodeString(VAny);
-    {$endif}
-    varOleStr:   result := WideString(VAny);
+    varUString:  result := string(UnicodeString(VAny));
+    {$endif HASVARUSTRING}
+    varOleStr:   result := string(WideString(VAny));
     else result := fValue;
   end;
 end;
@@ -3745,7 +3749,7 @@ begin
   fValue := aValue;
   {$else}
   with TVarData(fValue) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(fValue);
     VType := varString;
     VAny := nil; // avoid GPF below when assigning a string variable to VAny
@@ -3783,8 +3787,8 @@ begin
   fConnection := aConnection;
   fSQL := TStringList.Create;
   fSQL.OnChange := OnSQLChange;
-  fParam.Init(TypeInfo(TQueryValueDynArray),fParams,nil,nil,nil,@fParamCount,true);
-  fResult.Init(TypeInfo(TQueryValueDynArray),fResults,nil,nil,nil,@fResultCount,true);
+  fParam.InitSpecific(TypeInfo(TQueryValueDynArray),fParams,djString,@fParamCount,true);
+  fResult.InitSpecific(TypeInfo(TQueryValueDynArray),fResults,djString,@fResultCount,true);
 end;
 
 destructor TQuery.Destroy;
@@ -4574,7 +4578,7 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
         case VType of
           ftNull:     Stmt.BindNull(i,VInOut);
           ftInt64:    Stmt.Bind(i,VInt64,VInOut);
-          ftDouble:   Stmt.Bind(i,PDouble(@VInt64)^,VInOut);
+          ftDouble:   Stmt.Bind(i,unaligned(PDouble(@VInt64)^),VInOut);
           ftCurrency: Stmt.Bind(i,PCurrency(@VInt64)^,VInOut);
           ftDate:     Stmt.BindDateTime(i,PDateTime(@VInt64)^,VInOut);
           ftUTF8:     Stmt.BindTextU(i,VData,VInOut);
@@ -6167,7 +6171,8 @@ procedure TSQLDBConnectionProperties.MultipleValuesInsertFirebird(
   const FieldNames: TRawUTF8DynArray; const FieldTypes: TSQLDBFieldTypeArray;
   RowCount: integer; const FieldValues: TRawUTF8DynArrayDynArray);
 var W: TTextWriter;
-    maxf,sqllenwitoutvalues,sqllen,r,f: Integer;
+    maxf,sqllenwitoutvalues,sqllen,r,f,i: PtrInt;
+    v: RawUTF8;
 begin
   maxf := length(FieldNames);     // e.g. 2 fields
   if (Props=nil) or (FieldNames=nil) or (TableName='') or (length(FieldValues)<>maxf) or
@@ -6178,11 +6183,11 @@ begin
   dec(maxf);
   for f := 0 to maxf do
     case FieldTypes[f] of
-    ftBlob: begin // not possible to inline BLOBs
+    ftBlob: begin // not possible to inline BLOBs -> fallback to regular
       MultipleValuesInsert(Props,TableName,FieldNames,FieldTypes,RowCount,FieldValues);
       exit;
     end;
-    ftDate: inc(sqllenwitoutvalues,Length(FieldNames[f])+20); // 'cast(..)'
+    ftDate: inc(sqllenwitoutvalues,Length(FieldNames[f])+20); // 'timestamp '
     else
       inc(sqllenwitoutvalues,Length(FieldNames[f]));
     end;
@@ -6191,11 +6196,11 @@ begin
     r := 0;
     repeat
       W.AddShort('execute block as begin'#10);
+      sqllen := sqllenwitoutvalues;
       repeat
-        sqllen := sqllenwitoutvalues;
         for f := 0 to maxf do
           inc(sqllen,length(FieldValues[f,r]));
-        if sqllen+integer(W.TextLength)>30000 then
+        if sqllen+PtrInt(W.TextLength)>30000 then
           break;
         W.AddShort('INSERT INTO ');
         W.AddString(TableName);
@@ -6207,15 +6212,24 @@ begin
         W.CancelLastComma;
         W.AddShort(') VALUES (');
         for f := 0 to maxf do begin
-          if (FieldValues[f,r]='') or (FieldValues[f,r]='null') then
+          v := FieldValues[f,r]; // includes single quotes (#39)
+          if (v='') or (v='null') then
             W.AddShort('null') else
           if FieldTypes[f]=ftDate then
-            if FieldValues[f,r]=#39#39 then
+            if v=#39#39 then
               W.AddShort('null') else begin
               W.AddShort('timestamp ');
-              W.AddString(FieldValues[f,r]);
+              if length(v)>12 then begin // not 'CCYY-MM-DD' -> fix needed?
+                if v[12]='T' then // handle 'CCYY-MM-DDTHH:MM:SS' common case
+                  v[12] := ' ' else begin
+                  i := PosExChar('T',v);
+                  if i>0 then
+                    v[i] := ' ';
+                end; // see https://firebirdsql.org/en/firebird-date-literals
+              end;
+              W.AddString(v)
             end else
-            W.AddString(FieldValues[f,r]);
+            W.AddString(v);
           W.Add(',');
         end;
         W.CancelLastComma;
@@ -6812,7 +6826,7 @@ begin
   ColumnToSQLVar(Col,V,tmp);
   result := V.VType;
   with TVarData(Value) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(Value);
     VType := MAP_FIELDTYPE2VARTYPE[V.VType];
     case result of
@@ -7498,7 +7512,7 @@ begin
   if SQLDBRowVariantType=nil then
     SQLDBRowVariantType := SynRegisterCustomVariantType(TSQLDBRowVariantType);
   with TVarData(result) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(result);
     VType := SQLDBRowVariantType.VarType;
     VPointer := self;
@@ -7767,7 +7781,7 @@ begin
     result := VType;
     case VType of
       ftInt64:     Value := {$ifdef DELPHI5OROLDER}integer{$endif}(VInt64);
-      ftDouble:    Value := PDouble(@VInt64)^;
+      ftDouble:    Value := unaligned(PDouble(@VInt64)^);
       ftCurrency:  Value := PCurrency(@VInt64)^;
       ftDate:      Value := PDateTime(@VInt64)^;
       ftUTF8:      Value := RawUTF8(VData);
@@ -7788,7 +7802,7 @@ begin
     case VType of
       ftNull:     Dest.AddShort('NULL');
       ftInt64:    Dest.Add({$ifdef DELPHI5OROLDER}integer{$endif}(VInt64));
-      ftDouble:   Dest.AddDouble(PDouble(@VInt64)^);
+      ftDouble:   Dest.AddDouble(unaligned(PDouble(@VInt64)^));
       ftCurrency: Dest.AddCurr64(VInt64);
       ftDate:     Dest.AddDateTime(PDateTime(@VInt64),' ','''');
       ftUTF8:     Dest.AddQuotedStr(pointer(VData),'''',MaxCharCount);
@@ -7837,7 +7851,7 @@ begin
     for i := 0 to high(Values) do
       if StoreVoidStringAsNull and (Values[i]='') then
         VArray[i] := 'null' else
-        QuotedStr(pointer(Values[i]),'''',VArray[i]);
+        QuotedStr(Values[i],'''',VArray[i]);
 end;
 
 procedure TSQLDBStatementWithParams.BindArrayCurrency(Param: Integer;
@@ -7968,7 +7982,7 @@ end;
 constructor TSQLDBStatementWithParamsAndColumns.Create(aConnection: TSQLDBConnection);
 begin
   inherited Create(aConnection);
-  fColumn.Init(TypeInfo(TSQLDBColumnPropertyDynArray),fColumns,nil,nil,nil,@fColumnCount,True);
+  fColumn.InitSpecific(TypeInfo(TSQLDBColumnPropertyDynArray),fColumns,djRawUTF8,@fColumnCount,True);
 end;
 
 
@@ -8300,7 +8314,7 @@ begin
   repeat
     if DataLen<=5 then
       break; // to raise ESQLDBException
-    fDataRowCount := PInteger(PtrInt(Data)+DataLen-sizeof(Integer))^;
+    fDataRowCount := PInteger(PtrUInt(Data)+PtrUInt(DataLen)-sizeof(Integer))^;
     Magic := FromVarUInt32(Data);
     if Magic<>FETCHALLTOBINARY_MAGIC then
       break; // corrupted
@@ -8391,7 +8405,7 @@ begin
       ftInt64:
         WR.Add(FromVarInt64Value(Data));
       ftDouble:
-        WR.AddDouble(PDouble(Data)^);
+        WR.AddDouble(unaligned(PDouble(Data)^));
       ftCurrency:
         WR.AddCurr64(PInt64(Data)^);
       ftDate: begin
@@ -8463,7 +8477,7 @@ begin
   case IntColumnType(Col,Data) of
   ftNull: result := 0;
   ftInt64: result := FromVarInt64Value(Data);
-  ftDouble, ftDate: result := PDouble(Data)^;
+  ftDouble, ftDate: result := unaligned(PDouble(Data)^);
   ftCurrency: result := PCurrency(Data)^;
   else raise ESQLDBException.CreateUTF8('%.ColumnCurrency()',[self]);
   end;
@@ -8475,7 +8489,7 @@ begin
   case IntColumnType(Col,Data) of
   ftNull: result := 0;
   ftInt64: result := FromVarInt64Value(Data);
-  ftDouble, ftDate: result := PDouble(Data)^;
+  ftDouble, ftDate: result := unaligned(PDouble(Data)^);
   ftUTF8: with FromVarBlob(Data) do
             result := Iso8601ToDateTimePUTF8Char(PUTF8Char(Ptr),Len);
   else raise ESQLDBException.CreateUTF8('%.ColumnDateTime()',[self]);
@@ -8488,7 +8502,7 @@ begin
   case IntColumnType(Col,Data) of
   ftNull: result := 0;
   ftInt64: result := FromVarInt64Value(Data);
-  ftDouble, ftDate: result := PDouble(Data)^;
+  ftDouble, ftDate: result := unaligned(PDouble(Data)^);
   ftCurrency: result := PCurrency(Data)^;
   else raise ESQLDBException.CreateUTF8('%.ColumnDouble()',[self]);
   end;
@@ -8500,7 +8514,7 @@ begin
   case IntColumnType(Col,Data) of
   ftNull: result := 0;
   ftInt64: result := FromVarInt64Value(Data);
-  ftDouble, ftDate: result := Trunc(PDouble(Data)^);
+  ftDouble, ftDate: result := Trunc(unaligned(PDouble(Data)^));
   ftCurrency: result := PInt64(Data)^ div 10000;
   else raise ESQLDBException.CreateUTF8('%.ColumnInt()',[self]);
   end;
@@ -8529,7 +8543,7 @@ begin
   case IntColumnType(Col,Data) of
   ftNull: result := '';
   ftInt64: result := Int64ToUtf8(FromVarInt64Value(Data));
-  ftDouble: result := DoubleToStr(PDouble(Data)^);
+  ftDouble: result := DoubleToStr(unaligned(PDouble(Data)^));
   ftCurrency: result := Curr64ToStr(PInt64(Data)^);
   ftDate: DateTimeToIso8601TextVar(PDateTime(Data)^,'T',result);
   ftBlob, ftUTF8: with FromVarBlob(Data) do SetString(result,Ptr,Len);
@@ -8543,7 +8557,7 @@ begin
   case IntColumnType(Col,Data) of
   ftNull: result := '';
   ftInt64: result := IntToString(FromVarInt64Value(Data));
-  ftDouble: result := DoubleToString(PDouble(Data)^);
+  ftDouble: result := DoubleToString(unaligned(PDouble(Data)^));
   ftCurrency: result := Curr64ToString(PInt64(Data)^);
   ftDate: DateTimeToIso8601StringVar(PDateTime(Data)^,'T',result);
   ftUTF8: with FromVarBlob(Data) do UTF8DecodeToString(PUTF8Char(Ptr),Len,result);

@@ -2,7 +2,7 @@
   Synopse mORMot framework
 
 An Open Source Client-Server ORM/SOA framework
- (c) 2008-2019 Synopse Informatique
+ (c) 2008-2020 Synopse Informatique
   https://synopse.info
   http://mormot.net
 
@@ -12,6 +12,7 @@ Contributors
   Alexander (volax)
   AlexPirate
   Alfred Glaenzer (alf)
+  Andre Heider (dhewg)
   Arnaud Bouchez
   ASiwon
   Aweste
@@ -21,6 +22,7 @@ Contributors
   Cheemeng
   CoMPi
   Damien (ddemars)
+  Darian Miller
   Daniel Kuettner
   David Mead (MDW)
   Delphinium (louisyeow)
@@ -39,6 +41,7 @@ Contributors
   Joe (jokusoft)
   Johan Bontes
   Jordi Tudela
+  Kevin Chen
   Lagodny
   Leon Oosthuizen
   Maciej Izak (hnb)
@@ -60,7 +63,7 @@ Contributors
   Nzsolt
   Oleg Tretyakov
   Ondrej (reddwarf)
-  Pavel (mpv)
+  Pavel Mashlyakovskii (mpv)
   Pierre le Riche
   RalfS
   Richard6688
@@ -70,6 +73,7 @@ Contributors
   Sllimr7139
   SSoftPro
   Stefan (itSDS)
+  Svetozar Belic (transmogrifix)
   Transmogrifix
   Uian2000
   Vaclav

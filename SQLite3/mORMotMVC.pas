@@ -6,7 +6,7 @@ unit mORMotMVC;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotMVC;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -52,7 +52,7 @@ unit mORMotMVC;
 
 }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -186,11 +186,11 @@ type
     // optionally creating void templates for any missing view
     constructor Create(aInterface: PTypeInfo; aLogClass: TSynLogClass=nil;
       aExtensionForNotExistingTemplate: TFileName=''); overload;
-    /// will add the supplied Expression Helpers definition
+    /// define the supplied Expression Helpers definition
     // - returns self so that may be called in a fluent interface
     function RegisterExpressionHelpers(const aNames: array of RawUTF8;
       const aEvents: array of TSynMustacheHelperEvent): TMVCViewsMustache;
-    /// will add Expression Helpers for some ORM tables
+    /// define Expression Helpers for some ORM tables
     // - e.g. to read a TSQLMyRecord from its ID value and put its fields
     // in the current rendering data context, you can write:
     // ! aView.RegisterExpressionHelpersForTables(aServer,[TSQLMyRecord]);
@@ -199,7 +199,7 @@ type
     // - returns self so that may be called in a fluent interface
     function RegisterExpressionHelpersForTables(aRest: TSQLRest;
       const aTables: array of TSQLRecordClass): TMVCViewsMustache; overload;
-    /// will add Expression Helpers for all ORM tables of the supplied model
+    /// define Expression Helpers for all ORM tables of the supplied model
     // - e.g. to read a TSQLMyRecord from its ID value and put its fields
     // in the current rendering data context, you can write:
     // ! aView.RegisterExpressionHelpersForTables(aServer);
@@ -208,11 +208,13 @@ type
     // - returns self so that may be called in a fluent interface
     function RegisterExpressionHelpersForTables(
       aRest: TSQLRest): TMVCViewsMustache; overload;
-    /// will add some Expression Helpers for hashing
+    /// define some Expression Helpers for hashing
     // - i.e. md5, sha1 and sha256 hashing
     // - would allow e.g. to compute a Gravatar URI via:
     // ! <img src=http://www.gravatar.com/avatar/{{md5 email}}?s=200></img>
+    // - returns self so that may be called in a fluent interface
     function RegisterExpressionHelpersForCrypto: TMVCViewsMustache;
+
     /// finalize the instance
     destructor Destroy; override;
   end;
@@ -634,8 +636,8 @@ type
     /// to be called when the data model did change to force content re-creation
     // - this default implementation will call fMainRunner.NotifyContentChanged
     procedure FlushAnyCache; virtual;
-    /// generic IMVCApplication implementation
-    procedure Error(var Msg: RawUTF8; var Scope: variant);
+    /// generic IMVCApplication.Error method implementation
+    procedure Error(var Msg: RawUTF8; var Scope: variant); virtual;
     /// every view will have this data context transmitted as "main":...
     function GetViewInfo(MethodIndex: integer): variant; virtual;
     /// compute the data context e.g. for the /mvc-info URI
@@ -1218,7 +1220,7 @@ begin
   inherited Create;
   fContext.CookieName := 'mORMot';
   // temporary secret for encryption
-  fContext.CryptNonce := Random32;
+  fContext.CryptNonce := Random32gsl;
   TAESPRNG.Main.FillRandom(@fContext.Crypt,sizeof(fContext.Crypt));
   // temporary secret for HMAC-CRC32C
   TAESPRNG.Main.FillRandom(@rnd,sizeof(rnd));
@@ -1308,7 +1310,7 @@ begin
   if len>sizeof(tmp.data) then // all cookies storage should be < 4K
     raise EMVCApplication.CreateGotoError('Big Fat Cookie');
   result := InterlockedIncrement(fContext.SessionCount);
-  tmp.head.cryptnonce := Random32;
+  tmp.head.cryptnonce := Random32gsl;
   tmp.head.session := result;
   tmp.head.issued := UnixTimeUTC;
   if SessionTimeOutMinutes=0 then

@@ -6,7 +6,7 @@ unit SynLog;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynLog;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -52,7 +52,6 @@ unit SynLog;
     should UPGRADE to at least revision 1.18.1351, fixing a long-standing bug
   - all logged timestamps are now in much less error-prone UTC by default,
     unless the TSynLogFamily.LocalTimestamp property is defined
-  - Delphi XE4/XE5/XE6/XE7/XE8/10/10.1 compatibility (Windows target platforms)
   - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler under Windows
   - compatibility with (Cross)Kylix 3 and FPC 3.1 under Linux (and Darwin)
   - Exception logging and Stack trace do work now on Linux with Kylix/CrossKylix
@@ -103,7 +102,7 @@ unit SynLog;
 *)
 
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -1075,6 +1074,8 @@ type
     procedure DisableRemoteLog(value: boolean);
     /// the associated TSynLog class
     function LogClass: TSynLogClass; {$ifdef HASINLINENOTX86}inline;{$endif}
+    /// Force log rotation; Can be used for example inside SUGHUP signal handler
+    procedure ForceRotation;
     /// direct access to the low-level writing content
     // - should usually not be used directly, unless you ensure it is safe
     property Writer: TTextWriter read fWriter;
@@ -1599,8 +1600,8 @@ function EventArchiveSynLZ(const aOldLogFileName, aDestinationPath: TFileName): 
 // - returns the number of bytes written to destbuffer (which should have
 // destsize > 127)
 function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
-  const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: integer;
-  trimmsgfromlog: boolean): integer;
+  const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: PtrInt;
+  trimmsgfromlog: boolean): PtrInt;
 
 /// check if the supplied file name is a currently working log file
 // - may be used to avoid e.g. infinite recursion when monitoring the log file
@@ -1618,12 +1619,12 @@ uses
 {$endif FPC}
 
 var
-  LogInfoText: array[TSynLogInfo] of RawUTF8;
-  LogInfoCaption: array[TSynLogInfo] of string;
+  _LogInfoText: array[TSynLogInfo] of RawUTF8;
+  _LogInfoCaption: array[TSynLogInfo] of string;
 
 function ToText(event: TSynLogInfo): RawUTF8;
 begin
-  result := LogInfoText[event];
+  result := _LogInfoText[event];
 end;
 
 function ToText(events: TSynLogInfos): ShortString;
@@ -1633,7 +1634,7 @@ end;
 
 function ToCaption(event: TSynLogInfo): string;
 begin
-  result := LogInfoCaption[event];
+  result := _LogInfoCaption[event];
 end;
 
 function ToCaption(filter: TSynLogFilter): string;
@@ -1721,7 +1722,7 @@ begin
     L := FromVarUInt32(P); // inlined R.Read(S^.Name)
     FastSetString(S^.Name,P,L);
     inc(P,L);
-    inc(PtrUInt(S),A.ElemSize); // may be TSynMapSymbol or TSynMapUnit
+    inc(PByte(S),A.ElemSize); // may be TSynMapSymbol or TSynMapUnit
   end;
   S := A.Value^;
   Addr := FromVarUInt32(P);
@@ -1729,7 +1730,7 @@ begin
   for i := 1 to n-1 do begin
     inc(Addr,FromVarUInt32(P));
     S^.Stop := Addr-1;
-    inc(PtrUInt(S),A.ElemSize);
+    inc(PByte(S),A.ElemSize);
     S^.Start := Addr;
   end;
   S^.Stop := Addr+FromVarUInt32(P);
@@ -2019,8 +2020,8 @@ procedure WriteSymbol(var W: TFileBufferWriter; const A: TDynArray);
 var i, n: integer;
     Diff: integer;
     S: PSynMapSymbol;
-    P: PByte;
-    Beg: PtrUInt;
+    P,Beg: PByte;
+    tmp: RawByteString;
 begin
   n := A.Count;
   W.WriteVarUInt32(n);
@@ -2028,20 +2029,20 @@ begin
   S := A.Value^;
   for i := 0 to n-1 do begin
     W.Write(S^.Name);
-    inc(PtrUInt(S),A.ElemSize); // may be TSynMapSymbol or TSynMapUnit
+    inc(PByte(S),A.ElemSize); // may be TSynMapSymbol or TSynMapUnit
   end;
   S := A.Value^;
   Diff := S^.Start;
   W.WriteVarUInt32(Diff);
-  P := W.WriteDirectStart(n*5,A.ArrayTypeName);
-  Beg := PtrUInt(P);
+  P := pointer(W.DirectWritePrepare(n*5,tmp));
+  Beg := P;
   for i := 1 to n-1 do begin
-    inc(PtrUInt(S),A.ElemSize);
+    inc(PByte(S),A.ElemSize);
     P := ToVarUInt32(S^.Start-Diff,P);
     Diff := S^.Start;
   end;
   P := ToVarUInt32(S^.Stop-Diff,P);
-  W.WriteDirectEnd(PtrUInt(P)-Beg);
+  W.DirectWriteFlush(PtrUInt(P)-PtrUInt(Beg),tmp);
 end;
 
 procedure TSynMapFile.SaveToStream(aStream: TStream);
@@ -2385,7 +2386,7 @@ begin
     if ELevel<>sllNone then begin
       if info.Addr='' then
         info.Addr := GetInstanceMapFile.FindLocation(EAddr);
-      FormatUTF8('% % at %: % [%]',[LogInfoCaption[ELevel],EClass,info.Addr,
+      FormatUTF8('% % at %: % [%]',[_LogInfoCaption[ELevel],EClass,info.Addr,
         DateTimeToIso8601Text(UnixTimeToDateTime(ETimestamp),' '),
         StringToUTF8(info.Message)],result);
     end else
@@ -2415,55 +2416,54 @@ begin
 end;
 {$endif}
 
-function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
-  const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: integer;
-  trimmsgfromlog: boolean): integer;
-  procedure PrintUSAscii(const text: RawUTF8);
-  var i: PtrInt;
-  begin
-    destbuffer^ := ' ';
-    inc(destbuffer);
-    for i := 1 to length(text) do
-      if ord(text[i]) in [33..126] then begin // only printable ASCII chars
-        destbuffer^ := text[i];
-        inc(destbuffer);
-      end;
-    if destbuffer[-1]=' ' then begin
-      destbuffer^ := '-'; // nothing appended -> NILVALUE
-      inc(destbuffer);
+function PrintUSAscii(P: PUTF8Char; const text: RawUTF8): PUTF8Char;
+var i: PtrInt;
+begin
+  P^ := ' ';
+  inc(P);
+  for i := 1 to length(text) do
+    if ord(text[i]) in [33..126] then begin // only printable ASCII chars
+      P^ := text[i];
+      inc(P);
     end;
+  if P[-1]=' ' then begin
+    P^ := '-'; // nothing appended -> NILVALUE
+    inc(P);
   end;
-var tmp: array[0..15] of AnsiChar;
-    P: PAnsiChar;
+  result := P;
+end;
+
+function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
+  const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: PtrInt;
+  trimmsgfromlog: boolean): PtrInt;
+var P: PAnsiChar;
     start: PUTF8Char;
-    D: TDateTime;
-    len: integer;
+    len: PtrInt;
+    st: TSynSystemTime;
 begin
   result := 0;
   if destsize<127 then
     exit;
   start := destbuffer;
   destbuffer^ := '<';
-  inc(destbuffer);
-  P := StrUInt32(@tmp[15],ord(severity)+ord(facility) shl 3);
-  len := @tmp[15]-P;
-  MoveFast(P^,destbuffer^,len);
-  inc(destbuffer,len);
+  destbuffer := AppendUInt32ToBuffer(destbuffer+1,ord(severity)+ord(facility) shl 3);
   PInteger(destbuffer)^ := ord('>')+ord('1')shl 8+ord(' ')shl 16; // VERSION=1
   inc(destbuffer,3);
-  D := NowUTC;
-  DateToIso8601PChar(D,destbuffer,true);
-  TimeToIso8601PChar(D,destbuffer+10,True,'T',true);
+  st.FromNowUTC;
+  DateToIso8601PChar(destbuffer,true,st.Year,st.Month,st.Day);
+  TimeToIso8601PChar(destbuffer+10,true,st.Hour,st.Minute,st.Second,st.MilliSecond,'T',true);
   destbuffer[23] := 'Z';
   inc(destbuffer,24);
-  if length(ExeVersion.Host)+length(ExeVersion.ProgramName)+length(procid)+length(msgid)+
-     (destbuffer-start)+15>destsize then
-    exit; // avoid buffer overflow
-  PrintUSAscii(ExeVersion.Host); // HOST
-  PrintUSAscii(ExeVersion.ProgramName); // APP-NAME
-  PrintUSAscii(procid); // PROCID
-  PrintUSAscii(msgid);  // MSGID
-  PrintUSAscii('');     // no STRUCTURED-DATA
+  with ExeVersion do begin
+    if length(Host)+length(ProgramName)+length(procid)+length(msgid)+
+       (destbuffer-start)+15>destsize then
+      exit; // avoid buffer overflow
+    destbuffer := PrintUSAscii(destbuffer,Host); // HOST
+    destbuffer := PrintUSAscii(destbuffer,ProgramName); // APP-NAME
+  end;
+  destbuffer := PrintUSAscii(destbuffer,procid); // PROCID
+  destbuffer := PrintUSAscii(destbuffer,msgid);  // MSGID
+  destbuffer := PrintUSAscii(destbuffer,'');     // no STRUCTURED-DATA
   destbuffer^ := ' ';
   inc(destbuffer);
   len := length(msg);
@@ -2486,9 +2486,8 @@ begin
     PInteger(destbuffer)^ := $bfbbef; // UTF-8 BOM
     inc(destbuffer,3);
   end;
-  result := destbuffer-start;
   MoveFast(P^,destbuffer^,len);
-  inc(result,len);
+  result := (destbuffer-start)+len;
 end;
 
 function IsActiveLogFile(const aFileName: TFileName): boolean;
@@ -2973,15 +2972,8 @@ begin // avoid linking of ComObj.pas just for EOleSysError
     if IdemPropName(PShortString(PPointer(PtrInt(E)+vmtClassName)^)^,Name) then begin
       result := true;
       exit;
-    end else begin
-      {$ifdef FPC}
-      E := E.ClassParent;
-      {$else}
-      E := PPointer(PtrInt(E)+vmtParent)^;
-      if E<>nil then
-        E := PPointer(E)^;
-      {$endif}
-    end;
+    end else
+      E := GetClassParent(E);
   result := false;
 end;
 
@@ -3587,7 +3579,7 @@ class function TSynLog.Family: TSynLogFamily;
 begin
   result := pointer(Self);
   if result<>nil then begin
-    result := PPointer(PtrInt(result)+vmtAutoTable)^;
+    result := PPointer(PtrInt(PtrUInt(result))+vmtAutoTable)^;
     if result=nil then
       result := FamilyCreate;
   end;
@@ -3597,7 +3589,7 @@ class function TSynLog.Add: TSynLog;
 begin
   result := pointer(Self);
   if result<>nil then begin // inlined TSynLog.Family (Add is already inlined)
-    result := PPointer(PtrInt(result)+vmtAutoTable)^;
+    result := PPointer(PtrInt(PtrUInt(result))+vmtAutoTable)^;
     if result=nil then
       TSynLogFamily(pointer(result)) := FamilyCreate;
     result := TSynLogFamily(pointer(result)).SynLog;
@@ -3960,7 +3952,7 @@ begin
     result := nil;
     exit;
   end;
-  aSynLog := PPointer(PtrInt(aSynLog)+vmtAutoTable)^;
+  aSynLog := PPointer(PtrInt(PtrUInt(aSynLog))+vmtAutoTable)^;
   if aSynLog=nil then
     TSynLogFamily(pointer(aSynLog)) := FamilyCreate;
   aSynLog := TSynLogFamily(pointer(aSynLog)).SynLog;
@@ -4057,7 +4049,7 @@ begin // private sub function makes the code faster in most case
     EnterCriticalSection(GlobalThreadLock);
     try
       // TSynLogFamily instance is stored into "AutoTable" unused VMT entry
-      PVMT := pointer(PtrInt(self)+vmtAutoTable);
+      PVMT := pointer(PtrInt(PtrUInt(self))+vmtAutoTable);
       result := PPointer(PVMT)^;
       if result=nil then begin // protect from (unlikely) concurrent call
         // create the properties information from RTTI
@@ -4183,6 +4175,16 @@ begin
   if self=nil then
     result := nil else
     result := PPointer(self)^;
+end;
+
+procedure TSynLog.ForceRotation;
+begin
+  EnterCriticalSection(GlobalThreadLock);
+  try
+    PerformRotation;
+  finally
+    LeaveCriticalSection(GlobalThreadLock);
+  end;
 end;
 
 procedure TSynLog.DisableRemoteLog(value: boolean);
@@ -4381,9 +4383,9 @@ begin
       AddNoJSONEscapeString(InstanceFileName);
     end;
     {$ifdef MSWINDOWS}
-    NewLine;
-    AddShort('Environment variables=');
     if not fFamily.fNoEnvironmentVariable then begin
+      NewLine;
+      AddShort('Environment variables=');
       Env := GetEnvironmentStringsW;
       P := pointer(Env);
       while P^<>#0 do begin
@@ -4925,7 +4927,7 @@ begin
   P := PtrInt(IntegerScan(@fLogLevelsTextMap[succ(sllNone)],
     ord(high(TSynLogInfo)),PCardinal(LineBeg+fLineLevelOffset)^));
   if P<>0 then
-    result := TSynLogInfo((P-PtrInt(@fLogLevelsTextMap[succ(sllNone)]))shr 2+1) else
+    result := TSynLogInfo((P-PtrInt(PtrUInt(@fLogLevelsTextMap[succ(sllNone)])))shr 2+1) else
     result := sllNone;
 end;
 
@@ -5119,7 +5121,7 @@ begin
        LineSizeSmallerThan(fHeaderLinesCount,16) then
       exit;
     if fHeaderLinesCount<>4 then
-      FastSetString(fHeaders,fLines[2],PtrInt(fLines[fHeaderLinesCount-2])-PtrInt(fLines[2]));
+      FastSetString(fHeaders,fLines[2],PtrUInt(fLines[fHeaderLinesCount-2])-PtrUInt(fLines[2]));
     if PWord(fLines[fHeaderLinesCount])^<>ord('0')+ord('0')shl 8 then // YYYYMMDD -> 20101225 e.g.
       fFreq := 0 else // =0 if date time, >0 if high-resolution time stamp
       fFreqPerDay := fFreq*SecsPerDay;
@@ -5449,6 +5451,7 @@ end;
 function TSynLogFile.ThreadNames(CurrentLogIndex: integer): TRawUTF8DynArray;
 var i: integer;
 begin
+  result := nil;
   SetLength(result,fThreadMax);
   if fThreadInfo=nil then
     exit;
@@ -5714,7 +5717,7 @@ begin
         DateTimeToString(tim,TIME_FORMAT,elapsed);
         result := tim+'.'+result;
       end;
-      result := format('%d lines - time elapsed: %s',[aBottom-aTop+1,result]);
+      result := FormatString('% lines - time elapsed: %',[aBottom-aTop+1,result]);
     end;
   end;
 end;
@@ -5727,8 +5730,8 @@ begin
     aRow := fSelected[aRow];
   if cardinal(aRow)<cardinal(fCount) then begin
     dt := EventDateTime(aRow);
-    result := Format('%s %s'#9'%s'#9,[DateToStr(dt),FormatDateTime(TIME_FORMAT,dt),
-      LogInfoCaption[EventLevel[aRow]]]);
+    FormatString('% %'#9'%'#9,[DateToStr(dt),FormatDateTime(TIME_FORMAT,dt),
+      _LogInfoCaption[EventLevel[aRow]]],result);
     if fThreads<>nil then
       result := result+IntToString(cardinal(fThreads[aRow]))+#9;
     result := result+EventString(aRow,'   ');
@@ -5744,7 +5747,7 @@ begin
       aRow := fSelected[aRow];
       case aCol of
       0: DateTimeToString(result,TIME_FORMAT,EventDateTime(aRow));
-      1: result := LogInfoCaption[EventLevel[aRow]];
+      1: result := _LogInfoCaption[EventLevel[aRow]];
       2: if fThreads<>nil then
            result := IntToString(cardinal(fThreads[aRow]));
       3: result := EventString(aRow,'   ',MAXLOGLINES);
@@ -6006,9 +6009,9 @@ initialization
   {$ifndef NOEXCEPTIONINTERCEPT}
   DefaultSynLogExceptionToStr := InternalDefaultSynLogExceptionToStr;
   {$endif}
-  GetEnumTrimmedNames(TypeInfo(TSynLogInfo),@LogInfoText);
-  GetEnumCaptions(TypeInfo(TSynLogInfo),@LogInfoCaption);
-  LogInfoCaption[sllNone] := '';
+  GetEnumTrimmedNames(TypeInfo(TSynLogInfo),@_LogInfoText);
+  GetEnumCaptions(TypeInfo(TSynLogInfo),@_LogInfoCaption);
+  _LogInfoCaption[sllNone] := '';
   TTextWriter.RegisterCustomJSONSerializerFromText([
     TypeInfo(TSynMapSymbol),_TSynMapSymbol,
     TypeInfo(TSynMapUnit),_TSynMapUnit]);

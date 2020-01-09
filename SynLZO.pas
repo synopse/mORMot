@@ -5,7 +5,7 @@ unit SynLZO;
 {
     This file is part of Synopse LZO Compression.
 
-    Synopse LZO Compression. Copyright (C) 2019 Arnaud Bouchez
+    Synopse LZO Compression. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -24,7 +24,7 @@ unit SynLZO;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -52,7 +52,7 @@ unit SynLZO;
       written in optimized pascal code for Delphi 3 up to Delphi 2009
       with a tuned asm version available
     * offers *extremely* fast compression and decompression
-      with good compression rate, in comparaison with its speed
+      with good compression rate, in comparison with its speed
     * original LZO written in ANSI C - pascal+asm conversion by A.Bouchez
     * simple but very fast direct file compression:
       SynLZO compressed files read/write is faster than copying plain files!

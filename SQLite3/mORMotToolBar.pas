@@ -9,7 +9,7 @@ interface
 
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -28,7 +28,7 @@ interface
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -3001,8 +3001,7 @@ begin
       if (aID>0) and (Caption='') then
         Caption := U2S(Client.MainFieldValue(aTable,aID,true));
       Font.Size := 9;
-      AddPagesToFooterAt(
-        format('%s - %s %s',[sPageN,aTable.CaptionName,Caption]),LeftMargin);
+      AddPagesToFooterAt(FormatString('% - % %',[sPageN,aTable.CaptionName,Caption]),LeftMargin);
       Font.Size := 10;
       P := GetPage(aTable);
       if (P<0) or (aID<=0) then

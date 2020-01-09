@@ -5,7 +5,7 @@ unit SynSSPI;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -24,7 +24,7 @@ unit SynSSPI;
 
   The Initial Developer of the Original Code is Chaa.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -55,6 +55,8 @@ unit SynSSPI;
 {$I Synopse.inc} // define HASINLINE and other compatibility switches
 
 interface
+
+{$ifdef MSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
 
 uses
   Windows,
@@ -580,5 +582,11 @@ begin
   FreeSecurityContext(fContext.CtxHandle);
   FreeCredentialsContext(fContext.CredHandle);
 end;
+
+{$else}
+
+implementation // compiles as void unit for non-Windows
+
+{$endif MSWINDOWS}
 
 end.

@@ -6,7 +6,7 @@ unit SynZip;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynZip;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -158,7 +158,7 @@ unit SynZip;
 
 }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64
 
 {.$define USEZLIBSSE}
 // if defined (only FPC+Win64), will link static\x86_64-win64sse\*.o static libraries
@@ -1313,19 +1313,18 @@ begin
       for j := 0 to infoLocal^.nameLen-1 do
         if storedName[j]='/' then // normalize path delimiter
           PAnsiChar(Pointer(tmp))[j] := '\';
-      {$ifndef DELPHI5OROLDER}
-      // Delphi 5 doesn't have UTF8Decode/UTF8Encode functions -> make 7 bit version
+      {$ifndef DELPHI5OROLDER} // Delphi 5 lacks UTF-8 functions -> 7 bit
       if infoLocal^.GetUTF8FileName then
         // decode UTF-8 file name into native string/TFileName type
-        zipName := UTF8Decode(tmp) else
-      {$endif}
+        zipName := TFileName(UTF8Decode(tmp)) else
+      {$endif DELPHI5OROLDER}
       begin
         {$ifdef MSWINDOWS} // decode OEM/DOS file name into native encoding
         SetLength(zipName,infoLocal^.nameLen);
         OemToChar(Pointer(tmp),Pointer(zipName)); // OemToCharW/OemToCharA
         {$else}
-        zipName := UTF8Decode(tmp); // let's assume it is UTF-8 under Linux
-        {$endif}
+        zipName := TFileName(UTF8Decode(tmp)); // let's assume UTF-8 under Linux
+        {$endif MSWINDOWS}
       end;
       inc(PByte(H),sizeof(H^)+infoLocal^.NameLen+H^.fileInfo.extraLen+H^.commentLen);
       if not(infoLocal^.zZipMethod in [Z_STORED,Z_DEFLATED]) then

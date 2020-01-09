@@ -6,7 +6,7 @@ unit SynMongoDB;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynMongoDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -63,7 +63,7 @@ unit SynMongoDB;
 
 interface
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64
 
 uses
   {$ifdef MSWINDOWS}
@@ -824,10 +824,12 @@ type
 const
   /// fake BSON element type which compares lower than all other possible values
   // - element type sounds to be stored as shortint, so here $ff=-1<0=betEOF
-  betMinKey = TBSONElementType($ff);
+  // - defined as an integer to circumvent a compilation issue with FPC trunk
+  betMinKey = $ff;
   /// fake BSON element type which compares higher than all other possible values
   // - element type sounds to be stored as shortint, so here betInt64=$12<$7f
-  betMaxKey = TBSONElementType($7f);
+  // - defined as an integer to circumvent a compilation issue with FPC trunk
+  betMaxKey = $7f;
 
   /// kind of elements which will store a RawByteString/RawUTF8 content
   // within its TBSONVariant kind
@@ -2725,7 +2727,7 @@ begin
   ZeroFill(@result); // set result.VType=varEmpty and result.VAny=nil
   case Kind of
   betFloat:
-    res.VDouble := PDouble(Element)^;
+    res.VDouble := unaligned(PDouble(Element)^);
   betString:
     FastSetString(RawUTF8(res.VAny),Data.Text,Data.TextLen);
   betJS, betDeprecatedSymbol:
@@ -2763,7 +2765,7 @@ begin
   betBoolean:
     result := PByte(Element)^;
   betFloat:
-    result := Trunc(PDouble(Element)^);
+    result := Trunc(unaligned(PDouble(Element)^));
   betInt32:
     result := PInteger(Element)^;
   betInt64:
@@ -2784,7 +2786,7 @@ end;
 begin
   case Kind of
   betFloat:
-    ExtendedToStr(PDouble(Element)^,DOUBLE_PRECISION,result);
+    ExtendedToStr(unaligned(PDouble(Element)^),DOUBLE_PRECISION,result);
   betString:
     FastSetString(result,Data.Text,Data.TextLen);
   betInt32:
@@ -2827,24 +2829,24 @@ end;
 procedure TBSONElement.AddMongoJSON(W: TTextWriter; Mode: TMongoJSONMode);
 label bin,regex;
 begin
-  case Kind of
-  betFloat:
-    W.AddDouble(PDouble(Element)^);
-  betString, betJS, betDeprecatedSymbol: begin
+  case integer(Kind) of
+  ord(betFloat):
+    W.AddDouble(unaligned(PDouble(Element)^));
+  ord(betString), ord(betJS), ord(betDeprecatedSymbol): begin
     W.Add('"');
     W.AddJSONEscape(Data.Text,Data.TextLen);
     W.Add('"');
   end;
-  betDoc, betArray:
+  ord(betDoc), ord(betArray):
     BSONListToJSON(Data.DocList,Kind,W,Mode);
-  betObjectID: begin
+  ord(betObjectID): begin
     W.AddShort(BSON_JSON_OBJECTID[false,Mode]);
     W.AddBinToHex(Element,SizeOf(TBSONObjectID));
     W.AddShort(BSON_JSON_OBJECTID[true,Mode]);
   end;
-  betDeprecatedUndefined:
+  ord(betDeprecatedUndefined):
     W.AddShort(BSON_JSON_UNDEFINED[Mode=modMongoShell]);
-  betBinary:
+  ord(betBinary):
     case Mode of
     modNoMongo:
       W.WrBase64(Data.Blob,Data.BlobLen,true);
@@ -2863,7 +2865,7 @@ begin
       W.AddShort('")');
     end;
     end;
-  betRegEx:
+  ord(betRegEx):
     case Mode of
     modNoMongo:
 bin:W.WrBase64(Element,ElementBytes,true);
@@ -2884,37 +2886,37 @@ regex:  W.AddShort(BSON_JSON_REGEX[0]);
         W.AddShort(BSON_JSON_REGEX[2]);
       end;
     end;
-  betDeprecatedDbptr:
+  ord(betDeprecatedDbptr):
     goto bin; // no specific JSON construct for this deprecated item
-  betJSScope:
+  ord(betJSScope):
     goto bin; // no specific JSON construct for this item yet
-  betTimestamp:
+  ord(betTimestamp):
     goto bin; // internal content will always be written as raw binary
-  betBoolean:
+  ord(betBoolean):
     W.Add(PBoolean(Element)^);
-  betDateTime: begin
+  ord(betDateTime): begin
     W.AddShort(BSON_JSON_DATE[Mode,false]);
     W.AddUnixMSTime(Element,false);
     W.AddShort(BSON_JSON_DATE[Mode,true]);
   end;
-  betNull:
+  ord(betNull):
     W.AddShort('null');
-  betInt32:
+  ord(betInt32):
     W.Add(PInteger(Element)^);
-  betInt64:
+  ord(betInt64):
     W.Add(PInt64(Element)^);
-  betDecimal128: begin
+  ord(betDecimal128): begin
     W.AddShort(BSON_JSON_DECIMAL[false,Mode]);
     PDecimal128(Element)^.AddText(W);
     W.AddShort(BSON_JSON_DECIMAL[true,Mode]);
   end;
+  betMinKey:
+    W.AddShort(BSON_JSON_MINKEY[Mode=modMongoShell]);
+  betMaxKey:
+    W.AddShort(BSON_JSON_MAXKEY[Mode=modMongoShell]);
   else
-  if Kind=betMinKey then
-    W.AddShort(BSON_JSON_MINKEY[Mode=modMongoShell]) else
-  if Kind=betMaxKey then
-    W.AddShort(BSON_JSON_MAXKEY[Mode=modMongoShell]) else
     raise EBSONException.CreateUTF8('TBSONElement.AddMongoJSON: unexpected type %',
-      [ord(Kind)]);
+      [integer(Kind)]);
   end;
 end;
 
@@ -2942,7 +2944,7 @@ begin
     Kind := ELEMKIND[aVarData.VType];
     case Kind of
     betFloat:
-      PDouble(Element)^ := double(aValue);
+      unaligned(PDouble(Element)^) := double(aValue);
     betDateTime:
       PUnixMSTime(Element)^ := DateTimeToUnixMSTime(aVarData.VDate);
     betBoolean:
@@ -3087,10 +3089,10 @@ begin
     exit;
   end;
   Kind := TBSONElementType(BSON^);
-  case ord(Kind) of
+  case integer(Kind) of
   ord(betEOF):
     result := false;
-  ord(betFloat)..ord(betDecimal128),ord(betMinKey),ord(betMaxKey): begin
+  ord(betFloat)..ord(betDecimal128),betMinKey,betMaxKey: begin
     inc(BSON);
     Name := PUTF8Char(BSON);
     NameLen := StrLen(PUTF8Char(BSON));
@@ -3746,7 +3748,6 @@ var tmp: variant;
     ValueDateTime: TDateTime absolute VDouble;
     VInt64: Int64 absolute VDouble;
     Kind: TBSONElementType;
-label dbl;
 begin
   if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
   if not DoNotTryExtendedMongoSyntax and
@@ -3901,7 +3902,7 @@ begin
     Counter.b2 := count shr 8;
     Counter.b3 := count;
     LastCounter := count;
-    UnixCreateTime := {$ifdef FPC}SwapEndian{$else}bswap32{$endif}(LastCreateTime);
+    UnixCreateTime := {$ifdef CPUINTEL}bswap32{$else}SwapEndian{$endif}(LastCreateTime);
     MachineID := Default.MachineID;
     ProcessID := Default.ProcessID;
     LeaveCriticalSection(Section);
@@ -3921,7 +3922,7 @@ end;
 
 function TBSONObjectID.CreateDateTime: TDateTime;
 begin
-  result := UnixTimeToDateTime({$ifdef FPC}SwapEndian{$else}bswap32{$endif}(UnixCreateTime));
+  result := UnixTimeToDateTime(bswap32(UnixCreateTime));
 end;
 
 function TBSONObjectID.ToText: RawUTF8;
@@ -4073,10 +4074,10 @@ const
 {$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF} // avoid hints with CompareMemFixed() inlining
 function TBSONVariant.TryJSONToVariant(var JSON: PUTF8Char;
   var Value: variant; EndOfObject: PUTF8Char): boolean;
+// warning: code should NOT modify JSON buffer in-place, unless it returns true
 var bsonvalue: TBSONVariantData absolute Value;
     varvalue: TVarData absolute Value;
-// warning: code should NOT modify JSON buffer in-place, unless it returns true
-  procedure Return(kind: TBSONElementType; P: PUTF8Char; GotoEndOfObject: AnsiChar='}');
+  procedure Return(kind: TBSONElementType; P: PUTF8Char; GotoEndOfObject: AnsiChar);
   begin
     if GotoEndOfObject<>#0 then
       while P^<>GotoEndOfObject do
@@ -4100,6 +4101,12 @@ var bsonvalue: TBSONVariantData absolute Value;
       varvalue.VType := varDate;
     end;
     result := true;
+  end;
+  procedure ReturnInt(kindint: integer; P: PUTF8Char; GotoEndOfObject: AnsiChar);
+  {$ifdef HASINLINE}inline;{$endif} // redirection function to circumvent FPC trunk limitation
+  var kind: TBSONElementType absolute kindint;
+  begin
+    Return(kind,P,GotoEndOfObject);
   end;
   procedure TryDate(P: PUTF8Char; GotoEndOfObject: AnsiChar);
   var L: integer;
@@ -4209,18 +4216,18 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
     if P[0]='$' then
     case P[1] of
     'u': if CompareMemFixed(P+2,@BSON_JSON_UNDEFINED[false][5],10) then
-           Return(betDeprecatedUndefined,P+12);
-    'm': if CompareMemFixed(P+2,@BSON_JSON_MINKEY[false][5],7) then
-           Return(betMinKey,P+9) else
-         if CompareMemFixed(P+2,@BSON_JSON_MAXKEY[false][5],7) then
-           Return(betMaxKey,P+9);
+           Return(betDeprecatedUndefined,P+12,'}');
+    'm': if CompareMemFixed(P+1,@BSON_JSON_MINKEY[false][4],8) then
+           ReturnInt(betMinKey,P+9,'}') else
+         if CompareMemFixed(P+1,@BSON_JSON_MAXKEY[false][4],8) then
+           ReturnInt(betMaxKey,P+9,'}');
     'o': if PInteger(P+2)^=PInteger(@BSON_JSON_OBJECTID[false,modMongoStrict][5])^ then
            TryObjectID(P+6,'}');
-    'd': if CompareMemFixed(P+2,@BSON_JSON_DATE[modMongoStrict,false][5],5) then
+    'd': if CompareMemSmall(P+2,@BSON_JSON_DATE[modMongoStrict,false][5],5) then
            TryDate(P+7,'}');
-    'r': if CompareMemFixed(P+2,@BSON_JSON_REGEX[0][5],6) then
+    'r': if CompareMemFixed(P,@BSON_JSON_REGEX[0][3],8) then
            TryRegExStrict(P+8);
-    'n': if CompareMemFixed(P+2,@BSON_JSON_DECIMAL[false,modMongoStrict][5],14) then
+    'n': if CompareMemFixed(P,@BSON_JSON_DECIMAL[false,modMongoStrict][3],16) then
            TryDecimal(P+16,'}');
     end;
   end;
@@ -4228,9 +4235,9 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
   'U': if StrCompIL(JSON+1,@BSON_JSON_UNDEFINED[true][2],8)=0 then
          Return(betDeprecatedUndefined,JSON+8,#0);
   'M': if StrCompIL(JSON+1,@BSON_JSON_MINKEY[true][2],5)=0 then
-         Return(betMinKey,JSON+5,#0) else
+         ReturnInt(betMinKey,JSON+5,#0) else
        if StrCompIL(JSON+1,@BSON_JSON_MAXKEY[true][2],7)=0 then
-         Return(betMaxKey,JSON+5,#0);
+         ReturnInt(betMaxKey,JSON+5,#0);
   'O': if StrCompIL(JSON+1,@BSON_JSON_OBJECTID[false,modMongoShell][2],8)=0 then
          TryObjectID(JSON+9,')');
   'N': if StrCompIL(JSON+1,@BSON_JSON_NEWDATE[1],8)=0 then
@@ -5848,7 +5855,7 @@ begin // caller should have made fConnections[0].Open
     resp.Clear;
     CheckPayload;
     if (err='') and (resp.U['v']<>BinToBase64(@server,SizeOf(server))) then
-        err := 'Server returned an invalid signature';
+      err := 'Server returned an invalid signature';
     if err<>'' then
       raise EMongoException.CreateUTF8('%.OpenAuthSCRAM("%") step2: % - res=%',
         [self,DatabaseName,err,res]);
@@ -6475,9 +6482,10 @@ end;
 const
   D128: array[TDecimal128SpecialValue] of TDecimal128Bits = (
     // dsvError, dsvValue, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax
-    (hi:BSON_DECIMAL128_HI_NAN), (hi:BSON_DECIMAL128_HI_NAN), (hi:BSON_DECIMAL128_HI_NAN),
-    (hi:BSON_DECIMAL128_HI_INT64POS), (hi:$7800000000000000),
-    (hi:QWord($f800000000000000)), (lo:$378d8e63ffffffff; hi:QWord($dfffed09bead87c0)),
+    (lo:0; hi:BSON_DECIMAL128_HI_NAN), (lo:0; hi:BSON_DECIMAL128_HI_NAN),
+    (lo:0; hi:BSON_DECIMAL128_HI_NAN), (lo:0; hi:BSON_DECIMAL128_HI_INT64POS),
+    (lo:0; hi:$7800000000000000), (lo:0; hi:QWord($f800000000000000)),
+    (lo:$378d8e63ffffffff; hi:QWord($dfffed09bead87c0)),
     (lo:$378d8e63ffffffff; hi:$5fffed09bead87c0) );
 
 procedure TDecimal128.SetSpecial(special: TDecimal128SpecialValue);
@@ -6757,7 +6765,7 @@ procedure TDecimal128.ToCurr(out result: currency);
 var tmp: TDecimal128Str;
     res64: Int64 absolute result;
 begin
-  if Bits.hi=BSON_DECIMAL128_HI_CURRNEG then // fast direct conversion e.g. FromCurr
+  if Bits.hi=QWord(BSON_DECIMAL128_HI_CURRNEG) then // was e.g. FromCurr
     res64 := -Bits.lo else
   if Bits.hi=BSON_DECIMAL128_HI_CURRPOS then
     res64 := Bits.lo else begin
@@ -6892,14 +6900,15 @@ begin
   signlo := 0;
   if signdig<>0 then // if not zero
     if diglast-digfirst<17 then
-      for i := digfirst to diglast do
       {$ifdef CPU32DELPHI} // use "shl" under x86 to avoid slower "call _llmul"
+      for i := digfirst to diglast do
         inc(signlo,signlo+signlo shl 3+digits[i]) else begin
       for i := digfirst to diglast-17 do
         inc(signhi,signhi+signhi shl 3+digits[i]);
       for i := diglast-16 to diglast do
         inc(signlo,signlo+signlo shl 3+digits[i]);
       {$else}
+      for i := digfirst to diglast do
         signlo := signlo*10+digits[i] else begin
       for i := digfirst to diglast-17 do
         signhi := signhi*10+digits[i];

@@ -6,7 +6,7 @@ unit mORMotReport;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -27,7 +27,7 @@ unit mORMotReport;
 
   Portions created by the Initial Developer are Copyright (C) 2003
   the Initial Developer. All Rights Reserved.
-  Portions created by Arnaud Bouchez for Synopse are Copyright (C) 2019
+  Portions created by Arnaud Bouchez for Synopse are Copyright (C) 2020
   Arnaud Bouchez. All Rights Reserved.
 
   Contributor(s):
@@ -111,7 +111,7 @@ unit mORMotReport;
   - full Unicode text process (even before Delphi 2009)
   - speed up and various bug fixes to work with Delphi 5 up to XE3
 
-  Modifications © 2009-2019 Arnaud Bouchez
+  Modifications © 2009-2020 Arnaud Bouchez
 
   Version 1.4 - February 8, 2010
   - whole Synopse SQLite3 database framework released under the GNU Lesser
@@ -234,7 +234,7 @@ interface
   // Black&White and Duplex printing are only available with our Enhanced RTL
 {$endif}
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 uses
   SynCommons, SynLZ,
@@ -1622,7 +1622,7 @@ begin
   if Driver[0] = #0 then
     if not GetDriverForPrinter(Device, Driver) then
       exit;  // oops !
-  DefaultPrinter := format('%s,%s,%s',[Device, Driver, Port]);
+  DefaultPrinter := FormatString('%,%,%',[Device, Driver, Port]);
   WriteProfileString( 'windows', 'device', pointer(DefaultPrinter) );
   Device := 'windows';
   SendMessage(HWND_BROADCAST, WM_WININICHANGE, 0, PtrInt(@Device));
@@ -1673,7 +1673,7 @@ begin
       end;
     end;
     if result = '' then
-      result := format('Custom (%d x %dmm)',[cx, cy]);
+      result := FormatString('Custom (% x %mm)',[cx, cy]);
   end;
 end;
 

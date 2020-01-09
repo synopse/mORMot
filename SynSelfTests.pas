@@ -6,7 +6,7 @@ unit SynSelfTests;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynSelfTests;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -107,7 +107,7 @@ unit SynSelfTests;
 
 interface
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64
 
 {$ifdef ISDELPHIXE}
   // since Delphi XE, we have unit System.RegularExpressionsAPI available
@@ -172,6 +172,7 @@ uses
     {$endif}
     SynBidirSock,
     mORMotDDD,
+    dddDomCountry,
     dddDomUserTypes,
     dddDomUserInterfaces,
     dddDomAuthInterfaces,
@@ -181,6 +182,7 @@ uses
     dddInfraRepoUser,
     ECCProcess,
   {$endif DELPHI5OROLDER}
+  mORMotService,
   SynProtoRTSPHTTP,
   {$ifdef TEST_REGEXP}
     SynSQLite3RegEx,
@@ -342,6 +344,8 @@ type
     procedure UrlEncoding;
     /// test our internal fast TGUID process functions
     procedure _GUID;
+    /// test ParseCommandArguments() function
+    procedure _ParseCommandArguments;
     /// test IsMatch() function
     procedure _IsMatch;
     /// test TExprParserMatch class
@@ -410,6 +414,7 @@ type
 {$ifndef NOVARIANTS}
   protected
     procedure MustacheTranslate(var English: string);
+    procedure MustacheHelper(const Value: variant; out result: variant);
 {$endif}
   published
 {$ifndef DELPHI5OROLDER}
@@ -421,6 +426,8 @@ type
     procedure UrlEncoding;
     /// some low-level JSON encoding/decoding
     procedure EncodeDecodeJSON;
+    /// HTML generation from Wiki Or Markdown syntax
+    procedure WikiMarkdownToHtml;
 {$ifndef NOVARIANTS}
     /// some low-level variant process
     procedure Variants;
@@ -1984,6 +1991,9 @@ type
   end;
   TDataItems = array of TDataItem;
 
+  TRawUTF8DynArray1 = type TRawUTF8DynArray;
+  TRawUTF8DynArray2 = array of RawUTF8;
+
 function FVSort(const A,B): integer;
 begin
   result := SysUtils.StrComp(PChar(pointer(TFV(A).Detailed)),PChar(pointer(TFV(B).Detailed)));
@@ -2083,6 +2093,14 @@ begin
   Check(h=$887ED692,'TypeInfoToHash(TAmountCollection)');
   h := TypeInfoToHash(TypeInfo(TAmountICollection));
   Check(h=$4051BAC,'TypeInfoToHash(TAmountICollection)');
+  Check(not IsRawUTF8DynArray(nil),'IsRawUTF8DynArray0');
+  Check(IsRawUTF8DynArray(TypeInfo(TRawUTF8DynArray)),'IsRawUTF8DynArray1');
+  Check(IsRawUTF8DynArray(TypeInfo(TRawUTF8DynArray1)),'IsRawUTF8DynArray11');
+  Check(IsRawUTF8DynArray(TypeInfo(TRawUTF8DynArray2)),'IsRawUTF8DynArray12');
+  Check(not IsRawUTF8DynArray(TypeInfo(TAmount)),'IsRawUTF8DynArray2');
+  Check(not IsRawUTF8DynArray(TypeInfo(TIntegerDynArray)),'IsRawUTF8DynArray2');
+  Check(not IsRawUTF8DynArray(TypeInfo(TPointerDynArray)),'IsRawUTF8DynArray3');
+  Check(not IsRawUTF8DynArray(TypeInfo(TAmountCollection)),'IsRawUTF8DynArray4');
   W := TTextWriter.CreateOwnedStream;
   // validate TBooleanDynArray
   dyn1.Init(TypeInfo(TBooleanDynArray),AB);
@@ -2755,9 +2773,17 @@ begin
     Check(B.Bulk[i]=i);
   for i := 0 to High(B.Bulk) do
     Check(CompareMem(@A.Bulk,@B.Bulk,i));
+  for i := 0 to High(B.Bulk) do
+    Check(CompareMemSmall(@A.Bulk,@B.Bulk,i));
+  for i := 0 to High(B.Bulk) do
+    Check(CompareMemFixed(@A.Bulk,@B.Bulk,i));
   FillCharFast(A.Bulk,sizeof(A.Bulk),255);
   for i := 0 to High(B.Bulk) do
     Check(CompareMem(@A.Bulk,@B.Bulk,i)=(i=0));
+  for i := 0 to High(B.Bulk) do
+    Check(CompareMemSmall(@A.Bulk,@B.Bulk,i)=(i=0));
+  for i := 0 to High(B.Bulk) do
+    Check(CompareMemFixed(@A.Bulk,@B.Bulk,i)=(i=0));
   B.Three := 3;
   B.Dyn[0] := 10;
   C := B;
@@ -2893,6 +2919,76 @@ begin
   Check(RecordLoadJSON(g2,pointer(s),TypeInfo(TGUID))<>nil);
   Check(IsEqualGUID(g2,g));
   {$endif}
+end;
+
+procedure TTestLowLevelCommon._ParseCommandArguments;
+  procedure Test(const cmd: RawUTF8; const expected: array of RawUTF8;
+    const flags: TParseCommands = []; posix: boolean=true);
+  var tmp: RawUTF8;
+      n, i: integer;
+      a: TParseCommandsArgs;
+  begin
+    if checkfailed(ParseCommandArgs(cmd, nil, nil, nil, posix) = flags) then
+      exit;
+    FillcharFast(a, SizeOf(a), 255);
+    check(ParseCommandArgs(cmd, @a, @n, @tmp, posix) = flags);
+    if (flags = []) and not CheckFailed(n = length(expected)) then begin
+      for i := 0 to high(expected) do
+        check(StrComp(pointer(a[i]), pointer(expected[i])) = 0);
+      check(a[n] = nil);
+    end;
+  end;
+begin
+  Test('', [], [pcInvalidCommand]);
+  Test('one', ['one']);
+  Test('one two', ['one', 'two']);
+  Test('    one     two    ', ['one', 'two']);
+  Test('"one" two', ['one', 'two']);
+  Test('one "two"', ['one', 'two']);
+  Test('one     "two"', ['one', 'two']);
+  Test('one " two"', ['one', ' two']);
+  Test('" one" two', [' one', 'two']);
+  Test(''' one'' two', [' one', 'two']);
+  Test('"one one" two', ['one one', 'two']);
+  Test('one "two two"', ['one', 'two two']);
+  Test('"1  2"    "3    4"', ['1  2', '3    4']);
+  Test('"1 '' 2"    "3    4"', ['1 '' 2', '3    4']);
+  Test('''1  2''    "3    4"', ['1  2', '3    4']);
+  Test('1 ( "3    4"', [], [pcHasParenthesis]);
+  Test('1 "3  "  4"', [], [pcUnbalancedDoubleQuote]);
+  Test(''' "3  4"', [], [pcUnbalancedSingleQuote]);
+  Test('one|two', [], [pcHasRedirection]);
+  Test('one\|two', ['one|two'], []);
+  Test('"one|two"', ['one|two']);
+  Test('one>two', [], [pcHasRedirection]);
+  Test('one\>two', ['one>two'], []);
+  Test('"one>two"', ['one>two']);
+  Test('one&two', [], [pcHasJobControl]);
+  Test('one\&two', ['one&two'], []);
+  Test('"one&two"', ['one&two']);
+  Test('one`two', [], [pcHasSubCommand]);
+  Test('''one`two''', ['one`two']);
+  Test('one$two', [], [pcHasShellVariable]);
+  Test('''one$two''', ['one$two']);
+  Test('one$(two)', [], [pcHasSubCommand, pcHasParenthesis]);
+  Test('one\$two', ['one$two'], []);
+  Test('''one$(two)''', ['one$(two)']);
+  Test('one*two', [], [pcHasWildcard]);
+  Test('"one*two"', ['one*two']);
+  Test('one*two', [], [pcHasWildcard]);
+  Test('''one*two''', ['one*two']);
+  Test('one\ two', ['one two'], []);
+  Test('one\\two', ['one\two'], []);
+  Test('one\\\\\\two', ['one\\\two'], []);
+  Test('one|two', [], [pcHasRedirection], {posix=}false);
+  Test('one&two', ['one&two'], [], false);
+  Test(''' one'' two', ['''', 'one''', 'two'], [], false);
+  Test('"one" two', ['one', 'two'], [], false);
+  Test('one "two"', ['one', 'two'], [], false);
+  Test('one     "two"', ['one', 'two'], [], false);
+  Test('one " two"', ['one', ' two'], [], false);
+  Test('" one" two', [' one', 'two'], [], false);
+  Test('"one one" two', ['one one', 'two'], [], false);
 end;
 
 procedure TTestLowLevelCommon._IsMatch;
@@ -4062,7 +4158,7 @@ begin
     Check(Ansi7ToString(s)=u,u);
     PC := ToVarUInt32(juint,@varint);
     Check(PC<>nil);
-    Check(PAnsiChar(PC)-@varint=integer(ToVarUInt32Length(juint)));
+    Check(PtrInt(PC)-PtrInt(@varint)=integer(ToVarUInt32Length(juint)));
     PB := @varint;
     Check(PtrUInt(FromVarUint32(PB))=juint);
     Check(PB=PC);
@@ -4083,7 +4179,7 @@ begin
     Check(PB=PC);
     PC := ToVarUInt64(juint,@varint);
     Check(PC<>nil);
-    Check(PAnsiChar(PC)-@varint=integer(ToVarUInt32Length(juint)));
+    Check(PtrInt(PC)-PtrInt(@varint)=integer(ToVarUInt32Length(juint)));
     PB := @varint;
     Check(PtrUInt(FromVarUint64(PB))=juint);
     Check(PB=PC);
@@ -4242,11 +4338,12 @@ procedure TTestLowLevelCommon._UTF8;
     Check(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W))=W);
     {$endif}
   end;
-var i, len, CP, L: integer;
+var i, j, k, len, lenup100, CP, L: integer;
     W: WinAnsiString;
     WS: WideString;
     SU: SynUnicode;
-    U, res, Up,Up2: RawUTF8;
+    str: string;
+    U,U2, res, Up,Up2: RawUTF8;
     arr: TRawUTF8DynArray;
     PB: PByte;
     {$ifndef DELPHI5OROLDER}
@@ -4347,10 +4444,60 @@ begin
   Check(GetUnQuoteCSVItem('"""one,',0,',','"')='');
   Check(FormatUTF8('abcd',[U],[WS])='abcd');
 {$endif}
+  U := QuotedStr('','"');
+  Check(U='""');
+  U := QuotedStr('abc','"');
+  Check(U='"abc"');
+  U := QuotedStr('a"c','"');
+  Check(U='"a""c"');
+  U := QuotedStr('abcd"efg','"');
+  Check(U='"abcd""efg"');
+  U := QuotedStr('abcd""efg','"');
+  Check(U='"abcd""""efg"');
+  U := QuotedStr('abcd"e"fg"','"');
+  Check(U='"abcd""e""fg"""');
+  U := QuotedStr('"abcd"efg','"');
+  Check(U='"""abcd""efg"');
+  U := QuotedStr('','#'); // also test for custom quote
+  Check(U='##');
+  U := QuotedStr('abc','#');
+  Check(U='#abc#');
+  U := QuotedStr('a#c','#');
+  Check(U='#a##c#');
+  U := QuotedStr('abcd#efg','#');
+  Check(U='#abcd##efg#');
+  U := QuotedStr('abcd##efg','#');
+  Check(U='#abcd####efg#');
+  U := QuotedStr('abcd#e#fg#','#');
+  Check(U='#abcd##e##fg###');
+  U := QuotedStr('#abcd#efg','#');
+  Check(U='###abcd##efg#');
   for i := 0 to 1000 do begin
     len := i*5;
     W := RandomAnsi7(len);
     Check(length(W)=len);
+    lenup100 := len;
+    if lenup100>100 then
+      lenup100 := 100;
+    str := Ansi7ToString(W); // should be fine on any code page
+    if len>0 then begin
+      Check(length(str)=len);
+      check(PosExString(str[1],str)=1);
+      if str[1]<>str[2] then begin
+        check(PosExString(str[2],str)=2);
+        if (str[1]<>str[2]) and (str[2]<>str[3]) and (str[1]<>str[3]) then
+          check(PosExString(str[3],str)=3);
+      end;
+      for j := 1 to lenup100 do begin
+        check(PosExString(#13,str,j)=0);
+        check(PosExString(str[j],str,j)=j);
+        if (j>1) and (str[j-1]<>str[j]) then
+          check(PosExString(str[j],str,j-1)=j);
+        k := PosExString(str[j],str);
+        check((k>0) and (str[k]=str[j]));
+      end;
+    end else
+      check(PosExString(#0,str)=0);
     for CP := 1250 to 1258 do
       Test(CP,W);
     Test(932,W);
@@ -4363,6 +4510,22 @@ begin
     Test(CP_UTF16,W);
     W := WinAnsiString(RandomString(len));
     U := WinAnsiToUtf8(W);
+    if len>0 then begin
+      check(PosEx(U[1],U)=1);
+      if (len>1) and (U[1]<>U[2]) then begin
+        check(PosEx(U[2],U)=2);
+        if (len>2) and (U[1]<>U[2]) and (U[2]<>U[3]) and (U[1]<>U[3]) then
+          check(PosEx(U[3],U)=3);
+      end;
+    end;
+    for j := 1 to lenup100 do begin // validates with offset parameter
+      check(PosEx(#13,U,j)=0);
+      check(PosEx(U[j],U,j)=j);
+      if (j>1) and (U[j-1]<>U[j]) then
+        check(PosEx(U[j],U,j-1)=j);
+      k := PosEx(U[j],U);
+      check((k>0) and (U[k]=U[j]));
+    end;
     Unic := Utf8DecodeToRawUnicode(U);
     {$ifndef FPC_HAS_CPSTRING} // buggy FPC
     Check(Utf8ToWinAnsi(U)=W);
@@ -4389,7 +4552,7 @@ begin
     Check(IsWinAnsi(pointer(Unic),length(Unic)shr 1)=WA);
     Check(IsWinAnsiU(pointer(U))=WA);
     Up := SynCommons.UpperCase(U);
-    Check(SynCommons.UpperCase(LowerCase(U))=Up);
+    Check(SynCommons.UpperCase(SynCommons.LowerCase(U))=Up);
     Check(UTF8IComp(pointer(U),pointer(U))=0);
     Check(UTF8IComp(pointer(U),pointer(Up))=0);
     Check(UTF8ILComp(pointer(U),pointer(U),length(U),length(U))=0);
@@ -4411,7 +4574,8 @@ begin
     Check(kr32(0,pointer(U),length(U))=kr32reference(pointer(U),length(U)));
     if U='' then
       continue;
-    Check(UnQuoteSQLStringVar(pointer(QuotedStr(U,'"')),res)<>nil);
+    U2 := QuotedStr(U,'"');
+    Check(UnQuoteSQLStringVar(pointer(U2),res)<>nil);
     Check(res=U);
     Check(not IsZero(pointer(W),length(W)));
     FillCharFast(pointer(W)^,length(W),0);
@@ -4524,72 +4688,110 @@ begin
 end;
 
 procedure TTestLowLevelCommon.Iso8601DateAndTime;
-procedure Test(D: TDateTime; Expanded: boolean);
-var s,t: RawUTF8;
-    E,F: TDateTime;
-    I,J: TTimeLogBits;
-    st, s2: TSynSystemTime;
-begin
-  s := DateTimeToIso8601(D,Expanded);
-  if Expanded then
-    Check(length(s)=19) else
-    Check(length(s)=15);
-  if Expanded then begin
-    Check(Iso8601CheckAndDecode(Pointer(s),length(s),E));
+  procedure Test(D: TDateTime; Expanded: boolean);
+  var s,t: RawUTF8;
+      E,F: TDateTime;
+      I,J: TTimeLogBits;
+      st, s2: TSynSystemTime;
+      P: PUTF8Char;
+      d1, d2: TSynDate;
+  begin
+    s := DateTimeToIso8601(D,Expanded);
+    if Expanded then
+      Check(length(s)=19) else
+      Check(length(s)=15);
+    if Expanded then begin
+      Check(Iso8601CheckAndDecode(Pointer(s),length(s),E));
+      Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
+    end;
+    st.FromDateTime(D);
+    s2.Clear;
+    DecodeDate(D,s2.Year,s2.Month,s2.Day);
+    DecodeTime(D,s2.Hour,s2.Minute,s2.Second,s2.MilliSecond);
+    Check(abs(st.MilliSecond-s2.MilliSecond)<=1); // allow 1 ms rounding error
+    st.MilliSecond := 0;
+    s2.MilliSecond := 0;
+    Check(st.IsEqual(s2)); // ensure conversion matches the RTL's
+    t := st.ToText(Expanded);
+    Check(Copy(t,1,length(s))=s);
+    d1.Clear;
+    check(d1.IsZero);
+    d2.SetMax;
+    check(not d2.IsZero);
+    check(not d1.IsEqual(d2));
+    check(d1.Compare(d2)<0);
+    check(d2.Compare(d1)>0);
+    t := d2.ToText(false);
+    check(t='99991231');
+    check(d2.ToText(true)='9999-12-31');
+    d2.Clear;
+    check(d1.IsEqual(d2));
+    check(d1.Compare(d2)=0);
+    check(d2.Compare(d1)=0);
+    P := pointer(s);
+    check(d1.ParseFromText(P));
+    check(P<>nil);
+    check(not d1.IsZero);
+    check(st.IsDateEqual(d1));
+    t := d1.ToText(Expanded);
+    check(copy(s,1,length(t))=t);
+    d2.Clear;
+    check(d2.IsZero);
+    check(not d1.IsEqual(d2));
+    check(d1.Compare(d2)>0);
+    check(d2.Compare(d1)<0);
+    check(d2.ToText(Expanded)='');
+    d2.SetMax;
+    check(not d2.IsZero);
+    check(not d1.IsEqual(d2));
+    check(d1.Compare(d2)<0);
+    check(d2.Compare(d1)>0);
+    d2 := d1;
+    check(d1.IsEqual(d2));
+    check(d1.Compare(d2)=0);
+    check(d2.Compare(d1)=0);
+    E := Iso8601ToDateTime(s);
     Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
+    E := Iso8601ToDateTime(s+'Z');
+    Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
+    I.From(D);
+    Check(Iso8601ToTimeLog(s)=I.Value);
+    I.From(s);
+    t := I.Text(Expanded);
+    if t<>s then // we allow error on time = 00:00:00 -> I.Text = just date
+      Check(I.Value and (1 shl (6+6+5)-1)=0) else
+      Check(true);
+    J.From(E);
+    Check(Int64(I)=Int64(J));
+    s := TimeToIso8601(D,Expanded);
+    Check(PosEx('.',s)=0);
+    Check(abs(frac(D)-Iso8601ToDateTime(s))<1/SecsPerDay);
+    s := TimeToIso8601(D,Expanded,'T',true);
+    Check(PosEx('.',s)>0);
+    F := Iso8601ToDateTime(s);
+    Check(abs(frac(D)-F)<1/MSecsPerDay,'withms1');
+    s := DateToIso8601(D,Expanded);
+    Check(trunc(D)=trunc(Iso8601ToDateTime(s)));
+    Check(Abs(D-I.ToDateTime)<(1/SecsPerDay));
+    E := TimeLogToDateTime(I.Value);
+    Check(Abs(D-E)<(1/SecsPerDay));
+    s := DateTimeToIso8601(D,Expanded,#0);
+    if Expanded then
+      Check(length(s)=18) else
+      Check(length(s)=14);
+    s := DateTimeToIso8601(D,Expanded,'T',true);
+    Check(PosEx('.',s)>0);
+    if Expanded then
+      Check(length(s)=23) else
+      Check(length(s)=19);
+    F := Iso8601ToDateTime(s);
+    Check(abs(D-F)<1/MSecsPerDay,'withms2');
+    if Expanded then begin
+      F := 0;
+      Check(Iso8601CheckAndDecode(pointer(s),length(s),F));
+      Check(abs(D-F)<1/MSecsPerDay,'withms3');
+    end;
   end;
-  st.FromDateTime(D);
-  s2.Clear;
-  DecodeDate(D,s2.Year,s2.Month,s2.Day);
-  DecodeTime(D,s2.Hour,s2.Minute,s2.Second,s2.MilliSecond);
-  Check(abs(st.MilliSecond-s2.MilliSecond)<=1); // allow 1 ms rounding error
-  st.MilliSecond := 0;
-  s2.MilliSecond := 0;
-  Check(st.IsEqual(s2)); // ensure conversion matches the RTL's
-  t := st.ToText(Expanded);
-  Check(Copy(t,1,length(s))=s);
-  E := Iso8601ToDateTime(s);
-  Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
-  E := Iso8601ToDateTime(s+'Z');
-  Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
-  I.From(D);
-  Check(Iso8601ToTimeLog(s)=I.Value);
-  I.From(s);
-  t := I.Text(Expanded);
-  if t<>s then // we allow error on time = 00:00:00 -> I.Text = just date
-    Check(I.Value and (1 shl (6+6+5)-1)=0) else
-    Check(true);
-  J.From(E);
-  Check(Int64(I)=Int64(J));
-  s := TimeToIso8601(D,Expanded);
-  Check(PosEx('.',s)=0);
-  Check(abs(frac(D)-Iso8601ToDateTime(s))<1/SecsPerDay);
-  s := TimeToIso8601(D,Expanded,'T',true);
-  Check(PosEx('.',s)>0);
-  F := Iso8601ToDateTime(s);
-  Check(abs(frac(D)-F)<1/MSecsPerDay,'withms1');
-  s := DateToIso8601(D,Expanded);
-  Check(trunc(D)=trunc(Iso8601ToDateTime(s)));
-  Check(Abs(D-I.ToDateTime)<(1/SecsPerDay));
-  E := TimeLogToDateTime(I.Value);
-  Check(Abs(D-E)<(1/SecsPerDay));
-  s := DateTimeToIso8601(D,Expanded,#0);
-  if Expanded then
-    Check(length(s)=18) else
-    Check(length(s)=14);
-  s := DateTimeToIso8601(D,Expanded,'T',true);
-  Check(PosEx('.',s)>0);
-  if Expanded then
-    Check(length(s)=23) else
-    Check(length(s)=19);
-  F := Iso8601ToDateTime(s);
-  Check(abs(D-F)<1/MSecsPerDay,'withms2');
-  if Expanded then begin
-    F := 0;
-    Check(Iso8601CheckAndDecode(pointer(s),length(s),F));
-    Check(abs(D-F)<1/MSecsPerDay,'withms3');
-  end;
-end;
 var i: integer;
     D: TDateTime;
     tmp: RawUTF8;
@@ -6311,6 +6513,7 @@ var mustacheJson: RawByteString;
     mustacheJsonFileName: TFileName;
     doc: variant;
     html: RawUTF8;
+    helpers: TSynMustacheHelpers;
     guid: TGUID;
     spec,i: integer;
 begin
@@ -6376,6 +6579,23 @@ begin
   Check(mustache.SectionMaxCount=1);
   html := mustache.RenderJSON('{person2:2}');
   Check(html='Shown.Also shown!end');
+  Check(helpers=nil,'compiler initialized');
+  mustache.HelperAdd(helpers, 'jsonhelper', MustacheHelper);
+  mustache := TSynMustache.Parse('{{jsonhelper {a:"a",b:10}}}');
+  html := mustache.RenderJSON('', nil, helpers);
+  Check(html='a=a,b=10');
+  mustache := TSynMustache.Parse('{{jsonhelper {a:"b",b:10} }}');
+  html := mustache.RenderJSON('', nil, helpers);
+  Check(html='a=b,b=10');
+  mustache := TSynMustache.Parse('{{{jsonhelper {a:"a",b:1}}}}');
+  html := mustache.RenderJSON('', nil, helpers);
+  check(html='a=a,b=1');
+  mustache := TSynMustache.Parse('{{jsonhelper {a:1,b:2} }},titi');
+  html := mustache.RenderJSON('', nil, helpers);
+  Check(html='a=1,b=2,titi');
+  mustache := TSynMustache.Parse('{{jsonhelper {a:1,nested:{c:{d:[1,2]}},b:10}}}}toto');
+  html := mustache.RenderJSON('', nil, helpers);
+  Check(html='a=1,b=10}toto');
   mustache := TSynMustache.Parse('{{#a}}'#$A'{{one}}'#$A'{{/a}}'#$A);
   html := mustache.RenderJSON('{a:{one:1}}');
   Check(html='1'#$A);
@@ -6483,6 +6703,12 @@ begin
     English := 'Bonjour' else
   if English='You have just won' then
     English := 'Vous venez de gagner';
+end;
+
+procedure TTestLowLevelTypes.MustacheHelper(const Value: variant; out result: variant);
+begin
+  with _Safe(Value)^ do
+    result := RawUTF8ToVariant(FormatUTF8('a=%,b=%',[U['a'],I['b']]));
 end;
 
 {$endif NOVARIANTS}
@@ -8192,6 +8418,80 @@ begin
   {$endif}
 end;
 
+procedure TTestLowLevelTypes.WikiMarkdownToHtml;
+begin
+  // wiki
+  CheckEqual(HtmlEscapeWiki('test'),'<p>test</p>');
+  CheckEqual(HtmlEscapeWiki('te<b>st'),'<p>te&lt;b&gt;st</p>');
+  CheckEqual(HtmlEscapeWiki('t *e* st'),'<p>t <em>e</em> st</p>');
+  CheckEqual(HtmlEscapeWiki('t*e*st'),'<p>t<em>e</em>st</p>');
+  CheckEqual(HtmlEscapeWiki('t\*e\*st'),'<p>t*e*st</p>');
+  CheckEqual(HtmlEscapeWiki('t\*e*st'),'<p>t*e<em>st</em></p>');
+  CheckEqual(HtmlEscapeWiki('t +e+ st'),'<p>t <strong>e</strong> st</p>');
+  CheckEqual(HtmlEscapeWiki('t+e+st'),'<p>t<strong>e</strong>st</p>');
+  CheckEqual(HtmlEscapeWiki('t `e` st'),'<p>t <code>e</code> st</p>');
+  CheckEqual(HtmlEscapeWiki('t`e`st'),'<p>t<code>e</code>st</p>');
+  CheckEqual(HtmlEscapeWiki('https://test'),'<p><a href="https://test" rel="nofollow">https://test</a></p>');
+  CheckEqual(HtmlEscapeWiki('test'#13#10'click on http://coucouc.net toto'),
+    '<p>test</p><p>click on <a href="http://coucouc.net" rel="nofollow">http://coucouc.net</a> toto</p>');
+  CheckEqual(HtmlEscapeWiki(':test: :) joy:'),'<p>:test: '+EMOJI_UTF8[eSmiley]+' joy:</p>');
+  CheckEqual(HtmlEscapeWiki(':innocent: smile'),'<p>'+EMOJI_UTF8[eInnocent]+' smile</p>');
+  CheckEqual(HtmlEscapeWiki(':test: :) a:joy:'),'<p>:test: '+EMOJI_UTF8[eSmiley]+' a:joy:</p>');
+  CheckEqual(HtmlEscapeWiki(':test: :)'),'<p>:test: '+EMOJI_UTF8[eSmiley]+'</p>');
+  CheckEqual(HtmlEscapeWiki(':test: (:)'),'<p>:test: (:)</p>');
+  CheckEqual(HtmlEscapeWiki(':test: :))'),'<p>:test: :))</p>');
+  // Markdown
+  CheckEqual(HtmlEscapeMarkdown('test'),'<p>test</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#13#10'toto'),'<p>test toto</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#13#10#13#10'toto'),'<p>test</p><p>toto</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#10#10'toto'),'<p>test</p><p>toto</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#10#10#10'toto'),'<p>test</p><p> toto</p>');
+  CheckEqual(HtmlEscapeMarkdown('te<b>st'),'<p>te<b>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('te<b>st',[heHtmlEscape]),'<p>te&lt;b&gt;st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t *e* st'),'<p>t <em>e</em> st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t*e*st'),'<p>t<em>e</em>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t\*e\*st'),'<p>t*e*st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t\*e*st'),'<p>t*e<em>st</em></p>');
+  CheckEqual(HtmlEscapeMarkdown('t **e** st'),'<p>t <strong>e</strong> st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t**e**st'),'<p>t<strong>e</strong>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t _e_ st'),'<p>t <em>e</em> st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t_e_st'),'<p>t<em>e</em>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t\_e\_st'),'<p>t_e_st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t\_e_st'),'<p>t_e<em>st</em></p>');
+  CheckEqual(HtmlEscapeMarkdown('t __e__ st'),'<p>t <strong>e</strong> st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t__e__st'),'<p>t<strong>e</strong>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t `e` st'),'<p>t <code>e</code> st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t`e`st'),'<p>t<code>e</code>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('t***e***st'),'<p>t<strong><em>e</strong></em>st</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#13#10'click on http://coucouc.net toto'),
+    '<p>test click on <a href="http://coucouc.net" rel="nofollow">http://coucouc.net</a> toto</p>');
+  CheckEqual(HtmlEscapeMarkdown('[toto](http://coucou.net) titi'),
+    '<p><a href="http://coucou.net" rel="nofollow">toto</a> titi</p>');
+  CheckEqual(HtmlEscapeMarkdown('blabla ![img](static/img.jpg) blibli'),
+    '<p>blabla <img alt="img" src="static/img.jpg"> blibli</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#13#10'    a*=10*2'#10'    b=20'#13#10'ended'),
+    '<p>test</p><pre><code>a*=10*2'#$D#$A'b=20'#$D#$A'</code></pre><p>ended</p>');
+  CheckEqual(HtmlEscapeMarkdown('test'#13#10'``` a*=10*2'#10'  b=20'#13#10'```ended'),
+    '<p>test</p><pre><code> a*=10*2'#$D#$A'  b=20'#$D#$A'</code></pre><p>ended</p>');
+  CheckEqual(HtmlEscapeMarkdown('*te*st'#13#10'* one'#13#10'* two'#13#10'end'),
+    '<p><em>te</em>st</p><ul><li>one</li><li>two</li></ul><p>end</p>');
+  CheckEqual(HtmlEscapeMarkdown('+test'#13#10'+ one'#13#10'- two'#13#10'end'),
+    '<p>+test</p><ul><li>one</li><li>two</li></ul><p>end</p>');
+  CheckEqual(HtmlEscapeMarkdown('1test'#13#10'1. one'#13#10'2. two'#13#10'end'),
+    '<p>1test</p><ol><li>one</li><li>two</li></ol><p>end</p>');
+  CheckEqual(HtmlEscapeMarkdown('1test'#13#10'1. one'#13#10'7. two'#13#10'3. three'#13#10'4end'),
+    '<p>1test</p><ol><li>one</li><li>two</li><li>three</li></ol><p>4end</p>');
+  CheckEqual(HtmlEscapeMarkdown('1test'#13#10'1. one'#13#10'2. two'#13#10'+ one'#13#10'- two'#13#10'end'),
+    '<p>1test</p><ol><li>one</li><li>two</li></ol><ul><li>one</li><li>two</li></ul><p>end</p>');
+  CheckEqual(HtmlEscapeMarkdown('>test'#13#10'> quote'),
+    '<p>>test</p><blockquote><p>quote</p></blockquote>');
+  CheckEqual(HtmlEscapeMarkdown('>test'#13#10'> quote1'#10'> quote2'#13#10'end'),
+    '<p>>test</p><blockquote><p>quote1</p><p>quote2</p></blockquote><p>end</p>');
+  CheckEqual(HtmlEscapeMarkdown(':test: :) joy:'),'<p>:test: '+EMOJI_UTF8[eSmiley]+' joy:</p>');
+  CheckEqual(HtmlEscapeMarkdown(':innocent: :joy'),'<p>'+EMOJI_UTF8[eInnocent]+' :joy</p>');
+  CheckEqual(HtmlEscapeMarkdown(':test: :)'),'<p>:test: '+EMOJI_UTF8[eSmiley]+'</p>');
+  CheckEqual(HtmlEscapeMarkdown(':test: (:)'),'<p>:test: (:)</p>');
+end;
 
 {$ifndef DELPHI5OROLDER}
 {$ifndef LVCL}
@@ -8570,7 +8870,7 @@ begin
   CheckSame(value,1.2);
   elem.FromVariant(name,value,Temp);
   Check(elem.name='one');
-  CheckSame(PDouble(elem.Element)^,1.2);
+  CheckSame(unaligned(PDouble(elem.Element)^),1.2);
   Check(not BSONParseNextElement(b,name,value));
   Check(BSONToJSON(pointer(bsonDat),betDoc,length(bsonDat))=u);
   elem.FromVariant('test',o,Temp);
@@ -8913,16 +9213,17 @@ begin
   Doc.Clear;
   Doc.InitArray(['one',2,3.0]);
   Check(variant(Doc)._kind=ord(dvArray));
-  Check(Doc.Count=3);
   Check(variant(Doc)._count=3);
-  Check(Doc.Values[0]='one');
-  Check(Doc.Values[1]=2);
-  Check(Doc.Values[2]=3.0);
-  Check(Doc.Value[0]='one');
-  Check(Doc.Value[1]=2);
-  Check(Doc.Value[2]=3.0);
-  for i := 0 to Doc.Count-1 do
-    Check(Doc.Values[i]=Doc.Value[i]);
+  if not CheckFailed(Doc.Count=3) then begin
+    Check(Doc.Values[0]='one');
+    Check(Doc.Values[1]=2);
+    Check(Doc.Values[2]=3.0);
+    Check(Doc.Value[0]='one');
+    Check(Doc.Value[1]=2);
+    Check(Doc.Value[2]=3.0);
+    for i := 0 to Doc.Count-1 do
+      Check(VariantCompare(Doc.Values[i],Doc.Value[i])=0);
+  end;
   Check(Doc.ToJSON='["one",2,3]');
   Check(Variant(Doc)._JSON='["one",2,3]');
   Doc.ToArrayOfConst(vr);
@@ -9074,13 +9375,16 @@ begin
   v1.Add(vd);
   Check(VariantSaveJSON(v1)='[1.23456,1.234567]');
   v2 := _obj(['id',1]);
-  v1.Add(v2);
+  Check(VariantSaveJSON(v2)='{"id":1}');
+  {$ifdef FPC}_Safe(v1)^.AddItem(v2); // FPC does not accept v1.Add(v2)
+  {$else}v1.Add(v2);{$endif}
   Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1}]');
   s := 'abc';
-  v1.Add(s); // FPC does not accept v1.Add('abc') on ARM
+  {$ifdef FPC}_Safe(v1)^.AddItem(s); // FPC does not accept v1.Add(s)
+  {$else}v1.Add(s);{$endif}
   Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1},"abc"]');
   RawUTF8ToVariant('def',v2);
-  v1.Add(v2);
+  {$ifdef FPC}_Safe(v1)^.AddItem{$else}v1.Add{$endif}(v2);
   Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1},"abc","def"]');
   Doc.Clear;
   Doc.InitObjectFromPath('name','toto');
@@ -9160,7 +9464,49 @@ var i: Integer;
     astext: boolean;
     P: PUTF8Char;
     eoo: AnsiChar;
+    e: TEmoji;
 begin
+  check(EMOJI_UTF8[eNone]='');
+  checkEqual(BinToHex(EMOJI_UTF8[eGrinning]),'F09F9880');
+  checkEqual(BinToHex(EMOJI_UTF8[ePray]),'F09F998F');
+  check(EmojiFromText(Pointer(EMOJI_UTF8[eGrinning]),4)=eNone);
+  check(EmojiFromText(nil,0)=eNone);
+  checkEqual(EmojiToDots('toto'),'toto');
+  for e := low(e) to high(e) do begin
+    check(EmojiFromText(pointer(EMOJI_TEXT[e]),length(EMOJI_TEXT[e]))=e);
+    if e=eNone then
+      continue;
+    check(length(EMOJI_UTF8[e])=4);
+    P := Pointer(EMOJI_UTF8[e]);
+    checkEqual(NextUTF8UCS4(P),$1f5ff+ord(e));
+    FormatUTF8(':smile % ok',[EMOJI_TAG[e]],tmp);
+    P := pointer(tmp);
+    check(EmojiParseDots(P)=eNone);
+    check(IdemPChar(P,'SMILE :'));
+    inc(P,6);
+    check(P^=':');
+    check(EmojiParseDots(P)=e);
+    check(IdemPChar(P,' OK'));
+    checkEqual(EmojiToDots(EMOJI_UTF8[e]),EMOJI_TAG[e]);
+    checkEqual(EmojiToDots(' '+EMOJI_UTF8[e]+' '),' '+EMOJI_TAG[e]+' ');
+    checkEqual(EmojiToDots(EmojiFromDots(tmp)),tmp);
+  end;
+  tmp := ':) :( :JoY: :o :|';
+  P := pointer(tmp);
+  check(EmojiParseDots(P)=eSmiley);
+  check(P^=' ');
+  inc(P);
+  check(EmojiParseDots(P)=eFrowning);
+  check(IdemPChar(P,' :JOY:'));
+  inc(P);
+  check(EmojiParseDots(P)=eJoy);
+  check(P^=' ');
+  inc(P);
+  check(EmojiParseDots(P)=eOpen_mouth);
+  check(P^=' ');
+  inc(P);
+  check(EmojiParseDots(P)=eExpressionless);
+  check(P^=#0);
   with PTypeInfo(TypeInfo(TSynLogInfo))^.EnumBaseType^ do
     for i := 0 to integer(high(TSynLogInfo)) do begin
 {$ifdef VERBOSE}writeln(i,' ',GetEnumName(i)^, ' ',GetEnumNameTrimed(i));{$endif}
@@ -11154,13 +11500,22 @@ procedure TTestCryptographicRoutines._TAESPNRG;
 var b1,b2: TAESBlock;
     a1,a2: TAESPRNG;
     s1,s2,split: RawByteString;
+    c: cardinal;
     d: double;
+    e: TSynExtended;
     i,stripes: integer;
+    clo, chi, dlo, dhi, elo, ehi: integer;
 begin
   TAESPRNG.Main.FillRandom(b1);
   TAESPRNG.Main.FillRandom(b2);
   Check(not IsEqual(b1,b2));
   Check(not CompareMem(@b1,@b2,sizeof(b1)));
+  clo := 0;
+  chi := 0;
+  dlo := 0;
+  dhi := 0;
+  elo := 0;
+  ehi := 0;
   a1 := TAESPRNG.Create;
   a2 := TAESPRNG.Create;
   try
@@ -11183,18 +11538,44 @@ begin
       s1 := a1.FillRandomHex(i);
       check(length(s1)=i*2);
       check(SynCommons.HexToBin(pointer(s1),nil,i));
-      check(a1.Random32<>a2.Random32);
+      c := a1.Random32;
+      check(c<>a2.Random32,'Random32 collision');
+      if c<cardinal(maxint) then
+        inc(clo) else
+        inc(chi);
       check(a1.Random64<>a2.Random64);
       check(a1.Random32(i)<cardinal(i));
-      d := a1.RandomExt;
+      d := a1.RandomDouble;
       check((d>=0)and(d<1));
-      d := a2.RandomExt;
+      if d<0.5 then
+        inc(dlo) else
+        inc(dhi);
+      d := a2.RandomDouble;
       check((d>=0)and(d<1));
+      if d<0.5 then
+        inc(dlo) else
+        inc(dhi);
+      e := a1.Randomext;
+      check((e>=0)and(e<1));
+      if e<0.5 then
+        inc(elo) else
+        inc(ehi);
+      e := a2.Randomext;
+      check((e>=0)and(e<1));
+      if e<0.5 then
+        inc(elo) else
+        inc(ehi);
     end;
   finally
     a1.Free;
     a2.Free;
   end;
+  Check(clo+chi=2000);
+  Check(dlo+dhi=4000);
+  Check(elo+ehi=4000);
+  CheckUTF8((clo>=950) and (clo<=1050),'Random32 distribution clo=%',[clo]);
+  CheckUTF8((dlo>=1900) and (dlo<=2100),'RandomDouble distribution dlo=%',[dlo]);
+  CheckUTF8((elo>=1900) and (elo<=2100),'RandomExt distribution elo=%',[elo]);
   s1 := TAESPRNG.Main.FillRandom(100);
   for i := 1 to length(s1) do
     for stripes := 0 to 10 do begin
@@ -12861,28 +13242,28 @@ type
   end;
 
 procedure TestMasterSlaveRecordVersion(Test: TSynTestCase; const DBExt: TFileName);
-procedure TestMasterSlave(Master,Slave: TSQLRestServer; SynchronizeFromMaster: TSQLRest);
-var res: TRecordVersion;
-    Rec1,Rec2: TSQLRecordPeopleVersioned;
-begin
-  if SynchronizeFromMaster<>nil then
-    res := Slave.RecordVersionSynchronizeSlave(TSQLRecordPeopleVersioned,SynchronizeFromMaster,500) else
-    res := Slave.RecordVersionCurrent;
-  Test.Check(res=Master.RecordVersionCurrent);
-  Rec1 := TSQLRecordPeopleVersioned.CreateAndFillPrepare(Master,'order by ID','*');
-  Rec2 := TSQLRecordPeopleVersioned.CreateAndFillPrepare(Slave,'order by ID','*');
-  try
-    Test.Check(Rec1.FillTable.RowCount=Rec2.FillTable.RowCount);
-    while Rec1.FillOne do begin
-      Test.Check(Rec2.FillOne);
-      Test.Check(Rec1.SameRecord(Rec2),'simple fields');
-      Test.Check(Rec1.Version=Rec2.Version);
+  procedure TestMasterSlave(Master,Slave: TSQLRestServer; SynchronizeFromMaster: TSQLRest);
+  var res: TRecordVersion;
+      Rec1,Rec2: TSQLRecordPeopleVersioned;
+  begin
+    if SynchronizeFromMaster<>nil then
+      res := Slave.RecordVersionSynchronizeSlave(TSQLRecordPeopleVersioned,SynchronizeFromMaster,500) else
+      res := Slave.RecordVersionCurrent;
+    Test.Check(res=Master.RecordVersionCurrent);
+    Rec1 := TSQLRecordPeopleVersioned.CreateAndFillPrepare(Master,'order by ID','*');
+    Rec2 := TSQLRecordPeopleVersioned.CreateAndFillPrepare(Slave,'order by ID','*');
+    try
+      Test.Check(Rec1.FillTable.RowCount=Rec2.FillTable.RowCount);
+      while Rec1.FillOne do begin
+        Test.Check(Rec2.FillOne);
+        Test.Check(Rec1.SameRecord(Rec2),'simple fields');
+        Test.Check(Rec1.Version=Rec2.Version);
+      end;
+    finally
+      Rec1.Free;
+      Rec2.Free;
     end;
-  finally
-    Rec1.Free;
-    Rec2.Free;
   end;
-end;
 var Model: TSQLModel;
     Master,Slave1,Slave2: TSQLRestServerDB;
     MasterAccess: TSQLRestClientURI;
@@ -12891,31 +13272,33 @@ var Model: TSQLModel;
     Slave2Callback: IServiceRecordVersionCallback;
     i,n: integer;
     timeout: Int64;
-function CreateServer(const DBFileName: TFileName; DeleteDBFile: boolean): TSQLRestServerDB;
-begin
-  if DeleteDBFile then
-    DeleteFile(DBFileName);
-  result := TSQLRestServerDB.Create(Model,DBFileName,false,'');
-  result.DB.Synchronous := smOff;
-  result.DB.LockingMode := lmExclusive;
-  result.CreateMissingTables;
-end;
-procedure CreateMaster(DeleteDBFile: boolean);
-var serv: TSQLHttpServer;
-    ws: TSQLHttpClientWebsockets;
-begin
-  Master := CreateServer('testversion'+DBExt,DeleteDBFile);
-  if Test is TTestBidirectionalRemoteConnection then begin
-    serv := TTestBidirectionalRemoteConnection(Test).fHttpServer;
-    Test.Check(serv.AddServer(Master));
-    serv.WebSocketsEnable(Master,'key2').Settings.SetFullLog;
-    ws := TSQLHttpClientWebsockets.Create('127.0.0.1',HTTP_DEFAULTPORT,Model);
-    ws.WebSockets.Settings.SetFullLog;
-    Test.Check(ws.WebSocketsUpgrade('key2')='');
-    MasterAccess := ws;
-  end else
-    MasterAccess := TSQLRestClientDB.Create(Master);
-end;
+  function CreateServer(const DBFileName: TFileName; DeleteDBFile: boolean): TSQLRestServerDB;
+  begin
+    if DeleteDBFile then
+      DeleteFile(DBFileName);
+    result := TSQLRestServerDB.Create(TSQLModel.Create(Model),DBFileName,false,'');
+    result.Model.Owner := result;
+    result.DB.Synchronous := smOff;
+    result.DB.LockingMode := lmExclusive;
+    result.CreateMissingTables;
+  end;
+  procedure CreateMaster(DeleteDBFile: boolean);
+  var serv: TSQLHttpServer;
+      ws: TSQLHttpClientWebsockets;
+  begin
+    Master := CreateServer('testversion'+DBExt,DeleteDBFile);
+    if Test is TTestBidirectionalRemoteConnection then begin
+      serv := TTestBidirectionalRemoteConnection(Test).fHttpServer;
+      Test.Check(serv.AddServer(Master));
+      serv.WebSocketsEnable(Master,'key2').Settings.SetFullLog;
+      ws := TSQLHttpClientWebsockets.Create('127.0.0.1',HTTP_DEFAULTPORT,TSQLModel.Create(Model));
+      ws.Model.Owner := ws;
+      ws.WebSockets.Settings.SetFullLog;
+      Test.Check(ws.WebSocketsUpgrade('key2')='');
+      MasterAccess := ws;
+    end else
+      MasterAccess := TSQLRestClientDB.Create(Master);
+  end;
 begin
   Model := TSQLModel.Create(
     [TSQLRecordPeople,TSQLRecordPeopleVersioned,TSQLRecordTableDeleted],'root0');

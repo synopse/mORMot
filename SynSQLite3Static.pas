@@ -1,4 +1,4 @@
-/// SQLite3 3.28 Database engine - statically linked for Windows/Linux
+/// SQLite3 3.30.1 Database engine - statically linked for Windows/Linux
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSQLite3Static;
@@ -6,7 +6,7 @@ unit SynSQLite3Static;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynSQLite3Static;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -61,7 +61,8 @@ unit SynSQLite3Static;
   (but compile).
 
   To compile our patched SQlite3.c version, available in this source folder:
-  - Run c.bat to compile the sqlite3*.obj for Win32/Delphi
+  - Run c.bat to compile the sqlite3.obj for Win32/Delphi
+  - Run c64.bat to compile the sqlite3.o for Win64/Delphi
   - Run c-fpcmingw.bat to compile sqlite3.o for Win32/FPC
   - Run c-fpcmingw64.bat to compile sqlite3.o and sqlite3-64.dll for Win64 (Delphi/FPC)
   - Run c-fpcgcclin.sh to compile sqlite3.o for Linux32/FPC
@@ -77,14 +78,12 @@ unit SynSQLite3Static;
 
   Version 1.18
   - initial revision, extracted from SynSQLite3.pas unit
-  - updated SQLite3 engine to latest version 3.28
+  - updated SQLite3 engine to latest version 3.30.1
   - now all sqlite3_*() API calls are accessible via sqlite3.*()
   - our custom file encryption is now called via sqlite3.key() - i.e. official
     SQLite Encryption Extension (SEE) sqlite3_key() API - and works for database
     files of any size without touching the main sqlite.c amalgamation file
   - Memory-Mapped I/O support - see http://www.sqlite.org/mmap.html
-  - under Win64, expects an external sqlite3-64.dll file to be available, which
-    may be downloaded from https://synopse.info/files/SQLite3-64.7z
   - added sqlite3.backup_*() Online Backup API functions
   - added missing function sqlite3_column_text16() - fixed ticket [25d8d1f47a]
   - added sqlite3.db_config() support
@@ -92,6 +91,19 @@ unit SynSQLite3Static;
   - added FPC cross-platform support, statically linked for Win32/Win64
 
 }
+
+(* WARNING: with current 3.29+ version, the following sqlite3.c patch is needed:
+
+SQLITE_PRIVATE int sqlite3RealSameAsInt(double r1, sqlite3_int64 i){
+  double r2 = (double)i;
+#if defined(__BORLANDC__) // avoid weird Borland C++ compiler limitation
+  return r1==r2; // safe and fast with x87 FPU
+#else // faster version without any memcmp() call (not an intrinsic on GCC)
+  return *( sqlite3_int64* )(&r1) == *( sqlite3_int64* )(&r2)
+          && i >= -2251799813685248LL && i < 2251799813685248LL;
+#endif
+}
+*)
 
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
@@ -276,7 +288,7 @@ end;
 {$ifdef MSWINDOWS}
 {$ifdef CPUX86} // not a compiler intrinsic on x86
 function _InterlockedCompareExchange(var Dest: longint; New,Comp: longint): longint; stdcall;
-  [public, alias: '_InterlockedCompareExchange@12'];
+  public alias: '_InterlockedCompareExchange@12';
 begin
   result := InterlockedCompareExchange(Dest,New,Comp);
 end;
@@ -323,15 +335,15 @@ end;
 
 {$else FPC}
 
-  // Delphi has a more complex linking strategy, since $linklib doesn't exist :(
+  // Delphi has a diverse linking strategy, since $linklib doesn't exist :(
   {$ifdef MSWINDOWS}
     {$ifdef CPU64}
-      {$L static\x86_64-win64\sqlite3.o} // compiled with gcc for FPC ...
+      {$L sqlite3.o}  // compiled with C++ Builder 10.3 Community Edition bcc64
     {$else}
-      {$L sqlite3.obj}       // link SQlite3 database engine
+      {$L sqlite3.obj}  // compiled with free Borland C++ Compiler 5.5
     {$endif}
   {$else}
-  {$ifdef KYLIX3} // in practice, failed to compile SQLite3 with gcc 2 :(
+  {$ifdef KYLIX3} // in practice, we failed to compile SQLite3 with gcc 2 :(
     {$L kylix/sqlite3/sqlite3.o}
     {$L kylix/sqlite3/_divdi3.o}
     {$L kylix/sqlite3/_moddi3.o}
@@ -341,7 +353,7 @@ end;
   {$endif KYLIX3}
   {$endif MSWINDOWS}
 
-// those functions will be called only under Delphi + Win32
+// those functions will be called only under Delphi + Win32/Win64
 
 function malloc(size: cardinal): Pointer; cdecl; { always cdecl }
 begin
@@ -368,7 +380,7 @@ begin
 end;
 
 {$ifdef MSWINDOWS}
-{$ifdef CPU32}
+{$ifdef CPU32} // Delphi Win32 will link static Borland C++ sqlite3.obj
 
 // we then implement all needed Borland C++ runtime functions in pure pascal:
 
@@ -518,20 +530,21 @@ begin
   result := CompareByte(p1,p2,Size); // use FPC
 end;
 {$else}
-// a fast full pascal version of the standard C library function
-begin
+begin // full pascal version of the standard C library function
   if (p1<>p2) and (Size<>0) then
     if p1<>nil then
       if p2<>nil then begin
         repeat
-          if p1^<>p2^ then begin
-            result := p1^-p2^;
-            exit;
+          if p1^=p2^ then begin
+            inc(p1);
+            inc(p2);
+            dec(Size);
+            if Size<>0 then
+              continue else break;
           end;
-          dec(Size);
-          inc(p1);
-          inc(p2);
-        until Size=0;
+          result := p1^-p2^;
+          exit;
+        until false;
         result := 0;
       end else
       result := 1 else
@@ -559,7 +572,7 @@ type
   // this function type is defined for calling termDataCmp() in sqlite3.c
   qsort_compare_func = function(P1,P2: pointer): integer; cdecl; { always cdecl }
 
-procedure QuickSort4(base: PPointerArray; L, R: Integer; comparF: qsort_compare_func);
+procedure QuickSortPtr(base: PPointerArray; L, R: Integer; comparF: qsort_compare_func);
 var I, J, P: Integer;
     PP, C: PAnsiChar;
 begin
@@ -583,7 +596,7 @@ begin
       end;
     until I>J;
     if L<J then
-      QuickSort4(base, L, J, comparF);
+      QuickSortPtr(base, L, J, comparF);
     L := I;
   until I>=R;
 end;
@@ -638,7 +651,7 @@ procedure qsort(baseP: pointer; NElem, Width: integer; comparF: pointer); cdecl;
 begin
   if (cardinal(NElem)>1) and (Width>0) then
     if Width=sizeof(pointer) then
-      QuickSort4(baseP, 0, NElem-1, qsort_compare_func(comparF)) else
+      QuickSortPtr(baseP, 0, NElem-1, qsort_compare_func(comparF)) else
       QuickSort(baseP, Width, 0, NElem-1, qsort_compare_func(comparF));
 end;
 
@@ -712,27 +725,17 @@ procedure _endthreadex(exitcode: dword); cdecl; external msvcrt;
 
 {$ifdef CPU64}
 
-// first try for static on Win64 with Delphi
-function __imp__beginthreadex(security: pointer; stksize: dword;
-  start,arg: pointer; flags: dword; var threadid: dword): THandle; cdecl; external msvcrt name '_beginthreadex';
-procedure __imp__endthreadex(exitcode: dword); cdecl; external msvcrt name '_endthreadex';
+// Delphi Win64 will link its own static sqlite3.o (diverse from FPC's)
 
-function __imp_TryEnterCriticalSection(lpCriticalSection:pointer): BOOL; cdecl; external kernel name 'TryEnterCriticalSection';
-procedure __imp_LeaveCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'LeaveCriticalSection';
-procedure __imp_EnterCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'EnterCriticalSection';
-procedure __imp_DeleteCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'DeleteCriticalSection';
-procedure __imp_InitializeCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'InitializeCriticalSection';
-function __imp_GetCurrentThreadId:dword; cdecl; external kernel name 'GetCurrentThreadId';
-function __imp_CloseHandle(hObject:THandle): BOOL; cdecl; external kernel name 'CloseHandle';
-function __imp__localtime64(t: PCardinal): pointer; cdecl;
-begin
-  result := localtime64(t^);
-end;
-function log(x: double): double; cdecl; export;
+function _log(x: double): double; export; // to link LLVM bcc64 compiler
 begin
   result := ln(x);
 end;
-// try ends here
+
+function log(x: double): double; export; // to link old non-LLVM bcc64 compiler
+begin
+  result := ln(x);
+end;
 
 procedure __chkstk;
 begin
@@ -745,7 +748,8 @@ asm
 end;
 
 var
-  _fltused: byte; // not used, but needed for linking
+  _finf: double = 1.0 / 0.0; // compiles to some double infinity constant
+  _fltused: Int64 = 0; // to link old non-LLVM bcc64 compiler
 
 {$endif CPU64}
 
@@ -1134,7 +1138,7 @@ function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCall
 
 const
   // error message if statically linked sqlite3.o(bj) does not match this
-  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.28.0'{$endif};
+  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.30.1'{$endif};
 
 constructor TSQLite3LibraryStatic.Create;
 var error: RawUTF8;
@@ -1251,11 +1255,7 @@ begin
   FormatUTF8('Static SQLite3 library as included within % is outdated!'#13+
     'Linked version is % whereas the current/expected is '+EXPECTED_SQLITE3_VERSION+'.'#13#13+
     'Please download latest SQLite3 '+EXPECTED_SQLITE3_VERSION+' revision'#13+
-    {$ifdef FPC}
-    'from https://synopse.info/files/sqlite3fpc.7z',
-    {$else}
-    'from https://synopse.info/files/sqlite3obj.7z',
-    {$endif}
+    'from https://synopse.info/files/sqlite3'+{$ifdef FPC}'fpc'{$else}'obj'{$endif}+'.7z',
     [ExeVersion.ProgramName,fVersionText],error);
   LogToTextFile(error); // annoyning enough on all platforms
   // SynSQLite3Log.Add.Log() would do nothing: we are in .exe initialization

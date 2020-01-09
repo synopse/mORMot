@@ -20,7 +20,7 @@
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -120,7 +120,7 @@
 // be affected (unless you use the enhanced RTTI for record/dynamic array JSON
 // serialization) - left undefined by default to ensure minimal impact
 
-{$define NOSETTHREADNAME}
+{.$define NOSETTHREADNAME}
 // if defined, SetThreadName() would not raise the exception used to set the
 // thread name: to be defined if you have issues when debugging your application
 
@@ -163,6 +163,9 @@
 // enable low-level logging of SQlite3 virtual table query planner costs
 // -> to be defined only for internal debugging
 
+{.$define NOSYNDBZEOS}
+// made SynDBZeos.pas a "void" unit - defined for FPC/Lazarus packages only
+
 {.$define DDDNOSYNDB}
 // SynDB / external SQL DB won't be linked to the executable by dddInfraSettings
 {.$define DDDNOMONGODB}
@@ -203,7 +206,6 @@
 
   {$undef ENHANCEDRTL}    // there is no version of our Enhanced RTL for FPC
   {$undef DOPATCHTRTL}
-  {$define USETYPEINFO}  // will use SynFPCTypInfo.pas wrapper
   {$define HASINLINE}
   {$define HASUINT64}
   {$define HASINLINENOTX86}
@@ -229,7 +231,7 @@
     // PTypeInfo would be stored with no pointer de-reference
     // => Delphi and newer FPC uses a pointer reference to ease exe linking
   {$endif}
-  {$ifdef VER3_1}
+  {$ifdef VER3_1} // trunk before 3.2
     {$define ISFPC27}
     {$define ISFPC30}
     {.$define HASDIRECTTYPEINFO}
@@ -244,11 +246,23 @@
     {$define ISFPC30}
     {$define ISFPC32}
   {$endif}
-  {$ifdef VER3_3}
+  {$ifdef VER3_3} // trunk before 3.4
     {$define ISFPC27}
     {$define ISFPC30}
     {$define ISFPC32}
   {$endif}
+  {$ifdef VER3_4}
+    {$define ISFPC27}
+    {$define ISFPC30}
+    {$define ISFPC32}
+    {$define ISFPC34}
+    {$define FPC_PROVIDE_ATTR_TABLE} // introducing TTypeData.AttributeTable
+  {$endif}
+  {$if not defined(VER3_0) and not defined(VER3_2) and not defined(VER2)}
+    {.$define FPC_PROVIDE_ATTR_TABLE} // to be defined since SVN 42356-42411
+    // on compilation error in SynFPCTypInfo, undefine the above conditional
+    // see https://lists.freepascal.org/pipermail/fpc-announce/2019-July/000612.html
+  {$ifend}
 
   {$ifdef ANDROID}
     {$define LINUX} // a Linux-based system
@@ -259,9 +273,9 @@
   // -> could be disabled to force external .so/.dll linking
   {$ifdef MSWINDOWS}
   {$ifdef CPUX86}
-    {$define FPCSQLITE3STATIC} // use static\i386-win32\sqlite3.o
+    {$define FPCSQLITE3STATIC}   // use static\i386-win32\sqlite3.o
   {$else}
-    {$define FPCSQLITE3STATIC} // use static\x86_64-win64\sqlite3.o
+    {$define FPCSQLITE3STATIC}   // use static\x86_64-win64\sqlite3.o
   {$endif}
   {$endif}
   {$ifdef LINUX}
@@ -278,8 +292,8 @@
   {$endif}
 
   {$ifdef BSD}
-    // this includes Darwin and BSD family like FreeBSD
-    {$define LINUX} // not true, but a POSIX/BSD system
+    // LINUX conditional includes Darwin and BSD family like FreeBSD
+    {$define LINUX} // not true, but a POSIX/BSD system - see LINUXNOTBSD
     {$ifdef DARWIN}
       {$define FPCSQLITE3STATIC} // we supply Darwin static libs
       {$ifdef CPUX86}
@@ -288,11 +302,12 @@
       {$undef FORCE_STRSSE42}  // fails otherwise for sure
       {$define ABSOLUTEPASCAL} // NO asm nor redirection (until stabilized)
     {$else}
-      {$define BSDNOTDARWIN}
+      {$define BSDNOTDARWIN}   // OSX has some non-standard API calls
     {$endif}
   {$else}
     {$ifdef LINUX}
       {$define LINUXNOTBSD} // e.g. to disable epoll API
+      {$define FPCLINUXNOTBSD}
     {$endif}
   {$endif}
 
@@ -310,6 +325,7 @@
     {$ifdef CPUX64}
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
+      {$define FPC_X64}
       {$ASMMODE INTEL} // as Delphi expects
     {$endif CPUX64}
   {$else}
@@ -320,6 +336,7 @@
     {$ifdef CPUX86}
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
+      {$define FPC_X86}
       {$ASMMODE INTEL} // as Delphi expects
       {$ifndef FPC_PIC}
         {$define CPUX86NOTPIC} // use "absolute" instead of local register
@@ -357,6 +374,7 @@
     {$define DELPHI_OR_FPC_OLDRTTI}
     {$define FPC_OLDRTTI}
   {$endif}
+  {$define ISDELPHI2010_OR_FPC} // eltype2 field
 
   {$ifdef FPC_HAS_CPSTRING}
     // see http://wiki.freepascal.org/FPC_Unicode_support
@@ -370,10 +388,14 @@
     // you should use 2.7.1/trunk branch in revision 28995 from 2014-11-05T22:17:54
     // => this will change the TInvokeableVariantType.SetProperty() signature
     {$define FPC_VARIANTSETVAR}
-  {$endif}
+  {$endif ISFPC27}
+  {$ifdef FPC_PROVIDE_ATTR_TABLE}
+    {$define HASALIGNTYPEDATA} // to ignore attributes RTTI table
+  {$endif FPC_PROVIDE_ATTR_TABLE}
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
     {$define FPC_ENUMHASINNER}
-  {$endif}
+    {$define HASALIGNTYPEDATA} // to ensure proper RTTI alignment
+  {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 
 {$else FPC}
@@ -481,13 +503,13 @@
         {$define FPC_OR_UNICODE}
       {$ifend}
       {$if CompilerVersion >= 21.0}
-        // Delphi 2010/XE: Reduce EXE size by disabling much RTTI
         {$define ISDELPHI2010}
+        {$define ISDELPHI2010_OR_FPC} // eltype2 field
         {$define ISDELPHI2010_OR_FPC_NEWRTTI}
         {$define FPC_OR_UNICODE}
         {$define HASTTHREADSTART}
         {$define HASINTERFACEASTOBJECT}
-        {$ifdef NEWRTTINOTUSED}
+        {$ifdef NEWRTTINOTUSED} // option reduce EXE size by disabling much RTTI
           {$WEAKLINKRTTI ON}
           {$RTTI EXPLICIT METHODS([]) PROPERTIES([]) FIELDS([])}
         {$endif NEWRTTINOTUSED}
@@ -633,8 +655,8 @@
     {$define NOSQLITE3STATIC}
   {$endif}
 {$else}
-  // Only Win32+Linux32 do support static linked library yet with Delphi/Kylix
-  {$ifdef CPU64}
+  // only Win32+Win64 are supported yet with Delphi anyway
+  {$ifndef MSWINDOWS}
     {$define NOSQLITE3STATIC}
   {$endif}
 {$endif FPC}
