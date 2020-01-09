@@ -75,7 +75,7 @@ is used, when running system allows it. For IPv6 support you must have the new A
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
-
+{$ifdef MSWINDOWS}
 uses
   SysUtils,
   Classes,
@@ -944,9 +944,9 @@ const
   SECPKG_ATTR_STREAM_SIZES = 4;
   SECURITY_NATIVE_DREP = $10;
   SCHANNEL_SHUTDOWN = 1;
-
+{$endif}
 implementation
-
+{$ifdef MSWINDOWS}
 var
   SynSockCount: integer;
   LibHandle: {$ifdef FPC}TLibHandle{$else}HMODULE{$endif};
@@ -1949,5 +1949,6 @@ finalization
   SynSockCount := -254; // force release library
   DestroySocketInterface;
   DeleteCriticalSection(SynSockCS);
+{$endif}
 end.
 
