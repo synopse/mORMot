@@ -5901,6 +5901,8 @@ type
     // dedicated TSQLRestServerURIContext.RemoteIP/AuthenticationBearerToken
     function Header(UpperName: PAnsiChar): RawUTF8;
       {$ifdef HASINLINE}inline;{$endif}
+    /// wrap FindIniNameValue(pointer(InHead),UpperName) with a cache store
+    function HeaderOnce(var Store: RawUTF8; UpperName: PAnsiChar): RawUTF8;
   end;
 
   /// used to map set of parameters for a Client or Server method call
@@ -6187,7 +6189,7 @@ type
     function GetInput(const ParamName: RawUTF8): variant;
     function GetInputOrVoid(const ParamName: RawUTF8): variant;
     {$endif}
-    function GetInputNameIndex(const ParamName: RawUTF8): integer;
+    function GetInputNameIndex(const ParamName: RawUTF8): PtrInt;
     function GetInputExists(const ParamName: RawUTF8): Boolean;
     function GetInputInt(const ParamName: RawUTF8): Int64;
     function GetInputDouble(const ParamName: RawUTF8): Double;
@@ -6202,10 +6204,10 @@ type
     procedure RetrieveCookies;
     function GetInCookie(CookieName: RawUTF8): RawUTF8;
     procedure SetInCookie(CookieName, CookieValue: RawUTF8);
-    function GetUserAgent: RawUTF8;
-    function GetRemoteIP: RawUTF8;
-    function GetRemoteIPNotLocal: RawUTF8;
-    function GetRemoteIPIsLocalHost: boolean;
+    function GetUserAgent: RawUTF8; {$ifdef HASINLINE}inline;{$endif}
+    function GetRemoteIP: RawUTF8;  {$ifdef HASINLINE}inline;{$endif}
+    function GetRemoteIPNotLocal: RawUTF8; {$ifdef HASINLINE}inline;{$endif}
+    function GetRemoteIPIsLocalHost: boolean; {$ifdef HASINLINE}inline;{$endif}
     function GetResourceFileName: TFileName;
     procedure SetOutSetCookie(aOutSetCookie: RawUTF8);
     procedure ServiceResultStart(WR: TTextWriter); virtual;
@@ -37936,6 +37938,19 @@ begin
   result := FindIniNameValue(pointer(InHead),UpperName);
 end;
 
+function TSQLRestURIParams.HeaderOnce(var Store: RawUTF8; UpperName: PAnsiChar): RawUTF8;
+begin
+  if (Store='') and (@self<>nil) then begin
+    result := FindIniNameValue(pointer(InHead),UpperName);
+    if result='' then
+      Store := NULL_STR_VAR else // ensure header is parsed only once
+      Store := result;
+  end else
+    if pointer(Store)=pointer(NULL_STR_VAR) then
+      result := '' else
+      result := Store;
+end;
+
 
 { TSQLRestClientCallbacks }
 
@@ -41873,7 +41888,7 @@ begin
   result := GetExtended(pointer(GetInputUTF8OrVoid(ParamName)));
 end;
 
-function TSQLRestServerURIContext.GetInputNameIndex(const ParamName: RawUTF8): integer;
+function TSQLRestServerURIContext.GetInputNameIndex(const ParamName: RawUTF8): PtrInt;
 begin // fInput[0]='Param1',fInput[1]='Value1',fInput[2]='Param2'...
   if (fInput=nil) and (Parameters<>nil) then
     FillInput;
@@ -41884,7 +41899,7 @@ begin // fInput[0]='Param1',fInput[1]='Value1',fInput[2]='Param2'...
 end;
 
 function TSQLRestServerURIContext.GetInputUTF8(const ParamName: RawUTF8): RawUTF8;
-var i: integer;
+var i: PtrInt;
 begin
   i := GetInputNameIndex(ParamName);
   if i<0 then
@@ -41893,7 +41908,7 @@ begin
 end;
 
 function TSQLRestServerURIContext.GetInputUTF8OrVoid(const ParamName: RawUTF8): RawUTF8;
-var i: integer;
+var i: PtrInt;
 begin
   i := GetInputNameIndex(ParamName);
   if i<0 then
@@ -41903,7 +41918,7 @@ end;
 
 function TSQLRestServerURIContext.InputUTF8OrDefault(
   const ParamName, DefaultValue: RawUTF8): RawUTF8;
-var i: integer;
+var i: PtrInt;
 begin
   i := GetInputNameIndex(ParamName);
   if i<0 then
@@ -41913,7 +41928,7 @@ end;
 
 function TSQLRestServerURIContext.InputUTF8OrError(const ParamName: RawUTF8;
   out Value: RawUTF8; const ErrorMessageForMissingParameter: string): boolean;
-var i: integer;
+var i: PtrInt;
 begin
   i := GetInputNameIndex(ParamName);
   if i<0 then begin
@@ -41951,7 +41966,7 @@ begin
 end;
 
 function TSQLRestServerURIContext.GetInputString(const ParamName: RawUTF8): string;
-var i: integer;
+var i: PtrInt;
 begin
   i := GetInputNameIndex(ParamName);
   if i<0 then
@@ -41960,7 +41975,7 @@ begin
 end;
 
 function TSQLRestServerURIContext.GetInputStringOrVoid(const ParamName: RawUTF8): string;
-var i: integer;
+var i: PtrInt;
 begin
   i := GetInputNameIndex(ParamName);
   if i<0 then
@@ -42137,33 +42152,19 @@ begin
     fOutSetCookie := aOutSetCookie;
 end;
 
-function HeaderOnce(call: PSQLRestURIParams; var store: RawUTF8; upper: PAnsiChar): RawUTF8;
-  {$ifdef HASINLINE}inline;{$endif}
-begin
-  if (store='') and (call<>nil) then begin
-    result := FindIniNameValue(pointer(call^.InHead),upper);
-    if result='' then
-      store := NULL_STR_VAR else // ensure header is parsed only once
-      store := result;
-  end else
-    if pointer(store)=pointer(NULL_STR_VAR) then
-      result := '' else
-      result := store;
-end;
-
 function TSQLRestServerURIContext.GetUserAgent: RawUTF8;
 begin
-  result := HeaderOnce(Call,fUserAgent,'USER-AGENT: ');
+  result := Call^.HeaderOnce(fUserAgent,'USER-AGENT: ');
 end;
 
 function TSQLRestServerURIContext.GetRemoteIP: RawUTF8;
 begin
-  result := HeaderOnce(Call,fRemoteIP,HEADER_REMOTEIP_UPPER);
+  result := Call^.HeaderOnce(fRemoteIP,HEADER_REMOTEIP_UPPER);
 end;
 
 function TSQLRestServerURIContext.GetRemoteIPNotLocal: RawUTF8;
 begin
-  result := HeaderOnce(Call,fRemoteIP,HEADER_REMOTEIP_UPPER);
+  result := Call^.HeaderOnce(fRemoteIP,HEADER_REMOTEIP_UPPER);
   if result='127.0.0.1' then
     result := '';
 end;
@@ -42175,7 +42176,7 @@ end;
 
 function TSQLRestServerURIContext.AuthenticationBearerToken: RawUTF8;
 begin
-  result := HeaderOnce(Call,fAuthenticationBearerToken,HEADER_BEARER_UPPER);
+  result := Call^.HeaderOnce(fAuthenticationBearerToken,HEADER_BEARER_UPPER);
   if (result='') and not(rsoAuthenticationURIDisable in Server.Options) then begin
     result := GetInputUTF8OrVoid('authenticationbearer');
     if result<>'' then
