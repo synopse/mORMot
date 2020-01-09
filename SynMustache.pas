@@ -844,8 +844,9 @@ function TSynMustache.Render(const Context: variant;
   OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUTF8;
 var W: TTextWriter;
     Ctxt: TSynMustacheContext;
+    tmp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream(4096);
+  W := TTextWriter.CreateOwnedStream(tmp);
   try
     Ctxt := TSynMustacheContextVariant.Create(self,W,SectionMaxCount,Context);
     try
@@ -1031,7 +1032,7 @@ begin
     VariantToUTF8(d^.Values[0],txt);
     if not VarIsVoid(d^.Values[1]) then
       exclude(fmt,heEmojiToUTF8);
-    if (d^.Count=3) and not VarIsVoid(d^.Values[2]) then
+    if (d^.Count>=3) and not VarIsVoid(d^.Values[2]) then
       exclude(fmt,heHtmlEscape);
   end else // {{{MarkdownToHtml content}}}
     if VarIsEmptyOrNull(Value) then

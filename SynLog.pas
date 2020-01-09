@@ -812,7 +812,7 @@ type
   TSynLog = class(TObject, ISynLog)
   protected
     fFamily: TSynLogFamily;
-    fWriter: TTextWriter;
+    fWriter: TTextWriterWithEcho;
     fWriterClass: TTextWriterClass;
     fWriterStream: TStream;
     fThreadContext: PSynLogThreadContext;
@@ -1078,7 +1078,7 @@ type
     procedure ForceRotation;
     /// direct access to the low-level writing content
     // - should usually not be used directly, unless you ensure it is safe
-    property Writer: TTextWriter read fWriter;
+    property Writer: TTextWriterWithEcho read fWriter;
   published
     /// the associated file name containing the log
     // - this is accurate only with the default implementation of the class:
@@ -3303,7 +3303,7 @@ begin
           exit; // avoid GPF
       end;
       {$else}
-      FixedWaitFor(fEvent, 1000);
+      FixedWaitFor(fEvent,1000);
       if Terminated then
         exit;
       {$endif}
@@ -3362,7 +3362,7 @@ begin
   if AutoFlushThread<>nil then begin
     {$ifndef AUTOFLUSHRAWWIN}
     AutoFlushThread.Terminate;
-    AutoFlushThread.fEvent.SetEvent; // notify Execute to finish now
+    AutoFlushThread.fEvent.SetEvent; // notify TAutoFlushThread.Execute
     {$endif}
     AutoFlushThread := nil; // Terminated=true to avoid GPF in AutoFlushProc
   end;
@@ -4698,8 +4698,8 @@ begin
       fWriterStream.Seek(0,soFromEnd); // in rotation mode, append at the end
   end;
   if fWriterClass=nil then
-    // set to TTextWriter or TJSONSerializer if mORMot.pas is linked
-    fWriterClass := TTextWriter.GetDefaultJSONClass;
+    // set to TTextWriterWithEcho or TJSONSerializer if mORMot.pas is linked
+    fWriterClass := DefaultTextWriterSerializer;
   if fWriter=nil then begin
     fWriter := fWriterClass.Create(fWriterStream,fFamily.BufferSize);
     fWriter.CustomOptions := fWriter.CustomOptions+[twoEnumSetsAsTextInRecord,twoFullSetsAsStar];

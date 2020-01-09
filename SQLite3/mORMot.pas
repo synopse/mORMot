@@ -4186,8 +4186,9 @@ type
   TJSONSerializerSQLRecordOptions = set of TJSONSerializerSQLRecordOption;
 
   /// simple writer to a Stream, specialized for writing an object as JSON
-  // - resulting JSON content will be UTF-8 encoded
-  // - use an internal buffer, faster than string+string
+  // - override WriteObject() to use class RTTI process of this unit, and
+  // allow custom JSON serialization
+  // - this is the full-feature JSON serialization class
   TJSONSerializer = class(TJSONWriter)
   protected
     fSQLRecordOptions: TJSONSerializerSQLRecordOptions;
@@ -11280,7 +11281,7 @@ type
     // be serialized using ObjectToJSONDebug(), or this property will be left
     // to its default nil content if no exception occurred
     property ExecutedInstancesFailed: TRawUTF8DynArray read fExecutedInstancesFailed;
-    /// allow to use an instance-specific temporary TTextWriter
+    /// allow to use an instance-specific temporary TJSONSerializer
     function TempTextWriter: TJSONSerializer;
   end;
 
@@ -13855,6 +13856,8 @@ type
 
   /// optimized thread-safe storage of a list of IP v4 adresses
   //  - can be used e.g. as white-list or black-list of clients
+  //  - will use internally a sorted list of 32-bit integers for fast lookup
+  //  - with optional binary persistence
   TIPBan = class(TSynPersistentStore)
   protected
     fIP4: TIntegerDynArray;
@@ -26763,11 +26766,11 @@ const FIELDTYPE_TOXML: array[TSQLDBFieldType] of RawUTF8 = (
      '','',' dt:type="i8"',' dt:type="float"',' dt:type="number" rs:dbtype="currency"',
   // ftDate, ftUTF8, ftBlob
      ' dt:type="dateTime"',' dt:type="string"',' dt:type="bin.hex"');
-var W: TJSONWriter;
+var W: TTextWriter;
     f,r: integer;
     U: PPUTF8Char;
 begin
-  W := TJSONWriter.Create(Dest,16384);
+  W := TTextWriter.Create(Dest,32768);
   try
     W.AddShort('<xml xmlns:s="uuid:BDC6E3F0-6DA3-11d1-A2A3-00AA00C14882" '+
       'xmlns:dt="uuid:C2F41010-65B3-11d1-A29F-00AA00C14882" '+
@@ -37717,7 +37720,7 @@ begin
 end;
 
 procedure TIPBan.SaveToWriter(aWriter: TFileBufferWriter);
-begin
+begin // wkSorted not efficient: too big diffs between IPs
   aWriter.WriteVarUInt32Array(fIP4, fCount, wkUInt32);
 end;
 
@@ -53018,7 +53021,7 @@ begin
       aCtxt.Log.Log(sllUserAuth,
         'New "%" session %/% created at %/% running %',
         [User.GroupRights.Ident,User.LogonName,fIDCardinal,fRemoteIP,
-         aCtxt.Call^.LowLevelConnectionID,aCtxt.UserAgent],self);
+         aCtxt.Call^.LowLevelConnectionID,aCtxt.GetUserAgent],self);
       {$endif}
       exit; // create successfull
     end;
@@ -63013,7 +63016,7 @@ initialization
   StatusCodeToErrorMessage := StatusCodeToErrorMsgBasic;
   GarbageCollectorFreeAndNil(JSONCustomParsers,TSynDictionary.Create(
     TypeInfo(TClassDynArray),TypeInfo(TJSONCustomParsers)));
-  TTextWriter.SetDefaultJSONClass(TJSONSerializer);
+  DefaultTextWriterSerializer := TJSONSerializer;
   TJSONSerializer.RegisterObjArrayForJSON(
     [TypeInfo(TSQLModelRecordPropertiesObjArray),TSQLModelRecordProperties]);
   TJSONSerializer.RegisterCustomJSONSerializerFromText(

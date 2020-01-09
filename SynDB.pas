@@ -5980,11 +5980,12 @@ var SQL: RawUTF8;
     maxf: integer;
 procedure ComputeSQL(rowcount,offset: integer);
 var f,r,p,len: integer;
+    tmp: TTextWriterStackBuffer;
 begin
   if (fDBMS<>dFireBird) and (rowcount=prevrowcount) then
     exit;
   prevrowcount := rowcount;
-  with TTextWriter.CreateOwnedStream(8192) do
+  with TTextWriter.CreateOwnedStream(tmp) do
   try
     case Props.fDBMS of
     dFirebird: begin
@@ -7352,6 +7353,7 @@ var P,B: PUTF8Char;
     num: integer;
     maxSize,maxAllowed: cardinal;
     W: TTextWriter;
+    tmp: TTextWriterStackBuffer;
 begin
   try
     P := pointer(fSQL);
@@ -7389,7 +7391,7 @@ begin
             result := fSQL;
             exit;
           end else
-          W := TTextWriter.CreateOwnedStream;
+          W := TTextWriter.CreateOwnedStream(tmp);
         W.AddNoJSONEscape(B,P-B);
         if P^=#0 then
           break;

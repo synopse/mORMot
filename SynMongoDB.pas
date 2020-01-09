@@ -3232,9 +3232,10 @@ end;
 function BSONToJSON(BSON: PByte; Kind: TBSONElementType; ExpectedBSONLen: integer;
   Mode: TMongoJSONMode): RawUTF8;
 var W: TTextWriter;
+    tmp: TTextWriterStackBuffer;
 begin
   BSONParseLength(BSON,ExpectedBSONLen);
-  W := TTextWriter.CreateOwnedStream;
+  W := TTextWriter.CreateOwnedStream(tmp);
   try
     BSONListToJSON(BSON,Kind,W,Mode);
     W.SetText(result);
@@ -3259,8 +3260,9 @@ end;
 
 function VariantSaveMongoJSON(const Value: variant; Mode: TMongoJSONMode): RawUTF8;
 var W: TTextWriter;
+    tmp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream;
+  W := TTextWriter.CreateOwnedStream(tmp);
   try
     AddMongoJSON(Value,W,Mode);
     W.SetText(result);
@@ -3594,7 +3596,7 @@ end;
 
 procedure TBSONWriter.BSONWriteDoc(const doc: TDocVariantData);
 var Name: RawUTF8;
-    i: integer;
+    i: PtrInt;
 begin
   BSONDocumentBegin;
   if TVarData(doc).VType>varNull then // null,empty will write {}
@@ -3615,7 +3617,7 @@ end;
 
 procedure TBSONWriter.BSONWriteProjection(const FieldNamesCSV: RawUTF8);
 var FieldNames: TRawUTF8DynArray;
-    i: integer;
+    i: PtrInt;
 begin
   CSVToRawUTF8DynArray(pointer(FieldNamesCSV),FieldNames);
   BSONDocumentBegin;
@@ -4767,8 +4769,9 @@ end;
 
 function TMongoRequest.ToJSON(Mode: TMongoJSONMode): RawUTF8;
 var W: TTextWriter;
+    tmp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream;
+  W := TTextWriter.CreateOwnedStream(tmp);
   try
     ToJSON(W,Mode);
     W.SetText(result);
@@ -5130,10 +5133,11 @@ end;
 function TMongoReplyCursor.ToJSON(Mode: TMongoJSONMode; WithHeader: boolean;
   MaxSize: Cardinal): RawUTF8;
 var W: TTextWriter;
+    tmp: TTextWriterStackBuffer;
 begin
   if (fReply='') or (DocumentCount<=0) then
     result := 'null' else begin
-    W := TTextWriter.CreateOwnedStream;
+    W := TTextWriter.CreateOwnedStream(tmp);
     try
       FetchAllToJSON(W,Mode,WithHeader,MaxSize);
       W.SetText(result);
@@ -5249,9 +5253,10 @@ end;
 function TMongoConnection.GetJSONAndFree(Query: TMongoRequestQuery; Mode: TMongoJSONMode): RawUTF8;
 var W: TTextWriter;
     ReturnAsJSONArray: boolean;
+    tmp: TTextWriterStackBuffer;
 begin
   ReturnAsJSONArray := Query.NumberToReturn>1;
-  W := TTextWriter.CreateOwnedStream;
+  W := TTextWriter.CreateOwnedStream(tmp);
   try
     if ReturnAsJSONArray then
       W.Add('[');

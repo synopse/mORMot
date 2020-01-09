@@ -4639,6 +4639,7 @@ function ToVarUInt32LengthWithData(Value: PtrUInt): PtrUInt;
 // - store negative values as cardinal two-complement, i.e.
 // 0=0,1=1,2=-1,3=2,4=-2...
 function ToVarInt32(Value: PtrInt; Dest: PByte): PByte;
+  {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// convert a 32-bit variable-length integer buffer into a cardinal
 // - fast inlined process for any number < 128
@@ -4651,6 +4652,7 @@ function FromVarUInt32(var Source: PByte): cardinal;
 function FromVarUInt32Big(var Source: PByte): cardinal;
 
 /// convert a 32-bit variable-length integer buffer into a cardinal
+// - used e.g. when inlining FromVarUInt32()
 // - this version must be called if Source^ has already been checked to be > $7f
 // ! result := Source^;
 // ! inc(Source);
@@ -7435,6 +7437,7 @@ const
 
 type
   TTextWriter = class;
+  TTextWriterWithEcho = class;
 
   /// method prototype for custom serialization of a dynamic array item
   // - each element of the dynamic array will be called as aValue parameter
@@ -7904,9 +7907,6 @@ type
   TOnTextWriterObjectProp = function(Sender: TTextWriter; Value: TObject;
     PropInfo: pointer; Options: TTextWriterWriteObjectOptions): boolean of object;
 
-  /// class of our simple writer to a Stream, specialized for the TEXT format
-  TTextWriterClass = class of TTextWriter;
-
   /// the potential places were TTextWriter.AddHtmlEscape should process
   // proper HTML string escaping, unless hfNone is used
   // $  < > & "  ->   &lt; &gt; &amp; &quote;
@@ -7975,7 +7975,10 @@ type
 
   /// simple writer to a Stream, specialized for the TEXT format
   // - use an internal buffer, faster than string+string
-  // - some dedicated methods is able to encode any data with JSON escape
+  // - some dedicated methods is able to encode any data with JSON/XML escape
+  // - see TTextWriterWithEcho below for optional output redirection (for TSynLog)
+  // - see SynTable.pas for SQL resultset export via TJSONWriter
+  // - see mORMot.pas for proper class serialization via TJSONSerializer.WriteObject
   TTextWriter = class
   protected
     B, BEnd: PUTF8Char;
@@ -7990,18 +7993,11 @@ type
     /// used by WriteObjectAsString/AddDynArrayJSONAsString methods
     fInternalJSONWriter: TTextWriter;
     fHumanReadableLevel: integer;
-    fEchoStart: PtrInt;
-    fEchoBuf: RawUTF8;
-    fEchos: array of TOnTextWriterEcho;
     function GetTextLength: PtrUInt;
     procedure SetStream(aStream: TStream);
     procedure SetBuffer(aBuf: pointer; aBufSize: integer);
-    function EchoFlush: PtrInt;
     procedure InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: Cardinal;
       const AnsiToWide: TWordDynArray; Escape: TTextWriterKind);
-    function GetEndOfLineCRLF: boolean;
-      {$ifdef HASINLINE}inline;{$endif}
-    procedure SetEndOfLineCRLF(aEndOfLineCRLF: boolean);
   public
     /// the data will be written to the specified Stream
     // - aStream may be nil: in this case, it MUST be set before using any
@@ -8037,16 +8033,6 @@ type
     /// release all internal structures
     // - e.g. free fStream if the instance was owned by this class
     destructor Destroy; override;
-    /// you can use this method to override the default JSON serialization class
-    // - if only SynCommons.pas is used, it will be TTextWriter
-    // - but mORMot.pas initialization will call it to use the TJSONSerializer
-    // instead, which is able to serialize any class as JSON
-    class procedure SetDefaultJSONClass(aClass: TTextWriterClass);
-    /// you can use this method to retireve the default JSON serialization class
-    // - if only SynCommons.pas is used, it will be TTextWriter
-    // - but mORMot.pas initialization will call SetDefaultJSONClass to define
-    // TJSONSerializer instead, which is able to serialize any class as JSON
-    class function GetDefaultJSONClass: TTextWriterClass;
     /// allow to override the default JSON serialization of enumerations and
     // sets as text, which would write the whole identifier (e.g. 'sllError')
     // - calling SetDefaultEnumTrim(true) would force the enumerations to
@@ -8085,14 +8071,6 @@ type
     // - may be used to escape some JSON espaced value (i.e. escape it twice),
     // in conjunction with AddJSONEscape(Source: TTextWriter)
     function InternalJSONWriter: TTextWriter;
-    /// add a callback to echo each line written by this class
-    // - this class expects AddEndOfLine to mark the end of each line
-    procedure EchoAdd(const aEcho: TOnTextWriterEcho);
-    /// remove a callback to echo each line written by this class
-    // - event should have been previously registered by a EchoAdd() call
-    procedure EchoRemove(const aEcho: TOnTextWriterEcho);
-    /// reset the internal buffer used for echoing content
-    procedure EchoReset;
 
     /// append one ASCII char to the buffer
     procedure Add(c: AnsiChar); overload; {$ifdef HASINLINE}inline;{$endif}
@@ -8195,12 +8173,6 @@ type
     // - AddEndOfLine() will append either CR+LF (#13#10) or LF (#10) depending
     // on a flag
     procedure AddCR;
-    /// mark an end of line, ready to be "echoed" to registered listeners
-    // - append a LF (#10) char or CR+LF (#13#10) chars to the buffer, depending
-    // on the EndOfLineCRLF property value (default is LF, to minimize storage)
-    // - any callback registered via EchoAdd() will monitor this line
-    // - used e.g. by TSynLog for console output, as stated by Level parameter
-    procedure AddEndOfLine(aLevel: TSynLogInfo=sllNone);
     /// append CR+LF (#13#10) chars and #9 indentation
     // - indentation depth is defined by fHumanReadableLevel protected field
     procedure AddCRAndIndent;
@@ -8558,8 +8530,8 @@ type
     procedure AddTypedJSON(aTypeInfo: pointer; const aValue);
     /// serialize as JSON the given object
     // - this default implementation will write null, or only write the
-    // class name and pointer if FullExpand is true - use TJSONSerializer.
-    // WriteObject method for full RTTI handling
+    // class name and pointer if FullExpand is true - use
+    // TJSONSerializer.WriteObject method for full RTTI handling
     // - default implementation will write TList/TCollection/TStrings/TRawUTF8List
     // as appropriate array of class name/pointer (if woFullExpand is set)
     procedure WriteObject(Value: TObject;
@@ -8771,12 +8743,6 @@ type
     // - see PendingBytes for the number of bytes currently in the memory buffer
     // or WrittenBytes for the number of bytes already written to disk
     property TextLength: PtrUInt read GetTextLength;
-    /// define how AddEndOfLine method stores its line feed characters
-    // - by default (FALSE), it will append a LF (#10) char to the buffer
-    // - you can set this property to TRUE, so that CR+LF (#13#10) chars will
-    // be appended instead
-    // - is just a wrapper around twoEndOfLineCRLF item in CustomOptions
-    property EndOfLineCRLF: boolean read GetEndOfLineCRLF write SetEndOfLineCRLF;
     /// allows to override default WriteObject property JSON serialization
     property OnWriteObject: TOnTextWriterObjectProp read fOnWriteObject write fOnWriteObject;
     /// the internal TStream used for storage
@@ -8791,6 +8757,56 @@ type
     property CustomOptions: TTextWriterOptions read fCustomOptions write fCustomOptions;
   end;
 
+  /// class of our simple TEXT format writer to a Stream, with echoing
+  // - as used by TSynLog for writing its content
+  // - see TTextWriterWithEcho.SetAsDefaultJSONClass
+  TTextWriterClass = class of TTextWriterWithEcho;
+
+  /// Stream TEXT writer, with optional echoing of the lines
+  // - as used e.g. by TSynLog writer for log optional redirection
+  // - is defined as a sub-class to reduce plain TTextWriter scope
+  // - see SynTable.pas for SQL resultset export via TJSONWriter
+  // - see mORMot.pas for proper class serialization via TJSONSerializer.WriteObject
+  TTextWriterWithEcho = class(TTextWriter)
+  protected
+    fEchoStart: PtrInt;
+    fEchoBuf: RawUTF8;
+    fEchos: array of TOnTextWriterEcho;
+    function EchoFlush: PtrInt;
+    function GetEndOfLineCRLF: boolean; {$ifdef HASINLINE}inline;{$endif}
+    procedure SetEndOfLineCRLF(aEndOfLineCRLF: boolean);
+  public
+    /// write pending data to the Stream, with automatic buffer resizal and echoing
+    // - this overriden method will handle proper echoing
+    procedure FlushToStream; override;
+    /// mark an end of line, ready to be "echoed" to registered listeners
+    // - append a LF (#10) char or CR+LF (#13#10) chars to the buffer, depending
+    // on the EndOfLineCRLF property value (default is LF, to minimize storage)
+    // - any callback registered via EchoAdd() will monitor this line
+    // - used e.g. by TSynLog for console output, as stated by Level parameter
+    procedure AddEndOfLine(aLevel: TSynLogInfo=sllNone);
+    /// add a callback to echo each line written by this class
+    // - this class expects AddEndOfLine to mark the end of each line
+    procedure EchoAdd(const aEcho: TOnTextWriterEcho);
+    /// remove a callback to echo each line written by this class
+    // - event should have been previously registered by a EchoAdd() call
+    procedure EchoRemove(const aEcho: TOnTextWriterEcho);
+    /// reset the internal buffer used for echoing content
+    procedure EchoReset;
+    /// define how AddEndOfLine method stores its line feed characters
+    // - by default (FALSE), it will append a LF (#10) char to the buffer
+    // - you can set this property to TRUE, so that CR+LF (#13#10) chars will
+    // be appended instead
+    // - is just a wrapper around twoEndOfLineCRLF item in CustomOptions
+    property EndOfLineCRLF: boolean read GetEndOfLineCRLF write SetEndOfLineCRLF;
+  end;
+
+var
+  /// contains the default JSON serialization class for WriteObject
+  // - if only SynCommons.pas is used, it will be TTextWriterWithEcho
+  // - mORMot.pas will assign TJSONSerializer which uses RTTI to serialize
+  // TSQLRecord and any class published properties as JSON
+  DefaultTextWriterSerializer: TTextWriterClass = TTextWriterWithEcho;
 
 /// recognize a simple type from a supplied type information
 // - first try by name via TJSONCustomParserRTTI.TypeNameToSimpleRTTIType,
@@ -10042,7 +10058,8 @@ type
   // - wkVarInt32 will write the content using our 32-bit variable-length integer
   // encoding and the by-two complement (0=0,1=1,2=-1,3=2,4=-2...)
   // - wkSorted will write an increasing array of integers, handling the special
-  // case of a difference of similar value (e.g. 1) between two values
+  // case of a difference of similar value (e.g. 1) between two values - note
+  // that this encoding is efficient only if the difference is main < 253
   // - wkOffsetU and wkOffsetI will write the difference between two successive
   // values, handling constant difference (Unsigned or Integer) in an optimized manner
   // - wkFakeMarker won't be used by WriteVarUInt32Array, but to notify a
@@ -33893,7 +33910,6 @@ begin
 end;
 
 var
-  DefaultTextWriterJSONClass: TTextWriterClass = TTextWriter;
   DefaultTextWriterTrimEnum: boolean;
 
 function ObjectToJSON(Value: TObject; Options: TTextWriterWriteObjectOptions): RawUTF8;
@@ -33901,7 +33917,7 @@ var temp: TTextWriterStackBuffer;
 begin
   if Value=nil then
     result := NULL_STR_VAR else
-    with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
+    with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
     try
       include(fCustomOptions,twoForceJSONStandard);
       WriteObject(Value,Options);
@@ -33916,7 +33932,7 @@ function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TOb
 var i,n: integer;
     temp: TTextWriterStackBuffer;
 begin
-  with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
+  with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
   try
     n := length(Names);
     Add('{');
@@ -34419,7 +34435,7 @@ var i: integer;
 begin
   if length(NameValuePairs)<2 then
     result := '' else
-    with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
+    with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
     try
       for i := 1 to length(NameValuePairs) shr 1 do begin
         Add(NameValuePairs[i*2-2],twNone);
@@ -42220,7 +42236,7 @@ procedure SaveJSON(const Value; TypeInfo: pointer;
   Options: TTextWriterOptions; var result: RawUTF8);
 var temp: TTextWriterStackBuffer;
 begin
-  with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
+  with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
   try
     fCustomOptions := fCustomOptions+Options;
     AddTypedJSON(TypeInfo,Value);
@@ -44637,9 +44653,9 @@ procedure VariantSaveJSON(const Value: variant; Escape: TTextWriterKind;
   var result: RawUTF8);
 var temp: TTextWriterStackBuffer;
 begin // not very optimized, but fast enough in practice, and creates valid JSON
-  with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
+  with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
   try
-    AddVariant(Value,Escape);
+    AddVariant(Value,Escape); // may encounter TObjectVariant -> WriteObject
     SetText(result);
   finally
     Free;
@@ -44652,7 +44668,7 @@ var Fake: TFakeWriterStream;
 begin // will avoid most memory allocations
   Fake := TFakeWriterStream.Create;
   try
-    with DefaultTextWriterJSONClass.Create(Fake,@temp,SizeOf(temp)) do
+    with DefaultTextWriterSerializer.Create(Fake,@temp,SizeOf(temp)) do
     try
       AddVariant(Value,Escape);
       FlushFinal;
@@ -46933,7 +46949,7 @@ begin
     exit;
   end;
   UpperCopy255(Up,aStartName)^ := #0;
-  W := DefaultTextWriterJSONClass.CreateOwnedStream(temp);
+  W := DefaultTextWriterSerializer.CreateOwnedStream(temp);
   try
     W.Add('{');
     for ndx := 0 to VCount-1 do
@@ -47094,7 +47110,7 @@ begin
     result := ''; // null -> 'null'
     exit;
   end;
-  W := DefaultTextWriterJSONClass.CreateOwnedStream(temp);
+  W := DefaultTextWriterSerializer.CreateOwnedStream(temp);
   try
     W.AddString(Prefix);
     DocVariantType.ToJSON(W,variant(self),twJSONEscape);
@@ -47130,7 +47146,7 @@ begin
     end;
   if fieldsCount=0 then
     raise EDocVariant.Create('ToNonExpandedJSON: Value[0] is not an object');
-  W := DefaultTextWriterJSONClass.CreateOwnedStream(temp);
+  W := DefaultTextWriterSerializer.CreateOwnedStream(temp);
   try
     W.Add('{"fieldCount":%,"rowCount":%,"values":[',[fieldsCount,VCount]);
     for f := 0 to fieldsCount-1 do begin
@@ -47191,7 +47207,7 @@ begin
   if dvoIsArray in VOptions then
     raise EDocVariant.Create('ToTextPairs expects a dvObject');
   if (VCount>0) and (dvoIsObject in VOptions) then
-    with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
+    with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
     try
       ndx := 0;
       repeat
@@ -47994,7 +48010,7 @@ begin
   try
     if DynArray.LoadFrom(BlobValue)=nil then
       result := '' else begin
-      with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
+      with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
       try
         AddDynArrayJSON(TypeInfo,Value);
         SetText(result);
@@ -48708,7 +48724,7 @@ procedure TDynArray.SaveToJSON(out Result: RawUTF8; EnumSetsAsText: boolean;
   reformat: TTextWriterJSONFormat);
 var temp: TTextWriterStackBuffer;
 begin
-  with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
+  with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
   try
     if EnumSetsAsText then
       CustomOptions := CustomOptions+[twoEnumSetsAsTextInRecord];
@@ -51337,7 +51353,7 @@ end;
 function ObjArrayToJSON(const aObjArray; aOptions: TTextWriterWriteObjectOptions): RawUTF8;
 var temp: TTextWriterStackBuffer;
 begin
-  with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
+  with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
   try
     if woEnumSetsAsText in aOptions then
       CustomOptions := CustomOptions+[twoEnumSetsAsTextInRecord];
@@ -52427,30 +52443,6 @@ begin
   inc(B,2);
 end;
 
-procedure TTextWriter.AddEndOfLine(aLevel: TSynLogInfo=sllNone);
-var i: integer;
-begin
-  if BEnd-B<=1 then
-    FlushToStream;
-  if twoEndOfLineCRLF in fCustomOptions then begin
-    PWord(B+1)^ := 13+10 shl 8; // CR + LF
-    inc(B,2);
-  end else begin
-    B[1] := #10; // LF
-    inc(B);
-  end;
-  if fEchos<>nil then begin
-    fEchoStart := EchoFlush;
-    for i := length(fEchos)-1 downto 0 do // for MultiEventRemove() below
-    try
-      fEchos[i](self,aLevel,fEchoBuf);
-    except // remove callback in case of exception during echoing in user code
-      MultiEventRemove(fEchos,i);
-    end;
-    fEchoBuf := '';
-  end;
-end;
-
 procedure TTextWriter.AddCRAndIndent;
 var ntabs: cardinal;
 begin
@@ -52558,7 +52550,7 @@ begin
 end;
 
 procedure TTextWriter.AddCSVInteger(const Integers: array of Integer);
-var i: integer;
+var i: PtrInt;
 begin
   if length(Integers)=0 then
     exit;
@@ -52570,7 +52562,7 @@ begin
 end;
 
 procedure TTextWriter.AddCSVDouble(const Doubles: array of double);
-var i: integer;
+var i: PtrInt;
 begin
   if length(Doubles)=0 then
     exit;
@@ -52582,7 +52574,7 @@ begin
 end;
 
 procedure TTextWriter.AddCSVUTF8(const Values: array of RawUTF8);
-var i: integer;
+var i: PtrInt;
 begin
   if length(Values)=0 then
     exit;
@@ -52595,7 +52587,7 @@ begin
 end;
 
 procedure TTextWriter.AddCSVConst(const Values: array of const);
-var i: integer;
+var i: PtrInt;
 begin
   if length(Values)=0 then
     exit;
@@ -52607,14 +52599,14 @@ begin
 end;
 
 procedure TTextWriter.Add(const Values: array of const);
-var i: Integer;
+var i: PtrInt;
 begin
   for i := 0 to high(Values) do
     AddJSONEscape(Values[i]);
 end;
 
 procedure TTextWriter.WriteObject(Value: TObject; Options: TTextWriterWriteObjectOptions);
-var i: integer;
+var i: PtrInt;
 begin
   if Value<>nil then
     if Value.InheritsFrom(Exception) then
@@ -52672,7 +52664,7 @@ end;
 function TTextWriter.InternalJSONWriter: TTextWriter;
 begin
   if fInternalJSONWriter=nil then
-    fInternalJSONWriter := DefaultTextWriterJSONClass.CreateOwnedStream else
+    fInternalJSONWriter := DefaultTextWriterSerializer.CreateOwnedStream else
     fInternalJSONWriter.CancelAll;
   result := fInternalJSONWriter;
 end;
@@ -54963,16 +54955,6 @@ begin
   inherited;
 end;
 
-class procedure TTextWriter.SetDefaultJSONClass(aClass: TTextWriterClass);
-begin
-  DefaultTextWriterJSONClass := aClass;
-end;
-
-class function TTextWriter.GetDefaultJSONClass: TTextWriterClass;
-begin
-  result := DefaultTextWriterJSONClass;
-end;
-
 class procedure TTextWriter.SetDefaultEnumTrim(aShouldTrimEnumsAsText: boolean);
 begin
   DefaultTextWriterTrimEnum := aShouldTrimEnumsAsText;
@@ -54996,10 +54978,6 @@ procedure TTextWriter.FlushToStream;
 var i: PtrInt;
     written: PtrUInt;
 begin
-  if fEchos<>nil then begin
-    EchoFlush;
-    fEchoStart := 0;
-  end;
   i := B-fTempBuf+1;
   if i<=0 then
     exit;
@@ -55021,18 +54999,6 @@ begin
     end;
   end;
   B := fTempBuf-1;
-end;
-
-function TTextWriter.GetEndOfLineCRLF: boolean;
-begin
-  result := twoEndOfLineCRLF in fCustomOptions;
-end;
-
-procedure TTextWriter.SetEndOfLineCRLF(aEndOfLineCRLF: boolean);
-begin
-  if aEndOfLineCRLF then
-    include(fCustomOptions,twoEndOfLineCRLF) else
-    exclude(fCustomOptions,twoEndOfLineCRLF);
 end;
 
 function TTextWriter.GetTextLength: PtrUInt;
@@ -55150,7 +55116,43 @@ begin
     Add('"');
 end;
 
-procedure TTextWriter.EchoAdd(const aEcho: TOnTextWriterEcho);
+
+{ TTextWriterWithEcho }
+
+procedure TTextWriterWithEcho.AddEndOfLine(aLevel: TSynLogInfo=sllNone);
+var i: integer;
+begin
+  if BEnd-B<=1 then
+    FlushToStream;
+  if twoEndOfLineCRLF in fCustomOptions then begin
+    PWord(B+1)^ := 13+10 shl 8; // CR + LF
+    inc(B,2);
+  end else begin
+    B[1] := #10; // LF
+    inc(B);
+  end;
+  if fEchos<>nil then begin
+    fEchoStart := EchoFlush;
+    for i := length(fEchos)-1 downto 0 do // for MultiEventRemove() below
+    try
+      fEchos[i](self,aLevel,fEchoBuf);
+    except // remove callback in case of exception during echoing in user code
+      MultiEventRemove(fEchos,i);
+    end;
+    fEchoBuf := '';
+  end;
+end;
+
+procedure TTextWriterWithEcho.FlushToStream;
+begin
+  if fEchos<>nil then begin
+    EchoFlush;
+    fEchoStart := 0;
+  end;
+  inherited FlushToStream;
+end;
+
+procedure TTextWriterWithEcho.EchoAdd(const aEcho: TOnTextWriterEcho);
 begin
   if self<>nil then
     if MultiEventAdd(fEchos,TMethod(aEcho)) then
@@ -55158,13 +55160,13 @@ begin
         fEchoStart := B-fTempBuf+1; // ignore any previous buffer
 end;
 
-procedure TTextWriter.EchoRemove(const aEcho: TOnTextWriterEcho);
+procedure TTextWriterWithEcho.EchoRemove(const aEcho: TOnTextWriterEcho);
 begin
   if self<>nil then
     MultiEventRemove(fEchos,TMethod(aEcho));
 end;
 
-function TTextWriter.EchoFlush: PtrInt;
+function TTextWriterWithEcho.EchoFlush: PtrInt;
 var L,LI: PtrInt;
     P: PByteArray;
 begin
@@ -55178,9 +55180,21 @@ begin
   {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,PByteArray(fEchoBuf)[LI],L);
 end;
 
-procedure TTextWriter.EchoReset;
+procedure TTextWriterWithEcho.EchoReset;
 begin
   fEchoBuf := '';
+end;
+
+function TTextWriterWithEcho.GetEndOfLineCRLF: boolean;
+begin
+  result := twoEndOfLineCRLF in fCustomOptions;
+end;
+
+procedure TTextWriterWithEcho.SetEndOfLineCRLF(aEndOfLineCRLF: boolean);
+begin
+  if aEndOfLineCRLF then
+    include(fCustomOptions,twoEndOfLineCRLF) else
+    exclude(fCustomOptions,twoEndOfLineCRLF);
 end;
 
 
@@ -55190,7 +55204,7 @@ var temp: TTextWriterStackBuffer;
 begin
   if high(NameValuePairs)<1 then
     result := '{}' else // return void JSON object on error
-    with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
+    with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
     try
       AddJSONEscape(NameValuePairs);
       SetText(result);
@@ -55203,7 +55217,7 @@ end;
 function JSONEncode(const Format: RawUTF8; const Args,Params: array of const): RawUTF8;
 var temp: TTextWriterStackBuffer;
 begin
-  with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
+  with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
   try
     AddJSON(Format,Args,Params);
     SetText(result);
@@ -55217,7 +55231,7 @@ function JSONEncodeArrayDouble(const Values: array of double): RawUTF8;
 var W: TTextWriter;
     temp: TTextWriterStackBuffer;
 begin
-  W := DefaultTextWriterJSONClass.CreateOwnedStream(temp);
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     W.Add('[');
     W.AddCSVDouble(Values);
@@ -55232,7 +55246,7 @@ function JSONEncodeArrayUTF8(const Values: array of RawUTF8): RawUTF8;
 var W: TTextWriter;
     temp: TTextWriterStackBuffer;
 begin
-  W := DefaultTextWriterJSONClass.CreateOwnedStream(temp);
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     W.Add('[');
     W.AddCSVUTF8(Values);
@@ -55247,7 +55261,7 @@ function JSONEncodeArrayInteger(const Values: array of integer): RawUTF8;
 var W: TTextWriter;
     temp: TTextWriterStackBuffer;
 begin
-  W := DefaultTextWriterJSONClass.CreateOwnedStream(temp);
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     W.Add('[');
     W.AddCSVInteger(Values);
@@ -55272,7 +55286,7 @@ begin
     if WithoutBraces then
       result := '' else
       result := '[]' else
-    with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
+    with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
     try
       if not WithoutBraces then
         Add('[');
@@ -55291,7 +55305,7 @@ var temp: TTextWriterStackBuffer;
 begin
   if (SQLValue<>'') and (SQLValue[1] in ['''','"']) then
     // unescape SQL quoted string value into a valid JSON string
-    with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
+    with TTextWriter.CreateOwnedStream(temp) do
     try
       Add('{','"');
       AddNoJSONEscapeUTF8(Name);
@@ -56621,22 +56635,18 @@ begin
 end;
 
 function JSONReformat(const JSON: RawUTF8; Format: TTextWriterJSONFormat): RawUTF8;
-var tempIn: TSynTempBuffer;
-    tempOut: TTextWriterStackBuffer;
+var tmp: TSynTempBuffer;
 begin
-  tempIn.Init(JSON);
-  with TTextWriter.CreateOwnedStream(tempOut) do
+  tmp.Init(JSON);
   try
-    AddJSONReformat(tempIn.buf,Format,nil);
-    SetText(result);
+    JSONBufferReformat(tmp.buf,result,Format);
   finally
-    Free;
-    tempIn.Done;
+    tmp.Done;
   end;
 end;
 
 function JSONBufferReformatToFile(P: PUTF8Char; const Dest: TFileName;
-  Format: TTextWriterJSONFormat=jsonHumanReadable): boolean;
+  Format: TTextWriterJSONFormat): boolean;
 var F: TFileStream;
     temp: array[word] of word; // 128KB
 begin
@@ -57711,7 +57721,7 @@ function TSynMonitor.ComputeDetailsJSON: RawUTF8;
 var W: TTextWriter;
     temp: TTextWriterStackBuffer;
 begin
-  W := DefaultTextWriterJSONClass.CreateOwnedStream(temp);
+  W := DefaultTextWriterSerializer.CreateOwnedStream(temp);
   try
     ComputeDetailsTo(W);
     W.SetText(result);
@@ -59982,7 +59992,7 @@ function TSynDictionary.SaveToJSON(EnumSetsAsText: boolean): RawUTF8;
 var W: TTextWriter;
     temp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream(temp);
+  W := DefaultTextWriterSerializer.CreateOwnedStream(temp);
   try
     SaveToJSON(W,EnumSetsAsText);
     W.SetText(result);

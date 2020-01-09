@@ -701,8 +701,9 @@ type
   TSQLParamTypeDynArray = array of TSQLParamType;
 
   /// simple writer to a Stream, specialized for the JSON format and SQL export
-  // - use an internal buffer, faster than string+string
-  TJSONWriter = class(TTextWriter)
+  // - i.e. define some property/method helpers to export SQL resultset as JSON
+  // - see mORMot.pas for proper class serialization via TJSONSerializer.WriteObject
+  TJSONWriter = class(TTextWriterWithEcho)
   protected
     /// used to store output format
     fExpand: boolean;
@@ -9749,7 +9750,7 @@ function TSynPersistentStoreJson.SaveToJSON(reformat: TTextWriterJSONFormat): Ra
 var
   W: TTextWriter;
 begin
-  W := TTextWriter.CreateOwnedStream(65536);
+  W := DefaultTextWriterSerializer.CreateOwnedStream(65536);
   try
     W.Add('{');
     AddJSON(W);

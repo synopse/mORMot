@@ -914,13 +914,14 @@ var Rec: PDocVariantData;
     sets: TStringList;
     utf8: RawUTF8;
     W: TTextWriter;
+    tmp: TTextWriterStackBuffer;
 const ONOFF: array[boolean] of THtmlTableStyleLabel = (labelOff,labelOn);
       ENUM: array[boolean,boolean] of THtmlTableStyleLabel =
         ((labelValue,labelValue),(labelFalse,labelTrue));
 begin
   Rec := _Safe(Value);
   if Rec^.Kind=dvObject then begin
-    W := TTextWriter.CreateOwnedStream;
+    W := TTextWriter.CreateOwnedStream(tmp);
     try
       HtmlTableStyle.StartTable(W);
       for f := 0 to TableProps.Fields.Count-1 do begin

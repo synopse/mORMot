@@ -904,12 +904,13 @@ procedure TSQLRestStorageMongoDB.JSONFromDoc(var doc: TDocVariantData;
 var i: integer;
     name: RawUTF8;
     W: TTextWriter;
+    tmp: TTextWriterStackBuffer;
 begin
   if (doc.VarType<>DocVariantType.VarType) or (doc.Kind<>dvObject) or (doc.Count=0) then begin
     result := '';
     exit;
   end;
-  W := TTextWriter.CreateOwnedStream;
+  W := TTextWriter.CreateOwnedStream(tmp);
   try
     W.Add('{');
     for i := 0 to doc.Count-1 do begin
