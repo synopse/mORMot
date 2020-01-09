@@ -1015,6 +1015,9 @@ type
     procedure WebsocketsJSONProtocol;
     /// low-level test of our 'synopsebinary' WebSockets binary protocol
     procedure WebsocketsBinaryProtocol;
+    procedure WebsocketsBinaryProtocolEncrypted;
+    procedure WebsocketsBinaryProtocolCompressed;
+    procedure WebsocketsBinaryProtocolCompressEncrypted;
     /// launch the WebSockets-ready HTTP server
     procedure RunHttpServer;
     /// test the callback mechanism via interface-based services on server side
@@ -18633,7 +18636,7 @@ end;
 
 procedure TTestMultiThreadProcess.Locked;
 begin // 1=7310/s  2=8689/s  5=7693/s  10=3893/s  30=1295/s  50=777/s
-  // (numbers below are taken from a Xeon Phi 2 @ 1.5GHz with 288 cores)
+  // (numbers are taken from a Xeon Phi 2 @ 1.5GHz with 288 cores)
   Test(TSQLRestClientDB,HTTP_DEFAULT_MODE,amLocked);
 end;
 
@@ -18734,7 +18737,7 @@ begin
     while not Terminated do
     case FixedWaitFor(fEvent,INFINITE) of
       wrSignaled:
-        if fProcessFinished then // from Destroy
+        if Terminated or fProcessFinished then // from Destroy
           break else
           try
             try
@@ -18795,17 +18798,28 @@ end;
 
 { TTestBidirectionalRemoteConnection }
 
-procedure TTestBidirectionalRemoteConnection.WebsocketsBinaryProtocol;
-begin
-  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('',false,''),focBinary);
-  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('',false,'pass'),focBinary);
-  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('',false,'',true),focBinary);
-  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('',false,'pass',true),focBinary);
-end;
-
 procedure TTestBidirectionalRemoteConnection.WebsocketsJSONProtocol;
 begin
   WebsocketsLowLevel(TWebSocketProtocolJSON.Create(''),focText);
+end;
+
+procedure TTestBidirectionalRemoteConnection.WebsocketsBinaryProtocol;
+begin
+  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('',false,'',false),focBinary);
+end;
+procedure TTestBidirectionalRemoteConnection.WebsocketsBinaryProtocolEncrypted;
+begin
+  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('',false,'pass',false),focBinary);
+end;
+
+procedure TTestBidirectionalRemoteConnection.WebsocketsBinaryProtocolCompressed;
+begin
+  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('',false,'',true),focBinary);
+end;
+
+procedure TTestBidirectionalRemoteConnection.WebsocketsBinaryProtocolCompressEncrypted;
+begin
+  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('',false,'pass',true),focBinary);
 end;
 
 type // to access protected low-level frame methods

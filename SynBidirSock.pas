@@ -230,7 +230,8 @@ type
     /// add some data to the asynchronous output buffer of a given connection
     // - this overriden method will refresh TAsynchConnection.LastOperation
     // - can be executed from an TAsynchConnection.OnRead method
-    function Write(connection: TObject; const data; datalen: integer): boolean; override;
+    function Write(connection: TObject; const data; datalen: integer;
+      timeout: integer=5000): boolean; override;
   published
     /// how many clients have been handled by the poll, from the beginning
     property Total: integer read GetTotal;
@@ -1726,11 +1727,12 @@ procedure TWebSocketProtocolJSON.FrameCompress(const Head: RawUTF8;
   const Values: array of const; const Content, ContentType: RawByteString;
   var frame: TWebSocketFrame);
 var WR: TTextWriter;
+    tmp: TTextWriterStackBuffer;
     i: integer;
 begin
   frame.opcode := focText;
   frame.content := [];
-  WR := TTextWriter.CreateOwnedStream;
+  WR := TTextWriter.CreateOwnedStream(tmp);
   try
     WR.Add('{');
     WR.AddFieldName(Head);
@@ -3382,10 +3384,10 @@ begin
 end;
 
 function TAsynchConnectionsSockets.Write(connection: TObject;
-  const data; datalen: integer): boolean;
+  const data; datalen, timeout: integer): boolean;
 var tmp: TLogEscape;
 begin
-  result := inherited Write(connection,data,datalen);
+  result := inherited Write(connection,data,datalen,timeout);
   if result and not (acoLastOperationNoWrite in fOwner.Options) then
     (connection as TAsynchConnection).fLastOperation := UnixTimeUTC;
   if (fOwner.fLog<>nil) and not(acoNoLogWrite in fOwner.Options) then
