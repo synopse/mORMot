@@ -3097,30 +3097,31 @@ type
   end;
   {$M-}
 
-  /// store thread-safe information of one TPollAsynchSockets connection
+  /// store information of one TPollAsynchSockets connection
   TPollSocketsSlot = {$ifdef UNICODE}record{$else}object{$endif}
     /// the associated TCP connection
+    // - equals 0 after TPollAsynchSockets.Stop
     socket: TSocket;
-    /// Lock/Unlock thread acquisition (lighter than a TRTLCriticalSection)
-    lockcounter: integer;
+    /// Lock/Unlock R/W thread acquisition (lighter than a TRTLCriticalSection)
+    lockcounter: array[boolean] of integer;
+    /// the last error reported by WSAGetLastError before the connection ends
+    lastWSAError: integer;
     /// the current read data buffer of this slot
     readbuf: SockString;
     /// the current write data buffer of this slot
     writebuf: SockString;
-    /// the last error reported by WSAGetLastError before the connection ends
-    lastWSAError: Integer;
-    /// acquire an exclusive access to this connection
+    /// acquire an exclusive R/W access to this connection
     // - returns true if slot has been acquired
     // - returns false if it is used by another thread
     // - warning: this method is not re-entrant
-    function Lock: boolean;
-    /// try to acquire an exclusive access to this connection
+    function Lock(writer: boolean): boolean;
+    /// try to acquire an exclusive R/W access to this connection
     // - returns true if slot has been acquired
     // - returns false if it is used by another thread, after the timeoutMS period
     // - warning: this method is not re-entrant
-    function TryLock(timeoutMS: cardinal): boolean;
-    /// release exclusive access to this connection
-    procedure UnLock;
+    function TryLock(writer: boolean; timeoutMS: cardinal): boolean;
+    /// release exclusive R/W access to this connection
+    procedure UnLock(writer: boolean);
   end;
   /// points to thread-safe information of one TPollAsynchSockets connection
   PPollSocketsSlot = ^TPollSocketsSlot;
@@ -3161,6 +3162,7 @@ type
     fProcessing: integer;
     fOptions: TPollAsynchSocketsOptions;
     function GetCount: integer;
+    // warning: abstract methods below should be properly overriden
     // return low-level socket information from connection instance
     function SlotFromConnection(connection: TObject): PPollSocketsSlot; virtual; abstract;
     // extract frames from slot.readbuf, and handle them
@@ -3194,7 +3196,10 @@ type
     // - this method won't call OnClose, since it is initiated by the class
     function Stop(connection: TObject): boolean; virtual;
     /// add some data to the asynchronous output buffer of a given connection
-    function Write(connection: TObject; const data; datalen: integer): boolean; virtual;
+    // - this method may block if the connection is currently writing from
+    // another thread, up to timeout milliseconds
+    function Write(connection: TObject; const data; datalen: integer;
+      timeout: integer=5000): boolean; virtual;
     /// add some data to the asynchronous output buffer of a given connection
     function WriteString(connection: TObject; const data: SockString): boolean;
     /// one or several threads should execute this method
@@ -4727,7 +4732,7 @@ begin
     result := 0; // no error
   end else begin
     Sock.fSockInEof := true; // error -> mark end of SockIn
-    result := -WSAGetLastError();
+    result := -WSAGetLastError;
     // result <0 will update ioresult and raise an exception if {$I+}
   end;
 end;
@@ -4974,8 +4979,16 @@ begin
     raise ECrtSocket.CreateFmt('SndLow(%s) len=%d',[fServer,Len],-1);
 end;
 
+function WSAIsFatalError: boolean;
+var err: integer;
+begin
+  err := WSAGetLastError;
+  result := (err<>NO_ERROR) and {$ifdef MSWINDOWS}(err<>WSAEWOULDBLOCK) and{$endif}
+    (err<>WSATRY_AGAIN) and (err<>WSAEINTR);
+end;
+
 function TCrtSocket.TrySndLow(P: pointer; Len: integer): boolean;
-var sent, err: integer;
+var sent: integer;
     endtix: Int64;
 begin
   result := Len=0;
@@ -4994,11 +5007,8 @@ begin
       if Len<=0 then
         break;
       inc(PByte(P),sent);
-    end else begin
-      err := WSAGetLastError;
-      if (err<>WSATRY_AGAIN) and (err<>WSAEINTR) then
-        exit; // fatal socket error
-    end;
+    end else if WSAIsFatalError then
+      exit; // fatal socket error
     if GetTick64>endtix then
       exit; // identify read timeout as error
     sleep(1);
@@ -5203,7 +5213,7 @@ end;
 
 function TCrtSocket.TrySockRecv(Buffer: pointer; var Length: integer;
   StopBeforeLength: boolean): boolean;
-var expected,read,err: PtrInt;
+var expected,read: PtrInt;
     endtix: Int64;
 begin
   result := false;
@@ -5231,11 +5241,8 @@ begin
         if StopBeforeLength or (Length=expected) then
           break; // good enough for now
         inc(PByte(Buffer),read);
-      end else begin
-        err := WSAGetLastError;
-        if (err<>WSATRY_AGAIN) and (err<>WSAEINTR) then
-          exit; // fatal socket error
-      end;
+      end else if WSAIsFatalError then
+        exit; // fatal socket error
       if GetTick64>endtix then
         exit; // identify read timeout as error
       sleep(1);
@@ -5307,9 +5314,9 @@ begin
   p.revents := 0;
   res := poll(@p,1,TimeOutMS);
   if res<0 then
-    if (WSAGetLastError=WSATRY_AGAIN) or (WSAGetLastError=WSAEWOULDBLOCK) then
-      result := cspNoData else
+    if WSAIsFatalError then
       result := cspSocketError else
+      result := cspNoData else
   if p.revents=POLLIN then
     result := cspDataAvailable else
     result := cspNoData;
@@ -6919,7 +6926,10 @@ begin
   case Error of
   WSAETIMEDOUT:    result := 'WSAETIMEDOUT';
   WSAENETDOWN:     result := 'WSAENETDOWN';
+  WSATRY_AGAIN:    result := 'WSATRY_AGAIN';
+  {$ifdef MSWINDOWS} // WSATRY_AGAIN=WSAEWOULDBLOCK on POSIX
   WSAEWOULDBLOCK:  result := 'WSAEWOULDBLOCK';
+  {$endif}
   WSAECONNABORTED: result := 'WSAECONNABORTED';
   WSAECONNRESET:   result := 'WSAECONNRESET';
   WSAEMFILE:       result := 'WSAEMFILE';
@@ -12239,31 +12249,43 @@ end;
 
 { TPollSocketsSlot }
 
-function TPollSocketsSlot.Lock: boolean;
+function TPollSocketsSlot.Lock(writer: boolean): boolean;
 begin
-  result := InterlockedIncrement(lockcounter)=1;
+  result := InterlockedIncrement(lockcounter[writer])=1;
   if not result then
-    InterlockedDecrement(lockcounter);
+    InterlockedDecrement(lockcounter[writer]);
 end;
 
-procedure TPollSocketsSlot.Unlock;
+procedure TPollSocketsSlot.Unlock(writer: boolean);
 begin
   if @self<>nil then
-    InterlockedDecrement(lockcounter);
+    InterlockedDecrement(lockcounter[writer]);
 end;
 
-function TPollSocketsSlot.TryLock(timeoutMS: cardinal): boolean;
+function TPollSocketsSlot.TryLock(writer: boolean; timeoutMS: cardinal): boolean;
 var endtix: Int64;
+    ms: integer;
 begin
-  result := Lock;
-  if result then
-    exit; // we acquired the slot
+  result := (@self<>nil) and (socket<>0);
+  if not result then
+    exit; // socket closed
+  result := Lock(writer);
+  if result or (timeoutMS=0) then
+    exit; // we acquired the slot, or we don't want to wait
   endtix := GetTick64+timeoutMS; // never wait forever
+  ms := 0;
   repeat
-    sleep(1);
-    result := Lock;
-    if result then
-      exit;
+    sleep(ms);
+    ms := ms xor 1; // 0,1,0,1,0,1...
+    if socket=0 then
+      exit; // no socket to lock for
+    result := Lock(writer);
+    if result then begin
+      result := socket<>0;
+      if not result then
+        UnLock(writer);
+      exit; // acquired or socket closed
+    end;
   until GetTick64>=endtix;
 end;
 
@@ -12313,22 +12335,37 @@ end;
 
 function TPollAsynchSockets.Stop(connection: TObject): boolean;
 var slot: PPollSocketsSlot;
+    sock: TSocket;
+    endtix: Int64;
+    lock: set of (r,w);
 begin
   result := false;
-  if (fRead.Terminated) or (connection=nil) then
+  if fRead.Terminated or (connection=nil) then
     exit;
   InterlockedIncrement(fProcessing);
   try
     slot := SlotFromConnection(connection);
     if (slot<>nil) and (slot.socket<>0) then
       try
+        sock := slot.socket;
+        slot.socket := 0; // notify ProcessRead/ProcessWrite to abort
         slot.lastWSAError := WSAGetLastError;
-        fRead.Unsubscribe(slot.socket,TPollSocketTag(connection));
-        fWrite.Unsubscribe(slot.socket,TPollSocketTag(connection));
+        fRead.Unsubscribe(sock,TPollSocketTag(connection));
+        fWrite.Unsubscribe(sock,TPollSocketTag(connection));
         result := true;
       finally
-        DirectShutdown(slot.socket);
-        slot.socket := 0;
+        DirectShutdown(sock);
+        endtix := GetTick64+10000;
+        lock := [];
+        repeat // acquire locks to avoid OnClose -> Connection.Free -> GPF
+          if not(r in lock) and slot.Lock(false) then
+            include(lock,r);
+          if not(w in lock) and slot.Lock(true) then
+            include(lock,w);
+          if lock=[r,w] then
+            break;
+          sleep(0);
+        until GetTick64>=endtix;
       end;
   finally
     InterlockedDecrement(fProcessing);
@@ -12365,8 +12402,8 @@ begin
     result := Write(connection,pointer(data)^,length(data));
 end;
 
-procedure AppendData(var buf: SockString; const data; datalen: integer);
-var buflen: integer;
+procedure AppendData(var buf: SockString; const data; datalen: PtrInt);
+var buflen: PtrInt;
 begin
   if datalen>0 then begin
     buflen := length(buf);
@@ -12375,7 +12412,8 @@ begin
   end;
 end;
 
-function TPollAsynchSockets.Write(connection: TObject; const data; datalen: integer): boolean;
+function TPollAsynchSockets.Write(connection: TObject;
+  const data; datalen, timeout: integer): boolean;
 var tag: TPollSocketTag;
     slot: PPollSocketsSlot;
     P: PByte;
@@ -12390,18 +12428,22 @@ begin
     slot := SlotFromConnection(connection);
     if (slot=nil) or (slot.socket=0) then
       exit;
-    if slot.TryLock(5000) then // try for 5 seconds for ProcessRead/Write to finish
+    if slot.TryLock(true,timeout) then // try and wait for another ProcessWrite
       try
         P := @data;
         previous := length(slot.writebuf);
         if (previous=0) and not (paoWritePollOnly in fOptions) then
           repeat
-            if fWrite.Terminated then
-              exit;
             // try to send now in non-blocking mode (works most of the time)
+            if fWrite.Terminated or (slot.socket=0) then
+              exit;
             res := AsynchSend(slot.socket,P,datalen);
+            if slot.socket=0 then
+              exit;  // Stop() called
+            if (res<0) and not WSAIsFatalError then
+              break; // fails now -> retry later in ProcessWrite
             if res<=0 then
-              break;
+              exit;  // connection closed or broken -> abort
             inc(fWriteCount);
             inc(fWriteBytes,res);
             dec(datalen,res);
@@ -12417,15 +12459,15 @@ begin
             end;
             inc(P,res);
           until false;
-        // use fWrite output polling for the remaining data
+        // use fWrite output polling for the remaining data in ProcessWrite
         AppendData(slot.writebuf,P^,datalen);
         if previous>0 then // already subscribed
-          result := true else
+          result := slot.socket<>0 else
           if fWrite.Subscribe(slot.socket,tag,[pseWrite]) then
-            result := true else
+            result := slot.socket<>0 else
             slot.writebuf := ''; // subscription error -> abort
       finally
-        slot.UnLock;
+        slot.UnLock({writer=}true);
       end;
   finally
     InterlockedDecrement(fProcessing);
@@ -12438,17 +12480,17 @@ var notif: TPollSocketResult;
     slot: PPollSocketsSlot;
     res,added: integer;
     temp: array[0..$7fff] of byte; // read up to 32KB chunks
-  procedure CloseConnection;
+  procedure CloseConnection(withinreadlock: boolean);
   begin
-    if connection=nil then
-      exit;
-    Stop(connection); // will shutdown the socket
+    if withinreadlock then
+      slot.UnLock({writer=}false); // Stop() will try to acquire this lock
+    Stop(connection); // shutdown and set socket:=0 + acquire locks
     try
-      OnClose(connection); // do connection.Free
+      OnClose(connection); // now safe to perform connection.Free
     except
-      connection := nil;
+      connection := nil;   // user code may be unstable
     end;
-    slot := nil; // ignore pseClosed
+    slot := nil; // ignore pseClosed and slot.Unlock(false)
   end;
 begin
   if (self=nil) or fRead.Terminated then
@@ -12463,22 +12505,24 @@ begin
       exit;
     if pseError in notif.events then
       if not OnError(connection,notif.events) then begin // false = shutdown
-        CloseConnection;
+        CloseConnection({withinlock=}false);
         exit;
       end;
     if pseRead in notif.events then begin
-      if slot.Lock then // ensure read slot not already processed in another thread
+      if slot.Lock({writer=}false) then // paranoid thread-safe read
         try
           added := 0;
           repeat
-            if fRead.Terminated then
+            if fRead.Terminated or (slot.socket=0) then
               exit;
             res := AsynchRecv(slot.socket,@temp,sizeof(temp));
-            if (res<0) and (WSAGetLastError() = WSAEWOULDBLOCK) then // error "may block", try later
-              break;
-            if res<=0 then begin // socket closed or unrecoverable error -> abort
-              CloseConnection;
-              exit;
+            if slot.socket=0 then
+              exit; // Stop() called
+            if (res<0) and not WSAIsFatalError then
+              break; // may block, try later
+            if res<=0 then begin
+              CloseConnection(true);
+              exit; // socket closed gracefully or unrecoverable error -> abort
             end;
             AppendData(slot.readbuf,temp,res);
             inc(added,res);
@@ -12488,16 +12532,16 @@ begin
               inc(fReadCount);
               inc(fReadBytes,added);
               if OnRead(connection)=sorClose then
-                CloseConnection;
+                CloseConnection(true);
             except
-              CloseConnection; // any exception will force socket shutdown
+              CloseConnection(true); // force socket shutdown
             end;
         finally
-          slot.UnLock;
+          slot.UnLock(false); // CloseConnection may set slot=nil
         end;
     end;
-    if (slot<>nil) and (pseClosed in notif.events) then begin
-      CloseConnection;
+    if (slot<>nil) and (slot.socket<>0) and (pseClosed in notif.events) then begin
+      CloseConnection(false);
       exit;
     end;
   finally
@@ -12524,18 +12568,22 @@ begin
     slot := SlotFromConnection(connection);
     if (slot=nil) or (slot.socket=0) then
       exit;
-    if slot.Lock then // ensure write slot not already processed in another thread
+    if slot.Lock({writer=}true) then // paranoid check
       try
-        if slot.writebuf<>'' then begin
-          buflen := length(slot.writebuf);
+        buflen := length(slot.writebuf);
+        if buflen<>0 then begin
           buf := pointer(slot.writebuf);
           sent := 0;
           repeat
-            if fWrite.Terminated then
+            if fWrite.Terminated or (slot.socket=0) then
               exit;
             res := AsynchSend(slot.socket,buf,buflen);
+            if slot.socket=0 then
+              exit; // Stop() called
+            if (res<0) and not WSAIsFatalError then
+              break; // may block, try later
             if res<=0 then
-              break;
+              exit; // socket closed gracefully or unrecoverable error -> abort
             inc(fWriteCount);
             inc(sent,res);
             inc(buf,res);
@@ -12552,7 +12600,7 @@ begin
           end;
         end;
       finally
-        slot.UnLock;
+        slot.UnLock(true);
       end;
   finally
     InterlockedDecrement(fProcessing);
