@@ -12529,7 +12529,6 @@ begin
         if slot.writebuf<>'' then begin
           buflen := length(slot.writebuf);
           buf := pointer(slot.writebuf);
-          inc(buf,buflen);
           sent := 0;
           repeat
             if fWrite.Terminated then
