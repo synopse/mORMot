@@ -12345,9 +12345,11 @@ begin
   InterlockedIncrement(fProcessing);
   try
     slot := SlotFromConnection(connection);
-    if (slot<>nil) and (slot.socket<>0) then
+    if slot=nil then
+      exit;
+    sock := slot.socket;
+    if sock<>0 then
       try
-        sock := slot.socket;
         slot.socket := 0; // notify ProcessRead/ProcessWrite to abort
         slot.lastWSAError := WSAGetLastError;
         fRead.Unsubscribe(sock,TPollSocketTag(connection));
