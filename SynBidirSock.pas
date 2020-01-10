@@ -3724,7 +3724,7 @@ begin
   endtix := GetTickCount64+10000;
   inherited Destroy;
   while not fExecuteFinished and (GetTickCount64<endtix) do
-    sleep(1); // wait for Execute to be finalized (unlikely)
+    SleepHiRes(1); // wait for Execute to be finalized (unlikely)
   fServer.Free;
 end;
 
@@ -3747,7 +3747,7 @@ begin
             raise EAsynchConnections.CreateUTF8('%.Execute: too many connections', [self]);
           if acoOnAcceptFailureStop in fOptions then
             raise EAsynchConnections.CreateUTF8('%.Execute: Accept failed',[self]);
-          Sleep(1);
+          SleepHiRes(1);
           continue;
         end else
       if Terminated then begin

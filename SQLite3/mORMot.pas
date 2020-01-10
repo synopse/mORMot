@@ -37804,7 +37804,7 @@ begin
   if fExecuting then begin
     endtix := SynCommons.GetTickCount64+maxMS;
     repeat
-      Sleep(1); // wait for InternalExecute to finish
+      SleepHiRes(1); // wait for InternalExecute to finish
     until not fExecuting or (SynCommons.GetTickCount64>=endtix);
   end;
 end;
@@ -56687,7 +56687,7 @@ begin
     if not EnQueue(AsynchBatchExecute,'free@',true) then
       exit;
     repeat
-      sleep(1); // wait for all batchs to be released
+      SleepHiRes(1); // wait for all batchs to be released
     until (fBackgroundBatch=nil) or (SynCommons.GetTickCount64>timeout);
     result := Disable(AsynchBatchExecute);
   end else begin
@@ -56695,7 +56695,7 @@ begin
     if (b<0) or not EnQueue(AsynchBatchExecute,'free@'+Table.SQLTableName,true) then
       exit;
     repeat
-      sleep(1); // wait for all pending rows to be sent
+      SleepHiRes(1); // wait for all pending rows to be sent
     until (fBackgroundBatch[b]=nil) or (SynCommons.GetTickCount64>timeout);
     if ObjArrayCount(fBackgroundBatch)>0 then
       result := true else begin
@@ -62204,7 +62204,7 @@ begin
     if fBatch<>nil then begin
       timeOut := GetTickCount64+2000;
       repeat
-        sleep(1); // allow 2 seconds to process all pending frames
+        SleepHiRes(1); // allow 2 seconds to process all pending frames
         if fBatch=nil then
           exit;
       until GetTickCount64>timeOut;
@@ -62666,7 +62666,7 @@ begin
   {$endif}
   timeOut := GetTickCount64+aTimeOutSeconds*1000;
   repeat
-    Sleep(5);
+    SleepHiRes(5);
     if SendNotificationsPending=0 then
       exit;
   until GetTickCount64>timeOut;

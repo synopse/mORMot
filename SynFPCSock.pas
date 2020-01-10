@@ -96,7 +96,7 @@ uses
   Unix,
   {$ifdef Linux}
   Linux, // for epoll support
-  {$endif}
+  {$endif Linux}
   termio,
   netdb,
   Sockets, // most definitions are inlined in SynFPCSock to avoid Lazarus problems with Sockets.pp
@@ -108,7 +108,7 @@ uses
   KernelIoctl,
   SynKylix,
   {$endif}
-  {$endif}
+  {$endif FPC}
   SyncObjs,
   Classes;
 
@@ -240,7 +240,7 @@ const
   WSAEFAULT = ESysEFAULT;
   WSAEINVAL = ESysEINVAL;
   WSAEMFILE = ESysEMFILE;
-  WSAEWOULDBLOCK = ESysEWOULDBLOCK;
+  WSAEWOULDBLOCK = ESysEWOULDBLOCK; // =WSATRY_AGAIN/ESysEAGAIN on POSIX
   WSAEINPROGRESS = ESysEINPROGRESS;
   WSAEALREADY = ESysEALREADY;
   WSATRY_AGAIN = ESysEAGAIN;
@@ -440,8 +440,8 @@ type
                     sin_zero: array[0..7] of Char);
           AF_INET6:(sin6_port:     word; // see sockaddr_in6
                     sin6_flowinfo: cardinal;
-      	    	      sin6_addr:     TInAddr6;
-      		          sin6_scope_id: cardinal);
+      	    	    sin6_addr:     TInAddr6;
+      		    sin6_scope_id: cardinal);
           AF_UNIX: (sun_path: array[0..{$ifdef SOCK_HAS_SINLEN}103{$else}107{$endif}] of Char);
           );
   end;

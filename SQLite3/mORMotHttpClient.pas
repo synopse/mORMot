@@ -151,6 +151,8 @@ uses
   {$ifdef KYLIX3}
   Types,
   LibC,
+  {$else}
+  SynFPCLinux,
   {$endif}
 {$endif}
   SysUtils,
@@ -716,7 +718,7 @@ begin
               [E.ClassType,fServer,fPort,MicroSecToString(elapsed*1000),
                MicroSecToString(wait*1000),retry,fConnectRetrySeconds], self);
             {$endif}
-            sleep(wait);
+            SleepHiRes(wait);
           end;
         end;
       until fSocket<>nil;
@@ -981,7 +983,7 @@ begin
               'InternalCheckOpen: % on %:% -> wait and retry up to % seconds',
               [E.ClassType,fServer,fPort,fConnectRetrySeconds], self);
             {$endif}
-            sleep(250);
+            SleepHiRes(250);
           end;
         end;
       until fRequest<>nil;

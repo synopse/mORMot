@@ -5011,7 +5011,7 @@ begin
       exit; // fatal socket error
     if GetTick64>endtix then
       exit; // identify read timeout as error
-    sleep(1);
+    SleepHiRes(1);
   until false;
   result := true;
 end;
@@ -5245,7 +5245,7 @@ begin
         exit; // fatal socket error
       if GetTick64>endtix then
         exit; // identify read timeout as error
-      sleep(1);
+      SleepHiRes(1);
     until false;
   end;
   result := true;
@@ -5432,12 +5432,11 @@ begin
     exit;
   resultlen := 0;
   repeat
-    SleepHiRes(0);
-    if IOCtlSocket(fSock, FIONREAD, available)<>0 then // get exact count
+    if (IOCtlSocket(fSock, FIONREAD, available)<>0) or (fSock<=0) then
       exit; // raw socket error
     if available=0 then // no data in the allowed timeout
       if result='' then begin // wait till something
-        SleepHiRes(10); // 10 ms delay in infinite loop
+        SleepHiRes(1);// some delay in infinite loop
         continue;
       end else
         break; // return what we have
@@ -5451,6 +5450,7 @@ begin
     inc(resultlen,read);
     if read<available then
       SetLength(result,resultlen); // e.g. Read=0 may happen
+    SleepHiRes(0); // 1 microsec on POSIX
   until false;
 end;
 
@@ -6169,7 +6169,7 @@ begin
       if ClientSock<=0 then
         if Terminated then
           break else begin
-          SleepHiRes(0);
+          SleepHiRes(1); // failure (too many clients?) -> wait and retry
           continue;
         end;
       if Terminated or (Sock=nil) then begin
@@ -6382,13 +6382,13 @@ begin
   if Terminated then
     exit;
   if MS<32 then begin // smaller than GetTickCount resolution (under Windows)
-    sleep(MS);
+    SleepHiRes(MS);
     if Terminated then
       exit;
   end else begin
     endtix := GetTick64+MS;
     repeat
-      sleep(10);
+      SleepHiRes(10);
       if Terminated then
         exit;
     until GetTick64>endtix;
@@ -6471,7 +6471,7 @@ procedure THttpServerResp.Execute;
               TSynLog.Add.Log(sllCustom1, 'HandleRequestsProcess: sock=% LOWDELAY=%',
                 [fServerSock.fSock, tix-beforetix], self);
               {$endif}
-              sleep(1); // seen only on Windows in practice
+              SleepHiRes(1); // seen only on Windows in practice
               if (fServer=nil) or fServer.Terminated then
                 exit; // server is down -> disconnect the client
             end;
@@ -7018,7 +7018,7 @@ begin
     // wait for threads to finish, with 30 seconds TimeOut
     endtix := GetTick64+30000;
     while (fRunningThreads>0) and (GetTick64<endtix) do
-      Sleep(5);
+      SleepHiRes(5);
     fSubThread.Free;
   finally
     {$ifdef USE_WINIOCP}
@@ -12233,10 +12233,10 @@ begin
     if elapsed>timeoutMS then
       exit else
     if elapsed>300 then
-      sleep(50) else
+      SleepHiRes(50) else
     if elapsed>50 then
-      sleep(10) else
-      sleep(1);
+      SleepHiRes(10) else
+      SleepHiRes(1);
   until fTerminated;
 end;
 
@@ -12275,7 +12275,7 @@ begin
   endtix := GetTick64+timeoutMS; // never wait forever
   ms := 0;
   repeat
-    sleep(ms);
+    SleepHiRes(ms);
     ms := ms xor 1; // 0,1,0,1,0,1...
     if socket=0 then
       exit; // no socket to lock for
@@ -12366,7 +12366,7 @@ begin
             include(lock,w);
           if lock=[r,w] then
             break;
-          sleep(0);
+          SleepHiRes(0); // 1 microsec on POSIX
         until GetTick64>=endtix;
       end;
   finally
@@ -12390,7 +12390,7 @@ begin
     exit;
   endtix := GetTick64+waitforMS;
   repeat
-    Sleep(1);
+    SleepHiRes(1);
     if fProcessing=0 then
       break;
   until GetTick64>endtix;
@@ -12453,7 +12453,6 @@ begin
               try // notify everything written
                 AfterWrite(connection);
                 result := true;
-                exit;
               except
                 result := false;
               end;

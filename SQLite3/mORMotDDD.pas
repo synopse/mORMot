@@ -57,7 +57,11 @@ interface
 uses
 {$ifdef MSWINDOWS}
   Windows,
-{$endif}
+{$else}
+  {$ifdef FPC}
+  SynFPCLinux,
+  {$endif FPC}
+{$endif MSWINDOWS}
   SysUtils,
   Classes,
   Contnrs,
@@ -2119,7 +2123,7 @@ begin
   fDaemon.Rest.BeginCurrentThread(self);
   try
     repeat
-      sleep(fProcessIdleDelay);
+      SleepHiRes(fProcessIdleDelay);
       try
         try
           repeat
@@ -2279,7 +2283,7 @@ begin
   SetLength(fProcess,fProcessThreadCount);
   for i := 0 to fProcessThreadCount-1 do
     fProcess[i] := fProcessClass.Create(self,i);
-  sleep(1); // some time to actually start the threads
+  SleepHiRes(1); // some time to actually start the threads
 end;
 
 
@@ -2303,7 +2307,7 @@ begin
         fProcessLock.Leave;
       end;
       repeat
-        sleep(5);
+        SleepHiRes(5);
         allfinished := true;
         fProcessLock.Enter;
         try
@@ -2672,7 +2676,7 @@ begin
         res := Stop(status);
       if res=cqrsSuccess then begin
         if cmd=8 then
-          Sleep(200); // leave some time between stop and start
+          SleepHiRes(200); // leave some time between stop and start
         if cmd<>7 then
           res := Start;
         if res=cqrsSuccess then

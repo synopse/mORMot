@@ -843,7 +843,7 @@ var
 begin
   tix := GetTickCount64 + TimeoutMS;
   repeat
-    sleep(50);
+    SleepHiRes(50);
     result := Daemon <> nil;
   until result or (GetTickCount64 > tix);
 end;
@@ -1346,7 +1346,7 @@ begin
   Terminate;
   timeOut := GetTickCount64 + 10000;
   repeat // wait until properly disconnected from remote TCP server
-    Sleep(10);
+    SleepHiRes(10);
   until (fMonitoring.State = tpsDisconnected) or (GetTickCount64 > timeOut);
   inherited Destroy;
   if fMonitoring.fOwner=self then
@@ -1495,7 +1495,7 @@ begin
       else if fPerformConnection then
         ExecuteConnect
       else
-        sleep(100);
+        SleepHiRes(100);
       if Terminated then
         break;
       try
@@ -1555,7 +1555,7 @@ begin
     fRest.LogClass.Add.Log(sllDebug, 'Shutdown: % will stop any communication ' +
       'with %:%', [ClassType, fHost, fPort], self);
     if andTerminate and not Terminated then begin
-      sleep(100);
+      SleepHiRes(100);
       Terminate;
       WaitFor;
     end;
@@ -1761,7 +1761,7 @@ begin
     if (result <> 0) or ((fOwner <> nil) and TSQLRestThread(fOwner).Terminated)
       or (aTimeOut = 0) then
       break;
-    sleep(1); // emulate blocking process, just like a regular socket
+    SleepHiRes(1); // emulate blocking process, just like a regular socket
     if (fOwner <> nil) and TSQLRestThread(fOwner).Terminated then
       break;
   until GetTickCount64 > endTix; // warning: 10-16 ms resolution under Windows
@@ -1878,9 +1878,8 @@ begin
   finally
     fSafe.UnLock; // wait outside the instance lock
   end;
-  while (waitMS > 0) and not ((fOwner <> nil) and TSQLRestThread(fOwner).Terminated)
-    do begin
-    sleep(1); // do not use GetTickCount64 (poor resolution under Windows)
+  while (waitMS > 0) and not ((fOwner <> nil) and TSQLRestThread(fOwner).Terminated) do begin
+    SleepHiRes(1); // do not use GetTickCount64 (poor resolution under Windows)
     dec(waitMS);
   end;
 end;

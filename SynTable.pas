@@ -11609,17 +11609,17 @@ end;
 procedure TSynBackgroundThreadAbstract.WaitForNotExecuting(maxMS: integer);
 var endtix: Int64;
 begin
-  if fExecute = exRun then begin
+  if fExecute=exRun then begin
     endtix := SynCommons.GetTickCount64+maxMS;
     repeat
-      Sleep(1); // wait for Execute to finish
-    until (fExecute <> exRun) or (SynCommons.GetTickCount64>=endtix);
+      SleepHiRes(1); // wait for Execute to finish
+    until (fExecute<>exRun) or (SynCommons.GetTickCount64>=endtix);
   end;
 end;
 
 destructor TSynBackgroundThreadAbstract.Destroy;
 begin
-  if fExecute = exRun then begin
+  if fExecute=exRun then begin
     Terminate;
     WaitForNotExecuting(100);
   end;
@@ -11819,7 +11819,7 @@ begin
       break; // we acquired the background thread
     end;
     case OnIdleProcessNotify(start) of // Windows.GetTickCount64 res is 10-16 ms
-    0..20:    SleepHiRes(0);
+    0..20:    SleepHiRes(0); // 1 microsec delay on POSIX
     21..100:  SleepHiRes(1);
     101..900: SleepHiRes(5);
     else      SleepHiRes(50);
@@ -12241,7 +12241,7 @@ begin
         flagIdle:
           break; // acquired (should always be the case)
         end;
-        Sleep(1);
+        SleepHiRes(1);
         if Assigned(OnMainThreadIdle) then
           OnMainThreadIdle(self);
       until false;
@@ -12409,7 +12409,7 @@ begin
       someWaiting := true;
     end;
   if someWaiting then
-    sleep(10); // propagate the pending evTimeOut to the WaitFor threads
+    SleepHiRes(10); // propagate the pending evTimeOut to the WaitFor threads
   fPool.Free;
   inherited;
 end;

@@ -809,6 +809,7 @@ type
     function Init: integer; overload; {$ifdef HASINLINE}inline;{$endif}
     /// initialize a new temporary buffer of a given number of random bytes
     // - will fill the buffer via FillRandom() calls
+    // - forcegsl is true by default, since Lecuyer's generator has no HW bug
     function InitRandom(RandomLen: integer; forcegsl: boolean=true): pointer;
     /// initialize a new temporary buffer filled with 32-bit integer increasing values
     function InitIncreasing(Count: PtrInt; Start: PtrInt=0): PIntegerArray;
@@ -60248,7 +60249,7 @@ end;
 
 function TSynQueue.InternalWaitDone(endtix: Int64; const idle: TThreadMethod): boolean;
 begin
-  Sleep(1);
+  SleepHiRes(1);
   if Assigned(idle) then
     idle; // e.g. Application.ProcessMessages
   result := InternalDestroying(0) or (GetTickCount64>endtix);
@@ -60305,7 +60306,7 @@ begin
   end;
   endtix := GetTickCount64 + 100;
   repeat
-    Sleep(1); // ensure WaitPos() is actually finished
+    SleepHiRes(1); // ensure WaitPos() is actually finished
   until (fWaitPopCounter=0) or (GetTickCount64>endtix);
 end;
 
