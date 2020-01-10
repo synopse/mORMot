@@ -7025,6 +7025,11 @@ procedure RecordCopy(var Dest; const Source; TypeInfo: pointer); {$ifdef FPC}inl
 // - this unit includes a fast optimized asm version for x86 on Delphi
 procedure RecordClear(var Dest; TypeInfo: pointer); {$ifdef FPC}inline;{$endif}
 
+/// initialize a record content
+// - calls RecordClear() and FillCharFast() with 0
+// - do nothing if the TypeInfo is not from a record/object
+procedure RecordZero(var Dest; TypeInfo: pointer);
+
 {$ifndef DELPHI5OROLDER}
 /// copy a dynamic array content from source to Dest
 // - uses internally the TDynArray.CopyFrom() method and two temporary
@@ -40515,6 +40520,16 @@ asm
 {$endif CPU64}
 end;
 {$endif FPC}
+
+procedure RecordZero(var Dest; TypeInfo: pointer);
+var info: PTypeInfo;
+begin
+  info := GetTypeInfo(TypeInfo,tkRecordKinds);
+  if info<>nil then begin // record/object only
+    RecordClear(Dest,TypeInfo);
+    {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Dest,info^.recSize,0);
+  end;
+end;
 
 function ArrayItemType(var info: PTypeInfo; out len: integer): PTypeInfo;
   {$ifdef HASINLINE}inline;{$endif}
