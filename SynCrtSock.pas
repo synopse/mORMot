@@ -4744,7 +4744,7 @@ begin
     result := 0; // no error
   end else begin
     Sock.fSockInEof := true; // error -> mark end of SockIn
-    result := -WSAGetLastError;
+    result := -integer(WSAGetLastError); // integer() for FPC+Win target
     // result <0 will update ioresult and raise an exception if {$I+}
   end;
 end;
