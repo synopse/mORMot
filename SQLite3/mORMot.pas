@@ -6193,9 +6193,10 @@ type
     function GetInputExists(const ParamName: RawUTF8): Boolean;
     function GetInputInt(const ParamName: RawUTF8): Int64;
     function GetInputDouble(const ParamName: RawUTF8): Double;
-    function GetInputUTF8(const ParamName: RawUTF8): RawUTF8;
+    procedure GetInputByName(const ParamName,InputName: RawUTF8; var result: RawUTF8);
+    function GetInputUTF8(const ParamName: RawUTF8): RawUTF8; {$ifdef HASINLINE}inline;{$endif}
     function GetInputString(const ParamName: RawUTF8): string;
-    function GetInputIntOrVoid(const ParamName: RawUTF8): Int64;
+    function GetInputIntOrVoid(const ParamName: RawUTF8): Int64; {$ifdef HASINLINE}inline;{$endif}
     function GetInputHexaOrVoid(const ParamName: RawUTF8): cardinal;
     function GetInputDoubleOrVoid(const ParamName: RawUTF8): Double;
     function GetInputUTF8OrVoid(const ParamName: RawUTF8): RawUTF8;
@@ -7368,7 +7369,9 @@ type
     // - by default, create indexes for all TRecordReference properties, and
     // for all TSQLRecord inherited properties (i.e. of sftID type, that is
     // an INTEGER field containing the ID of the pointing record)
-    // - the options specified at CreateMissingTables() are passed to this method
+    // - the options specified at CreateMissingTables() are passed to this method,
+    // within the context of an opened DB transaction, in which missing tables
+    // and fields have already been added
     // - is not part of TSQLRecordProperties because has been declared as virtual
     class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
       Options: TSQLInitializeTableOptions); virtual;
@@ -28904,8 +28907,8 @@ procedure TJSONObjectDecoder.AddFieldValue(const FieldName,FieldValue: RawUTF8;
   FieldType: TJSONObjectDecoderFieldType);
 begin
   if FieldCount=MAX_SQLFIELDS then
-    raise EParsingException.CreateUTF8(
-      'Too many fields for TJSONObjectDecoder.AddField(%)',[FieldName]);
+    raise EParsingException.CreateUTF8('Too many fields for TJSONObjectDecoder.AddField(%) max=%',
+      [FieldName,MAX_SQLFIELDS]);
   FieldNames[FieldCount] := FieldName;
   FieldValues[FieldCount] := FieldValue;
   FieldTypeApproximation[FieldCount] := FieldType;
@@ -41854,20 +41857,24 @@ end;
 
 function TSQLRestServerURIContext.GetInputInt(const ParamName: RawUTF8): Int64;
 var err: integer;
+    v: RawUTF8;
 begin
-  result := GetInt64(pointer(GetInputUTF8(ParamName)),err);
+  GetInputByName(ParamName,'Int',v);
+  result := GetInt64(pointer(v),err);
   if err<>0 then
-    raise EParsingException.CreateUTF8('%.GetInputInt(%): Invalid parameter',
-      [self,ParamName]);
+    raise EParsingException.CreateUTF8('%.InputInt[%]: "%" is not an integer',
+      [self,ParamName,v]);
 end;
 
 function TSQLRestServerURIContext.GetInputDouble(const ParamName: RawUTF8): double;
 var err: integer;
+    v: RawUTF8;
 begin
-  result := GetExtended(pointer(GetInputUTF8(ParamName)),err);
+  GetInputByName(ParamName,'Double',v);
+  result := GetExtended(pointer(v),err);
   if err<>0 then
-    raise EParsingException.CreateUTF8('%.GetInputDouble(%): Invalid parameter',
-      [self,ParamName]);
+    raise EParsingException.CreateUTF8('%.InputDouble[%]: "%" is not a float',
+      [self,ParamName,v]);
 end;
 
 function TSQLRestServerURIContext.GetInputIntOrVoid(const ParamName: RawUTF8): Int64;
@@ -41898,13 +41905,19 @@ begin // fInput[0]='Param1',fInput[1]='Value1',fInput[2]='Param2'...
   result := -1;
 end;
 
-function TSQLRestServerURIContext.GetInputUTF8(const ParamName: RawUTF8): RawUTF8;
+procedure TSQLRestServerURIContext.GetInputByName(const ParamName,InputName: RawUTF8;
+  var result: RawUTF8);
 var i: PtrInt;
 begin
   i := GetInputNameIndex(ParamName);
   if i<0 then
-    raise EParsingException.CreateUTF8('%: missing ''%'' parameter',[self,ParamName]);
+    raise EParsingException.CreateUTF8('%: missing Input%[%]',[self,InputName,ParamName]);
   result := fInput[i*2+1];
+end;
+
+function TSQLRestServerURIContext.GetInputUTF8(const ParamName: RawUTF8): RawUTF8;
+begin
+  GetInputByName(ParamName,'UTF8',result);
 end;
 
 function TSQLRestServerURIContext.GetInputUTF8OrVoid(const ParamName: RawUTF8): RawUTF8;
@@ -41970,7 +41983,7 @@ var i: PtrInt;
 begin
   i := GetInputNameIndex(ParamName);
   if i<0 then
-    raise EParsingException.CreateUTF8('%: missing ''%'' parameter',[self,ParamName]);
+    raise EParsingException.CreateUTF8('%: missing InputString[%]',[self,ParamName]);
   result := UTF8ToString(fInput[i*2+1]);
 end;
 
@@ -41991,8 +42004,10 @@ end;
 {$ifndef NOVARIANTS}
 
 function TSQLRestServerURIContext.GetInput(const ParamName: RawUTF8): variant;
+var v: RawUTF8;
 begin
-  GetVariantFromJSON(pointer(GetInputUTF8(ParamName)),false,Result);
+  GetInputByName(ParamName,'',v);
+  GetVariantFromJSON(pointer(v),false,Result);
 end;
 
 function TSQLRestServerURIContext.GetInputOrVoid(const ParamName: RawUTF8): variant;
@@ -42002,11 +42017,11 @@ end;
 
 function TSQLRestServerURIContext.InputOrError(const ParamName: RawUTF8;
   out Value: variant; const ErrorMessageForMissingParameter: string): boolean;
-var ValueUTF8: RawUTF8;
+var v: RawUTF8;
 begin
-  result := InputUTF8OrError(ParamName,ValueUTF8,ErrorMessageForMissingParameter);
+  result := InputUTF8OrError(ParamName,v,ErrorMessageForMissingParameter);
   if result then
-    GetVariantFromJSON(pointer(ValueUTF8),false,Value);
+    GetVariantFromJSON(pointer(v),false,Value);
 end;
 
 function TSQLRestServerURIContext.GetInputAsTDocVariant(const Options: TDocVariantOptions; 

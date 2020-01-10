@@ -179,6 +179,7 @@ type
     fSlot: TPollSocketsSlot;
     fHandle: TAsynchConnectionHandle;
     fLastOperation: cardinal;
+    fRemoteIP: RawUTF8;
     /// this method is called when the instance is connected to a poll
     // - default implementation will set fLastOperation content
     procedure AfterCreate(Sender: TAsynchConnections); virtual;
@@ -200,7 +201,12 @@ type
     // - reset fLastOperation by default - overriden code should be fast
     // - Sender.Write() could be used to send e.g. a hearbeat frame
     procedure OnLastOperationIdle(Sender: TAsynchConnections); virtual;
+  public
+    /// initialize this instance
+    constructor Create(const aRemoteIP: RawUTF8); reintroduce; virtual;
   published
+    /// the associated remote IP4/IP6, as text
+    property RemoteIP: RawUTF8 read fRemoteIP;
     /// read-only access to the handle number associated with this connection
     property Handle: TAsynchConnectionHandle read fHandle;
     /// read-only access to the socket number associated with this connection
@@ -279,7 +285,7 @@ type
     fThreads: array of TAsynchConnectionsThread;
     fLastHandle: integer;
     fLog: TSynLogClass;
-    fTempConnection: TAsynchConnection;
+    fTempConnectionForSearchPerHandle: TAsynchConnection;
     fOptions: TAsynchConnectionsOptions;
     fLastOperationIdleSeconds: cardinal;
     fThreadClients: record // used by TAsynchClient
@@ -288,7 +294,8 @@ type
     end;
     fConnectionLock: TSynLocker;
     procedure IdleEverySecond;
-    function ConnectionCreate(aSocket: TSocket; out aConnection: TAsynchConnection): boolean; virtual;
+    function ConnectionCreate(aSocket: TSocket; const aRemoteIp: RawUTF8;
+      out aConnection: TAsynchConnection): boolean; virtual;
     function ConnectionAdd(aSocket: TSocket; aConnection: TAsynchConnection): boolean; virtual;
     function ConnectionDelete(aHandle: TAsynchConnectionHandle): boolean; overload; virtual;
     function ConnectionDelete(aConnection: TAsynchConnection; aIndex: integer): boolean; overload;
@@ -2818,58 +2825,67 @@ var upgrade,uri,version,prot,subprot,key,extin,extout: RawUTF8;
     Digest: TSHA1Digest;
 begin
   result := STATUS_BADREQUEST;
-  upgrade := ClientSock.HeaderGetValue('UPGRADE');
-  if not IdemPropNameU(upgrade,'websocket') then
-    exit;
-  version := ClientSock.HeaderGetValue('SEC-WEBSOCKET-VERSION');
-  if GetInteger(pointer(version))<13 then
-    exit; // we expect WebSockets protocol version 13 at least
-  uri := Trim(RawUTF8(ClientSock.URL));
-  if (uri<>'') and (uri[1]='/') then
-    Delete(uri,1,1);
-  prot := ClientSock.HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
-  P := pointer(prot);
-  if P<>nil then begin
-    repeat
-      GetNextItemTrimed(P,',',subprot);
-      Protocol := Protocols.CloneByName(subprot,uri);
-    until (P=nil) or (Protocol<>nil);
-    if (Protocol<>nil) and (Protocol.URI='') and not Protocol.ProcessURI(uri) then begin
-      Protocol.Free;
-      result := STATUS_UNAUTHORIZED;
+  try
+    upgrade := ClientSock.HeaderGetValue('UPGRADE');
+    if not IdemPropNameU(upgrade,'websocket') then
       exit;
+    version := ClientSock.HeaderGetValue('SEC-WEBSOCKET-VERSION');
+    if GetInteger(pointer(version))<13 then
+      exit; // we expect WebSockets protocol version 13 at least
+    uri := Trim(RawUTF8(ClientSock.URL));
+    if (uri<>'') and (uri[1]='/') then
+      Delete(uri,1,1);
+    prot := ClientSock.HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
+    P := pointer(prot);
+    if P<>nil then begin
+      repeat
+        GetNextItemTrimed(P,',',subprot);
+        Protocol := Protocols.CloneByName(subprot,uri);
+      until (P=nil) or (Protocol<>nil);
+      if (Protocol<>nil) and (Protocol.URI='') and not Protocol.ProcessURI(uri) then begin
+        Protocol.Free;
+        result := STATUS_UNAUTHORIZED;
+        exit;
+      end;
+    end else
+      // if no protocol is specified, try to match by URI
+      Protocol := Protocols.CloneByURI(uri);
+    if Protocol=nil then
+      exit;
+    Protocol.fRemoteIP := ClientSock.RemoteIP;
+    Protocol.fRemoteLocalhost := ClientSock.RemoteIP='127.0.0.1';
+    extin := ClientSock.HeaderGetValue('SEC-WEBSOCKET-EXTENSIONS');
+    if extin<>'' then begin
+      CSVToRawUTF8DynArray(pointer(extin),extins,';',true);
+      if not Protocol.ProcessHandshake(extins,extout,nil) then begin
+        Protocol.Free;
+        result := STATUS_UNAUTHORIZED;
+        exit;
+      end;
     end;
-  end else
-    // if no protocol is specified, try to match by URI
-    Protocol := Protocols.CloneByURI(uri);
-  if Protocol=nil then
-    exit;
-  Protocol.fRemoteIP := ClientSock.RemoteIP;
-  Protocol.fRemoteLocalhost := ClientSock.RemoteIP='127.0.0.1';
-  extin := ClientSock.HeaderGetValue('SEC-WEBSOCKET-EXTENSIONS');
-  if extin<>'' then begin
-    CSVToRawUTF8DynArray(pointer(extin),extins,';',true);
-    if not Protocol.ProcessHandshake(extins,extout,nil) then begin
+    key := ClientSock.HeaderGetValue('SEC-WEBSOCKET-KEY');
+    if Base64ToBinLengthSafe(pointer(key),length(key))<>16 then begin
       Protocol.Free;
-      result := STATUS_UNAUTHORIZED;
-      exit;
+      exit; // this nonce must be a Base64-encoded value of 16 bytes
+    end;
+    ComputeChallenge(key,Digest);
+    ClientSock.SockSend(['HTTP/1.1 101 Switching Protocols'#13#10+
+      'Upgrade: websocket'#13#10'Connection: Upgrade'#13#10+
+      'Sec-WebSocket-Protocol: ',Protocol.Name,#13#10+
+      'Sec-WebSocket-Accept: ',BinToBase64(@Digest,sizeof(Digest))]);
+    if extout<>'' then
+      ClientSock.SockSend(['Sec-WebSocket-Extensions: ',extout]);
+    ClientSock.SockSend;
+    ClientSock.SockSendFlush('');
+    result := STATUS_SUCCESS; // connection upgraded: never back to HTTP/1.1
+  finally
+    if result<>STATUS_SUCCESS then begin // notify upgrade failure to client
+      ClientSock.SockSend(['HTTP/1.0 ',result,' WebSocket Upgrade Error'#13#10+
+        'Connection: Close'#13#10]);
+      ClientSock.SockSendFlush('');
+      ClientSock.KeepAliveClient := false;
     end;
   end;
-  key := ClientSock.HeaderGetValue('SEC-WEBSOCKET-KEY');
-  if Base64ToBinLengthSafe(pointer(key),length(key))<>16 then begin
-    Protocol.Free;
-    exit; // this nonce must be a Base64-encoded value of 16 bytes
-  end;
-  ComputeChallenge(key,Digest);
-  ClientSock.SockSend(['HTTP/1.1 101 Switching Protocols'#13#10+
-    'Upgrade: websocket'#13#10'Connection: Upgrade'#13#10+
-    'Sec-WebSocket-Protocol: ',Protocol.Name,#13#10+
-    'Sec-WebSocket-Accept: ',BinToBase64(@Digest,sizeof(Digest))]);
-  if extout<>'' then
-    ClientSock.SockSend(['Sec-WebSocket-Extensions: ',extout]);
-  ClientSock.SockSend;
-  ClientSock.SockSendFlush('');
-  result := STATUS_SUCCESS; // connection upgraded: never back to HTTP/1.1
 end;
 
 
@@ -2915,12 +2931,8 @@ begin
      IdemPropNameU('GET',ClientSock.Method) and
      ConnectionThread.InheritsFrom(TWebSocketServerResp) then begin
     err := WebSocketProcessUpgrade(ClientSock,TWebSocketServerResp(ConnectionThread));
-    if err<>STATUS_SUCCESS then begin
-      ClientSock.SockSend(['HTTP/1.0 ',err,' WebSocket Upgrade Error'#13#10+
-        'Connection: Close'#13#10]);
-      ClientSock.SockSendFlush('');
-      ClientSock.KeepAliveClient := false;
-    end;
+    if err<>STATUS_SUCCESS then
+      WebSocketLog.Add.Log(sllTrace,'Process: WebSocketProcessUpgrade failure %',[err],self);
   end else
     inherited Process(ClientSock,ConnectionID,ConnectionThread);
 end;
@@ -3301,7 +3313,7 @@ end;
 procedure TWebSocketProcessClientThread.Execute;
 begin
   if fProcess<>nil then // may happen when debugging under FPC (alf)
-    SetCurrentThreadName('% % %',[self,fProcess.fProcessName,fProcess.Protocol.Name]);
+    SetCurrentThreadName('% % %',[fProcess.fProcessName,self,fProcess.Protocol.Name]);
   fThreadState := sRun;
   if not Terminated and (fProcess<>nil) then
     fProcess.ProcessLoop;
@@ -3324,6 +3336,12 @@ end;
 { ------------ client or server asynchronous process of multiple connections }
 
 { TAsynchConnection }
+
+constructor TAsynchConnection.Create(const aRemoteIP: RawUTF8);
+begin
+  inherited Create;
+  fRemoteIP := aRemoteIP;
+end;
 
 procedure TAsynchConnection.AfterCreate(Sender: TAsynchConnections);
 begin
@@ -3421,7 +3439,7 @@ end;
 procedure TAsynchConnectionsThread.Execute;
 var idletix: Int64;
 begin
-  SetCurrentThreadName('% % %',[self,fOwner.fProcessName,ToText(fProcess)^]);
+  SetCurrentThreadName('% % %',[fOwner.fProcessName,self,ToText(fProcess)^]);
   fOwner.NotifyThreadStart(self);
   try
     idletix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64+1000;
@@ -3480,7 +3498,7 @@ begin
   fConnections.IsObjArray := false; // to call TAsynchConnection.BeforeDestroy
   fClients := TAsynchConnectionsSockets.Create;
   fClients.fOwner := self;
-  fTempConnection := fStreamClass.Create;
+  fTempConnectionForSearchPerHandle := fStreamClass.Create('');
   fOptions := aOptions;
   inherited Create(false,OnStart,OnStop,ProcessName);
   SetLength(fThreads,aThreadPoolCount+1);
@@ -3508,7 +3526,7 @@ begin
     except
     end;
   fConnectionLock.Done;
-  fTempConnection.Free;
+  fTempConnectionForSearchPerHandle.Free;
 end;
 
 procedure TAsynchConnections.ThreadClientsConnect;
@@ -3518,19 +3536,19 @@ begin
   with fThreadClients do
     client := CallServer(Address,Port,false,cslTCP,Timeout);
   if client<0 then
-    raise ECrtSocket.CreateFmt('%s: %s:%s connection failure',
+    raise ECrtSocket.CreateFmt('%s: %s:%s connection failure', // ECrtSocket for error
       [ClassName,fThreadClients.Address,fThreadClients.Port],-1);
   connection := nil;
-  if not ConnectionCreate(client,connection) then
+  if not ConnectionCreate(client,{ip=}'',connection) then
     DirectShutdown(client);
 end;
 
-function TAsynchConnections.ConnectionCreate(aSocket: TSocket;
+function TAsynchConnections.ConnectionCreate(aSocket: TSocket; const aRemoteIp: RawUTF8;
   out aConnection: TAsynchConnection): boolean;
 begin // you can override this class then call ConnectionAdd
   if Terminated then
     result := false else begin
-    aConnection := fStreamClass.Create;
+    aConnection := fStreamClass.Create(aRemoteIP);
     result := ConnectionAdd(aSocket, aConnection);
   end;
 end;
@@ -3601,8 +3619,8 @@ begin
     exit;
   fConnectionLock.Lock;
   try
-    fTempConnection.fHandle := aHandle;
-    i := fConnections.Find(fTempConnection); // fast O(log(n)) binary search
+    fTempConnectionForSearchPerHandle.fHandle := aHandle;
+    i := fConnections.Find(fTempConnectionForSearchPerHandle); // fast O(log(n)) binary search
     if i>=0 then begin
       result := fConnection[i];
       if aIndex<>nil then
@@ -3720,7 +3738,7 @@ var endtix: Int64;
 begin
   Terminate;
   fServer.Close; // shutdown the socket to unlock Accept() in Execute
-  DirectShutdown(CallServer('127.0.0.1',fServer.Port,false,cslTCP,1));
+  DirectShutdown(CallServer('127.0.0.1',fServer.Port,false,cslTCP,1)); // paranoid
   endtix := GetTickCount64+10000;
   inherited Destroy;
   while not fExecuteFinished and (GetTickCount64<endtix) do
@@ -3732,8 +3750,10 @@ procedure TAsynchServer.Execute;
 var client: TSocket;
     connection: TAsynchConnection;
     sin: TVarSin;
+    ip: SockString;
+    err: string;
 begin
-  SetCurrentThreadName('% % Accept',[self,fProcessName]);
+  SetCurrentThreadName('% % Accept',[fProcessName,self]);
   NotifyThreadStart(self);
   if fServer.Sock<>0 then
   try
@@ -3742,24 +3762,25 @@ begin
       if client<0 then
         if Terminated then
           break else begin
-          fLog.Add.Log(sllWarning,'Execute: Accept()=%',[SocketErrorMessage],self);
-          if WSAGetLastError=WSAEMFILE then
-            raise EAsynchConnections.CreateUTF8('%.Execute: too many connections', [self]);
+          err := SocketErrorMessage;
+          fLog.Add.Log(sllWarning,'Execute: Accept()=%',[err],self);
           if acoOnAcceptFailureStop in fOptions then
-            raise EAsynchConnections.CreateUTF8('%.Execute: Accept failed',[self]);
+            if WSAGetLastError=WSAEMFILE then
+              raise EAsynchConnections.CreateUTF8('%.Execute: too many connections', [self]) else
+              raise EAsynchConnections.CreateUTF8('%.Execute: Accept failed as %',[self,err]);
           SleepHiRes(1);
           continue;
-        end else
+        end;
       if Terminated then begin
-        CloseSocket(client);
+        DirectShutdown(client);
         break;
-      end else
-        if ConnectionCreate(client,connection) then
-          if fClients.Start(connection) then
-            fLog.Add.Log(sllTrace,'Execute: Accept()=% from %',
-              [client,GetSinIP(sin)], self) else
-            connection.Free else
-          DirectShutdown(client);
+      end;
+      IPText(sin,ip);
+      if ConnectionCreate(client,ip,connection) then
+        if fClients.Start(connection) then
+          fLog.Add.Log(sllTrace,'Execute: Accept()=%',[connection], self) else
+          connection.Free else
+        DirectShutdown(client);
     end;
   except
     on E: Exception do
@@ -3787,7 +3808,7 @@ end;
 
 procedure TAsynchClient.Execute;
 begin
-  SetCurrentThreadName('% % Startup',[self,fProcessName]);
+  SetCurrentThreadName('% %',[fProcessName,self]);
   NotifyThreadStart(self);
   while InterlockedDecrement(fThreadClients.Count)>=0 do
     ThreadClientsConnect; // will connect some clients in this main thread

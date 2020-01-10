@@ -395,7 +395,7 @@ end;
 procedure SleepHiRes(ms: cardinal);
 begin
   if ms=0 then
-    sched_yield else
+    usleep(1) else // sched_yield() is buggy on multi CPU
     usleep(ms shl 10); // from ms to us
 end;
 

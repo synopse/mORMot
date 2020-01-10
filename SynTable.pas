@@ -12525,7 +12525,7 @@ begin
      current := GetTickCount64;
      elapsed := current-start;
      if elapsed=0 then
-       sched_yield else
+       usleep(1) else
      if elapsed>TimeOut then begin
        result := wrTimeOut;
        break;

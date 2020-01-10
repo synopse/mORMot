@@ -766,7 +766,7 @@ type
     // - get initialize the socket with the supplied accepted socket
     // - caller will then use the GetRequest method below to
     // get the request
-    procedure InitRequest(aClientSock: TSocket);
+    procedure InitRequest(aClientSock: TSocket; const aRemoteIP: SockString='');
     /// main object function called after aClientSock := Accept + Create:
     // - get Command, Method, URL, Headers and Body (if withBody is TRUE)
     // - get sent data in Content (if ContentLength<>0)
@@ -2603,6 +2603,9 @@ function AuthorizationBearer(const AuthToken: SockString): SockString;
 /// compute the '1.2.3.4' text representation of a raw IP4 binary
 procedure IP4Text(const ip4addr; var result: SockString); overload;
 
+/// compute the text representation of a IP4/IP6 low-level connection
+procedure IPText(const sin: TVarSin; var result: SockString);
+
 const
   /// the layout of TSMTPConnection.FromText method
   SMTP_DEFAULT = 'user:password@smtpserver:port';
@@ -3197,7 +3200,8 @@ type
     function Stop(connection: TObject): boolean; virtual;
     /// add some data to the asynchronous output buffer of a given connection
     // - this method may block if the connection is currently writing from
-    // another thread, up to timeout milliseconds
+    // another thread (which is not possible from TPollAsynchSockets.Write),
+    // up to timeout milliseconds
     function Write(connection: TObject; const data; datalen: integer;
       timeout: integer=5000): boolean; virtual;
     /// add some data to the asynchronous output buffer of a given connection
@@ -3978,7 +3982,7 @@ begin
     result := SockString(Format('%d.%d.%d.%d',[b[0],b[1],b[2],b[3]]))
 end;
 
-procedure GetSinIPFromCache(const sin: TVarSin; var result: SockString);
+procedure IPText(const sin: TVarSin; var result: SockString);
 begin
   if sin.sin_family=AF_INET then
     IP4Text(sin.sin_addr,result) else begin
@@ -4000,6 +4004,14 @@ begin
 end;
 
 {$ifdef MSWINDOWS}
+
+procedure SleepHiRes(ms: cardinal); // in SynKylix/SynFPCLinux
+begin
+  {$ifndef FPC} // function SwitchToThread oddly not defined in fpc\rtl\win
+  if (ms<>0) or not SwitchToThread then
+  {$endif}
+    Windows.Sleep(ms);
+end;
 
 const
   HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
@@ -4264,7 +4276,7 @@ begin
             end;
             //s := s+'@'+info^.ifa_name;
         end;
-        //AF_INET6: GetSinIPFromCache(PVarSin(info^.ifa_addr)^,s);
+        //AF_INET6: IPText(PVarSin(info^.ifa_addr)^,s);
         end;
         if s<>'' then begin
           if n=length(result) then
@@ -4846,7 +4858,7 @@ begin
   CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   OpenBind('','',false,aClientSock, fSocketLayer); // set the ACCEPTed aClientSock
   Linger := 5; // should remain open for 5 seconds after a closesocket() call
-  if aRemoteIP<>nil then
+  if (aRemoteIP<>nil) and (aRemoteIP^='') then
     aRemoteIP^ := GetRemoteIP(aClientSock);
 end;
 
@@ -5413,16 +5425,6 @@ function TCrtSocket.PeerPort: integer;
 begin
   result := fPeerAddr.sin_port;
 end;
-
-{$ifdef MSWINDOWS}
-procedure SleepHiRes(ms: cardinal);
-begin
-  {$ifndef FPC} // function SwitchToThread oddly not defined in fpc\rtl\win
-  if (ms<>0) or not SwitchToThread then
-  {$endif}
-    Windows.Sleep(ms);
-end;
-{$endif}
 
 function TCrtSocket.SockReceiveString: SockString;
 var available, resultlen, read: integer;
@@ -6792,8 +6794,9 @@ begin
   end;
 end;
 
-procedure THttpServerSocket.InitRequest(aClientSock: TSocket);
+procedure THttpServerSocket.InitRequest(aClientSock: TSocket; const aRemoteIP: SockString);
 begin
+  fRemoteIP := aRemoteIP;
   AcceptRequest(aClientSock, @fRemoteIP);
 end;
 
@@ -6915,7 +6918,7 @@ function GetRemoteIP(aClientSock: TSocket): SockString;
 var Name: TVarSin;
 begin
   if GetPeerName(aClientSock,Name)=0 then
-    GetSinIPFromCache(Name,result) else
+    IPText(Name,result) else
     result := '';
 end;
 
@@ -8108,7 +8111,7 @@ begin
       inc(P);
   end;
   if (RemoteIP='') and (Request.Address.pRemoteAddress<>nil) then
-    GetSinIPFromCache(PVarSin(Request.Address.pRemoteAddress)^,RemoteIP);
+    IPText(PVarSin(Request.Address.pRemoteAddress)^,RemoteIP);
   // compute headers length
   Lip := length(RemoteIP);
   if Lip<>0 then
