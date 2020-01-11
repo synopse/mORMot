@@ -36024,15 +36024,16 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=Dest rdx/rsi=Count r8/rdx=Value
         jmp     @remain
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @erms:  cld
-        mov     rcx, rdx
         {$ifdef WIN64} // al already set
-        push    rsi
+        push    rsi // preserve non volatile registers
         push    rdi
         mov     rdi, rcx
+        mov     rcx, rdx
         rep stosb // ERMS magic instruction
         pop     rdi
         pop     rsi
         {$else} // rdi and al already set
+        mov     rcx, rdx
         rep stosb
         {$endif}
         ret
@@ -42295,8 +42296,8 @@ begin
     FillcharFast := @FillCharERMSB;
   end else {$endif}{$endif} begin
     MoveFast := @Movex64;
-    {if cfERMS in CpuFeatures then
-      FillCharFast := @Fillcharx64ERMS else to be tested }
+    if cfERMS in CpuFeatures then
+      FillCharFast := @Fillcharx64ERMS else
       FillCharFast := @Fillcharx64;
   end;
   {$else CPU64}
