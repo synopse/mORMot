@@ -101,7 +101,6 @@ uses
   SynCommons,
   SynLog,
   SpiderMonkey,
-  NSPRAPI,
   SyNodeProto,
   mORMot,
   SynCrtSock,
@@ -161,29 +160,15 @@ type
     /// called from SpiderMonkey callback. Do not raise exception here
     // instead use CheckJSError metod after JSAPI compile/evaluate call
     procedure DoProcessJSError(report: PJSErrorReport); virtual;
-    /// called from SpiderMonkey callback. It used for interrupt execution of script
-    //  when it executes too long
+    /// called from SpiderMonkey callback
+    // If returns true then SM engine will interrupt script execution
     function DoProcessOperationCallback: Boolean; virtual;
     procedure SetPrivateDataForDebugger(const Value: Pointer);
   protected
     fCx: PJSContext;
-    // used by Watchdog thread state. See js.cpp
-    fTimeOutAborted: Boolean;
-    fTimedOut: Boolean;
-    fWatchdogLock: PRLock;
-    fWatchdogWakeup: PRCondVar;
-    fWatchdogThread: PRThread;
-    fWatchdogHasTimeout: Boolean;
-    fWatchdogTimeout: Int64;
-    fSleepWakeup: PRCondVar;
-    fTimeoutValue: integer;
+    // used by OperationCallback to interrupt script excution (Engine.CancelExecution)
+    fInterruptRequested: Boolean;
     fCreatedAtTick: Int64;
-
-    function ScheduleWatchdog: Boolean;
-    procedure StopWatchdog;
-    procedure KillWatchdog;
-    function InitWatchdog: boolean;
-    procedure SetTimeoutValue(const Value: Integer);
   public
     /// create one threadsafe JavaScript Engine instance
     // - initialize internal JSRuntime, JSContext, and global objects and
@@ -285,11 +270,8 @@ type
     property LastErrorFileName: RawUTF8 read FLastErrorFileName;
     /// TRUE if an error was triggered during JavaScript execution
     property ErrorExist: boolean read FErrorExist;
-    /// notifies a WatchDog timeout
-    property TimeOutAborted: boolean read FTimeOutAborted;
-    /// define a WatchDog timeout interval (in seconds)
-    // - is set to -1 by default, i.e. meaning no execution timeout
-    property TimeOutValue: Integer read fTimeoutValue write SetTimeoutValue default -1;
+    /// Indicate JavaScript runtime interrupt is requested using Engine.CancelExecution
+    property InterruptRequested: boolean read FInterruptRequested;
     /// If `true` engine will never expire
     property NeverExpire: boolean read FNeverExpire write FNeverExpire;
 
@@ -728,10 +710,6 @@ begin
     FGlobalObject.ptr.DefineProperty(cx, 'global', FGlobalObject.ptr.ToJSValue,
       JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY, nil, nil);
 
-    fTimeoutValue := -1;
-    if not InitWatchdog then
-      raise ESMException.Create('InitWatchDog failure');
-
     fcx.AddInterruptCallback(OperationCallback);
     FDllModulesUnInitProcList := TList.Create;
     DefineProcessBinding;
@@ -917,7 +895,6 @@ begin
     if FGlobalObject <> nil then cx.FreeRootedObject(FGlobalObject);
     with TSynFPUException.ForLibraryCode do begin
       cx.LeaveCompartment(comp);
-      KillWatchdog;
     end;
   finally
     cx.EndRequest;
@@ -1036,10 +1013,10 @@ begin
     end;
     raise ESMException.CreateWithTrace(FLastErrorFileName, FLastErrorNum, FLastErrorLine, FLastErrorMsg, FLastErrorStackTrace);
   end;
-  if (FTimeOutAborted and (FLastErrorMsg <> '')) or FErrorExist then begin
+  if (FInterruptRequested and (FLastErrorMsg <> '')) or FErrorExist then begin
     raise ESMException.CreateWithTrace(FLastErrorFileName, FLastErrorNum, FLastErrorLine, FLastErrorMsg, FLastErrorStackTrace);
   end;
-  if not res and not FTimeOutAborted then begin
+  if not res and not FInterruptRequested then begin
     raise ESMException.CreateWithTrace(FLastErrorFileName, 0, FLastErrorLine, 'Error compiling script', '');
   end;
 end;
@@ -1048,8 +1025,6 @@ procedure TSMEngine.ClearLastError;
 begin
   fcx.ClearPendingException;
   FErrorExist := False;
-  FTimeOutAborted := False;
-  fTimedOut := False;
 end;
 
 procedure TSMEngine.GarbageCollect;
@@ -1521,7 +1496,7 @@ end;
 
 function TSMEngine.DoProcessOperationCallback: Boolean;
 begin
-  Result := not fTimedOut;
+  Result := not fInterruptRequested;
 end;
 
 // Remove #13 characters from script(change it to #32)
@@ -1579,11 +1554,9 @@ var r: Boolean;
 begin
   with TSynFPUException.ForLibraryCode do begin
     ClearLastError;
-    ScheduleWatchdog;
     isFirst := not cx.IsRunning;
     opts := cx.NewCompileOptions;
     opts.SetFileLineAndUtf8(Pointer(ResName), 1, false);
-    //opts.filename := Pointer(ResName);
 
     if not getResCharsAndLength(ResName, pScript, scriptLength) then
       raise ESMException.CreateUTF8('Resource "%" not found', [ResName]);
@@ -1594,7 +1567,6 @@ begin
       r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
     if not r then
       r := false;
-    StopWatchdog;
     CheckJSError(r);
   end;
 end;
@@ -1608,7 +1580,6 @@ var r: Boolean;
 begin
   with TSynFPUException.ForLibraryCode do begin
     ClearLastError;
-    ScheduleWatchdog;
     isFirst := not cx.IsRunning;
     opts := cx.NewCompileOptions;
     opts.SetFileLineAndUtf8(Pointer(scriptName), 1, false);
@@ -1622,7 +1593,6 @@ begin
       r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
     if not r then
       r := false;
-    StopWatchdog;
     CheckJSError(r);
   end;
 end;
@@ -1638,12 +1608,9 @@ begin
     cx.BeginRequest;
     try
       ClearLastError;
-      ScheduleWatchdog;
       isFirst := not cx.IsRunning;
       opts := cx.NewCompileOptions;
       opts.SetFileLineAndUtf8(Pointer(scriptName), 1, true);
-      //opts.filename := Pointer(scriptName);
-      //opts.utf8 := true;
 
       remChar13FromScriptU(script);
       r := cx.EvaluateScript(
@@ -1653,7 +1620,6 @@ begin
         r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
       if not r then
         r := false;
-      StopWatchdog;
       CheckJSError(r);
     finally
       cx.EndRequest;
@@ -1700,12 +1666,10 @@ var r: Boolean;
 begin
   with TSynFPUException.ForLibraryCode do begin
     ClearLastError;
-    ScheduleWatchdog;
     isFirst := not cx.IsRunning;
     r := obj.ptr.CallFunctionValue(cx, funcVal.ptr, high(args) + 1, @args[0], Result);
     if withTimerLoop and r and isFirst and GlobalObject.ptr.HasProperty(cx, '_timerLoop') then
       r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
-    StopWatchdog;
     CheckJSError(r);
   end;
 end;
@@ -1718,20 +1682,17 @@ var r: Boolean;
 begin
   with TSynFPUException.ForLibraryCode do begin
     ClearLastError;
-    ScheduleWatchdog;
     isFirst := not cx.IsRunning;
     r := obj.ptr.CallFunctionName(cx, funcName, high(args) + 1, @args[0], Result);
     if r and isFirst and GlobalObject.ptr.HasProperty(cx, '_timerLoop') then
       r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
-    StopWatchdog;
     CheckJSError(r);
   end;
 end;
 
 procedure TSMEngine.CancelExecution(AWithException: boolean = true);
 begin
-  fTimedOut := True;
-  FTimeOutAborted := True;
+  fInterruptRequested := True;
   if AWithException then begin
     FErrorExist := True;
     FLastErrorFileName := '<>';
@@ -1742,127 +1703,9 @@ begin
   cx.RequestInterruptCallback;
 end;
 
-function TSMEngine.InitWatchdog: boolean;
-begin
-  Assert(not Assigned(fWatchdogThread));
-  fWatchdogLock := PR_NewLock;
-  if Assigned(fWatchdogLock) then begin
-    fWatchdogWakeup := PR_NewCondVar(fWatchdogLock);
-    if Assigned(fWatchdogWakeup) then begin
-      fSleepWakeup := PR_NewCondVar(fWatchdogLock);
-      if Assigned(fSleepWakeup) then begin
-        result := True;
-        exit;
-      end;
-      PR_DestroyCondVar(fWatchdogWakeup);
-    end;
-  end;
-  result := False;
-end;
-
-procedure TSMEngine.KillWatchdog;
-var thread: PRThread;
-begin
-  PR_Lock(fWatchdogLock);
-  thread := fWatchdogThread;
-  if Assigned(thread) then begin
-    // The watchdog thread is running, tell it to terminate waking it up
-    // if necessary.
-    fWatchdogThread := nil;
-    PR_NotifyCondVar(fWatchdogWakeup);
-  end;
-  PR_Unlock(fWatchdogLock);
-  if Assigned(thread) then
-    PR_JoinThread(thread);
-  PR_DestroyCondVar(fSleepWakeup);
-  PR_DestroyCondVar(fWatchdogWakeup);
-  PR_DestroyLock(fWatchdogLock);
-end;
-
 function IsBefore( t1, t2: int64): Boolean;
 begin
   Result := int32(t1 - t2) < 0;
-end;
-
-procedure WatchdogMain(arg: pointer); cdecl;
-var eng: TSMEngine;
-    cx: PJSContext;
-    now_: int64;
-    sleepDuration: PRIntervalTime;
-    status: PRStatus;
-begin
-  PR_SetCurrentThreadName('JS Watchdog');
-  eng := TSMEngine(arg);
-  cx := eng.cx;
-  PR_Lock(eng.fWatchdogLock);
-  while Assigned(eng.fWatchdogThread) do begin
-    now_ := cx.NowMs;
-    if (eng.fWatchdogHasTimeout and not IsBefore(now_, eng.fWatchdogTimeout)) then begin
-      // The timeout has just expired. Trigger the operation callback outside the lock
-      eng.fWatchdogHasTimeout := false;
-      PR_Unlock(eng.fWatchdogLock);
-      eng.CancelExecution;
-      PR_Lock(eng.fWatchdogLock);
-      // Wake up any threads doing sleep
-      PR_NotifyAllCondVar(eng.fSleepWakeup);
-    end else begin
-      if (eng.fWatchdogHasTimeout) then begin
-        // Time hasn't expired yet. Simulate an operation callback
-        // which doesn't abort execution.
-        cx.RequestInterruptCallback;
-      end;
-      sleepDuration := PR_INTERVAL_NO_TIMEOUT;
-      if (eng.fWatchdogHasTimeout) then
-        sleepDuration := PR_TicksPerSecond() div 10;
-      status := PR_WaitCondVar(eng.fWatchdogWakeup, sleepDuration);
-      Assert(status = PR_SUCCESS);
-    end
-  end;
-  PR_Unlock(eng.fWatchdogLock);
-end;
-
-procedure TSMEngine.StopWatchdog;
-begin
- if not fWatchdogHasTimeout then
-   Exit;
-
-  PR_Lock(fWatchdogLock);
-  fWatchdogHasTimeout := false;
-  PR_Unlock(fWatchdogLock);
-end;
-
-function TSMEngine.ScheduleWatchdog: Boolean;
-var interval: Int64;
-    timeout: Int64;
-begin
-  if fTimeoutValue <= 0 then begin
-    Result := true;
-    exit;
-  end;
-  interval := int64(fTimeoutValue * PRMJ_USEC_PER_SEC);
-  timeout := cx.NowMs + interval;
-  PR_Lock(fWatchdogLock);
-  if not Assigned(fWatchdogThread) then begin
-    Assert(not fWatchdogHasTimeout);
-    fWatchdogThread := PR_CreateThread(PR_USER_THREAD,
-                                       @WatchdogMain,
-                                       Self,
-                                       PR_PRIORITY_NORMAL,
-                                       PR_LOCAL_THREAD,
-                                       PR_JOINABLE_THREAD,
-                                       0);
-    if not Assigned(fWatchdogThread) then begin
-      PR_Unlock(fWatchdogLock);
-      Result := false;
-      Exit;
-   end
-  end else if (not fWatchdogHasTimeout or IsBefore(timeout, fWatchdogTimeout)) then
-    PR_NotifyCondVar(fWatchdogWakeup);
-
-  fWatchdogHasTimeout := true;
-  fWatchdogTimeout := timeout;
-  PR_Unlock(fWatchdogLock);
-  Result := true;
 end;
 
 procedure TSMEngine.SetPrivateDataForDebugger(const Value: Pointer);
@@ -1887,11 +1730,6 @@ end;
 procedure TSMEngine.SetThreadData(pThreadData: pointer);
 begin
   FThreadData := pThreadData;
-end;
-
-procedure TSMEngine.SetTimeoutValue(const Value: Integer);
-begin
-  fTimeoutValue := Value;
 end;
 
 // Bindings
@@ -2217,7 +2055,7 @@ begin
       interval := in_argv[0].asInteger
     else
       interval := Trunc(in_argv[0].asDouble);
-    while not engine.TimeOutAborted and (interval > 0) do
+    while not engine.InterruptRequested and (interval > 0) do
     begin
       Sleep(100);
       interval := interval - 100;
