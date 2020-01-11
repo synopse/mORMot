@@ -1,0 +1,6 @@
+bin/
+obj/
+x64/
+ipch/
+*.opendb
+*.filters

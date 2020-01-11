@@ -140,9 +140,6 @@ type
     fIsPaused: boolean;
     fMessagesQueue: TRawUTF8ListLocked;
     fLogQueue: TRawUTF8ListLocked;
-    {$IFNDEF SM52}
-    fOldInterruptCallback: JSInterruptCallback;
-    {$ENDIF}
     fSmThreadID: TThreadID;
     fNameForDebug: RawUTF8;
     fCommunicationThread: TSMRemoteDebuggerCommunicationThread;
@@ -221,20 +218,12 @@ begin
     Debugger.fLogQueue.SafePush(Text);
 
     if eng.cx.IsRunning then
-{$IFDEF SM52}
       eng.cx.RequestInterruptCallback
-{$ELSE}
-      eng.rt.RequestInterruptCallback
-{$ENDIF}
     else
-{$IFDEF SM52}
     begin
       eng.cx.RequestInterruptCallback;
       eng.cx.CheckForInterrupt;
     end;
-{$ELSE}
-      eng.rt.InterruptCallback(eng.cx);
-{$ENDIF}
   end;
 end;
 
@@ -556,11 +545,7 @@ begin
             raise ESMException.Create('not Assigned(engine.doInteruptInOwnThread)');
           engine.doInteruptInOwnThread;
         end;
-        {$IFDEF SM52}
         engine.cx.RequestInterruptCallback;
-        {$ELSE}
-        engine.rt.RequestInterruptCallback;
-        {$ENDIF}
       end;
     end;
   end;
@@ -691,11 +676,7 @@ begin
       end;
     end;
   finally
-  {$IFDEF SM52}
     result := True;
-  {$ELSE}
-    result := debugger.fOldInterruptCallback(cx);
-  {$ENDIF}
   end;
 end;
 
@@ -736,12 +717,7 @@ begin
       if Assigned(aEng.Manager.OnDebuggerInit) then
         aEng.Manager.OnDebuggerInit(aEng);
 
-{$IFDEF SM52}
       aEng.cx.AddInterruptCallback(doInterupt);
-{$ELSE}
-      foldInterruptCallback := aEng.rt.InterruptCallback;
-      aEng.rt.InterruptCallback := doInterupt;
-{$ENDIF}
     end;
   finally
     cx.LeaveCompartment(cmpDbg);

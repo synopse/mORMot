@@ -71,7 +71,7 @@
       </Options>
     </Linking>
     <Other>
-      <CustomOptions Value="-dSM52"/>
+      <CustomOptions Value=""/>
     </Other>
   </CompilerOptions>
   <Debugging>

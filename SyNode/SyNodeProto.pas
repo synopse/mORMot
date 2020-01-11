@@ -195,11 +195,7 @@ const prefix: array[boolean] of TShort4 = ('set ','get ');
 // called when the interpreter wants to create an object through a new TMyObject ()
 function SMCustomObjectConstruct(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;  cdecl;
 // called when the interpreter destroys the object
-{$IFDEF SM52}
 procedure SMCustomObjectDestroy(var fop: JSFreeOp; obj: PJSObject); cdecl;
-{$ELSE}
-procedure SMCustomObjectDestroy(var rt: PJSRuntime; obj: PJSObject); cdecl;
-{$ENDIF}
 
 implementation
 
@@ -260,7 +256,6 @@ end;
 const
 // Magic constant for TSMObjectRecord
   SMObjectRecordMagic: Word = 43857;
-{$IFDEF SM52}
   jsdef_classOpts: JSClassOps = (
     addProperty:        nil;
     delProperty:        nil;
@@ -281,13 +276,6 @@ const
     cOps: @jsdef_classOpts;
     reserved: (nil, nil, nil)
     );
-{$ELSE}
-  jsdef_class: JSClass = (name: '';
-    flags: uint32(JSCLASS_HAS_PRIVATE);
-    finalize: SMCustomObjectDestroy; // call then JS object GC}
-    construct: SMCustomObjectConstruct
-    );
-{$ENDIF}
 // create object var obj = new TMyObject();
 function SMCustomObjectConstruct(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
 var
@@ -311,11 +299,7 @@ begin
   end;
 end;
 
-{$IFDEF SM52}
 procedure SMCustomObjectDestroy(var fop: JSFreeOp;  obj: PJSObject); cdecl;
-{$ELSE}
-procedure SMCustomObjectDestroy(var rt: PJSRuntime; obj: PJSObject); cdecl;
-{$ENDIF}
 var
   ObjRec: PSMObjectRecord;
   Inst: PSMInstanceRecord;
