@@ -6638,7 +6638,7 @@ begin
     if s='' then
       break; // headers end with a void line
     if length(Headers)<=n then
-      SetLength(Headers,n+n shr 3+10);
+      SetLength(Headers,n+n shr 3+16);
     Headers[n] := s;
     inc(n);
     P := pointer(s);
@@ -6691,15 +6691,16 @@ begin
       while P^>#13 do inc(P);
       if PDeb<>P then begin // add any not void line
         if length(Headers)<=n then
-          SetLength(Headers,n+n shr 3+8);
+          SetLength(Headers,n+n shr 3+16);
         SetString(Headers[n],PDeb,P-PDeb);
         inc(n);
       end;
       while (P^=#13) or (P^=#10) do inc(P);
     until P^=#0;
-  SetLength(Headers,n);
-  if (aForcedContentType='') or (HeaderGetValue('CONTENT-TYPE')<>'') then
+  if (aForcedContentType='') or (HeaderGetValue('CONTENT-TYPE')<>'') then begin
+    SetLength(Headers,n);
     exit;
+  end;
   SetLength(Headers,n+1);
   Headers[n] := 'Content-Type: '+aForcedContentType;
 end;
