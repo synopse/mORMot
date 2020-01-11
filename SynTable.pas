@@ -7270,7 +7270,7 @@ var
   c: PCardinal;
 begin
   SetString(result, nil, SizeOf(m^));
-  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(m^, SizeOf(m^), 0);
+  FillCharFast(m^, SizeOf(m^), 0);
   for i := 0 to length(Pattern) - 1 do begin
     c := @m^[u[p[i]]]; // for FPC code generation
     c^ := c^ or (1 shl i);
@@ -7920,7 +7920,7 @@ begin
     InvalidTextLengthMin(MinLength,ErrorMsg) else
   if L>MaxLength then
     ErrorMsg := Format(sInvalidTextLengthMax,[MaxLength,Character01n(MaxLength)]) else begin
-    {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Min,SizeOf(Min),0);
+    FillCharFast(Min,SizeOf(Min),0);
     L := length(value);
     for i := 1 to L do
     case value[i] of
@@ -8568,7 +8568,7 @@ begin
     Len := FromVarUInt32(P)+3;
     if D+Len>DEnd then
       break;
-    {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(D^,Len,0);
+    FillCharFast(D^,Len,0);
     crc := crc32c(crc,@Len,SizeOf(Len));
     inc(D,Len);
   end;
@@ -10215,7 +10215,7 @@ end;
 destructor TSynUniqueIdentifierGenerator.Destroy;
 begin
   fSafe.Done;
-  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(fCrypto,SizeOf(fCrypto),0);
+  FillCharFast(fCrypto,SizeOf(fCrypto),0);
   fCryptoCRC := 0;
   inherited Destroy;
 end;
@@ -10634,7 +10634,7 @@ begin
     PInt64Array(@Fields)^[2] := 0;
     PInt64Array(@Fields)^[3] := 0;
   end else
-    {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Fields,SizeOf(Fields),0);
+    FillCharFast(Fields,SizeOf(Fields),0);
 end;
 
 {$ifdef FPC}{$pop}{$else}{$WARNINGS ON}{$endif}
@@ -10679,7 +10679,7 @@ end;
 procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray; var Fields: TSQLFieldBits);
 var i: integer;
 begin
-  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Fields,SizeOf(Fields),0);
+  FillCharFast(Fields,SizeOf(Fields),0);
   for i := 0 to Length(Index)-1 do
     if Index[i]>=0 then
       include(Fields,Index[i]);
@@ -10830,7 +10830,7 @@ var ppBeg: integer;
     wasNull: boolean;
 begin
   maxParam := 0;
-  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Nulls,SizeOf(Nulls),0);
+  FillCharFast(Nulls,SizeOf(Nulls),0);
   ppBeg := PosEx(RawUTF8(':('),SQL,1);
   if (ppBeg=0) or (PosEx(RawUTF8('):'),SQL,ppBeg+2)=0) then begin
     // SQL code with no valid :(...): internal parameters -> leave maxParam=0
@@ -12676,7 +12676,7 @@ end;
 
 function TProcessInfo.Init: boolean;
 begin
-  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(self,SizeOf(self),0);
+  FillCharFast(self,SizeOf(self),0);
   result := Assigned(GetSystemTimes) and Assigned(GetProcessTimes) and
     Assigned(GetProcessMemoryInfo); // no monitoring API under oldest Windows
 end;
@@ -12710,7 +12710,7 @@ var
   mem: TProcessMemoryCounters;
 begin
   result := false;
-  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Data,SizeOf(Data),0);
+  FillCharFast(Data,SizeOf(Data),0);
   h := OpenProcess(OpenProcessAccess,false,PID);
   if h<>0 then
     try
@@ -12725,7 +12725,7 @@ begin
         end;
         PrevKernel := pkrn;
         PrevUser := pusr;
-        {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(mem,SizeOf(mem),0);
+        FillCharFast(mem,SizeOf(mem),0);
         mem.cb := SizeOf(mem);
         if GetProcessMemoryInfo(h,mem,SizeOf(mem)) then begin
           Data.WorkKB := mem.WorkingSetSize shr 10;
@@ -12755,7 +12755,7 @@ end;
 {$else} // not implemented yet (use /proc ?)
 function TProcessInfo.Init: boolean;
 begin
-  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(self,SizeOf(self),0);
+  FillCharFast(self,SizeOf(self),0);
   result := false;
 end;
 
@@ -12930,7 +12930,7 @@ begin
       fSafe.UnLock;
     end;
   end;
-  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(aData,SizeOf(aData),0);
+  FillCharFast(aData,SizeOf(aData),0);
 end;
 
 function TSystemUse.Data(aProcessID: integer): TSystemUseData;
@@ -13339,7 +13339,7 @@ begin
 {$else}
 {$ifdef BSD}
 begin
-  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(info,SizeOf(info),0);
+  FillCharFast(info,SizeOf(info),0);
   info.memtotal := fpsysctlhwint({$ifdef DARWIN}HW_MEMSIZE{$else}HW_PHYSMEM{$endif});
   info.memfree := info.memtotal-fpsysctlhwint(HW_USERMEM);
   if info.memtotal<>0 then // avoid div per 0 exception

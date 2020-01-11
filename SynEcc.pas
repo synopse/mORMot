@@ -3717,7 +3717,7 @@ begin
   finally
     FillZero(aeskey);
     FillZero(mackey);
-    {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(rndpriv,sizeof(rndpriv),0);
+    FillCharFast(rndpriv,sizeof(rndpriv),0);
     if dec<>Plain then
       FillZero(dec);
     if content<>Plain then
@@ -5333,7 +5333,7 @@ procedure TECDHEProtocolClient.ComputeHandshake(out aClient: TECDHEFrameClient);
 begin
   if fAES[false]<>nil then
     raise EECCException.CreateUTF8('%.ComputeHandshake already called',[self]);
-  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(aClient,sizeof(aClient),0);
+  FillCharFast(aClient,sizeof(aClient),0);
   aClient.algo := fAlgo;
   TAESPRNG.Main.FillRandom(fRndA);
   aClient.RndA := fRndA;
@@ -5432,7 +5432,7 @@ begin
   if fAlgo.auth<>authServer then
     if not Verify(@aClient,sizeof(aClient),aClient.QCA,result) then
       exit;
-  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(aServer,sizeof(aServer),0);
+  FillCharFast(aServer,sizeof(aServer),0);
   aServer.algo := fAlgo;
   aServer.RndA := fRndA;
   TAESPRNG.Main.FillRandom(fRndB);
