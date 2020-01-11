@@ -1,5 +1,11 @@
-#include "SynSM.h"
+#ifdef _WINDOWS
+#define _CRT_NONSTDC_NO_DEPRECATE // disable error C4996 - 'strdup': The POSIX name for this item is deprecated. Instead, use the ISO C and C++ conformant name: _strdup. See online help for details.
+#include "stdafx.h"
+#endif
 
+#include "synsm.h"
+
+#include <jsapi.h>
 #include <jsfriendapi.h>
 #include <js/Date.h>
 #include <js/Initialization.h>

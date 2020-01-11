@@ -1,0 +1,117 @@
+diff --git a/js/src/moz.build b/js/src/moz.build
+index 1162cb70c1eb..c6c400a6f7bd 100644
+--- a/js/src/moz.build
++++ b/js/src/moz.build
+@@ -75,6 +75,9 @@ if not CONFIG['JS_STANDALONE']:
+         '../../config/emptyvars-js.mk',
+     ]
+ 
++if not CONFIG['OS_TARGET'] in ('WINNT', 'Darwin', 'Android') or CONFIG['JS_STANDALONE']:
++    LIBRARY_DEFINES['STATIC_MFBT_API'] = True
++
+ CONFIGURE_DEFINE_FILES += [
+     'js-config.h',
+ ]
+diff --git a/js/src/old-configure.in b/js/src/old-configure.in
+index 1c5c9e2145f6..ff0617e31695 100644
+--- a/js/src/old-configure.in
++++ b/js/src/old-configure.in
+@@ -1623,16 +1623,21 @@ dnl ========================================================
+ dnl = Enable jemalloc
+ dnl ========================================================
+ 
+-case "${OS_TARGET}" in
+-Android|WINNT|Darwin)
++dnl In stand-alone builds we always only want to link executables against mozglue.
++if test "$JS_STANDALONE"; then
+   MOZ_GLUE_IN_PROGRAM=
+-  ;;
+-*)
+-  dnl On !Android !Windows !OSX, we only want to link executables against mozglue
+-  MOZ_GLUE_IN_PROGRAM=1
+-  AC_DEFINE(MOZ_GLUE_IN_PROGRAM)
+-  ;;
+-esac
++else
++  case "${OS_TARGET}" in
++  Android|WINNT|Darwin)
++    MOZ_GLUE_IN_PROGRAM=
++    ;;
++  *)
++    dnl On !Android !Windows !OSX, we only want to link executables against mozglue
++    MOZ_GLUE_IN_PROGRAM=1
++    AC_DEFINE(MOZ_GLUE_IN_PROGRAM)
++    ;;
++  esac
++fi
+ 
+ if test "$MOZ_MEMORY"; then
+   if test "x$MOZ_DEBUG" = "x1"; then
+diff --git a/mfbt/Types.h b/mfbt/Types.h
+index e7e18abb2746..95c176528290 100644
+--- a/mfbt/Types.h
++++ b/mfbt/Types.h
+@@ -38,7 +38,11 @@
+  * methods or data used cross-file.
+  */
+ #if defined(WIN32)
+-#  define MOZ_EXPORT   __declspec(dllexport)
++#  if defined(STATIC_MFBT_API)
++#    define MOZ_EXPORT /* nothing */
++#  else
++#    define MOZ_EXPORT   __declspec(dllexport)
++#  endif
+ #else /* Unix */
+ #  ifdef HAVE_VISIBILITY_ATTRIBUTE
+ #    define MOZ_EXPORT       __attribute__((visibility("default")))
+@@ -58,7 +62,7 @@
+  * mode.
+  */
+ #ifdef _WIN32
+-#  if defined(__MWERKS__)
++#  if defined(__MWERKS__) || defined(STATIC_MFBT_API)
+ #    define MOZ_IMPORT_API /* nothing */
+ #  else
+ #    define MOZ_IMPORT_API __declspec(dllimport)
+@@ -67,7 +71,7 @@
+ #  define MOZ_IMPORT_API MOZ_EXPORT
+ #endif
+ 
+-#if defined(_WIN32) && !defined(__MWERKS__)
++#if defined(_WIN32) && !defined(__MWERKS__) && !defined(STATIC_MFBT_API)
+ #  define MOZ_IMPORT_DATA  __declspec(dllimport)
+ #else
+ #  define MOZ_IMPORT_DATA  MOZ_EXPORT
+@@ -90,8 +94,13 @@
+    * macros to exploit this.
+    */
+ #  if defined(MOZ_GLUE_IN_PROGRAM)
+-#    define MFBT_API   __attribute__((weak)) MOZ_IMPORT_API
+-#    define MFBT_DATA  __attribute__((weak)) MOZ_IMPORT_DATA
++#    ifdef _WIN32
++#      define MFBT_API   /* nothing */
++#      define MFBT_DATA  /* nothing */
++#    else
++#      define MFBT_API   __attribute__((weak)) MOZ_IMPORT_API
++#      define MFBT_DATA  __attribute__((weak)) MOZ_IMPORT_DATA
++#    endif
+ #  else
+ #    define MFBT_API   MOZ_IMPORT_API
+ #    define MFBT_DATA  MOZ_IMPORT_DATA
+diff --git a/mozglue/build/moz.build b/mozglue/build/moz.build
+index d289747785a1..4bb832ddd1e6 100644
+--- a/mozglue/build/moz.build
++++ b/mozglue/build/moz.build
+@@ -6,10 +6,11 @@
+ 
+ # Build mozglue as a shared lib on Windows, OSX and Android.
+ # If this is ever changed, update MOZ_SHARED_MOZGLUE in browser/installer/Makefile.in
+-if CONFIG['OS_TARGET'] in ('WINNT', 'Darwin', 'Android'):
++if CONFIG['OS_TARGET'] in ('WINNT', 'Darwin', 'Android') and not CONFIG['JS_STANDALONE']:
+     SharedLibrary('mozglue')
+ else:
+     Library('mozglue')
++    LIBRARY_DEFINES['STATIC_MFBT_API'] = True
+ 
+ SDK_LIBRARY = True
+ 
