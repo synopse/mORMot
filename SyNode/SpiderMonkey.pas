@@ -2204,8 +2204,7 @@ function JS_NewGlobalObject(cx: PJSContext; clasp: PJSClass; principals: PJSPrin
 ///
 /// It is still possible to specify custom trace hooks for global object classes. They can be
 /// provided via the CompartmentOptions passed to JS_NewGlobalObject.
-procedure JS_GlobalObjectTraceHook(trc: Pointer{ JSTracer }; global: PJSObject); cdecl;
-  external SpiderMonkeyLib name '_Z24JS_GlobalObjectTraceHookP8JSTracerP8JSObject';
+var JS_GlobalObjectTraceHook: procedure (trc: Pointer{ JSTracer }; global: PJSObject); cdecl;
 
 /// Create a new object based on a specified class
 function JS_NewObject(cx: PJSContext; clasp: PJSClass): PJSObject; cdecl; external SpiderMonkeyLib name 'SM_NewObject';
@@ -2485,15 +2484,15 @@ function JS_ParseJSON(cx: PJSContext; const chars: PCChar16;
 /// Create a new JavaScript Error object and set it to be the pending exception on cx.
 // The callback must then return JS_FALSE to cause the exception to be propagated
 // to the calling script.
-procedure JS_ReportError(cx: PJSContext; const format: PCChar);
-  cdecl; varargs; external SpiderMonkeyLib name '_Z19JS_ReportErrorASCIIP9JSContextPKcz';
+var JS_ReportError: procedure (cx: PJSContext; const format: PCChar);
+  cdecl; varargs;
 /// Report an error with an application-defined error code.
 // - varargs is Additional arguments for the error message.
 //- These arguments must be of type jschar*
 // - The number of additional arguments required depends on the error
 // message, which is determined by the errorCallback
-procedure JS_ReportErrorNumberUC(cx: PJSContext; errorCallback: JSErrorCallback;
-  userRef: pointer; const erroNubmer: uintN); cdecl; varargs; external SpiderMonkeyLib name '_Z22JS_ReportErrorNumberUCP9JSContextPFPK19JSErrorFormatStringPvjES4_jz';
+var JS_ReportErrorNumberUC: procedure (cx: PJSContext; errorCallback: JSErrorCallback;
+  userRef: pointer; const erroNubmer: uintN); cdecl; varargs;
 procedure JS_ReportErrorNumberUTF8(cx: PJSContext; errorCallback: JSErrorCallback;
   userRef: pointer; const erroNubmer: uintN); cdecl; varargs; external SpiderMonkeyLib name 'SM_ReportErrorNumberUTF8';
 /// Reports a memory allocation error
@@ -5321,6 +5320,26 @@ begin
   Result.asSimpleVariant[cx] := val;
 end;
 
+type
+  PSMInterface = ^TSMInterface;
+  TSMInterface = record
+    version: size_t;
+    GlobalObjectTraceHook: Pointer;
+    ReportErrorASCII: Pointer;
+    ReportErrorNumberUC: Pointer;
+  end;
+
+var intf: PSMInterface;
+
+function SM_GetInterface(): PSMInterface; cdecl; external SpiderMonkeyLib;
+
 initialization
+  intf := SM_GetInterface();
+  if Assigned(intf) and (intf.version = (52 shl 16) + 1) then begin
+    JS_GlobalObjectTraceHook := intf.GlobalObjectTraceHook;
+    JS_ReportError := intf.ReportErrorASCII;
+    JS_ReportErrorNumberUC := intf.ReportErrorNumberUC;
+  end else
+    raise ENotSupportedException.Create('synsm library installed provides not supported interface');
   Latin1AnsiConvert := TSynAnsiConvert.Engine(CODEPAGE_LATIN1);
 end.
