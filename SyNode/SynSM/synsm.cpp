@@ -16,6 +16,19 @@ namespace js {
     extern bool gCanUseExtraThreads;
 }
 
+JS_PUBLIC_API(SMInterface*) SM_GetInterface()
+{
+    static SMInterface interface = {
+        /*version*/ MOZJS_MAJOR_VERSION << 16 + 1,
+
+        /*GlobalObjectTraceHook*/ &JS_GlobalObjectTraceHook,
+
+        /*ReportErrorASCII*/ &JS_ReportErrorASCII,
+        /*ReportErrorNumberUC(*/ &JS_ReportErrorNumberUC
+    };
+    return &interface;
+}
+
 JS_PUBLIC_API(bool) SM_Initialize(void)
 {
     return JS_Init();
@@ -220,12 +233,12 @@ JS_PUBLIC_API(JSObject*) SM_NewGlobalObject(
 {
     return JS_NewGlobalObject(cx, clasp, principals, hookOption, options);
 }
-
+/*
 JS_PUBLIC_API(void) SM_GlobalObjectTraceHook(JSTracer* trc, JSObject* global)
 {
     JS_GlobalObjectTraceHook(trc, global);
 }
-
+*/
 JS_PUBLIC_API(JSObject*) SM_NewObject(JSContext* cx, const JSClass* clasp)
 {
     return JS_NewObject(cx, clasp);
@@ -573,7 +586,7 @@ JS_PUBLIC_API(bool) SM_ParseJSON(
 {
     return JS_ParseJSON(cx, chars, len, vp);
 }
-
+/*
 JS_PUBLIC_API(void) SM_ReportErrorASCII(JSContext* cx, const char* format, ...)
 {
 //    va_list ap;
@@ -590,7 +603,7 @@ JS_PUBLIC_API(void) SM_ReportErrorNumberUC(
 //    JS_ReportErrorNumberASCIIVA(cx, errorCallback, userRef, errorNumber, ap);
 //    va_end(ap);
 }
-
+*/
 JS_PUBLIC_API(void) SM_ReportErrorNumberUTF8(
     JSContext* cx, JSErrorCallback errorCallback, void* userRef, const unsigned errorNumber, ...)
 {

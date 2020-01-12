@@ -4,6 +4,15 @@
 #include <jsapi.h>
 #include <jsfriendapi.h>
 
+struct SMInterface {
+    size_t version;
+
+    void(*GlobalObjectTraceHook)(JSTracer* trc, JSObject* global);
+
+    void(*ReportErrorASCII)(JSContext* cx, const char* format, ...);
+    void(*ReportErrorNumberUC)(JSContext* cx, JSErrorCallback errorCallback, void* userRef, const unsigned errorNumber, ...);
+};
+
 extern "C" {
 
 JS_PUBLIC_API(bool) SM_Initialize(void);
@@ -94,9 +103,9 @@ JS_PUBLIC_API(void*) SM_GetInstancePrivate(
 JS_PUBLIC_API(JSObject*) SM_NewGlobalObject(
     JSContext* cx, const JSClass* clasp, JSPrincipals* principals,
     JS::OnNewGlobalHookOption hookOption, const JS::CompartmentOptions& options);
-
+/*
 JS_PUBLIC_API(void) SM_GlobalObjectTraceHook(JSTracer* trc, JSObject* global);
-
+*/
 JS_PUBLIC_API(JSObject*) SM_NewObject(JSContext* cx, const JSClass* clasp);
 
 JS_PUBLIC_API(JSObject*) SM_NewObjectWithGivenProto(
@@ -270,13 +279,13 @@ JS_PUBLIC_API(bool) SM_Stringify(
 
 JS_PUBLIC_API(bool) SM_ParseJSON(
     JSContext* cx, const char16_t* chars, uint32_t len, JS::MutableHandleValue vp);
-
+/*
 JS_PUBLIC_API(void) SM_ReportErrorASCII(
     JSContext* cx, const char* format, ...);
 
 JS_PUBLIC_API(void) SM_ReportErrorNumberUC(
     JSContext* cx, JSErrorCallback errorCallback, void* userRef, const unsigned errorNumber, ...);
-
+*/
 JS_PUBLIC_API(void) SM_ReportErrorNumberUTF8(
     JSContext* cx, JSErrorCallback errorCallback, void* userRef, const unsigned errorNumber, ...);
 
