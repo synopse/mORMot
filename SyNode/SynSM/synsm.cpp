@@ -19,7 +19,7 @@ namespace js {
 JS_PUBLIC_API(SMInterface*) SM_GetInterface()
 {
     static SMInterface interface = {
-        /*version*/ MOZJS_MAJOR_VERSION << 16 + 1,
+        /*version*/ (MOZJS_MAJOR_VERSION << 16) + 1,
 
         /*GlobalObjectTraceHook*/ &JS_GlobalObjectTraceHook,
 

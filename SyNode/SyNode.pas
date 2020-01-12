@@ -532,7 +532,7 @@ uses
   SyNodeBinding_uv,
   synodebinding_os;
 
-const
+var
   jsGlobal_opt: JSClassOps = (
     addProperty: nil;
     delProperty: nil;
@@ -545,7 +545,7 @@ const
     call:        nil;
     hasInstance: nil;
     construct:   nil;
-    trace:       @JS_GlobalObjectTraceHook;
+    trace:       nil;//JS_GlobalObjectTraceHook;
   );
   jsglobal_class: JSClass = (
     name: 'global';
@@ -2087,6 +2087,7 @@ begin
 end;
 
 initialization
+  jsGlobal_opt.trace := @JS_GlobalObjectTraceHook;
   TSMEngineManager.RegisterBinding('modules', SyNodeBinding_modules);
   TSMEngineManager.RegisterBinding('syNode', SyNodeBinding_syNode);
 finalization
