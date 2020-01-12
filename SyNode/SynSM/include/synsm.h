@@ -13,6 +13,8 @@ struct SMInterface {
     void(*ReportErrorNumberUC)(JSContext* cx, JSErrorCallback errorCallback, void* userRef, const unsigned errorNumber, ...);
 };
 
+extern "C" JS_PUBLIC_API(SMInterface*) SM_GetInterface();
+
 extern "C" {
 
 JS_PUBLIC_API(bool) SM_Initialize(void);
