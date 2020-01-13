@@ -6873,7 +6873,7 @@ Therefore, the writer callback could be:
 In the above code, the {\f1\fs20 cardinal} field named {\f1\fs20 Timestamp} is type-casted to a {\f1\fs20 Int64}: in fact, as stated by the documentation of the {\f1\fs20 AddJSONEscape} method, an {\f1\fs20 array of const} will handle by default any {\f1\fs20 cardinal} as an {\f1\fs20 integer} value (this is a limitation of the {\i Delphi} compiler). By forcing the type to be an {\f1\fs20 Int64}, the expected {\f1\fs20 cardinal} value will be transmitted, and not a wrongly negative versions for numbers {\f1\fs20 > $7fffffff}.
 On the other side, the corresponding reader callback will be like:
 !class function TTestServiceOrientedArchitecture.CustomReader(P: PUTF8Char;
-!  var aValue; out aValid: Boolean): PUTF8Char;
+!  var aValue; out aValid: Boolean; aCustomVariantOptions: PDocVariantOptions): PUTF8Char;
 !var V: TSQLRestCacheEntryValue absolute aValue;
 !    Values: array[0..2] of TValuePUTF8Char;
 !begin

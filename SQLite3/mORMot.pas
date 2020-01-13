@@ -23827,7 +23827,8 @@ type
   TObjArraySerializer = class(TPointerClassHashed)
   protected
     procedure DefaultCustomWriter(const aWriter: TTextWriter; const aValue);
-    function DefaultCustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
+    function DefaultCustomReader(P: PUTF8Char; var aValue; out aValid: Boolean{$ifndef NOVARIANTS};
+      CustomVariantOptions: PDocVariantOptions{$endif}): PUTF8Char;
   public
     Instance: TClassInstance;
     CustomReader: TDynArrayJSONCustomReader;
@@ -23873,7 +23874,7 @@ begin
 end;
 
 function TObjArraySerializer.DefaultCustomReader(P: PUTF8Char; var aValue;
-  out aValid: Boolean): PUTF8Char;
+  out aValid: Boolean{$ifndef NOVARIANTS}; CustomVariantOptions: PDocVariantOptions{$endif}): PUTF8Char;
 begin
   if TObject(aValue)=nil then
     TObject(aValue) := Instance.CreateNew;
@@ -24801,7 +24802,7 @@ begin
     Value := pointer(tmp);
   end;
   fCustomParser.ReadOneLevel(Value,Data,
-    [soReadIgnoreUnknownFields,soCustomVariantCopiedByReference]);
+    [soReadIgnoreUnknownFields,soCustomVariantCopiedByReference],nil);
 end;
 
 
@@ -49777,14 +49778,14 @@ var temp: variant;
 begin
   if j2oHandleCustomVariants in Options then begin
     if j2oHandleCustomVariantsWithinString in Options then
-      opt := [dvoValueCopiedByReference,dvoJSONObjectParseWithinString] else
-      opt := [dvoValueCopiedByReference];
+      opt := [dvoValueCopiedByReference,dvoAllowDoubleValue,dvoJSONObjectParseWithinString] else
+      opt := [dvoValueCopiedByReference,dvoAllowDoubleValue];
     GetVariantFromJSON(PropValue,wasString,temp,@opt,false);
   end else
     GetVariantFromJSON(PropValue,wasString,temp,nil,false);
   P^.SetVariantProp(Value,temp);
 end;
-{$endif}
+{$endif NOVARIANTS}
 
 procedure TJSONToObject.HandleProperty(var tmp: RawUTF8);
 var V: PtrInt;

@@ -1313,7 +1313,8 @@ type
       aAsJSONObject: boolean; {$ifndef LVCL}aRunInOtherThread: boolean=false;{$endif}
       aOptions: TServiceMethodOptions=[]);
     procedure ClientAlgo(algo: TSQLRestServerAuthenticationSignedURIAlgo);
-    class function CustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
+    class function CustomReader(P: PUTF8Char; var aValue; out aValid: Boolean{$ifndef NOVARIANTS};
+      CustomVariantOptions: PDocVariantOptions{$endif}): PUTF8Char;
     class procedure CustomWriter(const aWriter: TTextWriter; const aValue);
     procedure SetOptions(aAsJSONObject: boolean;
       aOptions: TServiceMethodOptions);
@@ -6759,11 +6760,11 @@ type
     fInts: TIntegerDynArray;
     fTimeLog: TTimeLogDynArray;
     fFileVersions: TFVs;
-    class function FVReader(P: PUTF8Char; var aValue;
-      out aValid: Boolean): PUTF8Char;
+    class function FVReader(P: PUTF8Char; var aValue; out aValid: Boolean
+      {$ifndef NOVARIANTS}; CustomVariantOptions: PDocVariantOptions{$endif}): PUTF8Char;
     class procedure FVWriter(const aWriter: TTextWriter; const aValue);
-    class function FVReader2(P: PUTF8Char; var aValue;
-      out aValid: Boolean): PUTF8Char;
+    class function FVReader2(P: PUTF8Char; var aValue; out aValid: Boolean
+      {$ifndef NOVARIANTS}; CustomVariantOptions: PDocVariantOptions{$endif}): PUTF8Char;
     class procedure FVWriter2(const aWriter: TTextWriter; const aValue);
     class function FVClassReader(const aValue: TObject; aFrom: PUTF8Char;
       var aValid: Boolean; aOptions: TJSONToObjectOptions): PUTF8Char;
@@ -6779,7 +6780,7 @@ type
 { TCollTstDynArray}
 
 class function TCollTstDynArray.FVReader(P: PUTF8Char; var aValue;
-  out aValid: Boolean): PUTF8Char;
+  out aValid: Boolean{$ifndef NOVARIANTS}; CustomVariantOptions: PDocVariantOptions{$endif}): PUTF8Char;
 var V: TFV absolute aValue;
 begin // '[1,2001,3001,4001,"1","1001"],[2,2002,3002,4002,"2","1002"],...'
   aValid := false;
@@ -6807,7 +6808,7 @@ begin
 end;
 
 class function TCollTstDynArray.FVReader2(P: PUTF8Char; var aValue;
-  out aValid: Boolean): PUTF8Char;
+  out aValid: Boolean{$ifndef NOVARIANTS}; CustomVariantOptions: PDocVariantOptions{$endif}): PUTF8Char;
 var V: TFV absolute aValue;
     Values: array[0..5] of TValuePUTF8Char;
 begin // '{"Major":1,"Minor":2001,"Release":3001,"Build":4001,"Main":"1","Detailed":"1001"},..
@@ -17950,7 +17951,8 @@ begin
 end;
 
 class function TTestServiceOrientedArchitecture.CustomReader(P: PUTF8Char;
-  var aValue; out aValid: Boolean): PUTF8Char;
+  var aValue; out aValid: Boolean{$ifndef NOVARIANTS};
+  CustomVariantOptions: PDocVariantOptions{$endif}): PUTF8Char;
 var V: TSQLRestCacheEntryValue absolute aValue;
     Values: array[0..2] of TValuePUTF8Char;
 begin // {"ID":1786554763,"Timestamp":323618765,"JSON":"D:\\TestSQL3.exe"}
