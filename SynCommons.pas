@@ -5715,7 +5715,8 @@ type
     function SaveToJSON(EnumSetsAsText: boolean=false;
       reformat: TTextWriterJSONFormat=jsonCompact): RawUTF8; inline;
     procedure Sort(aCompare: TDynArraySortCompare=nil); inline;
-    function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char; inline;
+    function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil{$ifndef NOVARIANTS};
+      CustomVariantOptions: PDocVariantOptions=nil{$endif}): PUTF8Char; inline;
     function SaveToLength: integer; inline;
     function LoadFrom(Source: PAnsiChar): PAnsiChar;  inline;
     property Count: PtrInt read GetCount write SetCount;
@@ -50569,9 +50570,11 @@ procedure TDynArrayHashed.Sort(aCompare: TDynArraySortCompare);
 begin
   InternalDynArray.Sort(aCompare);
 end;
-function TDynArrayHashed.LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char;
+function TDynArrayHashed.LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char{$ifndef NOVARIANTS};
+      CustomVariantOptions: PDocVariantOptions{$endif}): PUTF8Char;
 begin
-  result := InternalDynArray.LoadFromJSON(P,aEndOfObject);
+  result := InternalDynArray.LoadFromJSON(P,aEndOfObject{$ifndef NOVARIANTS},
+    CustomVariantOptions{$endif});
 end;
 function TDynArrayHashed.SaveToLength: integer;
 begin
