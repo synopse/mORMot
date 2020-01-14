@@ -1654,10 +1654,9 @@ begin
   Clear;
   if not Gdip.Exists or (Stream=nil) then
     exit;
-  fGlobalLen := Stream.Size;
+  fGlobalLen := Stream.Size - Stream.Position;
   if fGlobalLen=0 then
     exit;
-  Stream.Seek(0,soFromBeginning);
   fGlobal := GlobalAlloc(GMEM_MOVEABLE,fGlobalLen);
   if fGlobal=0 then
     exit;
