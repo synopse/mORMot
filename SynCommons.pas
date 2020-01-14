@@ -5752,6 +5752,7 @@ type
     function GetHashFromIndex(aIndex: PtrInt): Cardinal;
     procedure HashInvalidate;
     procedure RaiseFatalCollision(const caller: RawUTF8; aHashCode: cardinal);
+    function InternalCompare(Index: cardinal; const Elem): boolean;
   public
     /// initialize the wrapper with a one-dimension dynamic array
     // - this version accepts some hash-dedicated parameters: aHashElement to
@@ -5788,8 +5789,9 @@ type
     // any collision
     // - is a brute force search within fHashs[].Hash values, which may be handy
     // to validate the current HashElement() function
+    // - nocompare=true won't check the actual values for collision, just the hash
     // - returns -1 if no collision was found, or the index of the first collision
-    function IsHashElementWithoutCollision: integer;
+    function IsHashElementWithoutCollision(nocompare: boolean): integer;
     /// search for an element value inside the dynamic array using hashing
     // - ELem should be of the same exact type than the dynamic array, or at
     // least matchs the fields used by both the hash function and Equals method:
@@ -9880,7 +9882,7 @@ type
     // - note that input JSON buffer is not modified in place: no need to create
     // a temporary copy if the buffer is about to be re-used
     // - if the JSON input may not be correct (i.e. if not coming from SaveToJSON),
-    // you may set EnsureNoKeyCollision=TRUE for a slow but safe keys validation
+    // you may set EnsureNoKeyCollision=TRUE for a slow but safe keys uniqueness
     function LoadFromJSON(JSON: PUTF8Char; EnsureNoKeyCollision: boolean=false{$ifndef NOVARIANTS};
       CustomVariantOptions: PDocVariantOptions=nil{$endif}): boolean; overload;
     /// save the content as SynLZ-compressed raw binary data
@@ -13694,9 +13696,10 @@ function GetTickCount64: Int64;
 /// overloaded function optimized for one pass file reading
 // - will use e.g. the FILE_FLAG_SEQUENTIAL_SCAN flag under Windows, as stated
 // by http://blogs.msdn.com/b/oldnewthing/archive/2012/01/20/10258690.aspx
-// - is used e.g. by StringFromFile() and TSynMemoryStreamMapped.Create()
 // - under XP, we observed ERROR_NO_SYSTEM_RESOURCES problems with FileRead()
 // bigger than 32MB
+// - under POSIX, calls plain FileOpen(FileName,fmOpenRead or fmShareDenyNone)
+// - is used e.g. by StringFromFile() and TSynMemoryStreamMapped.Create()
 function FileOpenSequentialRead(const FileName: string): Integer;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -51055,9 +51058,19 @@ begin
   RaiseFatalCollision('HashFind',aHashCode);
 end;
 
+function TDynArrayHashed.InternalCompare(Index: cardinal; const Elem): boolean;
+var P: PAnsiChar;
+begin
+  P := PAnsiChar(Value^)+Index*ElemSize;
+  if Assigned(fEventCompare) then
+    result := fEventCompare(P^,Elem)=0 else
+    if @{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare<>nil then
+      result := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare(P^,Elem)=0 else
+      result := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}ElemEquals(P^,Elem);
+end;
+
 function TDynArrayHashed.HashFindAndCompare(aHashCode: cardinal; const Elem): integer;
 var first,last: integer;
-    P: PAnsiChar;
 begin
   if fHashs=nil then begin // e.g. Count<fHashCountTrigger
     result := Scan(Elem);
@@ -51073,23 +51086,10 @@ begin
   repeat
     with fHashs[result] do
     if Hash=aHashCode then begin
-      P := PAnsiChar(Value^)+Index*ElemSize;
-      if not Assigned(fEventCompare) then
-        if @{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare<>nil then begin
-          if {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare(P^,Elem)=0 then begin
-            result := Index;
-            exit; // found -> returns index in dynamic array
-          end;
-        end else begin
-          if {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}ElemEquals(P^,Elem) then begin
-            result := Index;
-            exit; // found
-          end;
-        end else
-        if fEventCompare(P^,Elem)=0 then begin
-          result := Index;
-          exit; // found
-        end;
+      if InternalCompare(Index,Elem) then begin
+        result := Index;
+        exit; // found -> returns index in dynamic array
+      end;
     end else
     if Hash=HASH_VOID then begin
       result := -(result+1);
@@ -51139,23 +51139,27 @@ begin
   end;
 end;
 
-function TDynArrayHashed.IsHashElementWithoutCollision: integer;
+function TDynArrayHashed.IsHashElementWithoutCollision(nocompare: boolean): integer;
 var i,j: PtrInt;
-    ph: ^TSynHash;
+    pi,pj: ^TSynHash;
     h: cardinal;
 begin
-  if Count>0 then begin
+  if {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCount>0 then begin
     ReHash;
-    for i := 0 to fHashsCount-1 do begin
-      h := fHashs[i].Hash;
-      if h=HASH_VOID then
-        continue;
-      result := fHashs[i].Index;
-      ph := pointer(fHashs);
-      for j := 0 to fHashsCount-1 do
-        if (i<>j) and (ph^.Hash=h) then
-          exit else // found duplicate
-          inc(ph);
+    pi := pointer(fHashs);
+    for i := 1 to fHashsCount do begin
+      h := pi^.Hash;
+      if h<>HASH_VOID then begin
+        pj := pointer(fHashs);
+        for j := 1 to fHashsCount do // O(n*n) brute force check
+          if (pj^.Hash=h) and (pi<>pj) and (nocompare or
+              InternalCompare(pi^.Index,PAnsiChar(Value)[pj^.Index*ElemSize])) then begin
+            result := pj^.Index; // found duplicate
+            exit;
+          end else
+            inc(pj);
+      end;
+      inc(pi);
     end;
   end;
   result := -1;
@@ -59161,8 +59165,8 @@ begin
     fHash.fHashElement := aHashElement;
   if Assigned(aCompare) then
     fHash.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := aCompare;
-  fHash.EventCompare := IntComp;
-  fHash.EventHash := IntHash;
+  fHash.fEventCompare := IntComp;
+  fHash.fEventHash := IntHash;
 end;
 
 function TObjectListPropertyHashed.IntHash(const Elem): cardinal;
@@ -60174,14 +60178,14 @@ end;
 
 function TSynDictionary.LoadFromJSON(const JSON: RawUTF8; EnsureNoKeyCollision: boolean
   {$ifndef NOVARIANTS}; CustomVariantOptions: PDocVariantOptions{$endif}): boolean;
-begin
+begin // pointer(JSON) is not modified in-place thanks to JSONObjectAsJSONArrays()
   result := LoadFromJSON(pointer(JSON),EnsureNoKeyCollision{$ifndef NOVARIANTS},
       CustomVariantOptions{$endif});
 end;
 
 function TSynDictionary.LoadFromJSON(JSON: PUTF8Char; EnsureNoKeyCollision: boolean{$ifndef NOVARIANTS};
   CustomVariantOptions: PDocVariantOptions{$endif}): boolean;
-var k,v: RawUTF8;
+var k,v: RawUTF8; // private copy of the JSON input, expanded as Keys/Values arrays
 begin
   result := false;
   if not JSONObjectAsJSONArrays(JSON,k,v) then
@@ -60194,7 +60198,7 @@ begin
           SetTimeouts;
           if EnsureNoKeyCollision then
             // fKeys.Rehash is not enough, since input JSON may be invalid
-            result := fKeys.IsHashElementWithoutCollision<0 else begin
+            result := fKeys.IsHashElementWithoutCollision({nocompare=}false)<0 else begin
             // optimistic approach
             fKeys.Rehash;
             result := true;
