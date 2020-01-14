@@ -51137,7 +51137,8 @@ begin
 end;
 
 function TDynArrayHashed.IsHashElementWithoutCollision: integer;
-var i,j: integer;
+var i,j: PtrInt;
+    ph: ^TSynHash;
     h: cardinal;
 begin
   if Count>0 then begin
@@ -51147,9 +51148,11 @@ begin
       if h=HASH_VOID then
         continue;
       result := fHashs[i].Index;
+      ph := pointer(fHashs);
       for j := 0 to fHashsCount-1 do
-        if (i<>j) and (fHashs[j].Hash=h) then
-          exit; // found duplicate
+        if (i<>j) and (ph^.Hash=h) then
+          exit else // found duplicate
+          inc(ph);
     end;
   end;
   result := -1;
