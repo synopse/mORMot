@@ -13694,6 +13694,8 @@ function GetTickCount64: Int64;
 // - will use e.g. the FILE_FLAG_SEQUENTIAL_SCAN flag under Windows, as stated
 // by http://blogs.msdn.com/b/oldnewthing/archive/2012/01/20/10258690.aspx
 // - is used e.g. by StringFromFile() and TSynMemoryStreamMapped.Create()
+// - under XP, we observed ERROR_NO_SYSTEM_RESOURCES problems with FileRead()
+// bigger than 32MB
 function FileOpenSequentialRead(const FileName: string): Integer;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -29901,7 +29903,8 @@ end;
 
 function StringFromFile(const FileName: TFileName; HasNoSize: boolean): RawByteString;
 var F: THandle;
-    Read, Size: integer;
+    Read, Size, Chunk: integer;
+    P: PUTF8Char;
     tmp: array[0..$7fff] of AnsiChar;
 begin
   result := '';
@@ -29923,8 +29926,21 @@ begin
       Size := GetFileSize(F,nil);
       if Size>0 then begin
         SetLength(result,Size);
-        if FileRead(F,pointer(result)^,Size)<>Size then
-          result := '';
+        P := pointer(result);
+        repeat
+          Chunk := Size;
+          {$ifdef MSWINDOWS} // FILE_FLAG_SEQUENTIAL_SCAN has limits on XP
+          if Chunk>32 shl 20 then
+            Chunk := 32 shl 20; // avoid e.g. ERROR_NO_SYSTEM_RESOURCES
+          {$endif}
+          Read := FileRead(F,P^,Chunk);
+          if Read<=0 then begin
+            result := '';
+            break;
+          end;
+          inc(P,Read);
+          dec(Size,Read);
+        until Size=0;
       end;
     end;
     FileClose(F);
