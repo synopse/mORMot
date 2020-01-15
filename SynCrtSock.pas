@@ -3502,7 +3502,7 @@ function IdemPCharUp(p: PByteArray; up: PByte; toup: PByteArray): boolean;
 var u: byte;
 begin
   result := false;
-  dec(PtrUInt(p), PtrUInt(up));
+  dec(PtrUInt(p),PtrUInt(up));
   repeat
     u := up^;
     if u=0 then
@@ -3542,14 +3542,27 @@ begin
 end;
 
 function FindHeader(H: PPByteArray; HCount: integer; const upper: SockString): PAnsiChar;
-var up: PByteArray;
+{$ifdef CPUX86} // not enough registers
+var u: PByteArray absolute upper;
+{$else}
+var p,u,up: PByteArray;
+{$endif CPUX86}
 begin
-  if upper<>'' then begin
-    up := @NormToUpper;
-    while HCount>0 do begin
-      dec(HCount);
-      if IdemPCharUp(H^,pointer(upper),up) then begin
+  {$ifdef CPUX86}
+  if (u<>nil) and (HCount>0) then begin
+    repeat
+      if (NormToUpper[H^[0]]=u[0]) and (NormToUpper[H^[1]]=u[1]) and
+         IdemPCharUp(@H^[2],@u[2],@NormToUpper) then begin
         result := pointer(@H^[length(upper)]);
+  {$else}
+  u := pointer(upper);
+  if (u<>nil) and (HCount>0) then begin
+    up := @NormToUpper;
+    repeat
+      p := H^;
+      if (up[p[0]]=u[0]) and (up[p[1]]=u[1]) and IdemPCharUp(@p[2],@u[2],up) then begin
+        result := pointer(@p[length(upper)]);
+  {$endif CPUX86}
         if result^=':' then begin
           repeat
             inc(result);
@@ -3558,7 +3571,8 @@ begin
         end;
       end;
       inc(H);
-    end;
+      dec(HCount);
+    until HCount=0;
   end;
   result := nil;
 end;
@@ -3624,7 +3638,7 @@ end;
 
 function GetHeaderValue(var headers: SockString; const upname: SockString;
   deleteInHeaders: boolean): SockString;
-var i,j,k: integer;
+var i,j,k: PtrInt;
 begin
   result := '';
   if (headers='') or (upname='') then
@@ -5057,7 +5071,7 @@ var len,res: integer;
 begin
   // get data from SockIn buffer, if any (faster than ReadChar)
   result := 0;
-  if Length=0 then
+  if Length<=0 then
     exit;
   if SockIn<>nil then
     with PTextRec(SockIn)^ do
@@ -6723,7 +6737,7 @@ begin // faster than for i := 0 to Count-1 do result := result+Headers[i]+#13#10
     if Lip<>0 then
       inc(L,(REMOTEIP_HEADERLEN+2)+Lip);
     if L<>0 then begin
-      SetLength(fHeaderText,L);
+      SetString(fHeaderText,nil,L);
       P := pointer(fHeaderText);
       for i := 0 to n do begin
         L := length(Headers[i]);
@@ -12484,7 +12498,7 @@ var notif: TPollSocketResult;
     connection: TObject;
     slot: PPollSocketsSlot;
     res,added: integer;
-    temp: array[0..$7fff] of byte; // read up to 32KB chunks
+    temp: array[0..$7fff] of byte; // read up to 32KB per chunk
   procedure CloseConnection(withinreadlock: boolean);
   begin
     if withinreadlock then
