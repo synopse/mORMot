@@ -11416,6 +11416,12 @@ function BinToBase64(const s: RawByteString): RawUTF8; overload;
 /// fast conversion from binary data into Base64 encoded UTF-8 text
 function BinToBase64(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
 
+/// fast conversion from a small binary data into Base64 encoded UTF-8 text
+function BinToBase64Short(const s: RawByteString): shortstring; overload;
+
+/// fast conversion from a small binary data into Base64 encoded UTF-8 text
+function BinToBase64Short(Bin: PAnsiChar; BinBytes: integer): shortstring; overload;
+
 /// fast conversion from binary data into prefixed/suffixed Base64 encoded UTF-8 text
 // - with optional JSON_BASE64_MAGIC prefix (UTF-8 encoded \uFFF0 special code)
 function BinToBase64(const data, Prefix, Suffix: RawByteString; WithMagic: boolean): RawUTF8; overload;
@@ -28187,6 +28193,24 @@ begin
     exit;
   FastSetString(result,nil,BinToBase64Length(len));
   Base64Encode(pointer(result),pointer(s),len);
+end;
+
+function BinToBase64Short(Bin: PAnsiChar; BinBytes: integer): shortstring;
+var destlen: integer;
+begin
+  result := '';
+  if BinBytes=0 then
+    exit;
+  destlen := BinToBase64Length(BinBytes);
+  if destlen>255 then
+    exit; // avoid buffer overflow
+  result[0] := AnsiChar(destlen);
+  Base64Encode(@result[1],Bin,BinBytes);
+end;
+
+function BinToBase64Short(const s: RawByteString): shortstring;
+begin
+  result := BinToBase64Short(pointer(s),length(s));
 end;
 
 function BinToBase64(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
