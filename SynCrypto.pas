@@ -14574,7 +14574,7 @@ begin
   end;
   JWT.result := jwtInvalidAlgorithm;
   if joHeaderParse in fOptions then begin
-    headerlen := PosEx('.',Token);
+    headerlen := PosExChar('.',Token);
     if (headerlen=0) or (headerlen>512) then
       exit;
     Base64URIToBin(tok,headerlen-1,signature);

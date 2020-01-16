@@ -4342,6 +4342,12 @@ procedure TTestLowLevelCommon._UTF8;
     Check(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W))=W);
     {$endif}
   end;
+  procedure tc(const S: RawUTF8; start,count: PtrInt);
+  var t: RawUTF8;
+  begin
+    trimcopy(s,start,count,t);
+    checkEqual(t,trim(copy(s,start,count)));
+  end;
 var i, j, k, len, lenup100, CP, L: integer;
     W: WinAnsiString;
     WS: WideString;
@@ -4689,6 +4695,28 @@ begin
   Check(StringReplaceAll('abcabcabc','bc','B')='aBaBaB');
   Check(StringReplaceAll('abcabcabc','bc','bcd')='abcdabcdabcd');
   Check(StringReplaceAll('abcabcabc','c','C')='abCabCabC');
+  for i := -10 to 50 do
+    for j := -10 to 50 do begin
+      tc('',i,j);
+      tc('1',i,j);
+      tc('1 ',i,j);
+      tc(' 1',i,j);
+      tc('   1',i,j);
+      tc('1   ',i,j);
+      tc('1',i,j);
+      tc('12',i,j);
+      tc('123',i,j);
+      tc(' 234',i,j);
+      tc(' 234 ',i,j);
+      tc(' 2 4',i,j);
+      tc(' 2 4 ',i,j);
+      tc('  3    ',i,j);
+      tc('  3   7  ',i,j);
+      tc(' 234 6',i,j);
+      tc('234 67 ',i,j);
+      tc(' 234 67 ',i,j);
+      tc(' 234 67 ',i,maxInt);
+    end;
 end;
 
 procedure TTestLowLevelCommon.Iso8601DateAndTime;

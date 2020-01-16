@@ -945,7 +945,7 @@ begin
       TypeInfoToQualifiedName(typInfo,typName);
       i := PosExChar('.',typName);
       if i>0 then
-        typName := trim(copy(typName,i+1,maxInt)); // trim unit name
+        trimcopy(typName,i+1,maxInt,typName); // trim unit name
     end else
       typName := TYPES_LANG[lngDelphi,typ];
   end;
