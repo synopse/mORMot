@@ -194,7 +194,7 @@ var
 /// similar to Windows sleep() API call, to be truly cross-platform
 // - using millisecond resolution
 // - SleepHiRes(0) calls ThreadSwitch on windows, but this POSIX version will
-// wait 1 microsecond unless SleepHiRes0Yield is forced to true (bad idea)
+// wait 10 microsecond unless SleepHiRes0Yield is forced to true (bad idea)
 // - in respect to RTL's Sleep() function, it will return on ESysEINTR
 procedure SleepHiRes(ms: cardinal);
 
@@ -525,7 +525,7 @@ begin
       exit;
     end else begin
       timeout.tv_sec := 0;
-      timeout.tv_nsec := 1000; // 1us is around timer resolution on modern HW
+      timeout.tv_nsec := 10000; // 10us is around timer resolution on modern HW
     end else begin
     timeout.tv_sec := ms div 1000;
     timeout.tv_nsec := 1000000*(ms mod 1000);
