@@ -663,6 +663,7 @@ type
   THttpSocketCompressRecDynArray = array of THttpSocketCompressRec;
 
   /// identify some items in a list of known compression algorithms
+  // - filled from ACCEPT-ENCODING: header value
   THttpSocketCompressSet = set of 0..31;
 
   /// parent of THttpClientSocket and THttpServerSocket classes
@@ -673,7 +674,7 @@ type
   THttpSocket = class(TCrtSocket)
   protected
     /// true if the TRANSFER-ENCODING: CHUNKED was set in headers
-    Chunked: boolean;
+    fChunked: boolean;
     /// to call GetBody only once
     fBodyRetrieved: boolean;
     /// used by RegisterCompress method
@@ -681,7 +682,7 @@ type
     /// set by RegisterCompress method
     fCompressAcceptEncoding: SockString;
     /// GetHeader set index of protocol in fCompress[], from ACCEPT-ENCODING:
-    fCompressHeader: THttpSocketCompressSet;
+    fCompressAcceptHeader: THttpSocketCompressSet;
     /// same as HeaderGetValue('CONTENT-ENCODING'), but retrieved during Request
     // and mapped into the fCompress[] array
     fContentCompress: integer;
@@ -714,11 +715,16 @@ type
     /// same as HeaderGetValue('CONTENT-LENGTH'), but retrieved during Request
     // - is overridden with real Content length during HTTP body retrieval
     ContentLength: integer;
+    /// same as HeaderGetValue('SERVER-INTERNALSTATE'), but retrieved during Request
+    // - proprietary header, used with our RESTful ORM access
+    ServerInternalState: integer;
     /// same as HeaderGetValue('CONTENT-TYPE'), but retrieved during Request
     ContentType: SockString;
+    /// same as HeaderGetValue('UPGRADE'), but retrieved during Request
+    Upgrade: SockString;
     /// same as HeaderGetValue('CONNECTION')='Close', but retrieved during Request
     ConnectionClose: boolean;
-    /// same as HeaderGetValue('CONNECTION')='Upgrade', but retrieved during Request
+    /// same as HeaderGetValue('CONNECTION-UPGRADE')<>'', but retrieved during Request
     ConnectionUpgrade: boolean;
     /// retrieve the HTTP headers into Headers[] and fill most properties below
     procedure GetHeader;
@@ -2129,7 +2135,7 @@ type
     /// set by RegisterCompress method
     fCompressAcceptEncoding: SockString;
     /// set index of protocol in fCompress[], from ACCEPT-ENCODING: header
-    fCompressHeader: THttpSocketCompressSet;
+    fCompressAcceptHeader: THttpSocketCompressSet;
     fTag: PtrInt;
     class function InternalREST(const url,method,data,header: SockString;
       aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString=nil): SockString;
@@ -3542,13 +3548,14 @@ begin
 end;
 
 function FindHeader(H: PPByteArray; HCount: integer; const upper: SockString): PAnsiChar;
-{$ifdef CPUX86} // not enough registers
+{$ifdef CPUX86NOTPIC} // not enough registers
 var u: PByteArray absolute upper;
 {$else}
 var p,u,up: PByteArray;
-{$endif CPUX86}
+{$endif CPUX86NOTPIC}
+label found;
 begin
-  {$ifdef CPUX86}
+  {$ifdef CPUX86NOTPIC}
   if (u<>nil) and (HCount>0) then begin
     repeat
       if (NormToUpper[H^[0]]=u[0]) and (NormToUpper[H^[1]]=u[1]) and
@@ -3558,13 +3565,27 @@ begin
   u := pointer(upper);
   if (u<>nil) and (HCount>0) then begin
     up := @NormToUpper;
+    if length(upper)>4 then // optimize most common case
+      repeat
+        p := H^;
+        if (up[p[0]]=u[0]) and (up[p[1]]=u[1]) and (up[p[2]]=u[2]) and
+           (up[p[3]]=u[3]) and (up[p[4]]=u[4]) and (up[p[5]]=u[5]) and
+           IdemPCharUp(@p[6],@u[6],up) then begin
+          result := pointer(@p[length(upper)]);
+          if result^=':' then
+            goto found;
+        end;
+        inc(H);
+        dec(HCount);
+      until HCount=0
+    else
     repeat
       p := H^;
-      if (up[p[0]]=u[0]) and (up[p[1]]=u[1]) and IdemPCharUp(@p[2],@u[2],up) then begin
+      if IdemPCharUp(p,pointer(u),up) then begin
         result := pointer(@p[length(upper)]);
-  {$endif CPUX86}
+  {$endif CPUX86NOTPIC}
         if result^=':' then begin
-          repeat
+found:   repeat
             inc(result);
           until result^<>' ';
           exit;
@@ -3687,19 +3708,44 @@ end;
 
 // rewrite some functions to avoid unattempted ansi<->unicode conversion
 
+procedure TrimCopy(const S: SockString; start,count: PtrInt;
+  out result: SockString); // faster alternative to Trim(copy())
+var L: PtrInt;
+begin
+  if count<=0 then
+    exit;
+  if start<=0 then
+    start := 1;
+  L := Length(S);
+  while (start<=L) and (S[start]<=' ') do begin
+    inc(start); dec(count); end;
+  dec(start);
+  dec(L,start);
+  if count<L then
+    L := count;
+  while L>0 do
+    if S[start+L]<=' ' then
+      dec(L) else
+      break;
+  if L>0 then
+    SetString(result,PAnsiChar(@PByteArray(S)[start]),L);
+end;
+
 function Trim(const S: SockString): SockString;
 {$ifdef FPC_OR_PUREPASCAL}
-var I, L: Integer;
+var i, L: PtrInt;
 begin
   L := Length(S);
-  I := 1;
-  while (I<=L) and (S[i]<=' ') do Inc(I);
-  if I>L then
-    Result := '' else
-  if (I=1) and (S[L]>' ') then
-    Result := S else begin
-    while S[L]<=' ' do Dec(L);
-    Result := Copy(S, I, L-I+1);
+  i := 1;
+  while (i<=L) and (S[i]<=' ') do
+    inc(i);
+  if i>L then
+    result := '' else
+  if (i=1) and (S[L]>' ') then
+    result := S else begin
+    while S[L]<=' ' do
+      dec(L);
+    result := copy(S,i,L-i+1);
   end;
 end;
 {$else}
@@ -3945,7 +3991,7 @@ begin
         exit;
       end;
   if n=sizeof(integer)*8 then
-    exit; // fCompressHeader is 0..31 (casted as integer)
+    exit; // fCompressAcceptHeader is 0..31 (casted as integer)
   SetLength(Compress,n+1);
   with Compress[n] do begin
     Name := aName;
@@ -4795,8 +4841,8 @@ var i: integer;
 begin
   for i := length(Text)-1 downto 2 do
     if Text[i]=Sep then begin
-      Before := trim(copy(Text,1,i-1));
-      After := trim(copy(Text,i+1,maxInt));
+      trimcopy(Text,1,i-1,Before);
+      trimcopy(Text,i+1,maxInt,After);
       result := true;
       exit;
     end;
@@ -5152,7 +5198,7 @@ begin
   cap := Length(fSndBuf);
   if Len+fSndBufLen>cap then
     SetLength(fSndBuf,len+cap+cap shr 3+2048);
-  move(P^,PAnsiChar(pointer(fSndBuf))[fSndBufLen],Len);
+  move(P^,PByteArray(fSndBuf)[fSndBufLen],Len);
   inc(fSndBufLen,Len);
 end;
 
@@ -5371,14 +5417,14 @@ procedure TCrtSocket.SockRecvLn(out Line: SockString; CROnly: boolean);
             LP := P-tmp; // append to already read chars
             L := length(Line);
             Setlength(Line,L+LP);
-            move(tmp,(PAnsiChar(pointer(Line))+L)^,LP);
+            move(tmp,PByteArray(Line)[L],LP);
           end;
           exit;
         end else
         if P=@tmp[1023] then begin // tmp[] buffer full?
           L := length(Line); // -> append to already read chars
           Setlength(Line,L+1024);
-          move(tmp,(PAnsiChar(pointer(Line))+L)^,1024);
+          move(tmp,PByteArray(Line)[L],1024);
           P := tmp;
         end else
           inc(P);
@@ -6309,7 +6355,7 @@ var ctxt: THttpServerRequest;
       if s<>'' then begin // no void line (means headers ending)
         ClientSock.SockSend(s);
         if IdemPChar(pointer(s),'CONTENT-ENCODING:') then
-          integer(ClientSock.fCompressHeader) := 0; // custom encoding: don't compress
+          integer(ClientSock.fCompressAcceptHeader) := 0; // custom encoding: don't compress
       end;
     end;
     // 2.2. generic headers
@@ -6575,7 +6621,7 @@ begin
   Content := '';
   {$I-}
   // direct read bytes, as indicated by Content-Length or Chunked
-  if Chunked then begin // we ignore the Length
+  if fChunked then begin // we ignore the Length
     LContent := 0; // current read position in Content
     repeat
       if SockIn<>nil then begin
@@ -6593,7 +6639,7 @@ begin
         break;
       end;
       SetLength(Content,LContent+Len); // reserve memory space for this chunk
-      SockInRead(pointer(PAnsiChar(pointer(Content))+LContent),Len) ; // append chunk data
+      SockInRead(@PByteArray(Content)[LContent],Len) ; // append chunk data
       inc(LContent,Len);
       SockRecvLn; // ignore next #13#10
     until false;
@@ -6634,18 +6680,21 @@ begin
 end;
 
 procedure THttpSocket.GetHeader;
-var s: SockString;
+var s,c: SockString;
     i, n: integer;
     P: PAnsiChar;
 begin
+  fHeaderText := '';
+  fChunked := false;
   fBodyRetrieved := false;
-  ContentType := '';
-  ContentLength := -1;
   fContentCompress := -1;
+  integer(fCompressAcceptHeader) := 0;
+  ContentType := '';
+  Upgrade := '';
+  ContentLength := -1;
   ConnectionClose := false;
   ConnectionUpgrade := false;
-  Chunked := false;
-  fHeaderText := '';
+  ServerInternalState := 0;
   n := 0;
   repeat
     SockRecvLn(s);
@@ -6656,29 +6705,29 @@ begin
     Headers[n] := s;
     inc(n);
     P := pointer(s);
-    case IdemPCharArray(P,['CONTENT-','TRANSFER-ENCODING: CHUNKED','CONNECTION: ',
-      'ACCEPT-ENCODING:']) of
-    0: case IdemPCharArray(P+8,['LENGTH:','TYPE:','ENCODING:']) of
+    case IdemPCharArray(P,['CONTENT-', 'TRANSFER-ENCODING: CHUNKED', 'CONNECTION: ',
+      'ACCEPT-ENCODING:', 'UPGRADE:', 'SERVER-INTERNALSTATE:']) of
+    0: case IdemPCharArray(P+8,['LENGTH:', 'TYPE:', 'ENCODING:']) of
        0: ContentLength := GetCardinal(P+16);
-       1: ContentType := trim(copy(s,14,128));
+       1: trimcopy(s,14,255,ContentType);
        2: if fCompress<>nil then begin
-            i := 18;
-            while s[i+1]=' ' do inc(i);
-            delete(s,1,i);
+            trimcopy(s,18,255,c);
             for i := 0 to high(fCompress) do
-              if fCompress[i].Name=s then begin
+              if fCompress[i].Name=c then begin
                 fContentCompress := i;
                 break;
               end;
           end;
        end;
-    1: Chunked := true;
-    2: case IdemPCharArray(P+12,['CLOSE','UPGRADE','KEEP-ALIVE, UPGRADE']) of
+    1: fChunked := true;
+    2: case IdemPCharArray(P+12,['CLOSE', 'UPGRADE', 'KEEP-ALIVE, UPGRADE']) of
        0:   ConnectionClose := true;
        1,2: ConnectionUpgrade := true;
        end;
     3: if fCompress<>nil then
-         fCompressHeader := ComputeContentEncoding(fCompress,P+16);
+         fCompressAcceptHeader := ComputeContentEncoding(fCompress,P+16);
+    4: trimcopy(s,9,255,Upgrade);
+    5: ServerInternalState := GetCardinal(P+21);
     end;
   until false;
   SetLength(Headers,n);
@@ -6711,7 +6760,8 @@ begin
       end;
       while (P^=#13) or (P^=#10) do inc(P);
     until P^=#0;
-  if (aForcedContentType='') or (HeaderGetValue('CONTENT-TYPE')<>'') then begin
+  if (aForcedContentType='') or
+     (FindHeader(pointer(Headers),length(Headers),'CONTENT-TYPE')<>nil) then begin
     SetLength(Headers,n);
     exit;
   end;
@@ -6783,8 +6833,8 @@ procedure THttpSocket.CompressDataAndWriteHeaders(const OutContentType: SockStri
   var OutContent: SockString);
 var OutContentEncoding: SockString;
 begin
-  if integer(fCompressHeader)<>0 then begin
-    OutContentEncoding := CompressDataAndGetHeaders(fCompressHeader,fCompress,
+  if integer(fCompressAcceptHeader)<>0 then begin
+    OutContentEncoding := CompressDataAndGetHeaders(fCompressAcceptHeader,fCompress,
       OutContentType,OutContent);
     if OutContentEncoding<>'' then
         SockSend(['Content-Encoding: ',OutContentEncoding]);
@@ -6837,12 +6887,16 @@ begin
     // get headers and content
     GetHeader;
     if fServer<>nil then begin // nil from TRTSPOverHTTPServer
-      P := FindHeader(pointer(Headers),length(Headers),fServer.fRemoteIPHeaderUpper);
-      if (P<>nil) and (P^<>#0) then
-        fRemoteIP := P;
-      P := FindHeader(pointer(Headers),length(Headers),fServer.fRemoteConnIDHeaderUpper);
-      if P<>nil then
-        fRemoteConnectionID := GetNextItemUInt64(P);
+      if fServer.fRemoteIPHeaderUpper<>'' then begin
+        P := FindHeader(pointer(Headers),length(Headers),fServer.fRemoteIPHeaderUpper);
+        if (P<>nil) and (P^<>#0) then
+          fRemoteIP := P;
+      end;
+      if fServer.fRemoteConnIDHeaderUpper<>'' then begin
+        P := FindHeader(pointer(Headers),length(Headers),fServer.fRemoteConnIDHeaderUpper);
+        if P<>nil then
+          fRemoteConnectionID := GetNextItemUInt64(P);
+      end;
     end;
     if ConnectionClose then
       fKeepAliveClient := false;
@@ -10682,8 +10736,8 @@ begin
       InternalAddHeader(SockString('Content-Type: ')+InDataType);
     // handle custom compression
     aData := InData;
-    if integer(fCompressHeader)<>0 then begin
-      aDataEncoding := CompressDataAndGetHeaders(fCompressHeader,fCompress,
+    if integer(fCompressAcceptHeader)<>0 then begin
+      aDataEncoding := CompressDataAndGetHeaders(fCompressAcceptHeader,fCompress,
         InDataType,aData);
       if aDataEncoding<>'' then
         InternalAddHeader(SockString('Content-Encoding: ')+aDataEncoding);
@@ -10704,7 +10758,7 @@ begin
               raise ECrtSocket.CreateFmt('%s uncompress',[Name]) else
               break; // successfully uncompressed content
       if aAcceptEncoding<>'' then
-        fCompressHeader := ComputeContentEncoding(fCompress,pointer(aAcceptEncoding));
+        fCompressAcceptHeader := ComputeContentEncoding(fCompress,pointer(aAcceptEncoding));
     end;
   finally
     InternalCloseRequest;
@@ -11659,9 +11713,9 @@ begin
   while P<>nil do begin
     GetNextLine(P,s);
     if IdemPChar(pointer(s),'ACCEPT-ENCODING:') then
-      AcceptEncoding := trim(copy(s,17,100)) else
+      trimcopy(s,17,100,AcceptEncoding) else
     if IdemPChar(pointer(s),'CONTENT-ENCODING:') then
-      Encoding := trim(copy(s,19,100))
+      trimcopy(s,19,100,Encoding);
   end;
   Data := fOut.Data;
 end;

@@ -1285,7 +1285,7 @@ begin
   STATUS_SUCCESS:
     if fCache <> nil then begin
       if fHttp <> nil then
-        cache.Tag := trim(FindIniNameValue(pointer(headout),'ETAG:')) else
+        cache.Tag := Trim(FindIniNameValue(pointer(headout),'ETAG:')) else
         cache.Tag := fSocket.HeaderGetValue('ETAG');
       if cache.Tag <> '' then begin
         cache.Content := result;
@@ -2926,15 +2926,14 @@ end;
 
 function HttpServerWebSocketUpgrade(ClientSock: THttpServerSocket;
   Protocols: TWebSocketProtocolList; out Protocol: TWebSocketProtocol): integer;
-var upgrade,uri,version,prot,subprot,key,extin,extout,header: RawUTF8;
+var uri,version,prot,subprot,key,extin,extout,header: RawUTF8;
     extins: TRawUTF8DynArray;
     P: PUTF8Char;
     Digest: TSHA1Digest;
 begin
   result := STATUS_BADREQUEST;
   try
-    upgrade := ClientSock.HeaderGetValue('UPGRADE');
-    if not IdemPropNameU(upgrade,'websocket') then
+    if not IdemPropNameU(ClientSock.Upgrade,'websocket') then
       exit;
     version := ClientSock.HeaderGetValue('SEC-WEBSOCKET-VERSION');
     if GetInteger(pointer(version))<13 then
@@ -3025,7 +3024,7 @@ begin
   Context.fProcess.fServerResp := Context;
   fWebSocketConnections.SafeAdd(Context);
   try
-    Context.fProcess.ProcessLoop;
+    Context.fProcess.ProcessLoop;  // run main blocking loop
     ClientSock.KeepAliveClient := false; // close connection with WebSockets
   finally
     FreeAndNil(Context.fProcess); // notify end of WebSockets
@@ -3339,7 +3338,7 @@ begin
       result := 'Invalid HTTP Upgrade Header';
       if not IdemPChar(pointer(cmd),'HTTP/1.1 101') or
          not ConnectionUpgrade or (ContentLength>0) or
-         not IdemPropNameU(HeaderGetValue('UPGRADE'),'websocket') or
+         not IdemPropNameU(Upgrade,'websocket') or
          not aProtocol.SetSubprotocol(prot) then
         exit;
       aProtocol.fName := prot;
