@@ -54767,7 +54767,7 @@ begin
   _AddRef;
 end;
 
-procedure IgnoreComma(var P: PUTF8Char);
+procedure IgnoreComma(var P: PUTF8Char); {$ifdef HASINLINE}inline;{$endif}
 begin
   if P<>nil then begin
     while (P^<=' ') and (P^<>#0) do inc(P);

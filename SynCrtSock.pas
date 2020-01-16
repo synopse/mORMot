@@ -755,6 +755,20 @@ type
 
   THttpServer = class;
 
+  /// results of THttpServerSocket.GetRequest virtual method
+  // - return grError if the socket was not connected any more, or grException
+  // if any exception occured during the process
+  // - grOversizedPayload is returned when MaximumAllowedContentLength is reached
+  // - grRejected is returned when OnBeforeBody returned not 200
+  // - grTimeout is returned when HeaderRetrieveAbortDelay is reached
+  // - grHeaderReceived is returned for GetRequest({withbody=}false)
+  // - grBodyReceived is returned for GetRequest({withbody=}true)
+  // - grOwned indicates that this connection is now handled by another thread,
+  // e.g. asynchronous WebSockets
+  THttpServerSocketGetRequestResult = (
+    grError, grException, grOversizedPayload, grRejected, grTimeout,
+    grHeaderReceived, grBodyReceived, grOwned);
+
   /// Socket API based HTTP/1.1 server class used by THttpServer Threads
   THttpServerSocket = class(THttpSocket)
   protected
@@ -775,10 +789,9 @@ type
     procedure InitRequest(aClientSock: TSocket; const aRemoteIP: SockString='');
     /// main object function called after aClientSock := Accept + Create:
     // - get Command, Method, URL, Headers and Body (if withBody is TRUE)
-    // - get sent data in Content (if ContentLength<>0)
-    // - return false if the socket was not connected any more, or if
-    // any exception occured during the process
-    function GetRequest(withBody: boolean; headerMaxTix: Int64): boolean;
+    // - get sent data in Content (if withBody=true and ContentLength<>0)
+    // - returned enumeration will indicates the processing state
+    function GetRequest(withBody: boolean; headerMaxTix: Int64): THttpServerSocketGetRequestResult; virtual;
     /// contains the method ('GET','POST'.. e.g.) after GetRequest()
     property Method: SockString read fMethod;
     /// contains the URL ('/' e.g.) after GetRequest()
@@ -903,7 +916,8 @@ type
   {$M-}
 
   /// HTTP response Thread as used by THttpServer Socket API based class
-  // - Execute procedure get the request and calculate the answer
+  // - Execute procedure get the request and calculate the answer, using
+  // the thread for a single client connection, until it is closed
   // - you don't have to overload the protected THttpServerResp Execute method:
   // override THttpServer.Request() function or, if you need a lower-level access
   // (change the protocol, e.g.) THttpServer.Process() method itself
@@ -1058,10 +1072,6 @@ type
   TSynThreadPoolTHttpServer = class(TSynThreadPool)
   protected
     fServer: THttpServer;
-    fHeaderErrors: integer;
-    fHeaderProcessed: integer;
-    fBodyProcessed: integer;
-    fBodyOwnThreads: integer;
     {$ifndef USE_WINIOCP}
     function QueueLength: integer; override;
     {$endif}
@@ -1073,15 +1083,6 @@ type
     // - Task() overridden method processs the HTTP request set by Push()
     // - up to 256 threads can be associated to a Thread Pool
     constructor Create(Server: THttpServer; NumberOfThreads: Integer=32); reintroduce;
-  published
-    /// how many invalid HTTP headers have been rejected by this thread pool
-    property HeaderErrors: integer read fHeaderErrors write fHeaderErrors;
-    /// how many HTTP headers have been processed by this thread pool
-    property HeaderProcessed: integer read fHeaderProcessed write fHeaderProcessed;
-    /// how many HTTP bodies have been processed by this thread pool
-    property BodyProcessed: integer read fBodyProcessed write fBodyProcessed;
-    /// how many HTTP bodies have been processed by a dedicated THttpServerResp thread
-    property BodyOwnThreads: integer read fBodyOwnThreads write fBodyOwnThreads;
   end;
 
   {$M+} // to have existing RTTI for published properties
@@ -1935,6 +1936,10 @@ type
   end;
   {$endif MSWINDOWS}
 
+  /// meta-class of the THttpServerSocket process
+  // - used to override THttpServerSocket.GetRequest for instance
+  THttpServerSocketClass = class of THttpServerSocket;
+
   /// event handler used by THttpServer.Process to send a local file
   // when HTTP_RESP_STATICFILE content-type is returned by the service
   // - can be defined e.g. to use NGINX X-Accel-Redirect header
@@ -1946,7 +1951,7 @@ type
 
   /// main HTTP server Thread using the standard Sockets API (e.g. WinSock)
   // - bind to a port and listen to incoming requests
-  // - assign this requests to THttpServerResp threads
+  // - assign this requests to THttpServerResp threads from a ThreadPool
   // - it implements a HTTP/1.1 compatible server, according to RFC 2068 specifications
   // - if the client is also HTTP/1.1 compatible, KeepAlive connection is handled:
   //  multiple requests will use the existing connection and thread;
@@ -1974,6 +1979,9 @@ type
     fNginxSendFileFrom: array of TFileName;
     fHTTPQueueLength: cardinal;
     fExecuteFinished: boolean;
+    fStats: array[THttpServerSocketGetRequestResult] of integer;
+    fSocketClass: THttpServerSocketClass;
+    function GetStat(one: THttpServerSocketGetRequestResult): integer;
     function GetHTTPQueueLength: Cardinal; override;
     procedure SetHTTPQueueLength(aValue: Cardinal); override;
     procedure InternalHttpServerRespListAdd(resp: THttpServerResp);
@@ -2025,6 +2033,9 @@ type
     // - THttpServerSocket are created on the fly for every request, then
     // a THttpServerResp thread is created for handling this THttpServerSocket
     property Sock: TCrtSocket read fSock;
+    /// custom event handler used to send a local file for HTTP_RESP_STATICFILE
+    // - see also NginxSendFileFrom() method
+    property OnSendFile: TOnHttpServerSendFile read fOnSendFile write fOnSendFile;
   published
     /// will contain the total number of connections to the server
     // - it's the global count since the server started
@@ -2052,9 +2063,23 @@ type
     /// milliseconds delay to reject a connection due to too long header retrieval
     // - default is 0, i.e. not checked (typically not needed behind a reverse proxy)
     property HeaderRetrieveAbortDelay: integer read fHeaderRetrieveAbortDelay write fHeaderRetrieveAbortDelay;
-    /// custom event handler used to send a local file for HTTP_RESP_STATICFILE
-    // - see also NginxSendFileFrom() method
-    property OnSendFile: TOnHttpServerSendFile read fOnSendFile write fOnSendFile;
+    /// how many invalid HTTP headers have been rejected
+    property StatHeaderErrors: integer index grError read GetStat;
+    /// how many invalid HTTP headers raised an exception
+    property StatHeaderException: integer index grException read GetStat;
+    /// how many HTTP requests pushed more than MaximumAllowedContentLength bytes
+    property StatOversizedPayloads: integer index grOversizedPayload read GetStat;
+    /// how many HTTP requests were rejected by the OnBeforeBody event handler
+    property StatRejected: integer index grRejected read GetStat;
+    /// how many HTTP requests were rejected after HeaderRetrieveAbortDelay timeout
+    property StatHeaderTimeout: integer index grTimeout read GetStat;
+    /// how many HTTP headers have been processed
+    property StatHeaderProcessed: integer index grHeaderReceived read GetStat;
+    /// how many HTTP bodies have been processed
+    property StatBodyProcessed: integer index grBodyReceived read GetStat;
+    /// how many HTTP connections were passed to an asynchronous handler
+    // - e.g. for background WebSockets processing after proper upgrade
+    property StatOwnedConnections: integer index grOwned read GetStat;
   end;
   {$M-}
 
@@ -6089,6 +6114,8 @@ begin
   SetOnTerminate(OnStop);
   if fThreadRespClass=nil then
     fThreadRespClass := THttpServerResp;
+  if fSocketClass=nil then
+    fSocketClass := THttpServerSocket;
   if ServerThreadPoolCount>0 then begin
     fThreadPool := TSynThreadPoolTHttpServer.Create(self,ServerThreadPoolCount);
     fHTTPQueueLength := 1000;
@@ -6135,6 +6162,11 @@ begin
   FreeAndNil(fSock);
   inherited Destroy;     // direct Thread abort, no wait till ended
   DeleteCriticalSection(fProcessCS);
+end;
+
+function THttpServer.GetStat(one: THttpServerSocketGetRequestResult): integer;
+begin
+  result := fStats[one];
 end;
 
 function THttpServer.GetHTTPQueueLength: Cardinal;
@@ -6219,6 +6251,7 @@ var ClientSock: TSocket;
     ClientSin: TVarSin;
     {$ifdef MONOTHREAD}
     ClientCrtSock: THttpServerSocket;
+    endtix: Int64;
     {$endif}
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
@@ -6240,13 +6273,13 @@ begin
       end;
       OnConnect;
       {$ifdef MONOTHREAD}
-      ClientCrtSock := THttpServerSocket.Create(self);
+      ClientCrtSock := fSocketClass.Create(self);
       try
         ClientCrtSock.InitRequest(ClientSock);
         endtix := fHeaderRetrieveAbortDelay;
         if endtix>0 then
           inc(endtix,GetTick64);
-        if ClientCrtSock.GetRequest({withbody=}true,endtix) then
+        if ClientCrtSock.GetRequest({withbody=}true,endtix) in [grBodyReceived,grHeaderReceived] then
           Process(ClientCrtSock,0,self);
         OnDisconnect;
         DirectShutdown(ClientSock);
@@ -6480,9 +6513,13 @@ end;
 { THttpServerResp }
 
 constructor THttpServerResp.Create(aSock: TSocket; aServer: THttpServer);
+var c: THttpServerSocketClass;
 begin
+  if aServer=nil then
+    c := THttpServerSocket else
+    c := aServer.fSocketClass;
   fClientSock := aSock; // ensure it is set ASAP: on Linux, Execute raises immediately
-  Create(THttpServerSocket.Create(aServer),aServer);
+  Create(c.Create(aServer),aServer);
 end;
 
 constructor THttpServerResp.Create(aServerSock: THttpServerSocket; aServer: THttpServer);
@@ -6504,6 +6541,7 @@ procedure THttpServerResp.Execute;
   procedure HandleRequestsProcess;
   var keepaliveendtix,beforetix,headertix,tix: Int64;
       pending: TCrtSocketPending;
+      res: THttpServerSocketGetRequestResult;
   begin
     {$ifdef SYNCRTDEBUGLOW} try {$endif}
     try
@@ -6544,15 +6582,26 @@ procedure THttpServerResp.Execute;
             headertix := fServer.HeaderRetrieveAbortDelay;
             if headertix>0 then
               inc(headertix,beforetix);
-            if not fServerSock.GetRequest({withbody=}true,headertix) then
-              // fServerSock connection was down or headers are not correct
+            res := fServerSock.GetRequest({withbody=}true,headertix);
+            if (fServer=nil) or fServer.Terminated then
+              exit; // server is down -> disconnect the client
+            InterLockedIncrement(fServer.fStats[res]);
+            case res of
+            grBodyReceived, grHeaderReceived: begin
+              // calc answer and send response
+              fServer.Process(fServerSock,ConnectionID,self);
+              // keep connection only if necessary
+              if fServerSock.KeepAliveClient then
+                break else
+                exit;
+            end;
+            grOwned: begin
+              fServerSock := nil; // will be freed by new owner
               exit;
-            // calc answer and send response
-            fServer.Process(fServerSock,ConnectionID,self);
-            // keep connection only if necessary
-            if fServerSock.KeepAliveClient then
-              break else
+            end;
+            else // fServerSock connection was down or headers are not correct
               exit;
+            end;
           end;
           end;
          until false;
@@ -6865,12 +6914,12 @@ begin
   AcceptRequest(aClientSock, @fRemoteIP);
 end;
 
-function THttpServerSocket.GetRequest(withBody: boolean; headerMaxTix: Int64): boolean;
+function THttpServerSocket.GetRequest(withBody: boolean; headerMaxTix: Int64): THttpServerSocketGetRequestResult;
 var P: PAnsiChar;
     status: cardinal;
     reason, allheaders: SockString;
 begin
-  result := false;
+  result := grError;
   try
     // 1st line is command: 'GET /path HTTP/1.1' e.g.
     SockRecvLn(Command);
@@ -6902,13 +6951,16 @@ begin
       fKeepAliveClient := false;
     if (ContentLength<0) and (KeepAliveClient or (fMethod = 'GET')) then
       ContentLength := 0; // HTTP/1.1 and no content length -> no eof
-    if (headerMaxTix>0) and (GetTick64>headerMaxTix) then
-        exit; // allow 10 sec for header -> DOS/TCPSYN Flood
+    if (headerMaxTix>0) and (GetTick64>headerMaxTix) then begin
+      result := grTimeout;
+      exit; // allow 10 sec for header -> DOS/TCPSYN Flood
+    end;
     if fServer<>nil then begin
       if (ContentLength>0) and (fServer.MaximumAllowedContentLength>0) and
          (cardinal(ContentLength)>fServer.MaximumAllowedContentLength) then begin
         SockSend('HTTP/1.0 413 Payload Too Large'#13#10#13#10'Rejected');
         SockSendFlush('');
+        result := grOversizedPayload;
         exit;
       end;
       if Assigned(fServer.OnBeforeBody) then begin
@@ -6923,16 +6975,19 @@ begin
           reason := StatusCodeToReason(status);
           SockSend(['HTTP/1.0 ',status,' ',reason,#13#10#13#10,reason,' ', status]);
           SockSendFlush('');
+          result := grRejected;
           exit;
         end;
       end;
     end;
-    if withBody and not ConnectionUpgrade then
+    if withBody and not ConnectionUpgrade then begin
       GetBody;
-    result := true;
+      result := grBodyReceived;
+    end else
+      result := grHeaderReceived;
   except
     on E: Exception do
-      result := false; // mark error
+      result := grException;
   end;
 end;
 
@@ -7339,18 +7394,23 @@ end;
 procedure TSynThreadPoolTHttpServer.Task(aCaller: TSynThread; aContext: Pointer);
 var ServerSock: THttpServerSocket;
     headertix: Int64;
+    res: THttpServerSocketGetRequestResult;
 begin
   if fServer.Terminated then
     exit;
-  ServerSock := THttpServerSocket.Create(fServer);
+  ServerSock := fServer.fSocketClass.Create(fServer);
   try
     ServerSock.InitRequest(TSocket(PtrUInt(aContext)));
     // get Header of incoming request in the thread pool
     headertix := fServer.HeaderRetrieveAbortDelay;
     if headertix>0 then
       headertix := headertix+GetTick64;
-    if ServerSock.GetRequest({withbody=}false,headertix) then begin
-      InterlockedIncrement(fHeaderProcessed);
+    res := ServerSock.GetRequest({withbody=}false,headertix);
+    if (fServer=nil) or fServer.Terminated then
+      exit;
+    InterlockedIncrement(fServer.fStats[res]);
+    case res of
+    grHeaderReceived: begin
       // connection and header seem valid -> process request further
       if (fServer.ServerKeepAliveTimeOut>0) and
          (fServer.fInternalHttpServerRespList.Count<THREADPOOL_MAXWORKTHREADS) and
@@ -7359,19 +7419,22 @@ begin
         // HTTP/1.1 Keep Alive (including WebSockets) or posted data > 16 MB
         // -> process in dedicated background thread
         fServer.fThreadRespClass.Create(ServerSock,fServer);
-        ServerSock := nil; // THttpServerResp will do ServerSock.Free
-        InterlockedIncrement(fBodyOwnThreads);
+        ServerSock := nil; // THttpServerResp will own and free ServerSock
       end else begin
         // no Keep Alive = multi-connection -> process in the Thread Pool
-        ServerSock.GetBody; // we need to get it now
+        if not ServerSock.ConnectionUpgrade then begin
+          ServerSock.GetBody; // we need to get it now
+          InterlockedIncrement(fServer.fStats[grBodyReceived]);
+        end;
         // multi-connection -> ID=0
         fServer.Process(ServerSock,ServerSock.RemoteConnectionID,aCaller);
         fServer.OnDisconnect;
         // no Shutdown here: will be done client-side
-        InterlockedIncrement(fBodyProcessed);
       end;
-    end else
-      InterlockedIncrement(fHeaderErrors);
+    end;
+    grOwned: // e.g. for asynchrounous WebSockets
+      ServerSock := nil; // to ignore FreeAndNil(ServerSock) below
+    end; // errors will close the connection
   finally
     FreeAndNil(ServerSock);
   end;
