@@ -267,7 +267,8 @@ begin
     sock := TProxySocket.Create(nil);
     try
       sock.InitRequest(aSocket,aRemoteIP);
-      if sock.GetRequest({withBody=}false, {headertix=}0) and (sock.URL <> '') then begin
+      if (sock.GetRequest({withBody=}false, {headertix=}0)=grHeaderReceived) and
+         (sock.URL <> '') then begin
         if log<>nil then
           log.Log(sllTrace, 'ConnectionCreate received % % %', [sock.Method, sock.URL,
             sock.HeaderGetText], self);

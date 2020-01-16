@@ -970,6 +970,14 @@ type
 { -------------- WebSockets Server classes for bidirectional remote access }
 
 type
+  TWebSocketServerSocket = class(THttpServerSocket)
+  public
+    /// overriden to detect upgrade: websocket header and return grOwned
+    function GetRequest(withBody: boolean;
+      headerMaxTix: Int64): THttpServerSocketGetRequestResult; override;
+  end;
+
+type
   {$M+}
   TWebSocketServerResp = class;
   {$M-}
@@ -3003,12 +3011,16 @@ end;
 constructor TWebSocketServer.Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
   const ProcessName: SockString; ServerThreadPoolCount, KeepAliveTimeOut: integer);
 begin
+  // override with custom processing classes
+  fSocketClass := TWebSocketServerSocket;
   fThreadRespClass := TWebSocketServerResp;
+  // initialize protocols and connections
   fWebSocketConnections := TObjectListLocked.Create(false);
   fProtocols := TWebSocketProtocolList.Create;
   fSettings.SetDefaults;
   fSettings.HeartbeatDelay := 20000;
   fCanNotifyCallback := true;
+  // start the server
   inherited Create(aPort,OnStart,OnStop,ProcessName,ServerThreadPoolCount,KeepAliveTimeOut);
 end;
 
@@ -3038,10 +3050,11 @@ var err: integer;
 begin
   if ClientSock.ConnectionUpgrade and ClientSock.KeepAliveClient and
      IdemPropNameU('GET',ClientSock.Method) and
+     IdemPropNameU(ClientSock.Upgrade,'websocket') and
      ConnectionThread.InheritsFrom(TWebSocketServerResp) then begin
     err := WebSocketProcessUpgrade(ClientSock,TWebSocketServerResp(ConnectionThread));
     if err<>STATUS_SUCCESS then
-      WebSocketLog.Add.Log(sllTrace,'Process: WebSocketProcessUpgrade failure %',[err],self);
+      WebSocketLog.Add.Log(sllTrace,'Process: WebSocketProcessUpgrade failed as %',[err],self);
   end else
     inherited Process(ClientSock,ConnectionID,ConnectionThread);
 end;
@@ -3232,6 +3245,18 @@ begin
 end;
 
 
+{ TWebSocketServerSocket }
+
+function TWebSocketServerSocket.GetRequest(withBody: boolean;
+  headerMaxTix: Int64): THttpServerSocketGetRequestResult;
+begin
+  result := inherited GetRequest(withBody, headerMaxTix);
+  if (result=grHeaderReceived) and ConnectionUpgrade and KeepAliveClient and
+     IdemPropNameU('GET',Method) and IdemPropNameU(Upgrade,'websocket') then
+    //writeln('!!');
+end;
+
+
 { -------------- WebSockets Client classes for bidirectional remote access }
 
 { THttpClientWebSockets }
@@ -3256,8 +3281,10 @@ var Ctxt: THttpServerRequest;
     block: TWebSocketProcessNotifyCallback;
     resthead: RawUTF8;
 begin
-  if fProcess<>nil then
-    if fProcess.fClientThread.fThreadState>sRun then
+  if fProcess<>nil then begin
+    if fProcess.fClientThread.fThreadState=sCreate then
+      sleep(10); // allow TWebSocketProcessClientThread.Execute warmup
+    if fProcess.fClientThread.fThreadState<>sRun then
       // WebSockets closed by server side
       result := STATUS_NOTIMPLEMENTED else begin
       // send the REST request over WebSockets
@@ -3279,8 +3306,9 @@ begin
       finally
         Ctxt.Free;
       end;
-    end else
-    // standard HTTP/1.1 REST request
+    end;
+  end else
+    // standard HTTP/1.1 REST request (before WebSocketsUpgrade call)
     result := inherited Request(url,method,KeepAlive,header,Data,DataType,retry);
 end;
 
