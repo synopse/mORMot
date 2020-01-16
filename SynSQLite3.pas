@@ -3456,7 +3456,7 @@ begin
   end;
 end;
 
-{ from WladiD about all collation functions:
+{ from WladiD about all SQLite3 collation functions:
   If a field with your custom collate ISO8601 is empty '' (not NULL),
   then SQLite calls the registered collate function with s1len=0 or s2len=0,
   but the pointers s1 or s2 map to the string of the previous call }
