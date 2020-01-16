@@ -113,13 +113,16 @@ uses
     SynLizard in '..\SynLizard.pas',
     SynCrypto in '..\SynCrypto.pas',
     SynEcc in '..\SynEcc.pas',
+    SynSSPI in '..\SynSSPI.pas',
+    SynSSPIAuth in '..\SynSSPIAuth.pas',
     SynCrtSock in '..\SynCrtSock.pas',
-    SynBidirSock in '..\SynBiDirSock.pas',
+    SynBidirSock in '..\SynBidirSock.pas',
     {$ifdef USELIBCURL}
       SynCurl in '..\SynCurl.pas',
     {$endif USELIBCURL}
     //SynOpenSSL,
     SynCommons in '..\SynCommons.pas',
+    SynTable in '..\SynTable.pas',
     SynLog in '..\SynLog.pas',
     SynTests in '..\SynTests.pas',
     {$ifndef DELPHI5OROLDER}
@@ -149,7 +152,6 @@ uses
           SynSMAPI in '..\SynSMAPI.pas',
           SynSM in '..\SynSM.pas',
         {$endif CPU64}
-        SynTable in '..\SynTable.pas',
         SynBigTable in '..\SynBigTable.pas',
       {$endif MSWINDOWS}
       SynSQLite3 in '..\SynSQLite3.pas',
@@ -177,13 +179,11 @@ uses
       SynDB in '..\SynDB.pas',
       SynDBSQLite3 in '..\SynDBSQLite3.pas',
       SynDBOracle in '..\SynDBOracle.pas',
-      {$ifdef MSWINDOWS}
-        SynOleDB in '..\SynOleDB.pas',
-        SynDBODBC in '..\SynDBODBC.pas',
-        {$ifdef USEZEOS}
-          SynDBZeos in '..\SynDBZeos.pas',
-        {$endif}
-      {$endif MSWINDOWS}
+      SynOleDB in '..\SynOleDB.pas',
+      SynDBODBC in '..\SynDBODBC.pas',
+      {$ifdef USEZEOS}
+        SynDBZeos in '..\SynDBZeos.pas',
+      {$endif}
       {$ifndef DELPHI5OROLDER}
         SynDBRemote in '..\SynDBRemote.pas',
         mORMotDB in 'mORMotDB.pas',

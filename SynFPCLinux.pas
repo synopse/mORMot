@@ -68,7 +68,9 @@ const
   INVALID_HANDLE_VALUE = THandle(-1);
 
   LOCALE_USER_DEFAULT = $400;
-  NORM_IGNORECASE = 1;
+
+  // for CompareStringW()
+  NORM_IGNORECASE = 1 shl ord(coIgnoreCase); // [widestringmanager.coIgnoreCase]
 
 /// compatibility function, wrapping Win32 API mutex initialization
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection); inline;
@@ -113,8 +115,8 @@ function GetLastError: longint; inline;
 procedure SetLastError(error: longint); inline;
 
 /// compatibility function, wrapping Win32 API text comparison
-// - somewhat slow by using two temporary WideString - but seldom called, unless
-// our private WIN32CASE collation is used in SynSQLite3
+// - somewhat slow by using two temporary UnicodeString - but seldom called,
+// unless our proprietary WIN32CASE collation is used in SynSQLite3
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
   cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
 
@@ -497,13 +499,15 @@ end;
 
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
   cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
-var W1,W2: WideString;
-begin // not inlined to avoid try..finally WideString protection
-  W1 := lpString1;
-  W2 := lpString2;
-  if dwCmpFlags and NORM_IGNORECASE<>0 then
-    result := WideCompareText(W1,W2) else
-    result := WideCompareStr(W1,W2);
+var U1,U2: UnicodeString; // (may be?) faster than WideString
+begin // not inlined to avoid try..finally UnicodeString protection
+  if cchCount1<0 then
+    cchCount1 := StrLen(lpString1);
+  SetString(U1,lpString1,cchCount1);
+  if cchCount2<0 then
+    cchCount2 := StrLen(lpString2);
+  SetString(U2,lpString2,cchCount2);
+  result := widestringmanager.CompareUnicodeStringProc(U1,U2,TCompareOptions(dwCmpFlags));
 end;
 
 function GetFileSize(hFile: cInt; lpFileSizeHigh: PDWORD): DWORD;
