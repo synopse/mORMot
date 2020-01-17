@@ -192,6 +192,7 @@ uses
     {$endif LVCL}
     SynZip in '..\SynZip.pas',
     SynProtoRTSPHTTP in '..\SynProtoRTSPHTTP.pas',
+    SynProtoRelay in '..\SynProtoRelay.pas',
     SynSelfTests in '..\SynSelfTests.pas',
     mORMotSelfTests in 'mORMotSelfTests.pas';
   {$endif KYLIX3}
