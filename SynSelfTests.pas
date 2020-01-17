@@ -184,6 +184,7 @@ uses
   {$endif DELPHI5OROLDER}
   mORMotService,
   SynProtoRTSPHTTP,
+  SynProtoRelay,
   {$ifdef TEST_REGEXP}
     SynSQLite3RegEx,
   {$endif TEST_REGEXP}
@@ -572,6 +573,8 @@ type
   published
     /// RTSP over HTTP, as implemented in SynProtoRTSPHTTP unit
     procedure RTSPOverHTTP;
+    /// secure Relay of TCP/HTTP connections
+    procedure SynRelay;
   end;
 
 {$ifdef MSWINDOWS}
@@ -7169,7 +7172,7 @@ begin
   MyItem.Color := 20;
   MyItem.Name := 'ABC';
   U := ObjectToJSON(MyColl);
-  Check(U='[{"Color":20,"Length":10,"Name":"ABC"}]');
+  CheckEqual(U,'[{"Color":20,"Length":10,"Name":"ABC"}]');
   MyColl.Free;
 end;
 procedure TCollTstDynArrayTest;
@@ -7196,6 +7199,7 @@ begin
     for i := 0 to high(CA.Ints) do
       CA.Ints[i] := i;
     U := ObjectToJSON(CA);
+    check(IsValidJSON(U));
   finally
     CA.Free;
   end;
@@ -7236,6 +7240,7 @@ begin
       DA.Add(F);
     end;
     U := ObjectToJSON(CA);
+    check(IsValidJSON(U));
     DA.Clear;
     Check(Length(CA.FileVersion)=0);
     pu := JSONToObject(CA,pointer(U),Valid);
@@ -7276,6 +7281,7 @@ begin
       end;
       V.BuildDateTime := 4090.0+i;
       J := ObjectToJSON(V);
+      check(IsValidJSON(J));
       JSONToObject(F,pointer(J),Valid);
       if CheckFailed(Valid) then
         continue;
@@ -7333,8 +7339,10 @@ begin
   FillCharFast(git,sizeof(git),0);
   FillCharFast(git2,sizeof(git2),0);
   U := zendframeworkJson; // need unique string for procedure re-entrance
+  check(IsValidJSON(U));
   Check(DynArrayLoadJSON(git,UniqueRawUTF8(U),TypeInfo(TTestCustomJSONGitHubs))<>nil);
   U := DynArraySaveJSON(git,TypeInfo(TTestCustomJSONGitHubs));
+  check(IsValidJSON(U));
   if soWriteHumanReadable in Options then
     FileFromString(U,'zendframeworkSaved.json');
   Check(length(git)>=30);
@@ -7352,6 +7360,7 @@ begin
     value := JsonObjectItem(item,'name');
     check(value<>nil);
     GetJSONItemAsRawJSON(value,s);
+    check(IsValidJSON(s));
     check(trim(s)='"'+name+'"');
     check(GetInteger(JsonObjectByPath(item,'owner.id'))=owner.id);
     check(GetInteger(JsonObjectByPath(item,'owner.i*'))=owner.id);
@@ -7368,6 +7377,7 @@ begin
       '{"owner.login":"%","owner.id":%}',[owner.login,owner.id]));
     value := JsonObjectByPath(item,'owner');
     GetJSONItemAsRawJSON(value,s);
+    check(IsValidJSON(s));
     check(JSONReformat(s,jsonCompact)=FormatUTF8(
       '{"login":"%","id":%}',[owner.login,owner.id]));
   end;
@@ -7418,13 +7428,15 @@ begin
   FillCharFast(JA,sizeof(JA),0);
   FillCharFast(JA2,sizeof(JA2),0);
   U := RecordSaveJSON(JR,TypeInfo(TTestCustomJSONRecord));
-  Check(U='{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
+  CheckEqual(U,'{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
+  check(IsValidJSON(U));
   X := JSONToXML(U,'');
   Check(X='<A>0</A><B>0</B><C>0</C><D></D><E><E1>0</E1><E2>0</E2></E><F></F>');
   J := JSONToXML(U,'',XMLUTF8_NAMESPACE);
-  Check(J=XMLUTF8_NAMESPACE+X+'</contents>');
+  CheckEqual(J,XMLUTF8_NAMESPACE+X+'</contents>');
   J := RecordSaveJSON(JA,TypeInfo(TTestCustomJSONArray));
-  Check(J='{"A":0,"B":0,"C":0,"D":null,"E":[],"F":""}');
+  CheckEqual(J,'{"A":0,"B":0,"C":0,"D":null,"E":[],"F":""}');
+  check(IsValidJSON(J));
   X := JSONToXML(J,'');
   Check(X='<A>0</A><B>0</B><C>0</C><D>null</D><F></F>');
   JR2.A := 10;
@@ -7436,9 +7448,11 @@ begin
   Check(JR2.D='');
   Check(JR2.F=0);
   U := RecordSaveJSON(JR2,TypeInfo(TTestCustomJSONRecord));
-  Check(U='{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
+  CheckEqual(U,'{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
+  check(IsValidJSON(U));
   U := RecordSaveJSON(JR,TypeInfo(TTestCustomJSONRecord));
-  Check(U='{"A":10,"B":0,"C":0,"D":"**","E":{"E1":0,"E2":0},"F":"1899-12-31"}');
+  CheckEqual(U,'{"A":10,"B":0,"C":0,"D":"**","E":{"E1":0,"E2":0},"F":"1899-12-31"}');
+  check(IsValidJSON(U));
   JA2.A := 10;
   JA2.D := '**';
   SetLength(JA2.E,2);
@@ -7449,27 +7463,32 @@ begin
   check(Length(JA2.E)=0);
   Check(JA2.F=0);
   J := RecordSaveJSON(JA2,TypeInfo(TTestCustomJSONArray));
-  Check(J='{"A":0,"B":0,"C":0,"D":null,"E":[],"F":""}');
+  CheckEqual(J,'{"A":0,"B":0,"C":0,"D":null,"E":[],"F":""}');
+  check(IsValidJSON(J));
   JA2.A := 100;
   JA2.F := 1;
   J := RecordSaveJSON(JA2,TypeInfo(TTestCustomJSONArray));
-  Check(J='{"A":100,"B":0,"C":0,"D":null,"E":[],"F":"1899-12-31"}');
+  CheckEqual(J,'{"A":100,"B":0,"C":0,"D":null,"E":[],"F":"1899-12-31"}');
+  check(IsValidJSON(J));
   SetLength(JA2.E,2);
   JA2.E[0].E1 := 1;
   JA2.E[0].E2 := '2';
   JA2.E[1].E1 := 3;
   JA2.E[1].E2 := '4';
   J := RecordSaveJSON(JA2,TypeInfo(TTestCustomJSONArray));
-  Check(J='{"A":100,"B":0,"C":0,"D":null,"E":[{"E1":1,"E2":"2"},{"E1":3,"E2":"4"}],"F":"1899-12-31"}');
+  CheckEqual(J,'{"A":100,"B":0,"C":0,"D":null,"E":[{"E1":1,"E2":"2"},{"E1":3,"E2":"4"}],"F":"1899-12-31"}');
+  check(IsValidJSON(J));
   X := JSONToXML(J,'');
   Check(X='<A>100</A><B>0</B><C>0</C><D>null</D><E><E1>1</E1><E2>2</E2></E><E><E1>3</E1><E2>4</E2></E><F>1899-12-31</F>');
   RecordLoadJSON(JA,pointer(J),TypeInfo(TTestCustomJSONArray));
   Check(RecordSave(JA,TypeInfo(TTestCustomJSONArray))=RecordSave(JA2,TypeInfo(TTestCustomJSONArray)));
   J := '{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}';
+  check(IsValidJSON(J));
   RecordLoadJSON(JA,UniqueRawUTF8(J),TypeInfo(TTestCustomJSONArray));
   U := RecordSaveJSON(JA,TypeInfo(TTestCustomJSONArray));
   Check(length(JA.E)=1);
-  Check(U='{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}');
+  CheckEqual(U,'{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}');
+  check(IsValidJSON(U));
   X := JSONToXML(U,'');
   Check(X='<A>0</A><B>0</B><C>0</C><D>null</D><E><E1>2</E1><E2>3</E2></E><F></F>');
   X := JSONToXML('[1,2,"three"]');
@@ -7478,8 +7497,12 @@ begin
   SetLength(AA,100);
   for i := 0 to high(AA) do begin
     SetLength(AA[i],random(100));
-    for a := 0 to high(AA[i]) do
+    for a := 0 to high(AA[i]) do begin
       UInt32ToUtf8(i+a,AA[i,a]);
+      check(IsValidJSON(AA[i,a]));
+      check(IsValidJSON('    '+AA[i,a]));
+      check(IsValidJSON(AA[i,a]+'  '));
+    end;
   end;
   binary := DynArraySave(AA,TypeInfo(TRawUTF8DynArrayDynArray));
   Check(DynArrayLoad(AB,pointer(binary),TypeInfo(TRawUTF8DynArrayDynArray))<>nil);
@@ -7490,6 +7513,7 @@ begin
       Check(AA[i,a]=AB[i,a]);
   end;
   j := DynArraySaveJSON(AA,TypeInfo(TRawUTF8DynArrayDynArray));
+  check(IsValidJSON(j));
   Finalize(AB);
   Check(DynArrayLoadJSON(AB,pointer(j),TypeInfo(TRawUTF8DynArrayDynArray))<>nil);
   Check(length(AA)=length(AB));
@@ -7519,15 +7543,18 @@ begin
   u := '{"abArr":[{"a":"AB0","b":0},{"a":"AB1","b":1}],"cdArr":[{"c":0,"d":"CD0"},'+
     '{"c":1,"d":"CD1"},{"c":2,"d":"CD2"}]}';
   Check(Hash32(u)=$E3AC9C44);
+  check(IsValidJSON(u));
   Check(RecordSaveJSON(agg,TypeInfo(TAggregate))=u);
   RecordLoadJSON(agg2,UniqueRawUTF8(u),TypeInfo(TAggregate));
   j := RecordSaveJSON(agg2,TypeInfo(TAggregate));
   Check(Hash32(j)=$E3AC9C44);
+  check(IsValidJSON(j));
 
   Finalize(JAS);
   FillCharFast(JAS,sizeof(JAS),0);
   U := RecordSaveJSON(JAS,TypeInfo(TTestCustomJSONArraySimple));
-  Check(U='{"A":0,"B":0,"C":[],"D":"","E":[],"H":""}');
+  CheckEqual(U,'{"A":0,"B":0,"C":[],"D":"","E":[],"H":""}');
+  check(IsValidJSON(U));
   U := '{"a":1,"b":2,"c":["C9A646D3-9C61-4CB7-BFCD-EE2522C8F633",'+
     '"3F2504E0-4F89-11D3-9A0C-0305E82C3301"],"d":"4","e":[{"f":"f","g":["g1","g2"]}],"h":"h"}';
   J := U;
@@ -7546,14 +7573,17 @@ begin
   Check(JAS.H='h');
   U := RecordSaveJSON(JAS,TypeInfo(TTestCustomJSONArraySimple));
   Check(SameTextU(J,U));
+  check(IsValidJSON(U));
 
 {$ifndef NOVARIANTS}
   Finalize(JAV);
   FillCharFast(JAV,sizeof(JAV),0);
   U := RecordSaveJSON(JAV,TypeInfo(TTestCustomJSONArrayVariant));
-  Check(U='{"A":0,"B":0,"C":[],"D":""}');
+  CheckEqual(U,'{"A":0,"B":0,"C":[],"D":""}');
+  check(IsValidJSON(U));
   assert(DocVariantType<>nil);
   U := '{"a":1,"b":2,"c":["one",2,2.5,{four:[1,2,3,4]}],"d":"4"}';
+  check(IsValidJSON(U));
   RecordLoadJSON(JAV,UniqueRawUTF8(U),TypeInfo(TTestCustomJSONArrayVariant));
   Check(JAV.A=1);
   Check(JAV.B=2);
@@ -7585,20 +7615,24 @@ begin
   Finalize(Cache);
   FillCharFast(Cache,sizeof(Cache),0);
   U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
-  Check(U='{"ID":0,"Timestamp512":0,"Tag":0,"JSON":""}');
+  CheckEqual(U,'{"ID":0,"Timestamp512":0,"Tag":0,"JSON":""}');
+  check(IsValidJSON(U));
   Cache.ID := 10;
   Cache.Timestamp512 := 200;
   Cache.JSON := 'test';
   Cache.Tag := 12;
   U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
-  Check(U='{"ID":10,"Timestamp512":200,"Tag":12,"JSON":"test"}');
+  CheckEqual(U,'{"ID":10,"Timestamp512":200,"Tag":12,"JSON":"test"}');
+  check(IsValidJSON(U));
   U := '{"ID":210,"Timestamp512":2200,"JSON":"test2"}';
+  check(IsValidJSON(U));
   RecordLoadJSON(Cache,UniqueRawUTF8(U),TypeInfo(TSQLRestCacheEntryValue));
   Check(Cache.ID=210);
   Check(Cache.Timestamp512=2200);
   Check(Cache.JSON='test2');
   Check(Cache.Tag=12);
   U := '{ID:220,JSON:"test3",Timestamp512:2300}';
+  check(IsValidJSON(U));
   RecordLoadJSON(Cache,UniqueRawUTF8(U),TypeInfo(TSQLRestCacheEntryValue));
   Check(Cache.ID=220);
   Check(Cache.Timestamp512=2300);
@@ -7618,18 +7652,18 @@ begin
   Check(nav2.MaxRows=0);
   check(not nav2.EOF);
   J := RecordSaveJSON(nav2,TypeInfo(TConsultaNav));
-  Check(J=RecordSaveJSON(nav,TypeInfo(TConsultaNav)));
+  CheckEqual(J,RecordSaveJSON(nav,TypeInfo(TConsultaNav)));
   Check(CompareMem(@nav,@nav2,sizeof(nav)));
   Finalize(nrtti);
   FillCharFast(nrtti,sizeof(nrtti),0);
   U := RecordSaveJSON(nrtti,TypeInfo(TNewRTTI));
-  Check(U='{"Number":0,"StaticArray":[{"Name":"","Single":0,"Double":0},'+
+  CheckEqual(U,'{"Number":0,"StaticArray":[{"Name":"","Single":0,"Double":0},'+
      '{"Name":"","Single":0,"Double":0}],"Int":[0,0,0,0,0]}');
   Finalize(nrtti2);
   FillCharFast(nrtti2,sizeof(nrtti2),0);
   Check(RecordLoadJSON(nrtti2,pointer(U),TypeInfo(TNewRTTI))<>nil);
   J := RecordSaveJSON(nrtti2,TypeInfo(TNewRTTI));
-  check(J=RecordSaveJSON(nrtti,TypeInfo(TNewRTTI)));
+  CheckEqual(J,RecordSaveJSON(nrtti,TypeInfo(TNewRTTI)));
   nrtti.Number := 1;
   nrtti.StaticArray[1].Name := 'one';
   nrtti.StaticArray[1].Single := 1.5;
@@ -7643,13 +7677,13 @@ begin
   nrtti.Int[4] := 4;
   nrtti.Int[5] := 5;
   U := RecordSaveJSON(nrtti,TypeInfo(TNewRTTI));
-  Check(U='{"Number":1,"StaticArray":[{"Name":"one","Single":1.5,"Double":1.7},'+
+  CheckEqual(U,'{"Number":1,"StaticArray":[{"Name":"one","Single":1.5,"Double":1.7},'+
     '{"Name":"two","Single":2.5,"Double":2.7}],"Int":[1,2,3,4,5]}');
   Finalize(nrtti2);
   FillCharFast(nrtti2,sizeof(nrtti2),0);
   Check(RecordLoadJSON(nrtti2,pointer(U),TypeInfo(TNewRTTI))<>nil);
   J := RecordSaveJSON(nrtti2,TypeInfo(TNewRTTI));
-  check(J=RecordSaveJSON(nrtti,TypeInfo(TNewRTTI)));
+  CheckEqual(J,RecordSaveJSON(nrtti,TypeInfo(TNewRTTI)));
   U :='{ "name": "Book the First", "author": { "first_name": "Bob", "last_name": "White" } }';
   RecordLoadJSON(Book,UniqueRawUTF8(U),TypeInfo(TBookRecord));
   check(Book.name='Book the First');
@@ -7742,13 +7776,15 @@ begin
   Check(uct('123-2')=sftUTF8Text);
   {$endif}
   J := JSONEncode(['name','john','year',1982,'pi',3.14159]);
-  Check(J='{"name":"john","year":1982,"pi":3.14159}');
+  CheckEqual(J,'{"name":"john","year":1982,"pi":3.14159}');
+  check(IsValidJSON(J));
   JSONDecode(J,['year','pi','john','name'],@V);
   Check(V[0].Value='1982');
   Check(V[1].Value='3.14159');
   Check(V[2].Value=nil);
   Check(V[3].Value='john');
   J := '{surrogate:"\uD801\uDC00"}'; // see https://en.wikipedia.org/wiki/CESU-8
+  check(IsValidJSON(J));
   JSONDecode(J,['surrogate'],@V);
   Check(V[0].ValueLen=4);
   Check(V[0].Value[0]=#$F0);
@@ -7756,36 +7792,49 @@ begin
   Check(V[0].Value[2]=#$90);
   Check(V[0].Value[3]=#$80);
   J := JSONEncode(['name','john','ab','[','a','b',']']);
-  Check(J='{"name":"john","ab":["a","b"]}');
+  check(IsValidJSON(J));
+  CheckEqual(J,'{"name":"john","ab":["a","b"]}');
   J := JSONEncode(['name','john','ab','[','a','b']);
-  Check(J='{"name":"john","ab":["a","b"]}');
+  check(IsValidJSON(J));
+  CheckEqual(J,'{"name":"john","ab":["a","b"]}');
   J := JSONEncode(['name','john','ab','[']);
-  Check(J='{"name":"john","ab":[]}');
+  check(IsValidJSON(J));
+  CheckEqual(J,'{"name":"john","ab":[]}');
   J := JSONEncode(['name','john','ab','{']);
-  Check(J='{"name":"john","ab":{}}');
+  check(IsValidJSON(J));
+  CheckEqual(J,'{"name":"john","ab":{}}');
   J := JSONEncode(['name','john','ab',nil]);
-  Check(J='{"name":"john","ab":null}');
+  check(IsValidJSON(J));
+  CheckEqual(J,'{"name":"john","ab":null}');
   J := JSONEncode(['name','john','ab']);
-  Check(J='{"name":"john"}');
+  check(IsValidJSON(J));
+  CheckEqual(J,'{"name":"john"}');
   J := JSONEncode(['name','john','{']);
-  Check(J='{"name":"john"}');
+  check(IsValidJSON(J));
+  CheckEqual(J,'{"name":"john"}');
   J := JSONEncode(['name','john','[']);
-  Check(J='{"name":"john"}');
+  check(IsValidJSON(J));
+  CheckEqual(J,'{"name":"john"}');
   J := JSONEncode(['name','john','ab','[','a','b',']','pi',3.14159]);
-  Check(J='{"name":"john","ab":["a","b"],"pi":3.14159}');
+  check(IsValidJSON(J));
+  CheckEqual(J,'{"name":"john","ab":["a","b"],"pi":3.14159}');
   J := JSONEncode(['doc','{','name','John','year',1982,'}','id',123]);
-  Check(J='{"doc":{"name":"John","year":1982},"id":123}');
+  check(IsValidJSON(J));
+  CheckEqual(J,'{"doc":{"name":"John","year":1982},"id":123}');
   J := JSONEncode(['doc','{','name','John','abc','[','a','b','c',']','}','id',123]);
-  Check(J='{"doc":{"name":"John","abc":["a","b","c"]},"id":123}');
+  check(IsValidJSON(J));
+  CheckEqual(J,'{"doc":{"name":"John","abc":["a","b","c"]},"id":123}');
 {$ifndef NOVARIANTS}
   J := JSONEncode('{%:{$in:[?,?]}}',['type'],['food','snack']);
-  Check(J='{"type":{"$in":["food","snack"]}}');
+check(IsValidJSON(J));
+  CheckEqual(J,'{"type":{"$in":["food","snack"]}}');
   Check(JSONEncode('{type:{$in:?}}',[],[_Arr(['food','snack'])])=J);
+  check(IsValidJSON(J));
   J := JSONEncode('{name:"John",field:{ "$regex": "acme.*corp", $options: "i" }}',[],[]);
-  Check(J='{"name":"John","field":{"$regex":"acme.*corp","$options":"i"}}');
+  CheckEqual(J,'{"name":"John","field":{"$regex":"acme.*corp","$options":"i"}}');
   // the below only works if unit SynMongoDB is included in the uses list of the project
   // for virtual function TryJSONToVariant
-  Check(JSONEncode('{name:?,field:/%/i}',['acme.*corp'],['John'])=J);
+  CheckEqual(JSONEncode('{name:?,field:/%/i}',['acme.*corp'],['John']),J);
 {$endif}
 {$ifndef DELPHI5OROLDER}
   peop := TSQLRecordPeople.Create;
@@ -7796,24 +7845,29 @@ begin
     peop.YearOfBirth := 1000;
     peop.Data := #1#2#3#4;
     J := ObjectToJSON(peop,[woSQLRawBlobAsBase64]);
+    check(IsValidJSON(J));
     check(J[53]=#$EF);
     check(J[54]=#$BF);
     check(J[55]=#$B0);
     J[53] := '1';
     J[54] := '2';
     J[55] := '3';
-    Check(J='{"ID":1234,"FirstName":"FN","LastName":"LN",'+
+    check(IsValidJSON(J));
+    CheckEqual(J,'{"ID":1234,"FirstName":"FN","LastName":"LN",'+
       '"Data":"123AQIDBA==","YearOfBirth":1000,"YearOfDeath":0}');
     J := ObjectToJSON(peop);
-    Check(J='{"ID":1234,"FirstName":"FN","LastName":"LN",'+
+    check(IsValidJSON(J));
+    CheckEqual(J,'{"ID":1234,"FirstName":"FN","LastName":"LN",'+
       '"Data":"","YearOfBirth":1000,"YearOfDeath":0}');
     ClearObject(peop);
     J := ObjectToJSON(peop);
-    Check(J='{"ID":1234,"FirstName":"","LastName":"",'+
+    check(IsValidJSON(J));
+    CheckEqual(J,'{"ID":1234,"FirstName":"","LastName":"",'+
       '"Data":"","YearOfBirth":0,"YearOfDeath":0}');
     peop.IDValue := -1234;
     J := ObjectToJSON(peop);
-    Check(J='{"ID":-1234,"FirstName":"","LastName":"",'+
+    check(IsValidJSON(J));
+    CheckEqual(J,'{"ID":-1234,"FirstName":"","LastName":"",'+
       '"Data":"","YearOfBirth":0,"YearOfDeath":0}');
    {$ifndef NOVARIANTS}
    peop.YearOfDeath := 10;
@@ -7824,7 +7878,8 @@ begin
    Check(Va.LastName='john');
    Check(Va.YearOfDeath=10);
    J := VariantSaveJSON(Va);
-   check(J='{"ID":-1234,"FirstName":"","LastName":"john","Data":"",'+
+   check(IsValidJSON(J));
+   CheckEqual(J,'{"ID":-1234,"FirstName":"","LastName":"john","Data":"",'+
      '"YearOfBirth":0,"YearOfDeath":10}');
    {$endif}
   finally
@@ -7836,6 +7891,7 @@ begin
     r := Random;
     U := RandomUTF8(i);
     J := JSONEncode(['a',a,'r',r,'u',U]);
+    check(IsValidJSON(J));
     JSONDecode(J,['U','R','A','FOO'],@V);
     V[0].ToUTF8(U2);
     Check(U2=U);
@@ -7869,7 +7925,7 @@ begin
       U := Int32ToUTF8(a);
       AddVariant(U);
       J := Text;
-      Check(J=U+','+DoubleToStr(r)+','+DoubleToStr(c)+',"'+U+'"');
+      CheckEqual(J,U+','+DoubleToStr(r)+','+DoubleToStr(c)+',"'+U+'"');
       P := UniqueRawUTF8(J);
       P := VariantLoadJSON(Va,P);
       Check(P<>nil);
@@ -7896,49 +7952,61 @@ begin
     '"First Login" :   null  ,  "Department"  :  "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]', false, true);
   U := ' (ID,Name,Role,Last Login,First Login,Department) VALUES '+
     '(:(1):,:(''Alice''):,:(''User''):,:(null):,:(null):,:(''{"relPath":"317\\","revision":1}''):)';
-  Check(J=U);
+  CheckEqual(J,U);
   J := GetJSONObjectAsSQL('{ "Name":"Alice","Role":"User","Last Login":null,'+
     '"First Login" :   null  ,  "Department"  :  "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]', false, true,1,true);
-  Check(J=U);
+  CheckEqual(J,U);
   J := GetJSONObjectAsSQL('{ "Name":"Alice","Role":"User","Last Login":null,'+
     '"First Login" :   null  ,  "Department"  :  "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]', false, true,1,false);
   Insert('Row',U,3);
-  Check(J=U);
+  CheckEqual(J,U);
   Delete(U,3,3);
   J := '{"ID":  1 ,"Name":"Alice","Role":"User","Last Login":null, // comment'#13#10+
     '"First Login" : /* to be ignored */  null  ,  "Department"  :  "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
+  check(not IsValidJSON(J));
   RemoveCommentsFromJSON(UniqueRawUTF8(J));
+  check(not IsValidJSON(J));
+  check(IsValidJSON('['+J));
   J := GetJSONObjectAsSQL(J,false,true);
-  Check(J=U);
+  CheckEqual(J,U);
   J := '{"RowID":  210 ,"Name":"Alice","Role":"User","Last Login":null, // comment'#13#10+
     '"First Login" : /* to be ignored */  null  ,  "Department"  :  "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
+  check(not IsValidJSON(J));
   RemoveCommentsFromJSON(UniqueRawUTF8(J));
+  check(not IsValidJSON(J));
+  check(IsValidJSON('['+J));
   J := GetJSONObjectAsSQL(J,false,true,1,True);
-  Check(J=U);
+  CheckEqual(J,U);
   O := TPersistentToJSON.Create;
   O2 := TPersistentToJSON.Create;
   try
     J := ObjectToJSON(O,[]);
-    Check(J='{"Name":"","Enum":0,"Sets":0}');
+    check(IsValidJSON(J));
+    CheckEqual(J,'{"Name":"","Enum":0,"Sets":0}');
     J := ObjectToJSON(O,[woDontStoreDefault]);
-    Check(J='{"Name":""}');
+    check(IsValidJSON(J));
+    CheckEqual(J,'{"Name":""}');
     J := ObjectToJSON(O,[woStoreClassName]);
-    Check(J='{"ClassName":"TPersistentToJSON","Name":"","Enum":0,"Sets":0}');
+    check(IsValidJSON(J));
+    CheckEqual(J,'{"ClassName":"TPersistentToJSON","Name":"","Enum":0,"Sets":0}');
     J := ObjectToJSON(O,[woHumanReadable]);
-    Check(J='{'#$D#$A#9'"Name": "",'#$D#$A#9'"Enum": "flagIdle",'#$D#$A#9'"Sets": []'#$D#$A'}');
+    check(IsValidJSON(J));
+    CheckEqual(J,'{'#$D#$A#9'"Name": "",'#$D#$A#9'"Enum": "flagIdle",'#$D#$A#9'"Sets": []'#$D#$A'}');
     with PTypeInfo(TypeInfo(TSynBackgroundThreadProcessStep))^.EnumBaseType^ do
     for E := low(E) to high(E) do begin
       O.fName := Int32ToUTF8(ord(E));
       O.fEnum := E;
       include(O.fSets,E);
       J := ObjectToJSON(O,[]);
-      Check(J=FormatUTF8('{"Name":"%","Enum":%,"Sets":%}',[ord(E),ord(E),byte(O.fSets)]));
+      check(IsValidJSON(J));
+      CheckEqual(J,FormatUTF8('{"Name":"%","Enum":%,"Sets":%}',[ord(E),ord(E),byte(O.fSets)]));
       JSONToObject(O2,pointer(J),valid);
       Check(Valid);
       Check(O.Name=O2.Name);
       Check(O.Enum=O2.Enum);
       Check(O.Sets=O2.Sets);
       J := ObjectToJSON(O,[woHumanReadable]);
+      check(IsValidJSON(J));
       U := FormatUTF8(
         '{'#$D#$A#9'"NAME": "%",'#$D#$A#9'"ENUM": "%",'#$D#$A#9'"SETS": ["FLAGIDLE"',
         [ord(E),UpperCaseU(RawUTF8(GetEnumName(E)^))]);
@@ -7953,14 +8021,17 @@ begin
     with PTypeInfo(TypeInfo(WordBool))^.EnumBaseType^ do
       Check(SizeInStorageAsEnum=2);
     J := ObjectToJSON(O,[woHumanReadable,woHumanReadableFullSetsAsStar]);
-    Check(J='{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "flagDestroying",'#$D#$A#9'"Sets": ["*"]'#$D#$A'}');
+    check(IsValidJSON(J));
+    CheckEqual(J,'{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "flagDestroying",'#$D#$A#9'"Sets": ["*"]'#$D#$A'}');
     J := ObjectToJSON(O,[woHumanReadable,woHumanReadableFullSetsAsStar,woHumanReadableEnumSetAsComment]);
-    Check(J='{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "flagDestroying", // "flagIdle","flagStarted","flagFinished","flagDestroying"'+
+    CheckEqual(J,'{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "flagDestroying", // "flagIdle","flagStarted","flagFinished","flagDestroying"'+
       #$D#$A#9'"Sets": ["*"] // "*" or a set of "flagIdle","flagStarted","flagFinished","flagDestroying"'#$D#$A'}');
     O2.fName := '';
     O2.fEnum := low(E);
     O2.fSets := [];
+    check(not IsValidJSON(J));
     RemoveCommentsFromJSON(UniqueRawUTF8(J));
+    check(IsValidJSON(J));
     JSONToObject(O2,pointer(J),valid);
     Check(Valid);
     Check(O.Name=O2.Name);
@@ -7973,6 +8044,8 @@ begin
   end;
   U := '"filters":[{"name":"name1","value":"value1","comparetype":">"},'+
     '{"name":"name2","value":"value2","comparetype":"="}], "Limit":100}';
+  check(not IsValidJSON(U));
+  check(IsValidJSON('{'+U));
   P := UniqueRawUTF8(U);
   Check(GetJSONPropName(P)='filters');
   Check((P<>nil)and(P^='['));
@@ -7983,37 +8056,55 @@ begin
   P := GotoNextJSONItem(P,1,@EndOfObject);
   Check(P<>nil);
   Check(EndOfObject='}');
+  check(IsValidJSON('null'));
+  check(IsValidJSON('true'));
+  check(IsValidJSON('false'));
+  check(IsValidJSON(' null'));
+  check(IsValidJSON(' true'));
+  check(IsValidJSON(' false'));
+  check(IsValidJSON('null  '));
+  check(IsValidJSON('true  '));
+  check(IsValidJSON('false  '));
+  check(not IsValidJSON('nulle'));
+  check(not IsValidJSON('trye'));
 {$ifndef LVCL}
   C2 := TCollTst.Create;
   Coll := TCollTst.Create;
   try
     U := ObjectToJSON(Coll);
+    check(IsValidJSON(U));
     Check(Hash32(U)=$95B54414);
     Check(ObjectToJSON(C2)=U);
     Coll.One.Name := 'test"\2';
     Coll.One.Color := 1;
     U := ObjectToJSON(Coll);
+    check(IsValidJSON(U));
     Check(Hash32(U)=$CE2C2DED);
     Check(JSONToObject(C2,pointer(U),Valid)=nil);
     Check(Valid);
     U := ObjectToJSON(C2);
+    check(IsValidJSON(U));
     Check(Hash32(U)=$CE2C2DED);
     Coll.Coll.Add.Color := 10;
     Coll.Coll.Add.Name := 'name';
     Check(Coll.Coll.Count=2);
     U := ObjectToJSON(Coll);
+    check(IsValidJSON(U));
     Check(Hash32(U)=$36B02F0E);
     Check(JSONToObject(C2,pointer(U),Valid)=nil);
     Check(Valid);
     Check(C2.Coll.Count=2);
     U := ObjectToJSON(C2);
+    check(IsValidJSON(U));
     Check(Hash32(U)=$36B02F0E);
     J := ObjectToJSON(Coll,[woHumanReadable]);
+    check(IsValidJSON(U));
     Check(Hash32(J)=$9FAFF11F);
     Check(JSONReformat(J,jsonCompact)=U);
     Check(JSONReformat('{ "empty": {} }')='{'#$D#$A#9'"empty": {'#$D#$A#9#9'}'#$D#$A'}');
     U := ObjectToJSON(Coll,[woStoreClassName]);
-    Check(U='{"ClassName":"TCollTst","One":{"ClassName":"TCollTest","Color":1,'+
+    check(IsValidJSON(U));
+    CheckEqual(U,'{"ClassName":"TCollTst","One":{"ClassName":"TCollTest","Color":1,'+
       '"Length":0,"Name":"test\"\\2"},"Coll":[{"ClassName":"TCollTest","Color":10,'+
       '"Length":0,"Name":""},{"ClassName":"TCollTest","Color":0,"Length":0,"Name":"name"}]}');
     C2.Coll.Clear;
@@ -8032,7 +8123,8 @@ begin
       CheckSame(Comp.Real,10.3);
       CheckSame(Comp.Imaginary,7.92);
       U := ObjectToJSON(Comp,[woStoreClassName]);
-      Check(U='{"ClassName":"TComplexNumber","Real":10.3,"Imaginary":7.92}');
+      check(IsValidJSON(U));
+      CheckEqual(U,'{"ClassName":"TComplexNumber","Real":10.3,"Imaginary":7.92}');
       Comp.Free;
     end;
     TJSONSerializer.RegisterCollectionForJSON(TMyCollection,TCollTest);
@@ -8041,6 +8133,7 @@ begin
     TestMyColl(Instance.CreateNew as TMyCollection);
     C2.Coll.Clear;
     U := ObjectToJSON(C2);
+    check(IsValidJSON(U));
     Check(Hash32(U)=$CE2C2DED);
     Coll.Coll.BeginUpdate;
     for i := 1 to 10000 do
@@ -8051,6 +8144,7 @@ begin
       end;
     Coll.Coll.EndUpdate;
     U := ObjectToJSON(Coll.Coll);
+    check(IsValidJSON(U));
     Check(Hash32(U)=$DB782098);
     C2.Coll.Clear;
     Check(JSONToObject(C2.fColl,pointer(U),Valid)=nil);
@@ -8063,6 +8157,7 @@ begin
         Check(Name=Int32ToUtf8(i));
       end;
     U := ObjectToJSON(Coll);
+    check(IsValidJSON(U));
     Check(length(U)=443103);
     Check(Hash32(U)=$7EACF12A);
     C2.One.Name := '';
@@ -8071,6 +8166,7 @@ begin
     Check(Valid);
     Check(C2.Coll.Count=Coll.Coll.Count);
     U := ObjectToJSON(C2);
+    check(IsValidJSON(U));
     Check(length(U)=443103);
     Check(Hash32(U)=$7EACF12A);
     for i := 1 to C2.Coll.Count-2 do
@@ -8086,9 +8182,12 @@ begin
       Check(Coll.Str.Add(IntToStr(i))=i-1);
     Coll.Str.EndUpdate;
     U := ObjectToJSON(Coll);
+    check(IsValidJSON(U));
     Check(Hash32(U)=$85926050);
     J := ObjectToJSON(Coll,[woHumanReadable]);
+    check(IsValidJSON(J));
     U2 := JSONReformat(J,jsonCompact);
+    check(IsValidJSON(U2));
     Check(U2=U);
     C2.Str := TStringList.Create;
     Check(JSONToObject(C2,pointer(U),Valid)=nil);
@@ -8097,6 +8196,7 @@ begin
     for i := 1 to C2.Str.Count do
       Check(C2.Str[i-1]=IntToStr(i));
     J := ObjectToJSON(C2);
+    check(IsValidJSON(J));
     Check(Hash32(J)=$85926050);
     C2.One.Color := 0;
     C2.One.Name := '';
@@ -8108,6 +8208,7 @@ begin
     C2.One.Color := 0;
     C2.One.Name := '';
     U := '{"One":{"Color":1,"Length":0,"wtf":{"one":1},"Name":"test","Unknown":123},"dummy":null,"Coll":[]}';
+    check(IsValidJSON(U));
     Check(JSONToObject(C2,UniqueRawUTF8(U),Valid,nil,[j2oIgnoreUnknownProperty])=nil,'Ignore unknown');
     Check(Valid);
     Check(C2.One.Color=1);
@@ -8131,6 +8232,7 @@ begin
     Check(C2.Coll[0].Name='test');
     C2.One.Length := 10;
     J := ObjectToJSON(C2);
+    check(IsValidJSON(J));
     Check(Hash32(J)=$41281936);
     // (custom) dynamic array serialization
     TCollTstDynArrayTest;
@@ -8153,26 +8255,32 @@ begin
       MyItem.Color := 20;
       MyItem.Name := 'ABC';
       J := ObjectToJSON(MyItem);
-      Check(J='{"Color":20,"Length":10,"Name":"ABC"}');
+      Check(IsValidJSON(J));
+      CheckEqual(J,'{"Color":20,"Length":10,"Name":"ABC"}');
       TJSONSerializer.RegisterCustomSerializerFieldNames(
         TCollTest,['name','length'],['n','len']);
       J := ObjectToJSON(MyItem);
-      Check(J='{"Color":20,"len":10,"n":"ABC"}');
+      Check(IsValidJSON(J));
+      CheckEqual(J,'{"Color":20,"len":10,"n":"ABC"}');
       J := ObjectToJSON(C2);
+      Check(IsValidJSON(J));
       Check(Hash32(J)=$FFBC77A,'RegisterCustomSerializerFieldNames');
       TCollTstDynArrayTest;
       TJSONSerializer.RegisterCustomSerializerFieldNames(TCollTest,[],[]);
       J := ObjectToJSON(MyItem);
-      Check(J='{"Color":20,"Length":10,"Name":"ABC"}');
+      CheckEqual(J,'{"Color":20,"Length":10,"Name":"ABC"}');
       J := ObjectToJSON(C2);
+      Check(IsValidJSON(J));
       Check(Hash32(J)=$41281936,'unRegisterCustomSerializerFieldNames');
       TCollTstDynArrayTest;
       TJSONSerializer.RegisterCustomSerializerFieldNames(TCollTest,['length'],['']);
       J := ObjectToJSON(MyItem);
-      Check(J='{"Color":20,"Name":"ABC"}','remove field');
+      Check(IsValidJSON(J));
+      CheckEqual(J,'{"Color":20,"Name":"ABC"}','remove field');
       TJSONSerializer.RegisterCustomSerializerFieldNames(TCollTest,[],[]);
       J := ObjectToJSON(MyItem);
-      Check(J='{"Color":20,"Length":10,"Name":"ABC"}');
+      Check(IsValidJSON(J));
+      CheckEqual(J,'{"Color":20,"Length":10,"Name":"ABC"}');
     finally
       MyItem.Free;
     end;
@@ -8292,9 +8400,11 @@ begin
     TypeInfo(TTestCustomJSONRecord),
     copy(__TTestCustomJSONRecord,1,PosEx('}',__TTestCustomJSONRecord))) as TJSONRecordTextDefinition;
   U := RecordSaveJSON(JR2,TypeInfo(TTestCustomJSONRecord));
-  Check(U='{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0}}');
+  Check(IsValidJSON(U));
+  CheckEqual(U,'{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0}}');
   U := RecordSaveJSON(JR,TypeInfo(TTestCustomJSONRecord));
-  Check(U='{"A":10,"B":0,"C":0,"D":"**","E":{"E1":0,"E2":0}}');
+  Check(IsValidJSON(U));
+  CheckEqual(U,'{"A":10,"B":0,"C":0,"D":"**","E":{"E1":0,"E2":0}}');
   U := '{"B":0,"C":0,"A":10,"D":"**","E":{"E1":0,"E2":20}}';
   RecordLoadJSON(JR2,UniqueRawUTF8(U),TypeInfo(TTestCustomJSONRecord));
   Check(JR2.A=10);
@@ -8313,17 +8423,20 @@ begin
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONArrayWithoutF),
     copy(__TTestCustomJSONArray,1,PosEx(']',__TTestCustomJSONArray)));
   U := RecordSaveJSON(JA2,TypeInfo(TTestCustomJSONArrayWithoutF));
-  Check(U='{"A":100,"B":0,"C":0,"D":null,"E":[{"E1":1,"E2":"2"},{"E1":3,"E2":"4"}]}');
+  Check(IsValidJSON(U));
+  CheckEqual(U,'{"A":100,"B":0,"C":0,"D":null,"E":[{"E1":1,"E2":"2"},{"E1":3,"E2":"4"}]}');
   Finalize(JA);
   FillCharFast(JA,sizeof(JA),0);
   RecordLoadJSON(JA,pointer(U),TypeInfo(TTestCustomJSONArrayWithoutF));
   Check(JA.A=100);
   Check(JA.D='');
   U := RecordSaveJSON(JA,TypeInfo(TTestCustomJSONArrayWithoutF));
+  Check(IsValidJSON(U));
   Check(length(JA.E)=2);
-  Check(U='{"A":100,"B":0,"C":0,"D":null,"E":[{"E1":1,"E2":"2"},{"E1":3,"E2":"4"}]}');
+  CheckEqual(U,'{"A":100,"B":0,"C":0,"D":null,"E":[{"E1":1,"E2":"2"},{"E1":3,"E2":"4"}]}');
   JA.D := '1234';
   U := RecordSaveJSON(JA,TypeInfo(TTestCustomJSONArrayWithoutF));
+  Check(IsValidJSON(U));
   Check(length(JA.E)=2);
   Finalize(JA);
   FillCharFast(JA,sizeof(JA),0);
@@ -8337,11 +8450,13 @@ begin
     discogsJson := HttpGet('https://api.discogs.com/artists/45/releases?page=1&per_page=100');
     FileFromString(discogsJson,discogsFileName);
   end;
+  Check(IsValidJSON(discogsJson));
   zendframeworkJson := StringFromFile(zendframeworkFileName);
   if zendframeworkJson='' then begin
     zendframeworkJson := HttpGet('https://api.github.com/users/zendframework/repos');
     FileFromString(zendframeworkJson,zendframeworkFileName);
   end;
+  Check(IsValidJSON(zendframeworkJson));
   TestGit([soReadIgnoreUnknownFields]);
   TestGit([soReadIgnoreUnknownFields,soWriteHumanReadable]);
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSON2Title),
@@ -8350,7 +8465,8 @@ begin
     __TTestCustomJSON2).Options := [soWriteHumanReadable];
   FillCharFast(Trans,sizeof(Trans),0);
   U := RecordSaveJSON(Trans,TypeInfo(TTestCustomJSON2));
-  Check(U='{'#$D#$A#9'"Transactions": []'#$D#$A'}');
+  Check(IsValidJSON(U));
+  CheckEqual(U,'{'#$D#$A#9'"Transactions": []'#$D#$A'}');
   for i := 1 to 10 do begin
     U := '{"transactions":[{"TRTYPE":"INCOME","TRDATE":"2013-12-09 02:30:04","TRAA":"1.23",'+
      '"TRCAT1":{"TITYPE":"C1","TIID":"1","TICID":"","TIDSC30":"description1","TIORDER":"0","TIDEL":"false"},'+
@@ -8358,6 +8474,7 @@ begin
      '"TRCAT3":{"TITYPE":"C3","TIID":"3","TICID":"","TIDSC30":"description3","TIORDER":"0","TIDEL":"false"},'+
      '"TRRMK":"Remark",'+
      '"TRACID":{"TITYPE":"AC","TIID":"4","TICID":"","TIDSC30":"account1","TIORDER":"0","TIDEL":"false"}}]}';
+    Check(IsValidJSON(U));
     RecordLoadJSON(Trans,UniqueRawUTF8(U),TypeInfo(TTestCustomJSON2));
     Check(length(Trans.Transactions)=1);
     Check(Trans.Transactions[0].TRTYPE='INCOME');
@@ -8378,8 +8495,9 @@ begin
   Check(sizeof(Disco.releases[0])=5*sizeof(Pointer)+2*sizeof(integer));
   Check(sizeof(Disco)=sizeof(Pointer)+3*sizeof(integer));
   U := RecordSaveJSON(Disco,TypeInfo(TTestCustomDiscogs));
-  Check(U='{"pagination":{"per_page":0,"items":0,"page":0},"releases":[]}');
+  CheckEqual(U,'{"pagination":{"per_page":0,"items":0,"page":0},"releases":[]}');
   U := JSONReformat(discogsJson,jsonCompact);
+  Check(IsValidJSON(U));
   Check(JSONReformat(JSONReformat(discogsJson,jsonHumanReadable),jsonCompact)=U);
   Check(JSONReformat(JSONReformat(discogsJson,jsonUnquotedPropName),jsonCompact)=U);
   Check(JSONReformat(JSONReformat(U,jsonUnquotedPropName),jsonCompact)=U);
@@ -8389,10 +8507,12 @@ begin
     Check(Disco.Releases[i].id>0);
   Parser.Options := [soWriteHumanReadable,soReadIgnoreUnknownFields];
   U := RecordSaveJSON(Disco,TypeInfo(TTestCustomDiscogs));
+  Check(IsValidJSON(U));
   FileFromString(U,'discoExtract.json');
   Finalize(Disco);
   FillCharFast(Disco,sizeof(Disco),0);
   U := '{"pagination":{"per_page":1},"releases":[{"title":"TEST","id":10}]}';
+  Check(IsValidJSON(U));
   RecordLoadJSON(Disco,UniqueRawUTF8(U),TypeInfo(TTestCustomDiscogs));
   Check(Disco.pagination.per_page=1);
   Check(Disco.pagination.page=0);
@@ -8403,6 +8523,7 @@ begin
   Finalize(Disco);
   FillCharFast(Disco,sizeof(Disco),0);
   U := '{"pagination":{},"releases":[{"Id":10},{"TITle":"blabla"}]}';
+  Check(IsValidJSON(U));
   RecordLoadJSON(Disco,UniqueRawUTF8(U),TypeInfo(TTestCustomDiscogs));
   Check(Disco.pagination.per_page=0);
   Check(Disco.pagination.page=0);
@@ -8413,6 +8534,7 @@ begin
     Check(Disco.releases[1].id=0);
   end;
   U := '{"pagination":{"page":1},"releases":[{"title":"abc","id":2}]}';
+  Check(IsValidJSON(U));
   RecordLoadJSON(Disco,UniqueRawUTF8(U),TypeInfo(TTestCustomDiscogs));
   Check(Disco.pagination.per_page=0);
   Check(Disco.pagination.page=1);
@@ -8424,18 +8546,20 @@ begin
   SetString(U,PAnsiChar('true'#0'footer,'),12);
   Check(IdemPChar(GetJSONField(pointer(U),P),'TRUE'));
   Check(P=nil);
-  Check(U='true'#0'footer,','3cce80e8df');
+  CheckEqual(U,'true'#0'footer,','3cce80e8df');
   {$ifndef DELPHI5OROLDER}
   // validates RawJSON (custom) serialization
   Enemy := TEnemy.Create;
   try
     U := ObjectToJSON(Enemy);
-    check(U='{"Enabled":false,"Name":"","Offense":{"damage":{"min":0,"max":0},'+
+    Check(IsValidJSON(U));
+    CheckEqual(U,'{"Enabled":false,"Name":"","Offense":{"damage":{"min":0,"max":0},'+
       '"attackspeed":{"min":0,"max":0}}}');
     Enemy.Off.Damage.Min := 10;
     Enemy.Off.AttackSpeed.Max := 100;
     U := ObjectToJSON(Enemy);
-    check(U='{"Enabled":false,"Name":"","Offense":{"damage":{"min":10,"max":0},'+
+    Check(IsValidJSON(U));
+    CheckEqual(U,'{"Enabled":false,"Name":"","Offense":{"damage":{"min":10,"max":0},'+
       '"attackspeed":{"min":0,"max":100}}}');
     FillcharFast(Enemy.Off, sizeof(Enemy.Off), 0);
     check(Enemy.Off.Damage.Min = 0);
@@ -19426,6 +19550,11 @@ begin
   finally
     proxy.Free;
   end;
+end;
+
+procedure TTestProtocols.SynRelay;
+begin
+
 end;
 
 

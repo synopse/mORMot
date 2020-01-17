@@ -2295,8 +2295,9 @@ function StrIComp(Str1, Str2: pointer): PtrInt;
 function StrLenPas(S: pointer): PtrInt;
 
 /// our fast version of StrLen(), to be used with PUTF8Char/PAnsiChar
+// - if available, a fast SSE2 asm will be used on Intel/AMD CPUs
 // - won't use SSE4.2 instructions on supported CPUs by default, which may read
-// some bytes beyond the s string, so should be avoided e.g. over memory mapped
+// some bytes beyond the string, so should be avoided e.g. over memory mapped
 // files - call explicitely StrLenSSE42() if you are confident on your input
 var StrLen: function(S: pointer): PtrInt = StrLenPas;
 
@@ -10759,13 +10760,19 @@ function IsString(P: PUTF8Char): boolean;
 // '0' is excluded at the begining of a number) and '123' is not a string
 function IsStringJSON(P: PUTF8Char): boolean;
 
+/// test if the supplied buffer is a correct JSON value
+function IsValidJSON(P: PUTF8Char; len: PtrInt): boolean; overload;
+
+/// test if the supplied buffer is a correct JSON value
+function IsValidJSON(const s: RawUTF8): boolean; overload;
+
 /// reach positon just after the current JSON item in the supplied UTF-8 buffer
 // - buffer can be either any JSON item, i.e. a string, a number or even a
 // JSON array (ending with ]) or a JSON object (ending with })
 // - returns nil if the specified buffer is not valid JSON content
 // - returns the position in buffer just after the item excluding the separator
 // character - i.e. result^ may be ',','}',']'
-function GotoEndJSONItem(P: PUTF8Char): PUTF8Char;
+function GotoEndJSONItem(P: PUTF8Char; strict: boolean=false): PUTF8Char;
 
 /// reach the positon of the next JSON item in the supplied UTF-8 buffer
 // - buffer can be either any JSON item, i.e. a string, a number or even a
@@ -21377,6 +21384,7 @@ end;
 const
   NULL_LOW  = ord('n')+ord('u')shl 8+ord('l')shl 16+ord('l')shl 24;
   FALSE_LOW = ord('f')+ord('a')shl 8+ord('l')shl 16+ord('s')shl 24;
+  FALSE_LOW2 = ord('a')+ord('l')shl 8+ord('s')shl 16+ord('e')shl 24;
   TRUE_LOW  = ord('t')+ord('r')shl 8+ord('u')shl 16+ord('e')shl 24;
   NULL_UPP  = ord('N')+ord('U')shl 8+ord('L')shl 16+ord('L')shl 24;
 
@@ -56166,36 +56174,64 @@ begin
     result := true; // don't begin with a numerical value -> must be a string
 end;
 
-function GotoEndJSONItem(P: PUTF8Char): PUTF8Char;
+function GotoEndJSONItem(P: PUTF8Char; strict: boolean): PUTF8Char;
+label ok;
 begin
   result := nil; // to notify unexpected end
   if P=nil then
     exit;
   while (P^<=' ') and (P^<>#0) do inc(P);
-  // get a field
   case P^ of
   #0: exit;
   '"': begin
     P := GotoEndOfJSONString(P);
     if P^<>'"' then
-      exit; // P^ should be '"' here -> execute repeat.. below
+      exit;
+    inc(P);
+    goto ok;
   end;
   '[','{': begin
     P := GotoNextJSONObjectOrArray(P);
     if P=nil then
       exit;
-    while (P^<=' ') and (P^<>#0) do inc(P);
+ok: while (P^<=' ') and (P^<>#0) do inc(P);
     result := P;
     exit;
   end;
   end;
-  repeat // numeric or true/false/null or MongoDB extended {age:{$gt:18}}
-    inc(P);
-    if P^=#0 then exit; // unexpected end
-  until P^ in [':',',',']','}'];
+  if strict then
+    case P^ of
+    't': if PInteger(P)^=TRUE_LOW then begin inc(P,4); goto ok; end;
+    'f': if PInteger(P+1)^=FALSE_LOW2 then begin inc(P,5); goto ok; end;
+    'n': if PInteger(P)^=NULL_LOW then begin inc(P,4); goto ok; end;
+    '-','+','0'..'9': begin
+      repeat inc(P) until not (P^ in DigitFloatChars);
+      goto ok;
+    end;
+    end else
+    repeat // numeric or true/false/null or MongoDB extended {age:{$gt:18}}
+      inc(P);
+      if P^=#0 then exit; // unexpected end
+    until P^ in [':',',',']','}'];
   if P^=#0 then
     exit;
   result := P;
+end;
+
+function IsValidJSON(const s: RawUTF8): boolean;
+begin
+  result := IsValidJSON(pointer(s),length(s));
+end;
+
+function IsValidJSON(P: PUTF8Char; len: PtrInt): boolean;
+var B: PUTF8Char;
+begin
+  result := false;
+  if (P=nil) or (len<=0) or (StrLen(P)<>len) then
+    exit;
+  B := P;
+  P :=  GotoEndJSONItem(B,{strict=}true);
+  result := (P<>nil) and (P-B=len);
 end;
 
 procedure GetJSONItemAsRawJSON(var P: PUTF8Char; var result: RawJSON;
@@ -56205,7 +56241,7 @@ begin
   result := '';
   if P=nil then
     exit;
-  B := P;
+  B := GotoNextNotSpace(P);
   P := GotoEndJSONItem(B);
   if P=nil then
     exit;
@@ -56295,9 +56331,9 @@ begin // should match GetJSONPropName()
         inc(P);
       until not (P^ in DigitFloatChars);
     't': if PInteger(P)^=TRUE_LOW then inc(P,4) else goto Prop;
-    'f': if PInteger(P)^=FALSE_LOW then inc(P,5) else goto Prop;
+    'f': if PInteger(P+1)^=FALSE_LOW2 then inc(P,5) else goto Prop;
     'n': if PInteger(P)^=NULL_LOW then inc(P,4) else goto Prop;
-    '''': begin
+    '''': begin // single-quoted identifier
       repeat inc(P); if P^<=' ' then exit; until P^='''';
       repeat inc(P) until (P^>' ') or (P^=#0);
       if P^<>':' then exit;
