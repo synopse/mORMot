@@ -13557,6 +13557,9 @@ var
   // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or
   // 'Ubuntu 16.04.5 LTS - Linux 3.13.0 110 generic#157 Ubuntu SMP Mon Feb 20 11:55:25 UTC 2017'
   OSVersionText: RawUTF8;
+  /// some addition system information as text, e.g. 'Wine 1.1.5'
+  // - also always appended to OSVersionText high-level description
+  OSVersionInfoEx: RawUTF8;
   /// some textual information about the current CPU
   CpuInfoText: RawUTF8;
   /// some textual information about the current computer hardware, from BIOS
@@ -13567,7 +13570,7 @@ var
 
 {$ifdef MSWINDOWS}
   {$ifndef UNICODE}
-  type
+type
   /// low-level API structure, not defined in older Delphi versions
   TOSVersionInfoEx = record
     dwOSVersionInfoSize: DWORD;
@@ -26732,24 +26735,25 @@ procedure RetrieveSystemInfo;
 var
   IsWow64Process: function(Handle: THandle; var Res: BOOL): BOOL; stdcall;
   GetNativeSystemInfo: procedure(var SystemInfo: TSystemInfo); stdcall;
+  wine_get_version: function: PAnsiChar; stdcall;
   Res: BOOL;
-  Kernel: THandle;
+  h: THandle;
   P: pointer;
   Vers: TWindowsVersion;
   cpu, manuf, prod, prodver: RawUTF8;
   reg: TWinRegistry;
 begin
-  Kernel := GetModuleHandle(kernel32);
-  GetTickCount64 := GetProcAddress(Kernel,'GetTickCount64');
+  h := GetModuleHandle(kernel32);
+  GetTickCount64 := GetProcAddress(h,'GetTickCount64');
   if not Assigned(GetTickCount64) then
     GetTickCount64 := @GetTickCount64ForXP;
-  IsWow64Process := GetProcAddress(Kernel,'IsWow64Process');
+  IsWow64Process := GetProcAddress(h,'IsWow64Process');
   Res := false;
   IsWow64 := Assigned(IsWow64Process) and
     IsWow64Process(GetCurrentProcess,Res) and Res;
   FillcharFast(SystemInfo,SizeOf(SystemInfo),0);
   if IsWow64 then // see http://msdn.microsoft.com/en-us/library/ms724381(v=VS.85).aspx
-    GetNativeSystemInfo := GetProcAddress(Kernel,'GetNativeSystemInfo') else
+    GetNativeSystemInfo := GetProcAddress(h,'GetNativeSystemInfo') else
     @GetNativeSystemInfo := nil;
   if Assigned(GetNativeSystemInfo) then
     GetNativeSystemInfo(SystemInfo) else
@@ -26832,6 +26836,15 @@ begin
     cpu := StringToUTF8(GetEnvironmentVariable('PROCESSOR_IDENTIFIER'));
   cpu := Trim(cpu);
   FormatUTF8('% x % ('+CPU_ARCH_TEXT+')',[SystemInfo.dwNumberOfProcessors,cpu],CpuInfoText);
+  h := LoadLibrary('ntdll.dll');
+  if h>0 then begin
+    wine_get_version := GetProcAddress(h,'wine_get_version');
+    if Assigned(wine_get_version) then
+      OSVersionInfoEx := trim('Wine '+trim(wine_get_version));
+    FreeLibrary(h);
+  end;
+  if OSVersionInfoEx<>'' then
+    OSVersionText := FormatUTF8('% - %', [OSVersionText,OSVersionInfoEx]);
 end;
 
 {$else}
