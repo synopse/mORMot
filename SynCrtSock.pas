@@ -4057,14 +4057,48 @@ begin
   result := '';
 end;
 
+procedure AppendI32(value: integer; var dest: shortstring); {$ifdef HASINLINE}inline;{$endif}
+var temp: shortstring;
+begin
+  str(value,temp);
+  move(temp[1],dest[ord(dest[0])+1],ord(temp[0]));
+  inc(dest[0],ord(temp[0]));
+end;
+
+procedure AppendI64(value: Int64; var dest: shortstring);
+var temp: shortstring;
+begin
+  str(value,temp);
+  move(temp[1],dest[ord(dest[0])+1],ord(temp[0]));
+  inc(dest[0],ord(temp[0]));
+end;
+
+procedure AppendChar(chr: AnsiChar; var dest: shortstring); {$ifdef HASINLINE}inline;{$endif}
+begin
+  inc(dest[0]);
+  dest[ord(dest[0])] := chr;
+end;
+
 procedure IP4Text(const ip4addr; var result: SockString);
 var b: array[0..3] of byte absolute ip4addr;
+    s: shortstring;
+    i: PtrInt;
 begin
   if cardinal(ip4addr)=0 then
     result := '' else
   if cardinal(ip4addr)=$0100007f then
-    result := '127.0.0.1' else
-    result := SockString(Format('%d.%d.%d.%d',[b[0],b[1],b[2],b[3]]))
+    result := '127.0.0.1' else begin
+    s := '';
+    i := 0;
+    repeat
+      AppendI32(b[i],s);
+      if i=3 then
+        break;
+      AppendChar('.',s);
+      inc(i);
+    until false;
+    SetString(result,PAnsiChar(@s[1]),ord(s[0]));
+  end;
 end;
 
 procedure IPText(const sin: TVarSin; var result: SockString);
@@ -5503,7 +5537,7 @@ end;
 
 function TCrtSocket.PeerAddress: SockString;
 begin
-  IP4Text(fPeerAddr.sin_addr,result);
+  IPText(PVarSin(@fPeerAddr)^,result);
 end;
 
 function TCrtSocket.PeerPort: integer;
@@ -5537,7 +5571,7 @@ begin
     inc(resultlen,read);
     if read<available then
       SetLength(result,resultlen); // e.g. Read=0 may happen
-    SleepHiRes(0); // 1 microsec on POSIX
+    SleepHiRes(0); // 10 microsecs on POSIX
   until false;
 end;
 
@@ -6588,6 +6622,8 @@ procedure THttpServerResp.Execute;
             InterLockedIncrement(fServer.fStats[res]);
             case res of
             grBodyReceived, grHeaderReceived: begin
+              if res=grBodyReceived then
+                InterlockedIncrement(fServer.fStats[grHeaderReceived]);
               // calc answer and send response
               fServer.Process(fServerSock,ConnectionID,self);
               // keep connection only if necessary
@@ -8830,19 +8866,6 @@ end;
 function THttpApiServer.GetSendResponseFlags(Ctxt: THttpServerRequest): Integer;
 begin
   result := 0;
-end;
-
-procedure AppendI64(value: Int64; var dest: shortstring);
-var temp: shortstring;
-begin
-  str(value,temp);
-  dest := dest+temp;
-end;
-
-procedure AppendChar(chr: AnsiChar; var dest: shortstring);
-begin
-  inc(dest[0]);
-  dest[ord(dest[0])] := chr;
 end;
 
 procedure THttpApiServer.Execute;
@@ -12501,7 +12524,7 @@ begin
             include(lock,w);
           if lock=[r,w] then
             break;
-          SleepHiRes(0); // 1 microsec on POSIX
+          SleepHiRes(0); // 10 microsecs on POSIX
         until GetTick64>=endtix;
       end;
   finally
