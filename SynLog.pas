@@ -1324,7 +1324,7 @@ type
     /// the computer Operating System in which the process was running on
     // - returns e.g. '2.3=5.1.2600' for Windows XP
     // - under Linux, it will return the full system version, e.g.
-    // 'Linux-3.13.0-43-generic#72-Ubuntu-SMP-Mon-Dec-8-19:35:44-UTC-2014'
+    // 'Ubuntu=Linux-3.13.0-43-generic#72-Ubuntu-SMP-Mon-Dec-8-19:35:44-UTC-2014'
     property DetailedOS: RawUTF8 read fOSDetailed;
     /// the associated framework information
     // - returns e.g. 'TSQLLog 1.18.2765 ERTL FTS3'
@@ -4353,31 +4353,32 @@ begin
       Add('*');
       Add(wProcessorArchitecture); Add('-'); Add(wProcessorLevel); Add('-');
       Add(wProcessorRevision);
+    {$endif}
       {$ifdef CPUINTEL}
       Add(':'); AddBinToHex(@CpuFeatures,SizeOf(CpuFeatures));
       {$endif}
-      AddShort(' OS='); Add(ord(OSVersion)); Add('.'); Add(wServicePackMajor);
+      AddShort(' OS=');
+    {$ifdef MSWINDOWS}
+      Add(ord(OSVersion)); Add('.'); Add(wServicePackMajor);
       Add('='); Add(dwMajorVersion); Add('.'); Add(dwMinorVersion); Add('.');
       Add(dwBuildNumber);
-      AddShort(' Wow64='); Add(integer(IsWow64));
     end;
     {$else}
-    {$ifdef CPUINTEL}
-    Add(':'); AddBinToHex(@CpuFeatures,SizeOf(CpuFeatures));
-    {$endif}
-    AddShort(' OS=');
-    AddNoJSONEscape(@SystemInfo.uts.sysname); Add('-');
-    AddNoJSONEscape(@SystemInfo.uts.release);
+    AddTrimLeftLowerCase(ToText(OS_KIND)); Add('=');
+    AddTrimSpaces(@SystemInfo.uts.sysname); Add('-');
+    AddTrimSpaces(@SystemInfo.uts.release);
     AddReplace(@SystemInfo.uts.version,' ','-');
-    AddShort(' Wow64=0');
-    {$endif}
+    {$endif MSWINDOWS}
+    if OSVersionInfoEx<> '' then begin
+      Add('/'); AddTrimSpaces(OSVersionInfoEx); end;
+    {$ifdef MSWINDOWS}
+    AddShort(' Wow64='); Add(integer(IsWow64));
     AddShort(' Freq=');
-    {$ifdef LINUX}
-    AddShort('1000000'); // taken by QueryPerformanceMicroSeconds()
-    {$else}
     QueryPerformanceFrequency(fFrequencyTimestamp);
     Add(fFrequencyTimestamp);
-    {$endif LINUX}
+    {$else}
+    AddShort(' Wow64=0 Freq=1000000'); // taken by QueryPerformanceMicroSeconds()
+    {$endif MSWINDOWS}
     if IsLibrary then begin
       AddShort(' Instance=');
       AddNoJSONEscapeString(InstanceFileName);
