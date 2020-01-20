@@ -4057,7 +4057,7 @@ begin
   result := '';
 end;
 
-procedure AppendI32(value: integer; var dest: shortstring); {$ifdef HASINLINE}inline;{$endif}
+procedure AppendI32(value: integer; var dest: shortstring); {$ifdef FPC}inline;{$endif}
 var temp: shortstring;
 begin
   str(value,temp);
@@ -4073,7 +4073,7 @@ begin
   inc(dest[0],ord(temp[0]));
 end;
 
-procedure AppendChar(chr: AnsiChar; var dest: shortstring); {$ifdef HASINLINE}inline;{$endif}
+procedure AppendChar(chr: AnsiChar; var dest: shortstring); {$ifdef FPC}inline;{$endif}
 begin
   inc(dest[0]);
   dest[ord(dest[0])] := chr;
