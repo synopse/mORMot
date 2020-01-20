@@ -11819,7 +11819,7 @@ begin
       break; // we acquired the background thread
     end;
     case OnIdleProcessNotify(start) of // Windows.GetTickCount64 res is 10-16 ms
-    0..20:    SleepHiRes(0); // 1 microsec delay on POSIX
+    0..20:    SleepHiRes(0); // 10 microsec delay on POSIX
     21..100:  SleepHiRes(1);
     101..900: SleepHiRes(5);
     else      SleepHiRes(50);

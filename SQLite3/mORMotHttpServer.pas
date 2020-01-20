@@ -715,6 +715,9 @@ begin
   {$ifndef ONLYUSEHTTPSOCKET}
   if aHttpServerKind in [useHttpApi,useHttpApiRegisteringURI] then
   try
+    if PosEx('Wine',OSVersionInfoEx)>0 then
+      log.Log(sllWarning,'%: httpapi probably not supported on % -> try useHttpSocket',
+        [ToText(aHttpServerKind)^,OSVersionInfoEx]);
     // first try to use fastest http.sys
     fHttpServer := THttpApiServer.Create(false,
       aQueueName,HttpThreadStart,HttpThreadTerminate,GetDBServerNames);
@@ -726,15 +729,15 @@ begin
         fHttpServerKind=useHttpApiRegisteringURI,true);
   except
     on E: Exception do begin
-      log.Log(sllError,'% for % at%  -> fallback to socket-based server',
-        [E,fHttpServer,ServersRoot],self);
+      log.Log(sllError,'% for % % at%  -> fallback to socket-based server',
+        [E,ToText(aHttpServerKind)^,fHttpServer,ServersRoot],self);
       FreeAndNil(fHttpServer); // if http.sys initialization failed
     end;
   end;
   {$endif}
   {$endif}
   if fHttpServer=nil then begin
-    // http.sys failed -> create one instance of our pure Delphi server
+    // http.sys not running -> create one instance of our pure socket server
     if aHttpServerKind=useBidirSocket then
       fHttpServer := TWebSocketServerRest.Create(
         fPort,HttpThreadStart,HttpThreadTerminate,GetDBServerNames) else
