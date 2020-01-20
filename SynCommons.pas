@@ -8372,6 +8372,13 @@ type
     procedure AddStringCopy(const Text: RawUTF8; start,len: PtrInt);
     /// append after trim first lowercase chars ('otDone' will add 'Done' e.g.)
     procedure AddTrimLeftLowerCase(Text: PShortString);
+    /// append a UTF-8 String excluding any space or control char
+    // - this won't escape the text as expected by JSON
+    procedure AddTrimSpaces(const Text: RawUTF8); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// append a UTF-8 String excluding any space or control char
+    // - this won't escape the text as expected by JSON
+    procedure AddTrimSpaces(P: PUTF8Char); overload;
     /// append a ShortString property name, as '"PropName":'
     // - PropName content should not need to be JSON escaped (e.g. no " within,
     // and only ASCII 7-bit characters)
@@ -55043,6 +55050,23 @@ begin
   if L=0 then
     AddShort(Text^) else
     AddNoJSONEscape(P,L);
+end;
+
+procedure TTextWriter.AddTrimSpaces(const Text: RawUTF8);
+begin
+  AddTrimSpaces(pointer(Text));
+end;
+
+procedure TTextWriter.AddTrimSpaces(P: PUTF8Char);
+var c: AnsiChar;
+begin
+  if P<>nil then
+    repeat
+      c := P^;
+      inc(P);
+      if c>' ' then
+        Add(c);
+    until c=#0;
 end;
 
 procedure TTextWriter.AddString(const Text: RawUTF8);
