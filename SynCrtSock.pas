@@ -1101,14 +1101,13 @@ type
   // - OutContent/OutContentType/OutCustomHeader are output parameters
   THttpServerRequest = class
   protected
-    fURL, fMethod, fInHeaders, fInContent, fInContentType: SockString;
+    fURL, fMethod, fInHeaders, fInContent, fInContentType, fAuthenticatedUser,
     fOutContent, fOutContentType, fOutCustomHeaders: SockString;
     fServer: THttpServerGeneric;
     fConnectionID: Int64;
     fConnectionThread: TSynThread;
     fUseSSL: boolean;
     fAuthenticationStatus: THttpServerRequestAuthentication;
-    fAuthenticatedUser: SockString;
     {$ifdef MSWINDOWS}
     fHttpApiRequest: Pointer;
     {$endif}
@@ -1970,7 +1969,8 @@ type
     fHeaderRetrieveAbortDelay: integer;
     fThreadPool: TSynThreadPoolTHttpServer;
     fInternalHttpServerRespList: TList;
-    fServerConnectionCount: cardinal;
+    fServerConnectionCount: integer;
+    fServerConnectionActive: integer;
     fServerKeepAliveTimeOut: cardinal;
     fTCPPrefix: SockString;
     fSock: TCrtSocket;
@@ -2037,9 +2037,12 @@ type
     // - see also NginxSendFileFrom() method
     property OnSendFile: TOnHttpServerSendFile read fOnSendFile write fOnSendFile;
   published
+    /// will contain the current number of connections to the server
+    property ServerConnectionActive: integer
+      read fServerConnectionActive write fServerConnectionActive;
     /// will contain the total number of connections to the server
     // - it's the global count since the server started
-    property ServerConnectionCount: cardinal
+    property ServerConnectionCount: integer
       read fServerConnectionCount write fServerConnectionCount;
     /// time, in milliseconds, for the HTTP/1.1 connections to be kept alive
     // - default is 3000 ms
@@ -4551,6 +4554,8 @@ begin
       until p = nil;
     end;
     {$endif MSWINDOWS}
+    { TODO : RetrieveMacAddresses() for BSD
+      see e.g. https://gist.github.com/OrangeTide/909204 }
   finally
     LeaveCriticalSection(SynSockCS);
   end;
@@ -6344,12 +6349,13 @@ end;
 
 procedure THttpServer.OnConnect;
 begin
-  inc(fServerConnectionCount);
+  InterLockedIncrement(fServerConnectionCount);
+  InterLockedIncrement(fServerConnectionActive);
 end;
 
 procedure THttpServer.OnDisconnect;
 begin
-  // nothing to do by default
+  InterLockedDecrement(fServerConnectionActive);
 end;
 
 procedure THttpServer.Process(ClientSock: THttpServerSocket;
@@ -6861,7 +6867,7 @@ const
 function THttpSocket.HeaderGetText(const aRemoteIP: SockString): SockString;
 var i,L,Lip,n: integer;
     P: PAnsiChar;
-begin // faster than for i := 0 to Count-1 do result := result+Headers[i]+#13#10
+begin // faster than for .. do result := result+Headers[i]+#13#10
   if fHeaderText='' then begin
     n := length(Headers);
     L := n*2; // #13#10 size
