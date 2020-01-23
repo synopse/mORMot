@@ -993,6 +993,7 @@ type
   TBidirServer = class(TInterfacedObject,IBidirService)
   protected
     fCallback: IBidirCallback;
+    // IBidirService implementation methods
     function TestRest(a,b: integer; out c: RawUTF8): variant;
     function TestRestCustom(a: integer): TServiceCustomAnswer;
     function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
@@ -1008,11 +1009,14 @@ type
     fHttpServer: TSQLHttpServer;
     fServer: TSQLRestServerFullMemory;
     fBidirServer: TBidirServer;
+    fPublicRelayClientsPort, fPublicRelayPort: SockString;
+    fPublicRelay: TPublicRelay;
+    fPrivateRelay: TPrivateRelay;
     procedure CleanUp; override;
     procedure WebsocketsLowLevel(protocol: TWebSocketProtocol; opcode: TWebSocketFrameOpCode);
     procedure TestRest(Rest: TSQLRest);
     procedure TestCallback(Rest: TSQLRest);
-    procedure SOACallbackViaWebsockets(Ajax: boolean);
+    procedure SOACallbackViaWebsockets(Ajax, Relay: boolean);
   published
     /// low-level test of our 'synopsejson' WebSockets JSON protocol
     procedure WebsocketsJSONProtocol;
@@ -1029,6 +1033,16 @@ type
     procedure SOACallbackViaJSONWebsockets;
     /// test callbacks via interface-based services over binary WebSockets
     procedure SOACallbackViaBinaryWebsockets;
+    /// initialize SynProtoRelay tunnelling
+    procedure RelayStart;
+    /// test SynProtoRelay tunnelling over JSON WebSockets
+    procedure RelaySOACallbackViaJSONWebsockets;
+    /// verify ability to reconect from Private Relay to Public Relay
+    procedure RelayConnectionRecreate;
+    /// test SynProtoRelay tunnelling over binary WebSockets
+    procedure RelaySOACallbackViaBinaryWebsockets;
+    /// finalize SynProtoRelay tunnelling
+    procedure RelayShutdown;
     /// test Master/Slave replication using TRecordVersion field over WebSockets
     procedure _TRecordVersion;
   end;
@@ -19110,6 +19124,8 @@ const
   WEBSOCKETS_KEY = 'key';
 
 procedure TTestBidirectionalRemoteConnection.RunHttpServer;
+var
+  port: integer;
 begin
   TInterfaceFactory.RegisterInterfaces([TypeInfo(IBidirService),TypeInfo(IBidirCallback)]);
   // sicClientDriven services expect authentication for sessions
@@ -19121,6 +19137,9 @@ begin
   Check(fHttpServer.AddServer(fServer));
   fHttpServer.WebSocketsEnable(fServer,WEBSOCKETS_KEY,true).Settings.SetFullLog;
   //(fHttpServer.HttpServer as TWebSocketServer).HeartbeatDelay := 5000;
+  port := UTF8ToInteger(HTTP_DEFAULTPORT);
+  fPublicRelayClientsPort := ToUTF8(port+1);
+  fPublicRelayPort := ToUTF8(port+2);
 end;
 
 procedure TTestBidirectionalRemoteConnection.TestRest(Rest: TSQLRest);
@@ -19131,7 +19150,7 @@ var I: IBidirService;
     res: TServiceCustomAnswer;
 begin
   Rest.Services.Resolve(IBidirService,I);
-  if CheckFailed(Assigned(I)) then
+  if CheckFailed(Assigned(I), 'Rest IBidirService') then
     exit;
   for a := -10 to 10 do
     for b := -10 to 10 do begin
@@ -19164,7 +19183,7 @@ begin
 end;
 begin
   Rest.Services.Resolve(IBidirService,I);
-  if CheckFailed(Assigned(I)) then
+  if CheckFailed(Assigned(I), 'Callback IBidirService') then
     exit;
   subscribed := TBidirCallbackInterfacedObject.Create;
   for d := -5 to 6 do begin
@@ -19197,32 +19216,95 @@ begin
   TestRest(fServer);
 end;
 
-procedure TTestBidirectionalRemoteConnection.SOACallbackViaWebsockets(Ajax: boolean);
+procedure TTestBidirectionalRemoteConnection.SOACallbackViaWebsockets(
+  Ajax, Relay: boolean);
 var Client: TSQLHttpClientWebsockets;
+    port: SockString;
+    error, stats: RawUTF8;
 begin
-  Client := TSQLHttpClientWebsockets.Create('127.0.0.1',HTTP_DEFAULTPORT,fServer.Model);
+  if Relay then
+    port := fPublicRelayClientsPort else
+    port := HTTP_DEFAULTPORT;
+  Client := TSQLHttpClientWebsockets.Create('127.0.0.1',port,fServer.Model);
   try
-    Check(Client.ServerTimestampSynchronize);
-    Check(Client.SetUser('User','synopse'));
-    Check(Client.ServiceDefine(IBidirService,sicShared)<>nil);
-    TestRest(Client);
     Client.WebSockets.Settings.SetFullLog;
-    Client.WebSocketsUpgrade(WEBSOCKETS_KEY,Ajax,true);
+    if not Relay then begin // HTTP link not relayed yet
+      Check(Client.ServerTimestampSynchronize);
+      Check(Client.SetUser('User','synopse'));
+      Check(Client.ServiceDefine(IBidirService,sicShared)<>nil);
+      TestRest(Client);
+    end;
+    error := Client.WebSocketsUpgrade(WEBSOCKETS_KEY,Ajax,true);
+    CheckEqual(error, '', 'WebSocketsUpgrade');
+    if Relay then begin // register it now
+      Check(Client.SetUser('User','synopse'), 'setuser');
+      Check(Client.ServiceDefine(IBidirService,sicShared)<>nil, 'IBidirService');
+    end;
     TestCallback(Client);
+    if Relay then begin
+      stats := HttpGet('127.0.0.1',fPublicRelayPort,'/stats','');
+      check(PosEx('"version"', stats)>0,'stats');
+    end;
     TestRest(Client);
   finally
     Client.Free;
   end;
 end;
 
-procedure TTestBidirectionalRemoteConnection.SOACallbackViaBinaryWebsockets;
-begin
-  SOACallbackViaWebsockets(false);
-end;
-
 procedure TTestBidirectionalRemoteConnection.SOACallbackViaJSONWebsockets;
 begin
-  SOACallbackViaWebsockets(true);
+  SOACallbackViaWebsockets({ajax=}true,{relay=}false);
+end;
+
+procedure TTestBidirectionalRemoteConnection.SOACallbackViaBinaryWebsockets;
+begin
+  SOACallbackViaWebsockets({ajax=}false,{relay=}false);
+end;
+
+procedure TTestBidirectionalRemoteConnection.RelayStart;
+const
+  RELAYKEY = 'aes256secret';
+var
+  stats: RawUTF8;
+begin
+  fPublicRelay := TPublicRelay.Create(nil, fPublicRelayClientsPort,
+    fPublicRelayPort, RELAYKEY, TJWTHS256.Create('jwtsecret', 100, [], []));
+  fPrivateRelay := TPrivateRelay.Create(nil, '127.0.0.1',fPublicRelayPort,
+    RELAYKEY, fPublicRelay.ServerJWT.Compute([]), '127.0.0.1',
+    HTTP_DEFAULTPORT, 'X-Real-IP');
+  check(not fPrivateRelay.Connected);
+  check(fPrivateRelay.TryConnect);
+  checkEqual(HttpGet('127.0.0.1',fPublicRelayPort,'/invalid',''), '', 'wrong URI');
+  stats := HttpGet('127.0.0.1',fPublicRelayPort,'/stats','');
+  check(PosEx('version', stats)>0,'stats');
+end;
+
+procedure TTestBidirectionalRemoteConnection.RelaySOACallbackViaJSONWebsockets;
+begin
+  SOACallbackViaWebsockets({ajax=}true,{relay=}true);
+end;
+
+procedure TTestBidirectionalRemoteConnection.RelayConnectionRecreate;
+begin
+  check(fPrivateRelay.TryConnect);
+end;
+
+procedure TTestBidirectionalRemoteConnection.RelaySOACallbackViaBinaryWebsockets;
+begin
+  SOACallbackViaWebsockets({ajax=}false,{relay=}true);
+end;
+
+procedure TTestBidirectionalRemoteConnection.RelayShutdown;
+var
+  stats: RaWUTF8;
+begin
+  stats := HttpGet('127.0.0.1',fPublicRelayPort,'/stats','');
+  check(PosEx('"version"', stats)>0,'stats');
+  fPrivateRelay.Free;
+  sleep(100);
+  stats := HttpGet('127.0.0.1',fPublicRelayPort,'/stats','');
+  check(PosEx('"version"', stats)>0,'stats');
+  fPublicRelay.Free;
 end;
 
 procedure TTestBidirectionalRemoteConnection._TRecordVersion;
