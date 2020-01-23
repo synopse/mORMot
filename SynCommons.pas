@@ -6618,7 +6618,10 @@ function PtrArrayAdd(var aPtrArray; aItem: pointer): integer;
 function PtrArrayAddOnce(var aPtrArray; aItem: pointer): integer;
 
 /// wrapper to delete an item from a array of pointer dynamic array storage
-function PtrArrayDelete(var aPtrArray; aItem: pointer): integer; overload;
+function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger=nil): integer; overload;
+
+/// wrapper to delete an item from a array of pointer dynamic array storage
+procedure PtrArrayDelete(var aPtrArray; aIndex: integer; aCount: PInteger=nil); overload;
 
 /// wrapper to find an item to a array of pointer dynamic array storage
 function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
@@ -6695,7 +6698,7 @@ function ObjArrayCount(const aObjArray): integer;
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 // - do nothing if the index is out of range in the dynamic array
 procedure ObjArrayDelete(var aObjArray; aItemIndex: PtrInt;
-  aContinueOnException: boolean=false); overload;
+  aContinueOnException: boolean=false; aCount: PInteger=nil); overload;
 
 /// wrapper to delete an item in a T*ObjArray dynamic array storage
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
@@ -6729,7 +6732,8 @@ procedure ObjArrayClear(var aObjArray; aCount: integer); overload;
 // e.g. in the owner class destructor
 // - will also set the dynamic array length to 0, so could be used to re-use
 // an existing T*ObjArray
-procedure ObjArrayClear(var aObjArray; aContinueOnException: boolean); overload;
+procedure ObjArrayClear(var aObjArray; aContinueOnException: boolean;
+  aCount: PInteger=nil); overload;
 
 /// wrapper to release all items stored in an array of T*ObjArray dynamic array
 // - e.g. aObjArray may be defined as "array of array of TSynFilter"
@@ -51406,11 +51410,31 @@ begin
   result := n;
 end;
 
-function PtrArrayDelete(var aPtrArray; aItem: pointer): integer;
+procedure PtrArrayDelete(var aPtrArray; aIndex: integer; aCount: PInteger);
 var a: TPointerDynArray absolute aPtrArray;
     n: integer;
 begin
-  n := length(a);
+  if aCount=nil then
+    n := length(a) else
+    n := aCount^;
+  if cardinal(aIndex)>=cardinal(n) then
+    exit; // out of range
+  dec(n);
+  if n>aIndex then
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(
+      a[aIndex+1],a[aIndex],(n-aIndex)*SizeOf(pointer));
+  if aCount=nil then
+    SetLength(a,n) else
+    aCount^ := n;
+end;
+
+function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger): integer;
+var a: TPointerDynArray absolute aPtrArray;
+    n: integer;
+begin
+  if aCount=nil then
+    n := length(a) else
+    n := aCount^;
   result := PtrUIntScanIndex(pointer(a),n,PtrUInt(aItem));
   if result<0 then
     exit;
@@ -51418,7 +51442,9 @@ begin
   if n>result then
     {$ifdef FPC}Move{$else}MoveFast{$endif}(
       a[result+1],a[result],(n-result)*SizeOf(pointer));
-  SetLength(a,n);
+  if aCount=nil then
+    SetLength(a,n) else
+    aCount^ := n;
 end;
 
 function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
@@ -51517,11 +51543,13 @@ begin
 end;
 
 procedure ObjArrayDelete(var aObjArray; aItemIndex: PtrInt;
-  aContinueOnException: boolean);
+  aContinueOnException: boolean; aCount: PInteger);
 var n: PtrInt;
     a: TObjectDynArray absolute aObjArray;
 begin
-  n := length(a);
+  if aCount=nil then
+    n := length(a) else
+    n := aCount^;
   if cardinal(aItemIndex)>=cardinal(n) then
     exit; // out of range
   if aContinueOnException then
@@ -51534,7 +51562,9 @@ begin
   if n>aItemIndex then
     {$ifdef FPC}Move{$else}MoveFast{$endif}(
       a[aItemIndex+1],a[aItemIndex],(n-aItemIndex)*SizeOf(TObject));
-  SetLength(a,n);
+  if aCount=nil then
+    SetLength(a,n) else
+    aCount^ := n;
 end;
 
 function ObjArrayDelete(var aObjArray; aItem: TObject): PtrInt;
@@ -51582,11 +51612,16 @@ begin
   a := nil;
 end;
 
-procedure ObjArrayClear(var aObjArray; aContinueOnException: boolean);
+procedure ObjArrayClear(var aObjArray; aContinueOnException: boolean;
+  aCount: PInteger);
 var n,i: PtrInt;
     a: TObjectDynArray absolute aObjArray;
 begin
-  n := length(a);
+  if aCount=nil then
+    n := length(a) else begin
+    n := aCount^;
+    aCount^ := 0;
+  end;
   if n=0 then
     exit;
   if aContinueOnException then
@@ -55089,7 +55124,7 @@ begin
 end;
 
 procedure TTextWriter.AddString(const Text: RawUTF8);
-var L: integer;
+var L: PtrInt;
 begin
   if PtrInt(Text)=0 then
     exit;
@@ -55121,7 +55156,7 @@ begin
 end;
 
 procedure TTextWriter.AddStrings(const Text: array of RawUTF8);
-var i: integer;
+var i: PtrInt;
 begin
   for i := 0 to high(Text) do
     AddString(Text[i]);
