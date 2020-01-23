@@ -452,7 +452,15 @@ type
   TWebSocketProcess = class;
   {$M-}
 
-  /// handle an application-level WebSockets protocol
+  /// callback event triggered by TWebSocketProtocol for any incoming message
+  // - called before TWebSocketProtocol.ProcessIncomingFrame for incoming
+  // focText/focBinary frames
+  // - should return true if the frame has been handled, or false if the
+  // regular processing should take place
+  TOnWebSocketProtocolIncomingFrame =
+    function(Sender: TWebSocketProcess; var Frame: TWebSocketFrame): boolean of object;
+
+  /// one instance implementing application-level WebSockets protocol
   // - shared by TWebSocketServer and TWebSocketClient classes
   // - once upgraded to WebSockets, a HTTP link could be used e.g. to transmit our
   // proprietary 'synopsejson' or 'synopsebin' application content, as stated
@@ -480,13 +488,16 @@ type
     fName: RawUTF8;
     fURI: RawUTF8;
     fFramesInCount: integer;
-    fFramesInBytes: QWord;
     fFramesOutCount: integer;
+    fFramesInBytes: QWord;
     fFramesOutBytes: QWord;
-    fRemoteIP: SockString;
+    fOnBeforeIncomingFrame: TOnWebSocketProtocolIncomingFrame;
     fRemoteLocalhost: boolean;
+    fRemoteIP: SockString;
+    fUpgradeURI: RawUTF8;
     fLastError: string;
     fEncryption: IProtocol;
+    // calls fEncryption.ProcessHandshake, if defined
     function ProcessHandshake(const ExtIn: TRawUTF8DynArray; out ExtOut: RawUTF8;
       ErrorMsg: PRawUTF8): boolean; virtual;
     function ProcessURI(const aClientURI: RawUTF8): boolean; virtual; // e.g. for authentication
@@ -502,7 +513,8 @@ type
     function FrameType(const frame: TWebSocketFrame): RawUTF8; virtual;
     function GetRemoteIP: SockString;
     function GetEncrypted: boolean;
-    function GetSubprotocols: RawUTF8; virtual; // e.g. 'synopsebin, synopsebinary'
+    // fName by default, but e.g. 'synopsebin, synopsebinary'
+    function GetSubprotocols: RawUTF8; virtual;
     function SetSubprotocol(const aProtocolName: RawUTF8): boolean; virtual;
   public
     /// abstract constructor to initialize the protocol
@@ -513,6 +525,18 @@ type
     constructor Create(const aName,aURI: RawUTF8); reintroduce;
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone(const aClientURI: RawUTF8): TWebSocketProtocol; virtual; abstract;
+    /// set the fEncryption: IProtocol according to the supplied key
+    // - any asymetric algorithm need to know which side (client/server) to work on
+    // - try TECDHEProtocol.FromKey(aKey) and fallback to TProtocolAES.Create(TAESCFB)
+    // using SHA256Weak(aKey)
+    procedure SetEncryptKey(aServer: boolean; const aKey: RawUTF8);
+    /// set the fEncryption: IProtocol as TProtocolAES.Create(TAESCFB)
+    procedure SetEncryptKeyAES(const aKey; aKeySize: cardinal);
+    /// allow low-level interception before ProcessIncomingFrame is done
+    property OnBeforeIncomingFrame: TOnWebSocketProtocolIncomingFrame
+      read fOnBeforeIncomingFrame write fOnBeforeIncomingFrame;
+    /// access low-level frame encryption
+    property Encryption: IProtocol read fEncryption;
   published
     /// the Sec-WebSocket-Protocol application name currently involved
     // - e.g. 'synopsejson', 'synopsebin' or 'synopsebinary'
@@ -521,8 +545,10 @@ type
     // - leave to '' if any URI should match
     property URI: RawUTF8 read fURI;
     /// the associated 'Remote-IP' HTTP header value
-    // - returns '' if RemoteLocalhost=true
+    // - returns '' if self=nil or RemoteLocalhost=true
     property RemoteIP: SockString read GetRemoteIP;
+    /// the URI on which this protocol has been upgraded
+    property UpgradeURI: RawUTF8 read fUpgradeURI;
     /// the last error message, during frame processing
     property LastError: string read fLastError;
     /// returns TRUE if encryption is enabled during the transmission
@@ -563,6 +589,7 @@ type
     function Clone(const aClientURI: RawUTF8): TWebSocketProtocol; override;
     /// on the server side, allows to send a message over the wire to a
     // specified client connection
+    // - a temporary copy of the Frame content will be made for safety
     function SendFrame(Sender: THttpServerResp; const Frame: TWebSocketFrame): boolean;
     /// on the server side, allows to send a JSON message over the wire to a
     // specified client connection
@@ -573,6 +600,7 @@ type
     property OnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame
       read fOnIncomingFrame write fOnIncomingFrame;
   end;
+
 
   /// handle a REST application-level bi-directional WebSockets protocol
   // - will emulate a bi-directional REST process, using THttpServerRequest to
@@ -635,7 +663,7 @@ type
   // $ Sec-WebSocket-Protocol: synopsebin
   // or fallback to the previous subprotocol
   // $ Sec-WebSocket-Protocol: synopsebinary
-  // - 'synopsebin' will expect requests as 'r000001','r000002',...
+  // - 'synopsebin' will expect requests sequenced as 'r000001','r000002',...
   // headers matching 'a000001','a000002',... instead of 'request'/'answer'
   TWebSocketProtocolBinary = class(TWebSocketProtocolRest)
   protected
@@ -657,8 +685,6 @@ type
       var request: TWebSocketFrame; const info: RawUTF8); override;
     function GetFramesInCompression: integer;
     function GetFramesOutCompression: integer;
-    function ProcessHandshake(const ExtIn: TRawUTF8DynArray; out ExtOut: RawUTF8;
-      ErrorMsg: PRawUTF8): boolean; override;
     function GetSubprotocols: RawUTF8; override;
     function SetSubprotocol(const aProtocolName: RawUTF8): boolean; override;
   public
@@ -840,10 +866,10 @@ type
     fState: TWebSocketProcessState;
     fProtocol: TWebSocketProtocol;
     fMaskSentFrames: byte;
-    fSettings: TWebSocketProcessSettings;
-    fProcessCount: integer;
     fProcessEnded: boolean;
     fNoConnectionCloseAtDestroy: boolean;
+    fProcessCount: integer;
+    fSettings: TWebSocketProcessSettings;
     fSafeIn, fSafeOut: PSynLocker;
     fInvalidPingSendCount: cardinal;
     fSafePing: PSynLocker;
@@ -874,6 +900,7 @@ type
       aOwnerThread: TSynThread; const aSettings: TWebSocketProcessSettings;
       const aProcessName: RawUTF8); reintroduce;
     /// finalize the context
+    // - if needed, will notify the other end with a focConnectionClose frame
     // - will release the TWebSocketProtocol associated instance
     destructor Destroy; override;
     /// abstract low-level method to retrieve pending input data
@@ -911,6 +938,9 @@ type
     function Settings: PWebSocketProcessSettings; {$ifdef HASINLINE}inline;{$endif}
     /// returns the current state of the underlying connection
     function State: TWebSocketProcessState;
+    /// the associated 'Remote-IP' HTTP header value
+    // - returns '' if Protocol=nil or Protocol.RemoteLocalhost=true
+    function RemoteIP: SockString;
     /// direct access to the low-level incoming frame stack
     property Incoming: TWebSocketFrameList read fIncoming;
     /// direct access to the low-level outgoing frame stack
@@ -925,7 +955,7 @@ type
     property ProcessCount: integer read fProcessCount;
     /// may be set to TRUE before Destroy to force raw socket disconnection
     property NoConnectionCloseAtDestroy: boolean
-        read fNoConnectionCloseAtDestroy write fNoConnectionCloseAtDestroy;
+      read fNoConnectionCloseAtDestroy write fNoConnectionCloseAtDestroy;
   published
     /// the Sec-WebSocket-Protocol application protocol currently involved
     // - TWebSocketProtocolJSON or TWebSocketProtocolBinary in the mORMot context
@@ -1004,6 +1034,8 @@ type
     // - TWebSocketProtocolJSON or TWebSocketProtocolBinary in the mORMot context
     // - could be nil if the connection is in standard HTTP/1.1 mode
     function WebSocketProtocol: TWebSocketProtocol;
+    /// low-level WebSocket protocol processing instance
+    property WebSocketProcess: TWebSocketProcessServer read fProcess;
   end;
 
   /// main HTTP/WebSockets server Thread using the standard Sockets API (e.g. WinSock)
@@ -1023,9 +1055,6 @@ type
     // and ConnectionUpgrade properties should be checked for the handshake
     procedure Process(ClientSock: THttpServerSocket;
       ConnectionID: integer; ConnectionThread: TSynThread); override;
-    /// identifies an incoming THttpServerResp as a valid TWebSocketServerResp
-    function IsActiveWebSocket(ConnectionID: integer): TWebSocketServerResp; overload;
-    function IsActiveWebSocket(ConnectionThread: TSynThread): TWebSocketServerResp; overload;
   public
     /// create a Server Thread, binded and listening on a port
     // - this constructor will raise a EHttpServer exception if binding failed
@@ -1053,12 +1082,20 @@ type
     // - will call TWebSocketProcess.Outgoing.Push for asynchronous sending
     procedure WebSocketBroadcast(const aFrame: TWebSocketFrame;
       const aClientsConnectionID: TIntegerDynArray); overload;
-    /// access to the protocol list handled by this server
-    property WebSocketProtocols: TWebSocketProtocolList read fProtocols;
+    /// give access to the underlying connection from its ID
+    // - also identifies an incoming THttpServerResp as a valid TWebSocketServerResp
+    function IsActiveWebSocket(ConnectionID: integer): TWebSocketServerResp; overload;
+    /// give access to the underlying connection from its connection thread
+    // - also identifies an incoming THttpServerResp as a valid TWebSocketServerResp
+    function IsActiveWebSocket(ConnectionThread: TSynThread): TWebSocketServerResp; overload;
     /// the settings to be used for WebSockets process
     // - note that those parameters won't be propagated to existing connections
     // - defined as a pointer so that you may be able to change the values
     function Settings: PWebSocketProcessSettings; {$ifdef HASINLINE}inline;{$endif}
+    /// how many WebSockets connections are currently maintained
+    function WebSocketConnections: integer;
+    /// access to the protocol list handled by this server
+    property WebSocketProtocols: TWebSocketProtocolList read fProtocols;
   end;
 
   /// main HTTP/WebSockets server Thread using the standard Sockets API (e.g. WinSock)
@@ -1110,6 +1147,9 @@ type
 /// used to return the text corresponding to a specified WebSockets frame data
 function ToText(opcode: TWebSocketFrameOpCode): PShortString; overload;
 
+/// used to return the text corresponding to a specified WebSockets sending mode
+function ToText(mode: TWebSocketProcessNotifyCallback): PShortString; overload;
+
 
 { -------------- WebSockets Client classes for bidirectional remote access }
 
@@ -1153,9 +1193,17 @@ type
     fProcess: TWebSocketProcessClient;
     fSettings: TWebSocketProcessSettings;
     fOnCallbackRequestProcess: TOnHttpServerRequest;
+    fOnBeforeIncomingFrame: TOnWebSocketProtocolIncomingFrame;
     fOnWebSocketsClosed: TNotifyEvent;
     procedure SetInt32OptionByIndex(OptName, OptVal: integer); override;
   public
+    /// low-level initialization of a client WebSockets connection
+    // - calls Open() then WebSocketsUpgrade() for a given protocol
+    // - with proper error interception and optional logging, returning nil
+    class function WebSocketsConnect(const aHost, aPort: SockString;
+      aProtocol: TWebSocketProtocol; aLog: TSynLogClass=nil;
+      const aLogContext: RawUTF8=''; const aURI: RawUTF8='';
+      const aCustomHeaders: RawUTF8=''): THttpClientWebSockets;
     /// common initialization of all constructors
     // - this overridden method will set the UserAgent with some default value
     constructor Create(aTimeOut: PtrInt=10000); override;
@@ -1179,7 +1227,7 @@ type
     // - will return '' on success, or an error message on failure
     function WebSocketsUpgrade(const aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8;
       aWebSocketsAJAX: boolean=false; aWebSocketsCompression: boolean=true;
-      aProtocol: TWebSocketProtocol=nil): RawUTF8;
+      aProtocol: TWebSocketProtocol=nil; const aCustomHeaders: RawUTF8=''): RawUTF8;
     /// the settings to be used for WebSockets process
     // - note that those parameters won't be propagated to existing connections
     // - defined as a pointer so that you may be able to change the values
@@ -1189,11 +1237,15 @@ type
     /// this event handler will be executed for any incoming push notification
     property OnCallbackRequestProcess: TOnHttpServerRequest
       read fOnCallbackRequestProcess write fOnCallbackRequestProcess;
-    /// this event handler when the WebSocket link is destroyed
+    /// event handler trigerred when the WebSocket link is destroyed
     // - may happen e.g. after graceful close from the server side, or
     // after DisconnectAfterInvalidHeartbeatCount is reached
     property OnWebSocketsClosed: TNotifyEvent
       read fOnWebSocketsClosed write fOnWebSocketsClosed;
+    /// allow low-level interception before
+    // TWebSocketProcessClient.ProcessIncomingFrame is executed
+    property OnBeforeIncomingFrame: TOnWebSocketProtocolIncomingFrame
+      read fOnBeforeIncomingFrame write fOnBeforeIncomingFrame;
   published
     /// the current WebSockets processing class
     // - equals nil for plain HTTP/1.1 mode
@@ -1317,8 +1369,7 @@ begin
   result := false;
   if (self=nil) or (fHttp<>nil) or (fSocket<>nil) or not fURI.From(aURI) then
     exit;
-  if aToken <> '' then
-    FormatUTF8('Authorization: Bearer %',[aToken],fTokenHeader);
+  fTokenHeader := AuthorizationBearer(aToken);
   if aHttpClass=nil then begin
     {$ifdef USEWININET}
     aHttpClass := TWinHTTP;
@@ -1350,9 +1401,14 @@ var
   _TWebSocketFrameOpCode: array[TWebSocketFrameOpCode] of PShortString;
   _TWebSocketProcessNotifyCallback: array[TWebSocketProcessNotifyCallback] of PShortString;
 
-function ToText(opcode: TWebSocketFrameOpCode): PShortString; overload;
+function ToText(opcode: TWebSocketFrameOpCode): PShortString;
 begin
   result := _TWebSocketFrameOpCode[opcode];
+end;
+
+function ToText(mode: TWebSocketProcessNotifyCallback): PShortString;
+begin
+  result := _TWebSocketProcessNotifyCallback[mode];
 end;
 
 function ToText(st: TWebSocketProcessClientThreadState): PShortString; overload;
@@ -1363,6 +1419,11 @@ end;
 function ToText(ev: TPollSocketEvent): PShortString; overload;
 begin
   result := GetEnumName(TypeInfo(TPollSocketEvent),ord(ev));
+end;
+
+function ToText(st: TWebSocketProcessState): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TWebSocketProcessState),ord(st));
 end;
 
 
@@ -1409,6 +1470,26 @@ begin
   fURI := aURI;
 end;
 
+procedure TWebSocketProtocol.SetEncryptKey(aServer: boolean; const aKey: RawUTF8);
+var key: TSHA256Digest;
+begin
+  if aKey='' then
+    fEncryption := nil else begin
+    fEncryption := TECDHEProtocol.FromKey(aKey,aServer);
+    if fEncryption=nil then begin
+      SHA256Weak(aKey,key); // fallback to TProtocolAES/TAESCFB
+      SetEncryptKeyAES(key,256);
+    end;
+  end;
+end;
+
+procedure TWebSocketProtocol.SetEncryptKeyAES(const aKey; aKeySize: cardinal);
+begin
+  if aKeySize>=128 then
+    fEncryption := TProtocolAES.Create(
+      TAESCFB,aKey,aKeySize,WebSocketsIVReplayAttackCheck);
+end;
+
 procedure TWebSocketProtocol.AfterGetFrame(var frame: TWebSocketFrame);
 begin
   inc(fFramesInCount);
@@ -1435,8 +1516,43 @@ end;
 
 function TWebSocketProtocol.ProcessHandshake(const ExtIn: TRawUTF8DynArray;
   out ExtOut: RawUTF8; ErrorMsg: PRawUTF8): boolean;
+var res: TProtocolResult;
+    msgin,msgout: RawUTF8;
+    synhk: boolean;
+    i: integer;
 begin
-  result := true; // just ignore any unknown extension
+  result := fEncryption=nil;
+  if result then
+    exit; // nothing to handshake for -> try to continue
+  synhk := false;
+  if ExtIn<>nil then begin
+    for i := 0 to length(ExtIn)-1 do
+      if IdemPropNameU(ExtIn[i],'synhk') then
+        synhk := true else
+      if synhk and IdemPChar(pointer(ExtIn[i]),'HK=') then begin
+        msgin := copy(ExtIn[i],4,maxInt);
+        break;
+      end;
+    if (msgin='') or not synhk then
+      exit;
+  end;
+  res := fEncryption.ProcessHandshake(msgin,msgout);
+  case res of
+  sprSuccess: begin
+    AddToCSV('synhk; hk='+msgout,ExtOut,'; ');
+    result := true;
+    exit;
+  end;
+  sprUnsupported:
+    if not synhk then begin
+      result := true; // try to continue execution
+      exit;
+    end;
+  end;
+  WebSocketLog.Add.Log(sllWarning,'ProcessHandshake=% In=[%]',[ToText(res)^,msgin],self);
+  if ErrorMsg<>nil then
+    ErrorMsg^ := FormatUTF8('%: %',[ErrorMsg^,
+      GetCaptionFromEnum(TypeInfo(TProtocolResult),ord(res))]);
 end;
 
 function TWebSocketProtocol.ProcessURI(const aClientURI: RawUTF8): boolean;
@@ -1579,6 +1695,8 @@ end;
 function TWebSocketProtocolChat.Clone(const aClientURI: RawUTF8): TWebSocketProtocol;
 begin
   result := TWebSocketProtocolChat.Create(fName,fURI);
+  if fEncryption<>nil then
+    result.fEncryption := fEncryption.Clone;
   TWebSocketProtocolChat(result).OnIncomingFrame := OnIncomingFrame;
 end;
 
@@ -1883,32 +2001,22 @@ constructor TWebSocketProtocolBinary.Create(const aURI: RawUTF8;
   const aKey; aKeySize: cardinal; aCompressed: boolean);
 begin
   Create(aURI,aCompressed);
-  if aKeySize>=128 then
-    fEncryption := TProtocolAES.Create(
-      TAESCFB,aKey,aKeySize,WebSocketsIVReplayAttackCheck);
+  SetEncryptKeyAES(aKey, aKeySize);
 end;
 
 constructor TWebSocketProtocolBinary.Create(const aURI: RawUTF8;
   aServer: boolean; const aKey: RawUTF8; aCompressed: boolean);
-var key: TSHA256Digest;
 begin
-  if aKey='' then
-    Create(aURI,aCompressed) else begin
-    fEncryption := TECDHEProtocol.FromKey(aKey,aServer);
-    if fEncryption<>nil then
-      Create(aURI,aCompressed) else begin
-      SHA256Weak(aKey,key);
-      Create(aURI,key,256,aCompressed);
-    end;
-  end;
+  Create(aURI,aCompressed);
+  SetEncryptKey(aServer,aKey);
 end;
 
 function TWebSocketProtocolBinary.Clone(const aClientURI: RawUTF8): TWebSocketProtocol;
 begin
-  result := TWebSocketProtocolBinary.Create(fURI,self,0,fCompressed);
+  result := TWebSocketProtocolBinary.Create(fURI,{dummykey=}self,0,fCompressed);
   TWebSocketProtocolBinary(result).fSequencing := fSequencing;
   if fEncryption<>nil then
-    TWebSocketProtocolBinary(result).fEncryption := fEncryption.Clone;
+    result.fEncryption := fEncryption.Clone;
 end;
 
 const
@@ -2120,47 +2228,6 @@ begin
       result := 100-(fFramesOutBytesSocket*100) div fFramesOutBytes;
 end;
 
-function TWebSocketProtocolBinary.ProcessHandshake(const ExtIn: TRawUTF8DynArray;
-  out ExtOut: RawUTF8; ErrorMsg: PRawUTF8): boolean;
-var res: TProtocolResult;
-    msgin,msgout: RawUTF8;
-    synhk: boolean;
-    i: integer;
-begin
-  result := false;
-  if fEncryption=nil then
-    exit;
-  synhk := false;
-  if ExtIn<>nil then begin
-    for i := 0 to length(ExtIn)-1 do
-      if IdemPropNameU(ExtIn[i],'synhk') then
-        synhk := true else
-      if synhk and IdemPChar(pointer(ExtIn[i]),'HK=') then begin
-        msgin := copy(ExtIn[i],4,maxInt);
-        break;
-      end;
-    if (msgin='') or not synhk then
-      exit;
-  end;
-  res := fEncryption.ProcessHandshake(msgin,msgout);
-  case res of
-  sprSuccess: begin
-    AddToCSV('synhk; hk='+msgout,ExtOut,'; ');
-    result := true;
-    exit;
-  end;
-  sprUnsupported:
-    if not synhk then begin
-      result := true; // try to continue execution
-      exit;
-    end;
-  end;
-  WebSocketLog.Add.Log(sllWarning,'ProcessHandshake=% In=[%]',[ToText(res)^,msgin],self);
-  if ErrorMsg<>nil then
-    ErrorMsg^ := FormatUTF8('%: %',[ErrorMsg^,
-      GetCaptionFromEnum(TypeInfo(TProtocolResult),ord(res))]);
-end;
-
 function TWebSocketProtocolBinary.GetSubprotocols: RawUTF8;
 begin
   result := 'synopsebin, synopsebinary';
@@ -2169,12 +2236,14 @@ end;
 function TWebSocketProtocolBinary.SetSubprotocol(
   const aProtocolName: RawUTF8): boolean;
 begin
-  result := false;
-  if IdemPropNameU(aProtocolName,'synopsebin') then
-    fSequencing := true else
-  if IdemPropNameU(aProtocolName,'synopsebinary') then
-    fSequencing := false else
+  case FindPropName(['synopsebin', 'synopsebinary'], aProtocolName) of
+  0: fSequencing := true;
+  1: fSequencing := false;
+  else begin
+    result := false;
     exit;
+  end;
+  end;
   result := true;
 end;
 
@@ -2192,7 +2261,8 @@ begin
   try
     for i := 0 to length(fProtocols)-1 do
       with fProtocols[i] do
-      if ((fURI='') or IdemPropNameU(fURI,aClientURI)) and SetSubprotocol(aProtocolName) then begin
+      if ((fURI='') or IdemPropNameU(fURI,aClientURI)) and
+         SetSubprotocol(aProtocolName) then begin
         result := fProtocols[i].Clone(aClientURI);
         result.fName := aProtocolName;
         exit;
@@ -2325,28 +2395,37 @@ var frame: TWebSocketFrame;
     log: ISynLog;
     dummyerror: integer;
 begin
-  log := WebSocketLog.Enter(self{$ifndef DELPHI5OROLDER},'Destroy'{$endif});
-  if (fState<>wpsClose) and not fNoConnectionCloseAtDestroy then
-    try
+  log := WebSocketLog.Enter('Destroy %',[ToText(fState)^],self);
+  if fState = wpsCreate then
+    fProcessEnded := true else
+    if not fNoConnectionCloseAtDestroy then begin
+      if log<>nil then
+        log.Log(sllTrace,'Destroy: notify focConnectionClose',self);
       InterlockedIncrement(fProcessCount);
-      fState := wpsDestroy;
-      if fOutgoing.Count>0 then
-        SendPendingOutgoingFrames;
-      frame.opcode := focConnectionClose;
-      if SendFrame(frame) then // notify clean closure
-        if CanGetFrame(1000,@dummyerror) then
-          GetFrame(frame,@dummyerror);  // expects an answer from peer
-    finally
-      InterlockedDecrement(fProcessCount);
-    end else
-      fState := wpsDestroy;
+      try
+        fState := wpsDestroy;
+        if fOutgoing.Count>0 then
+          SendPendingOutgoingFrames;
+        frame.opcode := focConnectionClose;
+        dummyerror := 0;
+        if not SendFrame(frame) or not CanGetFrame(1000,@dummyerror) or
+           not GetFrame(frame,@dummyerror) then
+            if log<>nil then // expects an answer from peer
+              log.Log(sllWarning,'Destroy: no focConnectionClose ACK %',[dummyerror],self);
+      finally
+        InterlockedDecrement(fProcessCount);
+      end;
+    end;
+  fState := wpsDestroy;
   if (fProcessCount>0) or not fProcessEnded then begin
     if log<>nil then
-      log.Log(sllDebug,'Destroy: wait for shutdown (fProcessCount=%)',[fProcessCount],self);
+      log.Log(sllDebug,'Destroy: wait for fProcessCount=%',[fProcessCount],self);
     timeOut := GetTickCount64+5000;
     repeat
       SleepHiRes(2);
     until ((fProcessCount=0) and fProcessEnded) or (GetTickCount64>timeOut);
+    if log<>nil then
+      log.Log(sllDebug,'Destroy: waited fProcessCount=%',[fProcessCount],self);
   end;
   fProtocol.Free;
   fOutgoing.Free;
@@ -2361,25 +2440,36 @@ procedure TWebSocketProcess.ProcessStart;
 var frame: TWebSocketFrame; // notify e.g. TOnWebSocketProtocolChatIncomingFrame
 begin
   if Assigned(fSettings.OnClientConnected) then
-  try
-    fSettings.OnClientConnected(Self);
-  except
-  end;
+    try
+      WebSocketLog.Add.Log(sllTrace,'ProcessStart: OnClientConnected',self);
+      fSettings.OnClientConnected(Self);
+    except
+    end;
+  WebSocketLog.Add.Log(sllTrace,'ProcessStart: callbacks',self);
   frame.opcode := focContinuation;
-  fProtocol.ProcessIncomingFrame(self,frame,'');
+  if not Assigned(fProtocol.fOnBeforeIncomingFrame) or
+     not fProtocol.fOnBeforeIncomingFrame(self,frame) then
+    fProtocol.ProcessIncomingFrame(self,frame,''); // any exception would abort
+  WebSocketLog.Add.Log(sllDebug,'ProcessStart %', [fProtocol],self);
 end;
 
 procedure TWebSocketProcess.ProcessStop;
 var frame: TWebSocketFrame; // notify e.g. TOnWebSocketProtocolChatIncomingFrame
 begin
   try
+    WebSocketLog.Add.Log(sllTrace,'ProcessStop: callbacks',self);
     frame.opcode := focConnectionClose;
-    fProtocol.ProcessIncomingFrame(self,frame,'');
-    if Assigned(fSettings.OnClientDisconnected) then
+    if not Assigned(fProtocol.fOnBeforeIncomingFrame) or
+       not fProtocol.fOnBeforeIncomingFrame(self,frame) then
+      fProtocol.ProcessIncomingFrame(self,frame,'');
+    if Assigned(fSettings.OnClientDisconnected) then begin
+      WebSocketLog.Add.Log(sllTrace,'ProcessStop: OnClientDisconnected',self);
       fSettings.OnClientDisconnected(Self);
-  except
+    end;
+  except // exceptions are just ignored at shutdown
   end;
   fProcessEnded := true;
+  WebSocketLog.Add.Log(sllDebug,'ProcessStop %', [fProtocol], self);
 end;
 
 procedure TWebSocketProcess.SetLastPingTicks(invalidPing: boolean);
@@ -2417,7 +2507,7 @@ begin
   if fState=wpsRun then begin
     InterlockedIncrement(fProcessCount); // flag currently processing
     try
-      if CanGetFrame(1,@sockerror) and GetFrame(request,@sockerror) then begin
+      if CanGetFrame({timeout=}1,@sockerror) and GetFrame(request,@sockerror) then begin
         case request.opcode of
         focPing: begin
           request.opcode := focPong;
@@ -2426,11 +2516,14 @@ begin
         focPong:
           ; // nothing to do
         focText,focBinary:
-          fProtocol.ProcessIncomingFrame(self,request,'');
+          if not Assigned(fProtocol.fOnBeforeIncomingFrame) or
+             not fProtocol.fOnBeforeIncomingFrame(self,request) then
+            fProtocol.ProcessIncomingFrame(self,request,'');
         focConnectionClose: begin
+          fNoConnectionCloseAtDestroy := true; // already done from the other side
           if fState=wpsRun then begin
             fState := wpsClose; // will close the connection
-            SendFrame(request);
+            SendFrame(request); // send back the frame as ACK
           end;
         end;
         end;
@@ -2482,22 +2575,21 @@ procedure TWebSocketProcess.ProcessLoop;
 begin
   if fProtocol=nil then
     exit;
-  ProcessStart; // any exception will close the socket
   try
-    SetLastPingTicks;
-    fState := wpsRun;
-    while (fOwnerThread=nil) or not fOwnerThread.Terminated do
-      try
+    ProcessStart; // any exception will close the socket
+    try
+      SetLastPingTicks;
+      fState := wpsRun;
+      while (fOwnerThread=nil) or not fOwnerThread.Terminated do
         if ProcessLoopStepReceive and ProcessLoopStepSend then
           HiResDelay(fLastSocketTicks)
         else
           break; // connection ended
-      except
-        fState := wpsClose;
-        break; // don't be optimistic: abort and close connection
-      end;
-  finally
-    ProcessStop;
+    finally
+      ProcessStop;
+    end;
+  except // don't be optimistic: abort and close connection
+    fState := wpsClose;
   end;
 end;
 
@@ -2505,7 +2597,7 @@ procedure TWebSocketProcess.HiResDelay(const start: Int64);
 var delay: cardinal;
 begin
   case {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64-start of
-  0..50:      delay := 0;
+  0..50:      delay := 0; // 10 microsecs on POSIX
   51..200:    delay := 1;
   201..500:   delay := 5;
   501..2000:  delay := 50;
@@ -2527,6 +2619,13 @@ begin
   if self=nil then
     result := wpsCreate else
     result := fState;
+end;
+
+function TWebSocketProcess.RemoteIP: SockString;
+begin
+  if (self=nil) or (fProtocol=nil) then
+    result := '' else
+    result := fProtocol.fRemoteIP;
 end;
 
 function TWebSocketProcess.NotifyCallback(aRequest: THttpServerRequest;
@@ -2867,11 +2966,11 @@ begin
         hdrlen := 10; // opcode+len8+len32+len64.low
       end;
       if fMaskSentFrames<>0 then begin
-        hdr.mask := Random32gsl;
+        hdr.mask := Random32gsl; // https://tools.ietf.org/html/rfc6455#section-10.3
         ProcessMask(pointer(Frame.payload),hdr.mask,len);
         inc(hdrlen,4);
       end;
-      tmp.Init(hdrlen+len);
+      tmp.Init(hdrlen+len); // avoid most memory allocations
       try
         MoveSmall(@hdr,tmp.buf,hdrlen);
         if fMaskSentFrames<>0 then
@@ -2966,8 +3065,11 @@ begin
       Protocol := Protocols.CloneByURI(uri);
     if Protocol=nil then
       exit;
-    Protocol.fRemoteIP := ClientSock.RemoteIP;
-    Protocol.fRemoteLocalhost := ClientSock.RemoteIP='127.0.0.1';
+    Protocol.fUpgradeURI := uri;
+    Protocol.fRemoteIP := ClientSock.HeaderGetValue('SEC-WEBSOCKET-REMOTEIP');
+    if Protocol.fRemoteIP='' then
+      Protocol.fRemoteIP := ClientSock.RemoteIP;
+    Protocol.fRemoteLocalhost := Protocol.fRemoteIP='127.0.0.1';
     extin := ClientSock.HeaderGetValue('SEC-WEBSOCKET-EXTENSIONS');
     if extin<>'' then begin
       CSVToRawUTF8DynArray(pointer(extin),extins,';',true);
@@ -3031,13 +3133,13 @@ begin
   result := HttpServerWebSocketUpgrade(ClientSock,fProtocols,protocol);
   if result<>STATUS_SUCCESS then
     exit;
+  ClientSock.KeepAliveClient := false; // close connection with WebSockets
   Context.fProcess := TWebSocketProcessServer.Create(
     ClientSock,protocol,Context.ConnectionID,Context,fSettings,fProcessName);
   Context.fProcess.fServerResp := Context;
   fWebSocketConnections.SafeAdd(Context);
   try
     Context.fProcess.ProcessLoop;  // run main blocking loop
-    ClientSock.KeepAliveClient := false; // close connection with WebSockets
   finally
     FreeAndNil(Context.fProcess); // notify end of WebSockets
     fWebSocketConnections.SafeRemove(Context);
@@ -3069,6 +3171,11 @@ end;
 function TWebSocketServer.Settings: PWebSocketProcessSettings;
 begin
   result := @fSettings;
+end;
+
+function TWebSocketServer.WebSocketConnections: integer;
+begin
+  result := fWebSocketConnections.SafeCount;
 end;
 
 function TWebSocketServer.IsActiveWebSocket(ConnectionThread: TSynThread): TWebSocketServerResp;
@@ -3268,6 +3375,34 @@ begin
   fSettings.CallbackAnswerTimeOutMS := aTimeOut;
 end;
 
+class function THttpClientWebSockets.WebSocketsConnect(const aHost,
+  aPort: SockString; aProtocol: TWebSocketProtocol; aLog: TSynLogClass;
+  const aLogContext, aURI, aCustomHeaders: RawUTF8): THttpClientWebSockets;
+var error: RawUTF8;
+begin
+  result := nil;
+  if (aProtocol = nil) or (aHost = '') then
+    raise EWebSockets.CreateUTF8('%.WebSocketsConnect(nil)', [self]);
+  try
+    result := Open(aHost, aPort); // constructor
+    error := result.WebSocketsUpgrade(aURI, '', false, false, aProtocol, aCustomHeaders);
+    if error <> '' then
+      FreeAndNil(result);
+  except
+    on E: Exception do begin
+      aProtocol.Free; // as done in WebSocketsUpgrade()
+      FreeAndNil(result);
+      FormatUTF8('% %', [E, E.Message], error);
+    end;
+  end;
+  if aLog <> nil then
+    if result <> nil then
+      aLog.Add.Log(sllDebug, '%: WebSocketsConnect %', [aLogContext, result])
+    else
+      aLog.Add.Log(sllWarning, '%: WebSocketsConnect %:% failed - %',
+        [aLogContext, aHost, aPort, error]);
+end;
+
 destructor THttpClientWebSockets.Destroy;
 begin
   FreeAndNil(fProcess);
@@ -3325,8 +3460,9 @@ begin
 end;
 
 function THttpClientWebSockets.WebSocketsUpgrade(const aWebSocketsURI,
-  aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,aWebSocketsCompression: boolean;
-  aProtocol: TWebSocketProtocol): RawUTF8;
+  aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean;
+  aWebSocketsCompression: boolean; aProtocol: TWebSocketProtocol;
+  const aCustomHeaders: RawUTF8): RawUTF8;
 var key: TAESBlock;
     bin1,bin2: RawByteString;
     extin,extout,prot: RawUTF8;
@@ -3349,6 +3485,7 @@ begin
           aProtocol := TWebSocketProtocolJSON.Create(aWebSocketsURI) else
           aProtocol := TWebSocketProtocolBinary.Create(
             aWebSocketsURI,false,aWebSocketsEncryptionKey,aWebSocketsCompression);
+      aProtocol.fOnBeforeIncomingFrame := fOnBeforeIncomingFrame;
       RequestSendHeader(aWebSocketsURI,'GET');
       TAESPRNG.Main.FillRandom(key);
       bin1 := BinToBase64(@key,sizeof(key));
@@ -3358,6 +3495,8 @@ begin
         'Sec-WebSocket-Version: 13']);
       if aProtocol.ProcessHandshake(nil,extout,nil) and (extout<>'') then
         SockSend(['Sec-WebSocket-Extensions: ',extout]);
+      if aCustomHeaders<>'' then
+        SockSend(aCustomHeaders);
       SockSend; // CRLF
       SockSendFlush('');
       SockRecvLn(cmd);
@@ -3391,7 +3530,7 @@ begin
         aProtocol.fRemoteIP := Server;
       result := ''; // no error message = success
       fProcess := TWebSocketProcessClient.Create(self,aProtocol,fProcessName);
-      aProtocol := nil; // protocol will be owned by fProcess now
+      aProtocol := nil; // protocol instance is owned by fProcess now
     finally
       aProtocol.Free;
     end;
@@ -3409,22 +3548,28 @@ end;
 constructor TWebSocketProcessClient.Create(aSender: THttpClientWebSockets;
   aProtocol: TWebSocketProtocol; const aProcessName: RawUTF8);
 begin
-  fMaskSentFrames := FRAME_LEN_MASK; // always mask the frames by default
+  fMaskSentFrames := FRAME_LEN_MASK; // https://tools.ietf.org/html/rfc6455#section-10.3
   inherited Create(aSender,aProtocol,0,nil,aSender.fSettings,aProcessName);
   // initialize the thread after everything is set (Execute may be instant)
   fClientThread := TWebSocketProcessClientThread.Create(self);
 end;
 
 destructor TWebSocketProcessClient.Destroy;
+var tix: Int64;
 begin
-  // focConnectionClose would be handled in this thread -> close client thread
-  fClientThread.Terminate;
-  while fClientThread.fThreadState<sFinished do
-    SleepHiRes(1);
-  fClientThread.fProcess := nil;
-  // SendPendingOutgoingFrames + SendFrame/GetFrame(focConnectionClose)
-  inherited Destroy;
-  fClientThread.Free;
+  with WebSocketLog.Enter('Destroy: ThreadState=%', [ToText(fClientThread.fThreadState)^], self) do
+  try
+    // focConnectionClose would be handled in this thread -> close client thread
+    fClientThread.Terminate;
+    tix := GetTickCount64+7000; // never wait forever
+    while (fClientThread.fThreadState=sRun) and (GetTickCount64<tix) do
+      SleepHiRes(1);
+    fClientThread.fProcess := nil;
+  finally
+    // SendPendingOutgoingFrames + SendFrame/GetFrame(focConnectionClose)
+    inherited Destroy;
+    fClientThread.Free;
+  end;
 end;
 
 function TWebSocketProcessClient.ComputeContext(
@@ -3452,21 +3597,22 @@ begin
   if fProcess<>nil then // may happen when debugging under FPC (alf)
     SetCurrentThreadName('% % %',[fProcess.fProcessName,self,fProcess.Protocol.Name]);
   fThreadState := sRun;
-  if not Terminated and (fProcess<>nil) then
-    fProcess.ProcessLoop;
-  WebSocketLog.Add.Log(sllDebug,'Execute finished: ThreadState=%',[ToText(fThreadState)^],self);
   try
+    WebSocketLog.Add.Log(sllDebug,'Execute: before ProcessLoop %', [fProcess], self);
+    if not Terminated and (fProcess<>nil) then
+      fProcess.ProcessLoop;
+    WebSocketLog.Add.Log(sllDebug,'Execute: after ProcessLoop %',[fProcess],self);
     if (fProcess<>nil) and (fProcess.Socket<>nil) and
        fProcess.Socket.InheritsFrom(THttpClientWebSockets) then
       with THttpClientWebSockets(fProcess.Socket) do
         if Assigned(OnWebSocketsClosed) then
           OnWebSocketsClosed(self);
-  except
-    // ignore any exception in the callback
+  except // ignore any exception in the thread
   end;
   if (fProcess<>nil) and (fProcess.fState=wpsClose) then
     fThreadState := sClosed else
     fThreadState := sFinished;
+  WebSocketLog.Add.Log(sllDebug,'Execute: done (%)',[ToText(fThreadState)^],self);
 end;
 
 
@@ -3606,6 +3752,7 @@ begin
       fOwner.fLog.Add.Log(sllWarning,'Execute raised a % -> terminate % thread',
         [E.ClassType,fOwner.fStreamClass],self);
   end;
+  fOwner.fLog.Add.Log(sllDebug,'Execute: done', self);
 end;
 
 
@@ -3921,9 +4068,10 @@ begin
     end;
   except
     on E: Exception do
-      fLog.Add.Log(sllWarning,'Execute raised a % -> terminate %',
+      fLog.Add.Log(sllWarning,'Execute raised % -> terminate %',
         [E.ClassType,fProcessName],self);
   end;
+  fLog.Add.Log(sllDebug, 'Execute: % done', [fProcessName], self);
   fExecuteFinished := true;
 end;
 
@@ -3947,8 +4095,15 @@ procedure TAsynchClient.Execute;
 begin
   SetCurrentThreadName('% %',[fProcessName,self]);
   NotifyThreadStart(self);
-  while InterlockedDecrement(fThreadClients.Count)>=0 do
-    ThreadClientsConnect; // will connect some clients in this main thread
+  try
+    while InterlockedDecrement(fThreadClients.Count)>=0 do
+      ThreadClientsConnect; // will connect some clients in this main thread
+  except
+    on E: Exception do
+      fLog.Add.Log(sllWarning,'Execute raised % -> terminate %',
+        [E.ClassType,fProcessName],self);
+  end;
+  fLog.Add.Log(sllDebug, 'Execute: % done', [fProcessName], self);
 end;
 
 
