@@ -293,6 +293,7 @@ type
   protected
     /// internal HTTP/1.1 compatible client
     fSocketClass: THttpClientSocketClass;
+    /// either THttpClientSocket or THttpClientWebSockets
     fSocket: THttpClientSocket;
     /// call fSocket.Request()
     function InternalRequest(const url, method: RawUTF8;
@@ -820,9 +821,8 @@ begin
       ParamValue,TInterfaceFactory.Get(ParamInfo.ArgTypeInfo));
 end;
 
-function TSQLHttpClientWebsockets.FakeCallbackUnregister(
-  Factory: TInterfaceFactory; FakeCallbackID: integer;
-  Instance: pointer): boolean;
+function TSQLHttpClientWebsockets.FakeCallbackUnregister(Factory: TInterfaceFactory;
+  FakeCallbackID: integer; Instance: pointer): boolean;
 var body,head,resp: RawUTF8;
 begin
   if (FakeCallbackID=0) or not WebSocketsConnected then begin

@@ -310,10 +310,8 @@ type
     function GetDBServerNames: RawUTF8;
     function HttpApiAddUri(const aRoot,aDomainName: RawByteString;
       aSecurity: TSQLHttpServerSecurity; aRegisterURI,aRaiseExceptionOnError: boolean): RawUTF8;
-    function NotifyCallback(aSender: TSQLRestServer;
-      const aInterfaceDotMethodName,aParams: RawUTF8;
-      aConnectionID: Int64; aFakeCallID: integer;
-      aResult, aErrorMsg: PRawUTF8): boolean;
+    function NotifyCallback(aSender: TSQLRestServer; const aInterfaceDotMethodName,aParams: RawUTF8;
+      aConnectionID: Int64; aFakeCallID: integer; aResult, aErrorMsg: PRawUTF8): boolean;
   public
     /// create a Server instance, binded and listening on a TCP port to HTTP requests
     // - raise a EHttpServer exception if binding failed

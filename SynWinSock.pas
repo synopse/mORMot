@@ -58,6 +58,7 @@ unit SynWinSock;
   Version 1.18
   - fixed ticket [f79ff5714b] about potential finalization issues as .bpl in IDE
   - fixed Win64 compatibility issue
+  - includes SChannel API process for TLS connection
 
 
 }
@@ -845,6 +846,7 @@ type
   PSecPkgContextStreamSizes = ^TSecPkgContextStreamSizes;
 
   ESChannel = class(Exception);
+
   {$ifdef UNICODE}TSChannelClient = record{$else}TSChannelClient = object{$endif}
   private
     Cred: TCredHandle;
@@ -1533,7 +1535,7 @@ begin
             SockSChannelApi := Assigned(AcquireCredentialsHandle) and
               Assigned(InitializeSecurityContext) and
               Assigned(QueryContextAttributes) and
-              Assigned(EncryptMessage);
+              Assigned(EncryptMessage) and Assigned(DecryptMessage);
           end;
         end;
         result := True;
