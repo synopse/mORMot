@@ -908,6 +908,7 @@ const
 
   /// HTTP header name for the authorization token, in upper case
   // - could be used e.g. with IdemPChar() to retrieve a JWT value
+  // - will detect header computed e.g. by SynCrtSock.AuthorizationBearer()
   HEADER_BEARER_UPPER = 'AUTHORIZATION: BEARER ';
 
   /// MIME content type used for JSON communication (as used by the Microsoft
@@ -2302,13 +2303,15 @@ function StrLenPas(S: pointer): PtrInt;
 var StrLen: function(S: pointer): PtrInt = StrLenPas;
 
 /// our fast version of FillChar()
-// - this version will use fast SSE2/ERMS instructions (if available), on both
-// Win32 and Win64 platforms, or an optimized X86 revision on older CPUs
+// - on Intel i386/x86_64, will use fast SSE2/ERMS instructions (if available),
+// or optimized X87 assembly implementation for older CPUs
+// - on non-Intel CPUs, it will fallback to the default RTL FillChar()
 var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte);
 
 /// our fast version of move()
-// - this version will use fast SSE2 instructions (if available), on both Win32
-// and Win64 platforms, or an optimized X86 revision on older CPUs
+// - on Intel i386/x86_64, will use fast SSE2 instructions (if available),
+// or optimized X87 assembly implementation for older CPUs
+// - on non-Intel CPUs, it will fallback to the default RTL Move()
 var MoveFast: procedure(const Source; var Dest; Count: PtrInt);
 
 /// an alternative Move() function tuned for small unaligned counts
@@ -6107,7 +6110,9 @@ type
     // - inherited class should override AssignTo() protected method
     // to implement the proper assignment
     procedure Assign(Source: TSynPersistent); virtual;
-    /// optimized x86 asm initialization code
+    /// optimized initialization code
+    // - somewhat faster than the regular RTL implementation - especially
+    // since rewritten in pure asm on Delphi/x86
     // - warning: this optimized version won't initialize the vmtIntfTable
     // for this class hierarchy: as a result, you would NOT be able to
     // implement an interface with a TSynPersistent descendent (but you should
@@ -6923,9 +6928,10 @@ function GUIDToString({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid
 
 type
   /// low-level object implementing a 32-bit Pierre L'Ecuyer software generator
-  // - as used by RandomGsl function, and Random32 if no RDRAND hardware is available
-  // - is not thread-safe, but cross-compiler and cross-platform, still very
-  // fast with a much better distribution than Delphi system's Random() function
+  // - as used by Random32gsl, and Random32 if no RDRAND hardware is available
+  // - is not thread-safe by itself, but cross-compiler and cross-platform, still
+  // very fast with a much better distribution than Delphi system's Random() function
+  // - Random32gsl/Random32 will use a threadvar to have thread safety
   {$ifdef FPC_OR_UNICODE}TLecuyer = record{$else}TLecuyer = object{$endif}
   public
     rs1, rs2, rs3, seedcount: cardinal;
@@ -6947,7 +6953,7 @@ type
 // - will detect known AMD CPUs RDRAND bugs, and fallback to gsl_rng_taus2
 // - consider Random32gsl to avoid slow RDRAND call (up to 1500 cycles needed!)
 // - use rather TAESPRNG.Main.FillRandom() for cryptographic-level randomness
-// - thread-safe function: each thread will maintain its own gsl_rng_taus2 table
+// - thread-safe function: each thread will maintain its own TLecuyer table
 function Random32: cardinal; overload;
 
 /// fast compute of some 32-bit random value, with a maximum (excluded) upper value
@@ -6961,7 +6967,7 @@ function Random32(max: cardinal): cardinal; overload;
 // - may be used if you don't want/trust RDRAND, if you expect a well defined
 // cross-platform generator, or have higher performance expectations
 // - use rather TAESPRNG.Main.FillRandom() for cryptographic-level randomness
-// - thread-safe function: each thread will maintain its own gsl_rng_taus2 table
+// - thread-safe function: each thread will maintain its own TLecuyer table
 function Random32gsl: cardinal; overload;
 
 /// fast compute of bounded 32-bit random value, using the gsl_rng_taus2 generator
@@ -6982,7 +6988,7 @@ procedure Random32Seed(entropy: pointer=nil; entropylen: PtrInt=0);
 // - the destination buffer is expected to be allocated as 32-bit items
 // - use internally crc32c() with some rough entropy source, and Random32
 // gsl_rng_taus2 generator or hardware RDRAND Intel x86/x64 opcode if available
-// (and ForceGsl is kept to its default false value)
+// (and ForceGsl is kept to its default false)
 // - consider using instead the cryptographic secure TAESPRNG.Main.FillRandom()
 // method from the SynCrypto unit, or set ForceGsl=true - in particular, RDRAND
 // is reported as very slow: see https://en.wikipedia.org/wiki/RdRand#Performance
@@ -13390,31 +13396,31 @@ type
     // - return "string" type, i.e. UnicodeString for Delphi 2009+
     Main: string;
     /// associated CompanyName string version resource
-    // - only available on Windows - contains '' under Linux
+    // - only available on Windows - contains '' under Linux/POSIX
     CompanyName: RawUTF8;
     /// associated FileDescription string version resource
-    // - only available on Windows - contains '' under Linux
+    // - only available on Windows - contains '' under Linux/POSIX
     FileDescription: RawUTF8;
     /// associated FileVersion string version resource
-    // - only available on Windows - contains '' under Linux
+    // - only available on Windows - contains '' under Linux/POSIX
     FileVersion: RawUTF8;
     /// associated InternalName string version resource
-    // - only available on Windows - contains '' under Linux
+    // - only available on Windows - contains '' under Linux/POSIX
     InternalName: RawUTF8;
     /// associated LegalCopyright string version resource
-    // - only available on Windows - contains '' under Linux
+    // - only available on Windows - contains '' under Linux/POSIX
     LegalCopyright: RawUTF8;
     /// associated OriginalFileName string version resource
-    // - only available on Windows - contains '' under Linux
+    // - only available on Windows - contains '' under Linux/POSIX
     OriginalFilename: RawUTF8;
     /// associated ProductName string version resource
-    // - only available on Windows - contains '' under Linux
+    // - only available on Windows - contains '' under Linux/POSIX
     ProductName: RawUTF8;
     /// associated ProductVersion string version resource
-    // - only available on Windows - contains '' under Linux
+    // - only available on Windows - contains '' under Linux/POSIX
     ProductVersion: RawUTF8;
     /// associated Comments string version resource
-    // - only available on Windows - contains '' under Linux
+    // - only available on Windows - contains '' under Linux/POSIX
     Comments: RawUTF8;
     /// retrieve application version from exe file name
     // - DefaultVersion32 is used if no information Version was included into
