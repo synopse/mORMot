@@ -794,9 +794,9 @@ type
     procedure TrailerBytes(count: cardinal);
   public
     /// creates a new instance with the very same values
-    // - by design, our classes will use stateless context, so this method
+    // - by design, our classes will use TAES stateless context, so this method
     // will just copy the current fields to a new instance, by-passing
-    // the key creation
+    // the key creation step
     function Clone: TAESAbstract; override;
     /// release the used instance memory and resources
     // - also fill the TAES instance with zeros, for safety
@@ -2522,7 +2522,7 @@ type
   // and another one for decryption, with PKCS7 padding and no MAC validation
   TProtocolAES = class(TInterfacedObjectLocked, IProtocol)
   protected
-    fAES: array[boolean] of TAESAbstract;
+    fAES: array[boolean] of TAESAbstract; // [false]=decrypt [true]=encrypt
   public
     /// initialize this encryption protocol with the given AES settings
     constructor Create(aClass: TAESAbstractClass; const aKey; aKeySize: cardinal;
@@ -14342,7 +14342,7 @@ begin
   fSafe.Lock;
   try
     try
-      aPlain := fAES[false].DecryptPKCS7(aEncrypted,true);
+      aPlain := fAES[false].DecryptPKCS7(aEncrypted,{iv=}true,{raise=}false);
       if aPlain='' then
         result := sprBadRequest else
         result := sprSuccess;
@@ -14359,7 +14359,7 @@ procedure TProtocolAES.Encrypt(const aPlain: RawByteString;
 begin
   fSafe.Lock;
   try
-    aEncrypted := fAES[true].EncryptPKCS7(aPlain,true);
+    aEncrypted := fAES[true].EncryptPKCS7(aPlain,{iv=}true);
   finally
     fSafe.UnLock;
   end;
@@ -14605,9 +14605,10 @@ begin
     exit;
   P := GotoNextNotSpace(P+1);
   cap := JSONObjectPropCount(P);
-  if cap<=0 then
+  if cap<0 then
     exit;
   requiredclaims := fClaims - excluded;
+  if cap>0 then
   repeat
     N := GetJSONPropName(P);
     if N=nil then
@@ -15035,7 +15036,7 @@ initialization
     if (cfSSE42 in CpuFeatures) and (cfAesNi in CpuFeatures) then
       crc32c := @crc32c_sse42_aesni;
   {$endif CRC32C_X64}
-  if cfSSE41 in CpuFeatures then begin // optimized Intel's sha256_sse4.asm ?
+  if cfSSE41 in CpuFeatures then begin // optimized Intel's sha256_sse4.asm
     if K256AlignedStore='' then
       GetMemAligned(K256AlignedStore,@K256,SizeOf(K256),K256Aligned);
     if PtrUInt(K256Aligned) and 15<>0 then
