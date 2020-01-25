@@ -173,6 +173,13 @@ const
   /// maximum compression level for TSynLizard.compress
   LIZARD_MAX_CLEVEL = 49;
 
+
+{$ifndef LIZARD_EXTERNALONLY}
+  {$ifndef MSWINDOWS}
+    function __printf_chk(Flag:integer; Format: PChar; Arguments: array of TVarRec):longint;
+  {$endif MSWINDOWS}
+{$endif LIZARD_EXTERNALONLY}
+
 {$ifdef LIZARD_STANDALONE}
 
 function Lizard_versionNumber: integer; cdecl;
@@ -317,6 +324,24 @@ implementation
 
 
 {$ifndef LIZARD_EXTERNALONLY}
+  {$ifndef MSWINDOWS}
+    function vprintf_mormot(f,a:pansichar):longint; cdecl; external name 'vprintf';
+    function __printf_chk(Flag:integer; Format: PChar; Arguments: array of TVarRec):longint; alias: '__printf_chk';
+    var
+      arg: PIntegerArray;
+      i: integer;
+    begin
+      GetMem(arg, Length(Arguments) * sizeof(Integer));
+      try
+        Assert(Low(Arguments) = 0);
+        for i := Low(Arguments) to High(Arguments) do
+            arg[i] := Arguments[i].VInteger;
+        result:=vprintf_mormot(Format, PChar(arg));
+      finally
+        FreeMem(arg);
+      end;
+    end;
+    {$endif MSWINDOWS}
 
 function Lizard_versionNumber: integer; cdecl; external;
 function Lizard_compressBound(inputSize: integer): integer; cdecl; external;
