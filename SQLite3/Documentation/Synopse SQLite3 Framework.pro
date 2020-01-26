@@ -16430,6 +16430,13 @@ Don't forget to select the {\i trunk} versions for both FPC and Lazarus versions
 Those revisions are currently used for building our production projects, so are expected to be properly tested and supported.
 Then build the FPC and Lazarus binaries directly from the latest sources. One big advantage of {\i fpcupdeluxe} is that you can very easily install cross-compilers for the CPU / OS combinations enumerated at @202@.
 You could install {\i mORMot} using {\i fpcupdeluxe}, but we recommend you clone our @https://github.com/synopse/mORMot repository, and setup the expected project paths, as detailed above at @113@.
+If you don't want to define a given version, the current {\i trunk} should/could work, if it didn't include any regression at the time you get it - this is why we provide "supported" SVN revisions.\line If you want to use the {\i FPC trunk}, please modify line #262 in {\f1\fs20 Synopse.inc} to enable the {\f1\fs20 FPC_PROVIDE_ATTR_TABLE} conditional and support the latest trunk RTTI changes:
+!  {$if not defined(VER3_0) and not defined(VER3_2) and not defined(VER2)}
+!!    {$define FPC_PROVIDE_ATTR_TABLE} // to be defined since SVN 42356-42411
+!    // on compilation error in SynFPCTypInfo, undefine the above conditional
+!    // see https://lists.freepascal.org/pipermail/fpc-announce/2019-July/000612.html
+!  {$ifend}
+Sadly, there is no official conditional available to have this RTTI change detected. You need to define globally this conditional.
 :  Missing RTTI for interfaces in old FPC 2.6
 Sadly, if you use a somewhat old revision of FPC, you may have to face some long-time unresolved FPC compiler-level restriction/issue, which did not supply the needed {\f1\fs20 interface} RTTI, which was available since Delphi 6 - see @http://bugs.freepascal.org/view.php?id=26774 \line As a consequence, SOA, mock/stub and MVC framework features will not work directly with older FPC revisions.
 You could upgrade to a more recent FPC - we encourage you to @203@ - or we will propose here a workaround to compile such {\i mORMot} applications with oldest FPC. The trick is to use Delphi to generate one unit containing the needed information.
