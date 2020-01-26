@@ -35965,7 +35965,7 @@ end;
     write combining (WC) memory type protocol when writing the data to memory.
     The processor does not write the data into the cache hierarchy, nor does
     it fetch the corresponding cache line from memory into the cache hierarchy.
-    By-passing the cache should enhance move() speed of memory blocks >8KB. }
+    By-passing the cache should enhance speed of memory blocks >8KB. }
 procedure FillCharx64; {$ifdef FPC}nostackframe; assembler;
 asm {$else} asm .noframe {$endif} // rcx/rdi=Dest rdx/rsi=Count r8/rdx=Value
         {$ifndef WIN64} // Linux 64-bit ABI
@@ -35979,32 +35979,34 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=Dest rdx/rsi=Count r8/rdx=Value
         and     r8, 0FFH
         cmp     rdx, 32
         {$endif}
-        jle     @_32
-        mov     r9, 101010101010101H
+        jle     @_32 // small blocks (< 32 bytes) redirection
+        mov     r9, $0101010101010101
         imul    r8, r9
-        test    cl, 07H
+        // align rcx destination to QWord
+        test    cl, 7
         jz      @27C5
-        test    cl, 01H
+        test    cl, 1
         jz      @27A4
-        mov     byte ptr[rcx], r8b
+        mov     byte ptr[rcx], al
         add     rcx, 1
         sub     rdx, 1
-@27A4:  test    cl, 02H
+@27A4:  test    cl, 2
         jz      @27B5
         mov     word ptr[rcx], r8w
         add     rcx, 2
         sub     rdx, 2
-@27B5:  test    cl, 04H
+@27B5:  test    cl, 4
         jz      @27C5
         mov     dword ptr[rcx], r8d
         add     rcx, 4
         sub     rdx, 4
 @27C5:  mov     rax, rdx
-        and     rdx, 3FH
+        and     rdx, $3F
         shr     rax, 6
         jnz     @_64
+        // handle less than 64 bytes
 @remain:mov     rax, rdx
-        and     rdx, 07H
+        and     rdx, 7
         shr     rax, 3
         jz      @27EC
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
@@ -36019,35 +36021,38 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=Dest rdx/rsi=Count r8/rdx=Value
         dec     rdx
         jnz     @27F1
 @27FC:  ret
-@_64:   cmp     rax, 8192
+@_64:   cmp     rax, 8192 // movnti is worth it only > 8KB of data (cache size)
         jnc     @_8192
+        // 64-bytes loop through cache (regular mov)
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @_64s:  add     rcx, 64
-        mov     qword ptr[rcx - 40H], r8
-        mov     qword ptr[rcx - 38H], r8
-        mov     qword ptr[rcx - 30H], r8
-        mov     qword ptr[rcx - 28H], r8
-        mov     qword ptr[rcx - 20H], r8
-        mov     qword ptr[rcx - 18H], r8
-        mov     qword ptr[rcx - 10H], r8
-        mov     qword ptr[rcx - 8H], r8
+        mov     qword ptr[rcx - $40], r8
+        mov     qword ptr[rcx - $38], r8
+        mov     qword ptr[rcx - $30], r8
+        mov     qword ptr[rcx - $28], r8
+        mov     qword ptr[rcx - $20], r8
+        mov     qword ptr[rcx - $18], r8
+        mov     qword ptr[rcx - $10], r8
+        mov     qword ptr[rcx - $08], r8
         dec     rax
         jnz     @_64s
         jmp     @remain
+        // 64-bytes loop bypassing cache (movnti)
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @_8192: add     rcx, 64
-        db      $4C, $0F, $C3, $41, $C0 // movnti  qword ptr [rcx-40H],r8
-        db      $4C, $0F, $C3, $41, $C8 // movnti  qword ptr [rcx-38H],r8
-        db      $4C, $0F, $C3, $41, $D0 // movnti  qword ptr [rcx-30H],r8
-        db      $4C, $0F, $C3, $41, $D8 // movnti  qword ptr [rcx-28H],r8
-        db      $4C, $0F, $C3, $41, $E0 // movnti  qword ptr [rcx-20H],r8
-        db      $4C, $0F, $C3, $41, $E8 // movnti  qword ptr [rcx-18H],r8
-        db      $4C, $0F, $C3, $41, $F0 // movnti  qword ptr [rcx-10H],r8
-        db      $4C, $0F, $C3, $41, $F8 // movnti  qword ptr [rcx-8H],r8
+        db      $4C, $0F, $C3, $41, $C0 // movnti  qword ptr [rcx-$40],r8
+        db      $4C, $0F, $C3, $41, $C8 // movnti  qword ptr [rcx-$38],r8
+        db      $4C, $0F, $C3, $41, $D0 // movnti  qword ptr [rcx-$30],r8
+        db      $4C, $0F, $C3, $41, $D8 // movnti  qword ptr [rcx-$28],r8
+        db      $4C, $0F, $C3, $41, $E0 // movnti  qword ptr [rcx-$20],r8
+        db      $4C, $0F, $C3, $41, $E8 // movnti  qword ptr [rcx-$18],r8
+        db      $4C, $0F, $C3, $41, $F0 // movnti  qword ptr [rcx-$10],r8
+        db      $4C, $0F, $C3, $41, $F8 // movnti  qword ptr [rcx-$08],r8
         dec     rax
         jnz     @_8192
         mfence
         jmp     @remain
+        // handle small blocks up to 32 bytes
 @_32:   test    rdx, rdx
         jle     @done
         mov     ah, al
@@ -36069,121 +36074,34 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=Dest rdx/rsi=Count r8/rdx=Value
         mov     [rcx + 14], ax
         mov     [rcx + 12], ax
         mov     [rcx + 10], ax
-        mov     [rcx + 8], ax
-        mov     [rcx + 6], ax
-        mov     [rcx + 4], ax
-        mov     [rcx + 2], ax
-        mov     [rcx], ax
-@done:  ret // for 4-bytes @table alignment with rdx=1
+        mov     [rcx +  8], ax
+        mov     [rcx +  6], ax
+        mov     [rcx +  4], ax
+        mov     [rcx +  2], ax
+        mov     [rcx     ], ax
+@done:  ret // for 4-bytes @table alignment of last 'mov [rcx],ax'
 end;
 procedure Fillcharx64ERMS; {$ifdef FPC}nostackframe; assembler;
 asm {$else} asm .noframe {$endif} // rcx/rdi=Dest rdx/rsi=Count r8/rdx=Value
-        {$ifndef WIN64} // Linux 64-bit ABI
-        mov     rax, rdx
-        movzx   r8, dl
-        mov     rdx, rsi
-        mov     rcx, rdi
-        cmp     rsi, 32
-        {$else}
-        mov     rax, r8
-        and     r8, 0FFH
-        cmp     rdx, 32
-        {$endif}
-        jle     @_32
+        // use 'rep stosb' ERMS magic if > 2KB (from Intel's Manual)
+        {$ifdef WIN64}
         cmp     rdx, 2048
-        jae     @erms // worth it after 2KB (from Intel's Manual)
-        mov     r9, 101010101010101H
-        imul    r8, r9
-        test    cl, 07H
-        jz      @27C5
-        test    cl, 01H
-        jz      @27A4
-        mov     byte ptr[rcx], r8b
-        add     rcx, 1
-        sub     rdx, 1
-@27A4:  test    cl, 02H
-        jz      @27B5
-        mov     word ptr[rcx], r8w
-        add     rcx, 2
-        sub     rdx, 2
-@27B5:  test    cl, 04H
-        jz      @27C5
-        mov     dword ptr[rcx], r8d
-        add     rcx, 4
-        sub     rdx, 4
-@27C5:  mov     rax, rdx
-        and     rdx, 3FH
-        shr     rax, 6
-        jnz     @_64
-@remain:mov     rax, rdx
-        and     rdx, 07H
-        shr     rax, 3
-        jz      @27EC
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
-@27E0:  mov     qword ptr[rcx], r8
-        add     rcx, 8
-        dec     rax
-        jnz     @27E0
-@27EC:  test    rdx, rdx
-        jle     @27FC
-@27F1:  mov     byte ptr[rcx], r8b
-        inc     rcx
-        dec     rdx
-        jnz     @27F1
-@27FC:  ret
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
-@_64:   add     rcx, 64
-        mov     qword ptr[rcx - 40H], r8
-        mov     qword ptr[rcx - 38H], r8
-        mov     qword ptr[rcx - 30H], r8
-        mov     qword ptr[rcx - 28H], r8
-        mov     qword ptr[rcx - 20H], r8
-        mov     qword ptr[rcx - 18H], r8
-        mov     qword ptr[rcx - 10H], r8
-        mov     qword ptr[rcx - 8H], r8
-        dec     rax
-        jnz     @_64
-        jmp     @remain
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
-@erms:  cld
-        {$ifdef WIN64} // al already set
+        jb      FillCharx64
+        cld
         push    rdi // preserve non volatile registers
+        mov     rax, r8
         mov     rdi, rcx
         mov     rcx, rdx
-        rep stosb // ERMS magic instruction
+        rep     stosb
         pop     rdi
-        {$else} // rdi and al already set
-        mov     rcx, rdx
-        rep stosb
+        {$else}
+        cmp     rsi, 2048
+        jb      FillCharx64
+        cld
+        mov     rax, rdx
+        mov     rcx, rsi
+        rep     stosb
         {$endif}
-        ret
-@_32:   test    rdx, rdx
-        jle     @done
-        mov     ah, al
-        mov     [rcx + rdx - 1], al
-        lea     r8, [rip + @table]
-        and     rdx, -2
-        neg     rdx
-        lea     rdx, [r8 + rdx * 2 + 64]
-        jmp     rdx
-{$ifdef FPC} align 4 {$else} .align 4 {$endif}
-@table: mov     [rcx + 30], ax
-        mov     [rcx + 28], ax
-        mov     [rcx + 26], ax
-        mov     [rcx + 24], ax
-        mov     [rcx + 22], ax
-        mov     [rcx + 20], ax
-        mov     [rcx + 18], ax
-        mov     [rcx + 16], ax
-        mov     [rcx + 14], ax
-        mov     [rcx + 12], ax
-        mov     [rcx + 10], ax
-        mov     [rcx + 8], ax
-        mov     [rcx + 6], ax
-        mov     [rcx + 4], ax
-        mov     [rcx + 2], ax
-        mov     [rcx], ax
-@done:  ret // for 4-bytes @table alignment with rdx=1
 end;
 {$endif CPUX64}
 
@@ -52219,10 +52137,11 @@ end;
 
 {$ifdef FPC_OR_PUREPASCAL}
 class function TSynPersistent.NewInstance: TObject;
-begin // bypass vmtIntfTable and vmt^.vInitTable (management operators)
-  result := AllocMem(InstanceSize);   // will zero memory
+begin // bypass vmtIntfTable and vmt^.vInitTable (FPC management operators)
+  GetMem(pointer(result),InstanceSize); // InstanceSize is inlined
+  FillCharFast(pointer(result)^,InstanceSize,0);
   PPointer(result)^ := pointer(self); // store VMT
-end;
+end; // no benefit of rewriting FreeInstance/CleanupInstance
 {$else}
 class function TSynPersistent.NewInstance: TObject;
 asm
