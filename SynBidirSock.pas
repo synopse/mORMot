@@ -2520,7 +2520,6 @@ begin
              not fProtocol.fOnBeforeIncomingFrame(self,request) then
             fProtocol.ProcessIncomingFrame(self,request,'');
         focConnectionClose: begin
-          fNoConnectionCloseAtDestroy := true; // already done from the other side
           if fState=wpsRun then begin
             fState := wpsClose; // will close the connection
             SendFrame(request); // send back the frame as ACK
@@ -2947,6 +2946,8 @@ begin
     Log(frame,'SendFrame',sllTrace,true);
     try
       result := true;
+      if Frame.opcode=focConnectionClose then
+        fNoConnectionCloseAtDestroy := true; // to be done once on each end
       if (fProtocol<>nil) and (Frame.payload<>'') then
         fProtocol.BeforeSendFrame(Frame);
       len := Length(Frame.payload);

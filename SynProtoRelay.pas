@@ -440,10 +440,6 @@ var
 begin
   log := fOwner.fLog.Add;
   log.Log(sllTrace, 'ProcessIncomingFrame % %', [Sender.RemoteIP, ToText(Frame.opcode)^], self);
-  if Frame.opcode = focBinary then
-    connection := fOwner.Decapsulate(Sender.Protocol, Frame)
-  else
-    connection := 0;
   fOwner.Safe.Lock;
   try
     case Frame.opcode of
@@ -457,9 +453,10 @@ begin
           fOwner.fServerConnected := nil
         else
           log.Log(sllWarning, 'ProcessIncomingFrame: fServerConnected?', self);
-      focText, focBinary: begin
+      focBinary: begin
         if fOwner.fServerConnected <> Sender then
-          raise ERelayProtocol.CreateUTF8('Unexpected %.ProcessIncomingFrame', [self]);
+          raise ERelayProtocol.CreateUTF8('Unexpected %.ProcessIncomingFrame Sender', [self]);
+        connection := fOwner.Decapsulate(Sender.Protocol, Frame);
         if connection = 0 then
           exit;
         client := fOwner.fClients.IsActiveWebSocket(connection);
@@ -471,12 +468,13 @@ begin
             Frame.payload := '';
             fOwner.EncapsulateAndSend(Sender, 'removed', Frame, connection);
           end;
-          exit;
+        end
+        else begin // redirect the frame to the final client
+          sent := client.WebSocketProcess.SendFrame(Frame);
+          log.Log(LOG_DEBUGERROR[not sent], 'ProcessIncomingFrame % #% % %',
+            [ToText(Frame.opcode)^, Connection, client.WebSocketProcess.RemoteIP,
+             KBNoSpace(length(Frame.payload))], self);
         end;
-        sent := client.WebSocketProcess.SendFrame(Frame);
-        log.Log(LOG_DEBUGERROR[not sent], 'ProcessIncomingFrame % #% % %',
-          [ToText(Frame.opcode)^, Connection, client.WebSocketProcess.RemoteIP,
-           KBNoSpace(length(Frame.payload))], self);
       end;
       else
         raise ERelayProtocol.CreateUTF8('Unexpected % in %.ProcessIncomingFrame',
