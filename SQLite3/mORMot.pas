@@ -5873,8 +5873,9 @@ type
     // - may point e.g. to a THttpServerResp, a TWebSocketServerResp,
     // a THttpApiServer, a TSQLRestClientURI, a TFastCGIServer or a
     // TSQLRestServerNamedPipeResponse instance
-    // - is a Int64 as expected by http.sys, but is an incremental sequence
-    // of integer for THttpServer/TWebSocketServer, or a PtrInt(self)
+    // - stores SynCrtSock's THttpServerConnectionID, i.e. a Int64 as expected
+    // by http.sys, or an incremental rolling sequence of 31-bit integers for
+    // THttpServer/TWebSocketServer, or maybe a raw PtrInt(self/THandle)
     LowLevelConnectionID: Int64;
     /// low-level properties of the current protocol context
     LowLevelFlags: TSQLRestURIParamsLowLevelFlags;

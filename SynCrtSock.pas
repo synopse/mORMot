@@ -769,6 +769,12 @@ type
     grError, grException, grOversizedPayload, grRejected, grTimeout,
     grHeaderReceived, grBodyReceived, grOwned);
 
+  /// a genuine identifier for a given client connection on server side
+  // - maps http.sys ID, or is a genuine 31-bit value from increasing sequence
+  THttpServerConnectionID = Int64;
+  /// a dynamic array of client connection identifiers, e.g. for broadcasting
+  THttpServerConnectionIDDynArray = array of THttpServerConnectionID;
+
   /// Socket API based HTTP/1.1 server class used by THttpServer Threads
   THttpServerSocket = class(THttpSocket)
   protected
@@ -776,7 +782,7 @@ type
     fURL: SockString;
     fKeepAliveClient: boolean;
     fRemoteIP: SockString;
-    fRemoteConnectionID: Int64;
+    fRemoteConnectionID: THttpServerConnectionID;
     fServer: THttpServer;
   public
     /// create the socket according to a server
@@ -803,9 +809,15 @@ type
     // in every message"
     property KeepAliveClient: boolean read fKeepAliveClient write fKeepAliveClient;
     /// the recognized client IP, after a call to GetRequest()
+    // - is either the raw connection IP to the current server socket, or
+    // a custom header value set by a local proxy, e.g.
+    // THttpServerGeneric.RemoteIPHeader='X-Real-IP' for nginx
     property RemoteIP: SockString read fRemoteIP;
     /// the recognized connection ID, after a call to GetRequest()
-    property RemoteConnectionID: Int64 read fRemoteConnectionID;
+    // - identifies either the raw connection on the current server, or is
+    // a custom header value set by a local proxy, e.g.
+    // THttpServerGeneric.RemoteConnIDHeader='X-Conn-ID' for nginx
+    property RemoteConnectionID: THttpServerConnectionID read fRemoteConnectionID;
   end;
 
   /// Socket API based REST and HTTP/1.1 compatible client class
@@ -926,7 +938,7 @@ type
     fServer: THttpServer;
     fServerSock: THttpServerSocket;
     fClientSock: TSocket;
-    fConnectionID: integer;
+    fConnectionID: THttpServerConnectionID;
     /// main thread loop: read request from socket, send back answer
     procedure Execute; override;
   public
@@ -942,7 +954,7 @@ type
     /// the associated main HTTP server instance
     property Server: THttpServer read fServer;
     /// the unique identifier of this connection
-    property ConnectionID: integer read fConnectionID;
+    property ConnectionID: THttpServerConnectionID read fConnectionID;
   end;
 
   /// metaclass of HTTP response Thread
@@ -1104,7 +1116,7 @@ type
     fURL, fMethod, fInHeaders, fInContent, fInContentType, fAuthenticatedUser,
     fOutContent, fOutContentType, fOutCustomHeaders: SockString;
     fServer: THttpServerGeneric;
-    fConnectionID: Int64;
+    fConnectionID: THttpServerConnectionID;
     fConnectionThread: TSynThread;
     fUseSSL: boolean;
     fAuthenticationStatus: THttpServerRequestAuthentication;
@@ -1113,8 +1125,8 @@ type
     {$endif}
   public
     /// initialize the context, associated to a HTTP server instance
-    constructor Create(aServer: THttpServerGeneric; aConnectionID: Int64;
-      aConnectionThread: TSynThread); virtual;
+    constructor Create(aServer: THttpServerGeneric;
+      aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread); virtual;
     /// prepare an incoming request
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
@@ -1154,8 +1166,8 @@ type
     // - e.g. SynCrtSock's TWebSocketProcess.NotifyCallback method would use
     // this property to specify the client connection to be notified
     // - is set as an Int64 to match http.sys ID type, but will be an
-    // increasing integer sequence for (web)socket-based servers
-    property ConnectionID: Int64 read fConnectionID;
+    // increasing 31-bit integer sequence for (web)socket-based servers
+    property ConnectionID: THttpServerConnectionID read fConnectionID;
     /// the thread which owns the connection of this execution context
     // - depending on the HTTP server used, may not follow ConnectionID
     property ConnectionThread: TSynThread read fConnectionThread;
@@ -1239,7 +1251,7 @@ type
     /// set by RegisterCompress method
     fCompressAcceptEncoding: SockString;
     fServerName: SockString;
-    fCurrentConnectionID: integer;
+    fCurrentConnectionID: integer; // thread-safe 31-bit sequence
     fCanNotifyCallback: boolean;
     fRemoteIPHeader, fRemoteIPHeaderUpper: SockString;
     fRemoteConnIDHeader, fRemoteConnIDHeaderUpper: SockString;
@@ -1259,7 +1271,7 @@ type
     function DoAfterRequest(Ctxt: THttpServerRequest): cardinal;
     procedure DoAfterResponse(Ctxt: THttpServerRequest;
       const Code: cardinal); virtual;
-    function NextConnectionID: integer;
+    function NextConnectionID: integer; // 31-bit internal sequence
   public
     /// initialize the server instance, in non suspended state
     constructor Create(CreateSuspended: boolean; OnStart,OnStop: TNotifyThreadEvent;
@@ -1389,10 +1401,10 @@ type
     // IP value, mostly as 'X-Real-IP' or 'X-Forwarded-For'
     property RemoteIPHeader: SockString read fRemoteIPHeader write SetRemoteIPHeader;
     /// the value of a custom HTTP header containing the real client connection ID
-    // - by default, the Ctxt.ConnectionID information will be retrieved from the socket
-    // layer - but if the server runs behind some proxy service, you should
-    // define here the HTTP header name which indicates the true remote connection
-    // ID value, for example as 'X-Conn-ID', setting in nginx config:
+    // - by default, Ctxt.ConnectionID information will be retrieved from our
+    // socket layer - but if the server runs behind some proxy service, you should
+    // define here the HTTP header name which indicates the real remote connection,
+    // for example as 'X-Conn-ID', setting in nginx config:
     //  $ proxy_set_header      X-Conn-ID       $connection
     property RemoteConnIDHeader: SockString read fRemoteConnIDHeader write SetRemoteConnIDHeader;
   published
@@ -1999,7 +2011,7 @@ type
     /// override this function in order to low-level process the request;
     // default process is to get headers, and call public function Request
     procedure Process(ClientSock: THttpServerSocket;
-      ConnectionID: integer; ConnectionThread: TSynThread); virtual;
+      ConnectionID: THttpServerConnectionID; ConnectionThread: TSynThread); virtual;
   public
     /// create a Server Thread, binded and listening on a port
     // - this constructor will raise a EHttpServer exception if binding failed
@@ -5959,7 +5971,7 @@ end;
 { THttpServerRequest }
 
 constructor THttpServerRequest.Create(aServer: THttpServerGeneric;
-  aConnectionID: Int64; aConnectionThread: TSynThread);
+  aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread);
 begin
   inherited Create;
   fServer := aServer;
@@ -6132,6 +6144,8 @@ end;
 function THttpServerGeneric.NextConnectionID: integer;
 begin
   result := InterlockedIncrement(fCurrentConnectionID);
+  if result=maxInt-2048 then // paranoid 31-bit counter reset to ensure >0
+    fCurrentConnectionID := 0;
 end;
 
 
@@ -6359,7 +6373,7 @@ begin
 end;
 
 procedure THttpServer.Process(ClientSock: THttpServerSocket;
-  ConnectionID: integer; ConnectionThread: TSynThread);
+  ConnectionID: THttpServerConnectionID; ConnectionThread: TSynThread);
 var ctxt: THttpServerRequest;
     P: PAnsiChar;
     respsent: boolean;
@@ -6568,10 +6582,9 @@ begin
   fServerSock := aServerSock;
   fOnTerminate := fServer.fOnTerminate;
   fServer.InternalHttpServerRespListAdd(self);
-  if (aServerSock.RemoteConnectionID <> 0) then
-    fConnectionID := aServerSock.RemoteConnectionID
-  else
-    fConnectionID := fServer.NextConnectionID;
+  fConnectionID := aServerSock.RemoteConnectionID;
+  if fConnectionID=0 then
+    fConnectionID := fServer.NextConnectionID; // fallback to 31-bit sequence
   FreeOnTerminate := true;
   inherited Create(false);
 end;
@@ -7468,7 +7481,7 @@ begin
           ServerSock.GetBody; // we need to get it now
           InterlockedIncrement(fServer.fStats[grBodyReceived]);
         end;
-        // multi-connection -> ID=0
+        // multi-connection -> process now
         fServer.Process(ServerSock,ServerSock.RemoteConnectionID,aCaller);
         fServer.OnDisconnect;
         // no Shutdown here: will be done client-side

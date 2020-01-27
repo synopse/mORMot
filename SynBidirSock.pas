@@ -862,7 +862,7 @@ type
     fIncoming: TWebSocketFrameList;
     fOutgoing: TWebSocketFrameList;
     fOwnerThread: TSynThread;
-    fOwnerConnection: Int64;
+    fOwnerConnection: THttpServerConnectionID;
     fState: TWebSocketProcessState;
     fProtocol: TWebSocketProtocol;
     fMaskSentFrames: byte;
@@ -896,7 +896,7 @@ type
     /// initialize the WebSockets process on a given connection
     // - the supplied TWebSocketProtocol will be owned by this instance
     // - other parameters should reflect the client or server expectations
-    constructor Create(aProtocol: TWebSocketProtocol; aOwnerConnection: Int64;
+    constructor Create(aProtocol: TWebSocketProtocol; aOwnerConnection: THttpServerConnectionID;
       aOwnerThread: TSynThread; const aSettings: TWebSocketProcessSettings;
       const aProcessName: RawUTF8); reintroduce;
     /// finalize the context
@@ -950,7 +950,7 @@ type
     /// the associated low-level processing thread
     property OwnerThread: TSynThread read fOwnerThread;
     /// the associated low-level WebSocket connection opaque identifier
-    property OwnerConnection: Int64 read fOwnerConnection;
+    property OwnerConnection: THttpServerConnectionID read fOwnerConnection;
     /// how many frames are currently processed by this connection
     property ProcessCount: integer read fProcessCount;
     /// may be set to TRUE before Destroy to force raw socket disconnection
@@ -978,7 +978,7 @@ type
     // - the supplied TWebSocketProtocol will be owned by this instance
     // - other parameters should reflect the client or server expectations
     constructor Create(aSocket: TCrtSocket; aProtocol: TWebSocketProtocol;
-      aOwnerConnection: Int64; aOwnerThread: TSynThread;
+      aOwnerConnection: THttpServerConnectionID; aOwnerThread: TSynThread;
       const aSettings: TWebSocketProcessSettings;
       const aProcessName: RawUTF8); reintroduce; virtual;
     /// first step of the low level incoming WebSockets framing protocol over TCrtSocket
@@ -1037,6 +1037,7 @@ type
     /// low-level WebSocket protocol processing instance
     property WebSocketProcess: TWebSocketProcessServer read fProcess;
   end;
+  PWebSocketServerResp = ^TWebSocketServerResp;
 
   /// main HTTP/WebSockets server Thread using the standard Sockets API (e.g. WinSock)
   // - once upgraded to WebSockets from the client, this class is able to serve
@@ -1054,7 +1055,7 @@ type
     // - here ConnectionThread is a THttpServerResp, and ClientSock.Headers
     // and ConnectionUpgrade properties should be checked for the handshake
     procedure Process(ClientSock: THttpServerSocket;
-      ConnectionID: integer; ConnectionThread: TSynThread); override;
+      ConnectionID: THttpServerConnectionID; ConnectionThread: TSynThread); override;
   public
     /// create a Server Thread, binded and listening on a port
     // - this constructor will raise a EHttpServer exception if binding failed
@@ -1081,10 +1082,10 @@ type
     // - expect aFrame.opcode to be either focText or focBinary
     // - will call TWebSocketProcess.Outgoing.Push for asynchronous sending
     procedure WebSocketBroadcast(const aFrame: TWebSocketFrame;
-      const aClientsConnectionID: TIntegerDynArray); overload;
+      const aClientsConnectionID: THttpServerConnectionIDDynArray); overload;
     /// give access to the underlying connection from its ID
     // - also identifies an incoming THttpServerResp as a valid TWebSocketServerResp
-    function IsActiveWebSocket(ConnectionID: integer): TWebSocketServerResp; overload;
+    function IsActiveWebSocket(ConnectionID: THttpServerConnectionID): TWebSocketServerResp; overload;
     /// give access to the underlying connection from its connection thread
     // - also identifies an incoming THttpServerResp as a valid TWebSocketServerResp
     function IsActiveWebSocket(ConnectionThread: TSynThread): TWebSocketServerResp; overload;
@@ -2373,7 +2374,7 @@ end;
 { TWebSocketProcess }
 
 constructor TWebSocketProcess.Create(aProtocol: TWebSocketProtocol;
-  aOwnerConnection: Int64; aOwnerThread: TSynThread;
+  aOwnerConnection: THttpServerConnectionID; aOwnerThread: TSynThread;
   const aSettings: TWebSocketProcessSettings; const aProcessName: RawUTF8);
 begin
   inherited Create;
@@ -2994,8 +2995,8 @@ end;
 
 { TWebCrtSocketProcess }
 
-constructor TWebCrtSocketProcess.Create(aSocket: TCrtSocket;
-  aProtocol: TWebSocketProtocol; aOwnerConnection: Int64; aOwnerThread: TSynThread;
+constructor TWebCrtSocketProcess.Create(aSocket: TCrtSocket; aProtocol: TWebSocketProtocol;
+  aOwnerConnection: THttpServerConnectionID; aOwnerThread: TSynThread;
   const aSettings: TWebSocketProcessSettings; const aProcessName: RawUTF8);
 begin
   inherited Create(aProtocol,aOwnerConnection,aOwnerThread,aSettings,aProcessName);
@@ -3148,7 +3149,7 @@ begin
 end;
 
 procedure TWebSocketServer.Process(ClientSock: THttpServerSocket;
-  ConnectionID: integer; ConnectionThread: TSynThread);
+  ConnectionID: THttpServerConnectionID; ConnectionThread: TSynThread);
 var err: integer;
 begin
   if ClientSock.ConnectionUpgrade and ClientSock.KeepAliveClient and
@@ -3181,8 +3182,8 @@ end;
 
 function TWebSocketServer.IsActiveWebSocket(ConnectionThread: TSynThread): TWebSocketServerResp;
 var i: Integer;
-    c: ^TWebSocketServerResp;
-begin
+    c: PWebSocketServerResp;
+begin // no need to optimize (not called often)
   result := nil;
   if Terminated or (ConnectionThread=nil) or
      not ConnectionThread.InheritsFrom(TWebSocketServerResp) then
@@ -3202,23 +3203,35 @@ begin
   end;
 end;
 
-function TWebSocketServer.IsActiveWebSocket(ConnectionID: integer): TWebSocketServerResp;
-var i: Integer;
-    c: ^TWebSocketServerResp;
+function FastFindConnection(c: PWebSocketServerResp; n: integer; id: THttpServerConnectionID): TWebSocketServerResp;
+begin // speedup brute force check in case of high number of connections
+  if n>0 then
+    repeat
+      result := c^;
+      if result.ConnectionID=id then
+        exit;
+      inc(c);
+      dec(n);
+      if n=0 then
+        break;
+      result := c^;
+      if result.ConnectionID=id then
+        exit;
+      inc(c);
+      dec(n);
+    until n=0;
+  result := nil;
+end;
+
+function TWebSocketServer.IsActiveWebSocket(ConnectionID: THttpServerConnectionID): TWebSocketServerResp;
 begin
   result := nil;
-  if Terminated or (ConnectionID<=0) then
+  if Terminated or (ConnectionID=0) then
     exit;
   fWebSocketConnections.Safe.Lock;
   try
-    c := pointer(fWebSocketConnections.List);
-    for i := 1 to fWebSocketConnections.Count do
-      if c^.ConnectionID=ConnectionID then begin
-        if c^.fProcess.State=wpsRun then
-          result := c^;
-        exit;
-      end else
-      inc(c);
+    result := FastFindConnection(pointer(fWebSocketConnections.List),
+      fWebSocketConnections.Count, ConnectionID);
   finally
     fWebSocketConnections.Safe.UnLock;
   end;
@@ -3230,7 +3243,7 @@ begin
 end;
 
 procedure TWebSocketServer.WebSocketBroadcast(const aFrame: TWebSocketFrame;
-  const aClientsConnectionID: TIntegerDynArray);
+  const aClientsConnectionID: THttpServerConnectionIDDynArray);
 var i, len, ids: Integer;
     c: ^TWebSocketServerResp;
     temp: TWebSocketFrame; // local copy since SendFrame() modifies the payload
@@ -3240,10 +3253,10 @@ begin
     exit;
   ids := length(aClientsConnectionID);
   if ids>0 then begin
-    sorted.Init(pointer(aClientsConnectionID),ids*4);
-    QuickSortInteger(sorted.buf,0,ids-1); // faster O(log(n)) binary search
+    sorted.Init(pointer(aClientsConnectionID),ids*8);
+    QuickSortInt64(sorted.buf,0,ids-1); // faster O(log(n)) binary search
   end;
-  dec(ids);
+  dec(ids); // WebSocketBroadcast(nil) -> ids<0
   temp.opcode := aFrame.opcode;
   temp.content := aFrame.content;
   len := length(aFrame.payload);
@@ -3252,7 +3265,7 @@ begin
     c := pointer(fWebSocketConnections.List);
     for i := 1 to fWebSocketConnections.Count do begin
       if (c^.fProcess.State=wpsRun) and
-         ((ids<0) or (FastFindIntegerSorted(sorted.buf,ids,c^.ConnectionID)>=0)) then begin
+         ((ids<0) or (FastFindInt64Sorted(sorted.buf,ids,c^.ConnectionID)>=0)) then begin
         SetString(temp.payload,PAnsiChar(pointer(aFrame.payload)),len);
         c^.fProcess.Outgoing.Push(temp); // non blocking asynchronous sending
       end;

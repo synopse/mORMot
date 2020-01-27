@@ -1013,6 +1013,7 @@ type
     fPublicRelay: TPublicRelay;
     fPrivateRelay: TPrivateRelay;
     procedure CleanUp; override;
+    function NewClient(const port: SockString): TSQLHttpClientWebsockets;
     procedure WebsocketsLowLevel(protocol: TWebSocketProtocol; opcode: TWebSocketFrameOpCode);
     procedure TestRest(Rest: TSQLRest);
     procedure TestCallback(Rest: TSQLRest);
@@ -19216,38 +19217,54 @@ begin
   TestRest(fServer);
 end;
 
+function TTestBidirectionalRemoteConnection.NewClient(const port: SockString): TSQLHttpClientWebsockets;
+begin
+  result := TSQLHttpClientWebsockets.Create('127.0.0.1',port,TSQLModel.Create(fServer.Model));
+  result.Model.Owner := result;
+  result.WebSockets.Settings.SetFullLog;
+end;
+
 procedure TTestBidirectionalRemoteConnection.SOACallbackViaWebsockets(
   Ajax, Relay: boolean);
-var Client: TSQLHttpClientWebsockets;
+  procedure ServiceDefine(c: TSQLHttpClientWebsockets; const msg: string);
+  begin
+    Check(c.SetUser('User','synopse'),'setuser'+msg);
+    Check(c.ServiceDefine(IBidirService,sicShared)<>nil,'IBidirService'+msg);
+  end;
+var c1, c2: TSQLHttpClientWebsockets;
     port: SockString;
-    error, stats: RawUTF8;
+    stats: RawUTF8;
 begin
   if Relay then
     port := fPublicRelayClientsPort else
     port := HTTP_DEFAULTPORT;
-  Client := TSQLHttpClientWebsockets.Create('127.0.0.1',port,fServer.Model);
+  c1 := NewClient(port);
   try
-    Client.WebSockets.Settings.SetFullLog;
-    if not Relay then begin // HTTP link not relayed yet
-      Check(Client.ServerTimestampSynchronize);
-      Check(Client.SetUser('User','synopse'));
-      Check(Client.ServiceDefine(IBidirService,sicShared)<>nil);
-      TestRest(Client);
+    c2 := NewClient(port);
+    try
+      if not Relay then begin // HTTP link not relayed yet
+        Check(c1.ServerTimestampSynchronize);
+        ServiceDefine(c1,'1');
+        TestRest(c1);
+      end;
+      CheckEqual(c1.WebSocketsUpgrade(WEBSOCKETS_KEY,Ajax,true), '', 'WebSocketsUpgrade1');
+      if Relay then // register it now
+        ServiceDefine(c1,'1');
+      TestCallback(c1);
+      CheckEqual(c2.WebSocketsUpgrade(WEBSOCKETS_KEY,Ajax,true), '', 'WebSocketsUpgrade2');
+      ServiceDefine(c2,'2');
+      TestCallback(c2);
+      if Relay then begin
+        stats := HttpGet('127.0.0.1',fPublicRelayPort,'/stats','');
+        check(PosEx('"version"', stats)>0,'stats');
+      end;
+      TestRest(c2);
+      TestRest(c1);
+    finally
+      c2.Free;
     end;
-    error := Client.WebSocketsUpgrade(WEBSOCKETS_KEY,Ajax,true);
-    CheckEqual(error, '', 'WebSocketsUpgrade');
-    if Relay then begin // register it now
-      Check(Client.SetUser('User','synopse'), 'setuser');
-      Check(Client.ServiceDefine(IBidirService,sicShared)<>nil, 'IBidirService');
-    end;
-    TestCallback(Client);
-    if Relay then begin
-      stats := HttpGet('127.0.0.1',fPublicRelayPort,'/stats','');
-      check(PosEx('"version"', stats)>0,'stats');
-    end;
-    TestRest(Client);
   finally
-    Client.Free;
+    c1.Free;
   end;
 end;
 

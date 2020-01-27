@@ -311,7 +311,7 @@ type
     function HttpApiAddUri(const aRoot,aDomainName: RawByteString;
       aSecurity: TSQLHttpServerSecurity; aRegisterURI,aRaiseExceptionOnError: boolean): RawUTF8;
     function NotifyCallback(aSender: TSQLRestServer; const aInterfaceDotMethodName,aParams: RawUTF8;
-      aConnectionID: Int64; aFakeCallID: integer; aResult, aErrorMsg: PRawUTF8): boolean;
+      aConnectionID: THttpServerConnectionID; aFakeCallID: integer; aResult, aErrorMsg: PRawUTF8): boolean;
   public
     /// create a Server instance, binded and listening on a TCP port to HTTP requests
     // - raise a EHttpServer exception if binding failed
@@ -1140,7 +1140,7 @@ begin
 end;
 
 function TSQLHttpServer.NotifyCallback(aSender: TSQLRestServer;
-  const aInterfaceDotMethodName, aParams: RawUTF8; aConnectionID: Int64;
+  const aInterfaceDotMethodName, aParams: RawUTF8; aConnectionID: THttpServerConnectionID;
   aFakeCallID: integer; aResult, aErrorMsg: PRawUTF8): boolean;
 var ctxt: THttpServerRequest;
     status: cardinal;
