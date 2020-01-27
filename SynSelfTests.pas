@@ -9137,13 +9137,15 @@ begin
   CheckRegEx(_Json(REGEX2));
   CheckRegEx(_JsonFast('{"name":"John",field:{ "$regex": "acme.*corp", $options: "i" }}'));
   CheckRegEx(_JsonFast(REGEX2));
-  b := pointer(BSON(REGEX2));
+  temp := BSON(REGEX2);
+  b := pointer(temp);
   u := BSONToJSON(b,betDoc,0,modMongoStrict);
   Check(u='{"name":"John","field":'+REGEX+'}');
   o2 := BSONVariant(REGEX2);
   Check(string(o2)='{name:"John",field:/acme.*corp/i}','MongoShell in string cast');
   Check(VariantSaveJson(o2)=u);
-  b := pointer(BSON('{name:?,field:/%/i}',['acme.*corp'],['John']));;
+  temp := BSON('{name:?,field:/%/i}',['acme.*corp'],['John']);
+  b := pointer(temp);
   u2 := BSONToJSON(b,betDoc,0,modMongoStrict);
   Check(u=u2);
   u := VariantSaveMongoJSON(_Json('{name:"John",date: new date() , field: /acme.*corp/i}'),modMongoStrict);
@@ -9173,15 +9175,17 @@ begin
   Check(u=REGEX);
   o := _Json('{ tags: { $in: [ /^be/, /^st/ ] } }');
   u := VariantSaveMongoJSON(o,modMongoStrict);
-  Check(u='{"tags":{"$in":[{"$regex":"^be","$options":""},{"$regex":"^st","$options":""}]}}');
-  b := pointer(BSON(u,[],[]));
+  CheckEqual(u,'{"tags":{"$in":[{"$regex":"^be","$options":""},{"$regex":"^st","$options":""}]}}');
+  temp := BSON(u,[],[]);
+  b := pointer(temp);
   u2 := VariantSaveMongoJSON(o,modMongoShell);
   Check(u2='{tags:{$in:[/^be/,/^st/]}}');
   u := VariantSaveMongoJSON(_Json(u),modMongoShell);
   Check(u=u2);
   u2 := BSONToJSON(b,betDoc,0,modMongoShell);
-  Check(u=u2);
-  b := pointer(BSON('{id:ObjectId(),doc:{name:?,date:ISODate(?)}}',[],['John',NowUTC]));
+  CheckEqual(u,u2);
+  temp := BSON('{id:ObjectId(),doc:{name:?,date:ISODate(?)}}',[],['John',NowUTC]);
+  b := pointer(temp);
   u := BSONToJSON(b,betDoc,0,modMongoShell);
   Check(IdemPChar(pointer(u),'{ID:OBJECTID("'));
   Check(PosEx('"),doc:{name:"John",date:ISODate("',u)>10);
@@ -9219,7 +9223,8 @@ begin
   {$else}
   check(o=o2,'o=o2');
   {$endif}
-  b := pointer(BSON(u,[],[]));
+  temp := BSON(u,[],[]);
+  b := pointer(temp);
   u2 := BSONToJSON(b,betDoc,0,modMongoShell);
   Check(u=u2);
   u2 := BSONToJSON(b,betDoc,0,modMongoStrict);
