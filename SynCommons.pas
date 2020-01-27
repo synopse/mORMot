@@ -5675,7 +5675,11 @@ type
     // - returns false if the supplied binary buffer is not correct
     // - you can specify an optional SourceMaxLen to avoid any buffer overflow
     function Init(ArrayTypeInfo: pointer; Source: PAnsiChar;
-      SourceMaxLen: PtrInt=0): boolean;
+      SourceMaxLen: PtrInt=0): boolean; overload;
+    /// initialize iteration over a TDynArray.SaveTo binary buffer
+    // - returns true on success, with Count and Position being set
+    // - returns false if the supplied binary buffer is not correct
+    function Init(ArrayTypeInfo: pointer; const Source: RawByteString): boolean; overload;
     /// iterate over the current stored item
     // - Elem should point to a variable of the exact item type stored in this
     // dynamic array
@@ -7176,10 +7180,10 @@ function RecordSaveJSON(const Rec; TypeInfo: pointer;
 // of the string length - note that if you change the type definition, any
 // previously-serialized content will fail, maybe triggering unexpected GPF: you
 // may use TypeInfoToHash() if you share this binary data accross executables
-// - you can optionally provide the Source end buffer (i.e. first byte after
-// the memory buffer to decode), which will be used to avoid any unexpected
-// access - it would be mandatory e.g. when decoding the content from any
-// external process (e.g. a maybe-forged client) - with a performance penalty
+// - you can optionally provide in SourceMax the first byte after the input
+// memory buffer, which will be used to avoid any unexpected buffer overflow -
+// coul dbe mandatory when decoding the content from any external process
+// (e.g. a maybe-forged client) - only with slightly performance penalty
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer;
   Len: PInteger=nil; SourceMax: PAnsiChar=nil): PAnsiChar; overload;
 
@@ -50547,6 +50551,11 @@ begin
   Position := @Hash[1];
   Current := 0;
   result := true;
+end;
+
+function TDynArrayLoadFrom.Init(ArrayTypeInfo: pointer; const Source: RawByteString): boolean;
+begin
+  result := Init(ArrayTypeInfo,pointer(Source),length(Source));
 end;
 
 function TDynArrayLoadFrom.Step(out Elem): boolean;

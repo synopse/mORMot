@@ -2156,7 +2156,7 @@ begin
   Check(dyn1.Count=4);
   for i := 0 to 3 do
     Check(AB[i]=(i and 1=1));
-  Check(dyniter.Init(TypeInfo(TBooleanDynArray),pointer(test)));
+  Check(dyniter.Init(TypeInfo(TBooleanDynArray),test));
   Check(dyniter.Count=4);
   for i := 0 to 3 do begin
     Check(dyniter.FirstField(B));
