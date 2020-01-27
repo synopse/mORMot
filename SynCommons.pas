@@ -4652,7 +4652,9 @@ function ToVarInt32(Value: PtrInt; Dest: PByte): PByte;
 
 /// convert a 32-bit variable-length integer buffer into a cardinal
 // - fast inlined process for any number < 128
-function FromVarUInt32(var Source: PByte): cardinal;
+// - use overloaded FromVarUInt32() or FromVarUInt32Safe() with a SourceMax
+// pointer to avoid any potential buffer overflow
+function FromVarUInt32(var Source: PByte): cardinal; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// safely convert a 32-bit variable-length integer buffer into a cardinal
@@ -4661,6 +4663,12 @@ function FromVarUInt32(var Source: PByte): cardinal;
 // just after the input memory buffer
 // - returns nil on error, or point to next input data on successful decoding
 function FromVarUInt32Safe(Source, SourceMax: PByte; out Value: cardinal): PByte;
+
+/// convert a 32-bit variable-length integer buffer into a cardinal
+// - will call FromVarUInt32() if SourceMax=nil, or FromVarUInt32Safe() if set
+// - returns false on error, true if Value has been set properly
+function FromVarUInt32(var Source: PByte; SourceMax: PByte; out Value: cardinal): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a 32-bit variable-length integer buffer into a cardinal
 // - this version could be called if number is likely to be > $7f, so it
@@ -5117,7 +5125,8 @@ type
     procedure SetIsObjArray(aValue: boolean); {$ifdef HASINLINE}inline;{$endif}
     /// will set fKnownType and fKnownOffset/fKnownSize fields
     function ToKnownType(exactType: boolean=false): TDynArrayKind;
-    function LoadKnownType(Data,Source: PAnsiChar): boolean;
+    function LoadFromHeader(var Source: PByte; SourceMax: PByte): integer;
+    function LoadKnownType(Data,Source,SourceMax: PAnsiChar): boolean;
     /// faster than System.DynArraySetLength() function + handle T*ObjArray
     procedure InternalSetLength(NewLength: PtrUInt);
   public
@@ -5436,10 +5445,10 @@ type
     // ElemSize or ElemType information, or any previously registered
     // TTextWriter.RegisterCustomJSONSerializerFromText definition
     function SaveToTypeInfoHash(crc: cardinal=0): cardinal;
-    /// load the dynamic array content from a memory buffer
-    // - return nil if the Source buffer is incorrect (invalid type or internal
-    // checksum e.g.), or return the memory buffer pointer just after the
-    // content, as written by TDynArray.SaveTo
+    /// unserialize dynamic array content from binary written by TDynArray.SaveTo
+    // - return nil if the Source buffer is incorrect: invalid type, wrong
+    // checksum, or optional SourceMax overflow
+    // - return a non nil pointer just after the Source content on success
     // - this method will raise an ESynException for T*ObjArray types
     // - you can optionally call AfterEach callback for each row loaded
     // - if you don't want to allocate all items on memory, but just want to
@@ -5447,9 +5456,9 @@ type
     // consider using TDynArrayLoadFrom object
     function LoadFrom(Source: PAnsiChar; AfterEach: TDynArrayAfterLoadFrom=nil;
       NoCheckHash: boolean=false; SourceMax: PAnsiChar=nil): PAnsiChar;
-    /// load the dynamic array content from a memory buffer
-    // - same as LoadFrom(), but will check for any buffer overflow since
-    // we know the actual end of input buffer
+    /// unserialize the dynamic array content from a TDynArray.SaveTo binary string
+    // - same as LoadFrom, and will check for any buffer overflow since we
+    // know the actual end of input buffer
     function LoadFromBinary(const Buffer: RawByteString;
       NoCheckHash: boolean=false): boolean;
     /// serialize the dynamic array content as JSON
@@ -5649,8 +5658,10 @@ type
   {$else}TDynArrayLoadFrom = object protected{$endif}
     DynArray: TDynArray; // used to access RTTI
     Hash: PCardinalArray;
+    PositionEnd: PAnsiChar;
   public
     /// how many items were saved in the TDynArray.SaveTo binary buffer
+    // - equals -1 if Init() failed to unserialize its header
     Count: integer;
     /// the zero-based index of the current item pointed by next Step() call
     // - is in range 0..Count-1 until Step() returns false
@@ -5662,7 +5673,9 @@ type
     /// initialize iteration over a TDynArray.SaveTo binary buffer
     // - returns true on success, with Count and Position being set
     // - returns false if the supplied binary buffer is not correct
-    function Init(ArrayTypeInfo: pointer; Source: PAnsiChar): boolean;
+    // - you can specify an optional SourceMaxLen to avoid any buffer overflow
+    function Init(ArrayTypeInfo: pointer; Source: PAnsiChar;
+      SourceMaxLen: PtrInt=0): boolean;
     /// iterate over the current stored item
     // - Elem should point to a variable of the exact item type stored in this
     // dynamic array
@@ -40375,6 +40388,14 @@ begin // Values above 128
   Source := p;
 end;
 
+function FromVarUInt32(var Source: PByte; SourceMax: PByte; out Value: cardinal): boolean;
+begin
+  if SourceMax=nil then
+    Value := FromVarUInt32(Source) else
+    Source := FromVarUInt32Safe(Source,SourceMax,Value);
+  result := Source<>nil;
+end;
+
 function FromVarUInt32Safe(Source, SourceMax: PByte; out Value: cardinal): PByte;
 var c: cardinal;
 begin
@@ -40714,18 +40735,14 @@ function FromVarString(var Source: PByte; SourceMax: PByte;
   var Value: TSynTempBuffer): boolean;
 var len: cardinal;
 begin
-  if SourceMax=nil then
-    len := FromVarUInt32(Source) else begin
-    Source := FromVarUInt32Safe(Source,SourceMax,len);
-    if (Source=nil) or (PAnsiChar(Source)+len>PAnsiChar(SourceMax)) then begin
-      result := false;
-      exit;
-    end;
+  if not FromVarUInt32(Source,SourceMax,len) or
+     ((SourceMax<>nil) and (Source+len>SourceMax)) then
+    result := false else begin
+    Value.Init(Source,len);
+    PByteArray(Value.buf)[len] := 0; // include trailing #0
+    inc(Source,len);
+    result := true;
   end;
-  Value.Init(Source,len);
-  PByteArray(Value.buf)[len] := 0; // include trailing #0
-  inc(Source,len);
-  result := true;
 end;
 
 procedure FromVarString(var Source: PByte; var Value: RawByteString;
@@ -44824,24 +44841,20 @@ begin
   end;
   varString, varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}: begin
     TVarData(Value).VAny := nil; // avoid GPF below when assigning a string variable to VAny
-    if SourceMax=nil then
-      tmp.Len := FromVarUInt32(PByte(Source)) else begin
-      Source := pointer(FromVarUInt32Safe(PByte(Source),PByte(SourceMax),n));
-      if (Source=nil) or (Source+n>SourceMax) then
-        exit;
-      tmp.Len := n;
-    end;
+    if not FromVarUInt32(PByte(Source),PByte(SourceMax),n) or
+       ((SourceMax<>nil) and (Source+n>SourceMax)) then
+      exit;
     case TVarData(Value).VType of
     varString:
-      FastSetString(RawUTF8(TVarData(Value).VString),Source,tmp.Len); // explicit RawUTF8
+      FastSetString(RawUTF8(TVarData(Value).VString),Source,n); // explicit RawUTF8
     varOleStr:
-      SetString(WideString(TVarData(Value).VAny),PWideChar(Source),tmp.Len shr 1);
+      SetString(WideString(TVarData(Value).VAny),PWideChar(Source),n shr 1);
     {$ifdef HASVARUSTRING}
     varUString:
-      SetString(UnicodeString(TVarData(Value).VAny),PWideChar(Source),tmp.Len shr 1);
+      SetString(UnicodeString(TVarData(Value).VAny),PWideChar(Source),n shr 1);
     {$endif}
     end;
-    inc(Source,tmp.Len);
+    inc(Source,n);
   end;
   else
     if CustomVariantOptions<>nil then begin
@@ -49020,7 +49033,7 @@ const
     {$ifndef NOVARIANTS}SizeOf(Variant),{$endif} 0);
   DYNARRAY_PARSERUNKNOWN = -2;
 
-var
+var // for TDynArray.LoadKnownType
   KINDTYPE_INFO: array[TDynArrayKind] of pointer;
 
 function TDynArray.GetArrayTypeName: RawUTF8;
@@ -49174,19 +49187,21 @@ begin
   result := true;
 end;
 
-function TDynArray.LoadKnownType(Data,Source: PAnsiChar): boolean;
+function TDynArray.LoadKnownType(Data,Source,SourceMax: PAnsiChar): boolean;
 var info: PTypeInfo;
 begin
   if fKnownType=djNone then
     ToKnownType({exacttype=}false); // set fKnownType and fKnownSize
-  if fKnownType in [djBoolean..djDateTimeMS] then begin
-    MoveSmall(Source,Data,fKnownSize);
-    result := true;
-  end else begin
+  if fKnownType in [djBoolean..djDateTimeMS,djHash128..djHash512] then
+    if (SourceMax<>nil) and (Source+fKnownSize>SourceMax) then
+      result := false else begin
+      MoveSmall(Source,Data,fKnownSize);
+      result := true;
+    end else begin
     info := KINDTYPE_INFO[fKnownType];
     if info=nil then
       result := false else
-      result := (ManagedTypeLoad(Data,Source,info,nil)<>0) and (Source<>nil);
+      result := (ManagedTypeLoad(Data,Source,info,SourceMax)<>0) and (Source<>nil);
   end;
 end;
 
@@ -49338,119 +49353,6 @@ begin
 end;
 {$endif NOVARIANTS}
 
-function SimpleDynArrayLoadFrom(Source: PAnsiChar; aTypeInfo: pointer;
-  var Count, ElemSize: integer; NoHash32Check: boolean): pointer;
-var Hash: PCardinalArray absolute Source;
-    info: PTypeInfo;
-begin
-  result := nil;
-  info := GetTypeInfo(aTypeInfo,tkDynArray);
-  if info=nil then
-    exit; // invalid type information
-  if (info^.ElType<>nil) or (Source=nil) or
-     (Source[0]<>AnsiChar(info^.elSize)) or (Source[1]<>#0) then
-    exit; // invalid type information or Source content
-  ElemSize := info^.elSize {$ifdef FPC}and $7FFFFFFF{$endif};
-  inc(Source,2);
-  Count := FromVarUInt32(PByte(Source)); // dynamic array count
-  if (Count<>0) and (NoHash32Check or (Hash32(@Hash[1],Count*ElemSize)=Hash[0])) then
-    result := @Hash[1]; // returns valid Source content
-end;
-
-function IntegerDynArrayLoadFrom(Source: PAnsiChar; var Count: integer;
-  NoHash32Check: boolean): PIntegerArray;
-var Hash: PCardinalArray absolute Source;
-begin
-  result := nil;
-  if (Source=nil) or (Source[0]<>#4) or (Source[1]<>#0) then
-    exit; // invalid Source content
-  inc(Source,2);
-  Count := FromVarUInt32(PByte(Source)); // dynamic array count
-  if (Count<>0) and (NoHash32Check or (Hash32(@Hash[1],Count*4)=Hash[0])) then
-    result := @Hash[1]; // returns valid Source content
-end;
-
-function RawUTF8DynArrayLoadFromContains(Source: PAnsiChar;
-  Value: PUTF8Char; ValueLen: PtrInt; CaseSensitive: boolean): PtrInt;
-var Count, Len: PtrInt;
-begin
-  if (Value=nil) or (ValueLen=0) or
-     (Source=nil) or (Source[0]<>AnsiChar(SizeOf(PtrInt)))
-     {$ifndef FPC}or (Source[1]<>AnsiChar(tkLString)){$endif} then begin
-    result := -1;
-    exit; // invalid Source or Value content
-  end;
-  inc(Source,2);
-  Count := FromVarUInt32(PByte(Source)); // dynamic array count
-  inc(Source,SizeOf(cardinal)); // ignore Hash32 security checksum
-  for result := 0 to Count-1 do begin
-    Len := FromVarUInt32(PByte(Source));
-    if CaseSensitive then begin
-      if (Len=ValueLen) and CompareMemFixed(Value,Source,Len) then
-        exit;
-    end else
-      if UTF8ILComp(Value,pointer(Source),ValueLen,Len)=0 then
-        exit;
-    inc(Source,Len);
-  end;
-  result := -1;
-end;
-
-function TDynArrayLoadFrom.Init(ArrayTypeInfo: pointer; Source: PAnsiChar): boolean;
-var fake: pointer;
-begin
-  result := false;
-  Position := nil; // force Step() to return false if called aterwards
-  if Source=nil then
-    exit;
-  DynArray.Init(ArrayTypeInfo,fake); // just to retrieve RTTI
-  FromVarUInt32(PByte(Source)); // ignore StoredElemSize to be Win32/64 compatible
-  if DynArray.ElemType=nil then begin
-    if (Source^<>#0) or DynArray.GetIsObjArray then
-      exit; // invalid Source, or unexpected T*ObjArray
-  end else
-  if Source^<>{$ifdef FPC} // cross-FPC/Delphi compatible
-      AnsiChar(FPCTODELPHI[PTypeKind(DynArray.ElemType)^]){$else}
-      PAnsiChar(DynArray.ElemType)^{$endif} then
-    exit; // invalid Source content
-  inc(Source);
-  Count := FromVarUInt32(PByte(Source));
-  Hash := pointer(Source);
-  Position := Source+SizeOf(cardinal);
-  Current := 0;
-  result := true;
-end;
-
-function TDynArrayLoadFrom.Step(out Elem): boolean;
-begin
-  result := false;
-  if (Position<>nil) and (Current<Count) then begin
-    if DynArray.ElemType=nil then begin
-      MoveSmall(Position,@Elem,DynArray.ElemSize);
-      inc(Position,DynArray.ElemSize);
-    end else begin
-      ManagedTypeLoad(@Elem,Position,DynArray.ElemType,nil);
-      if Position=nil then
-         exit;
-    end;
-    inc(Current);
-    result := true;
-  end;
-end;
-
-function TDynArrayLoadFrom.FirstField(out Field): boolean;
-begin
-  if (Position<>nil) and (Current<Count) then
-    result := DynArray.LoadKnownType(@Field,Position) else
-    result := false;
-end;
-
-function TDynArrayLoadFrom.CheckHash: boolean;
-begin
-  result := (Position<>nil) and
-     (Hash32(@Hash[1],Position-PAnsiChar(@Hash[1]))=Hash[0]);
-end;
-
 function TDynArray.LoadFromBinary(const Buffer: RawByteString;
   NoCheckHash: boolean): boolean;
 var P: PAnsiChar;
@@ -49461,54 +49363,57 @@ begin
   result := (P<>nil) and (P-pointer(Buffer)=len);
 end;
 
+function TDynArray.LoadFromHeader(var Source: PByte; SourceMax: PByte): integer;
+var n: cardinal;
+begin
+  // check context
+  result := -1; // to notify error
+  if (Source=nil) or (fValue=nil) then
+    exit;
+  // ignore legacy element size for cross-platform compatibility
+  if not FromVarUInt32(Source,SourceMax,n) or
+     ((SourceMax<>nil) and (PAnsiChar(Source)>=PAnsiChar(SourceMax))) then
+    exit;
+  // check stored element type
+  if ElemType=nil then begin
+    if Source^<>0 then
+      exit;
+  end else
+    if Source^<>{$ifdef FPC}ord(FPCTODELPHI[PTypeKind(ElemType)^]){$else}
+        PByte(ElemType)^{$endif} then
+      exit;
+  inc(Source);
+  // retrieve dynamic array count
+  if FromVarUInt32(Source,SourceMax,n) then
+    if (n=0) or (SourceMax=nil) or
+       (PAnsiChar(Source)+SizeOf(cardinal)<PAnsiChar(SourceMax)) then
+      result := n;
+end;
+
 function TDynArray.LoadFrom(Source: PAnsiChar; AfterEach: TDynArrayAfterLoadFrom;
   NoCheckHash: boolean; SourceMax: PAnsiChar): PAnsiChar;
 var i, n: integer;
     P: PAnsiChar;
     Hash: PCardinalArray;
 begin
-  // check context
+  // validate and unserialize binary header
   result := nil;
-  SetCount(0); // always reset number of items
-  if (Source=nil) or (fValue=nil) then
+  SetCapacity(0); // clear current values, and reset growing factor
+  n := LoadFromHeader(PByte(Source),PByte(SourceMax));
+  if n<=0 then begin
+    if n=0 then
+      result := Source;
     exit;
-  // ignore legacy element size for cross-platform compatibility
-  if SourceMax=nil then
-    FromVarUInt32(PByte(Source)) else begin
-    Source := pointer(FromVarUInt32Safe(PByte(Source),PByte(SourceMax),cardinal(n)));
-    if (Source=nil) or (Source>=SourceMax) then
-      exit;
-  end;
-  // check stored element type
-  if ElemType=nil then begin
-    if Source^<>#0 then
-      exit;
-  end else
-    if Source^<>{$ifdef FPC} // cross-FPC/Delphi compatible
-        AnsiChar(FPCTODELPHI[PTypeKind(ElemType)^]){$else}
-        PAnsiChar(ElemType)^{$endif} then
-      exit;
-  inc(Source);
-  // retrieve dynamic array count
-  if SourceMax=nil then
-    n := FromVarUInt32(PByte(Source)) else begin
-    Source := pointer(FromVarUInt32Safe(PByte(Source),PByte(SourceMax),cardinal(n)));
-    if Source=nil then exit;
   end;
   SetCount(n);
-  if n=0 then begin
-    result := Source;
-    exit;
-  end;
   // retrieve security checksum
   Hash := pointer(Source);
   inc(Source,SizeOf(cardinal));
-  if (SourceMax<>nil) and (Source>=SourceMax) then exit;
   // retrieve dynamic array elements content
   P := fValue^;
   if ElemType=nil then // FPC: nil also if not Kind in tkManagedTypes
     if GetIsObjArray then
-      raise ESynException.CreateUTF8('TDynArray.LoadFrom(%) is a T*ObjArray',
+      raise ESynException.CreateUTF8('TDynArray.LoadFrom: % is a T*ObjArray',
         [ArrayTypeShort^]) else begin
       // binary type was stored directly
       n := n*integer(ElemSize);
@@ -50378,8 +50283,8 @@ begin // this method is faster than default System.DynArraySetLength() function
   // if not shared (refCnt=1), resize; if shared, create copy (not thread safe)
   p := fValue^;
   if p=nil then begin
-    p := AllocMem(NeededSize);
-    OldLength := NewLength; // no FillcharFast() below
+    p := AllocMem(NeededSize); // RTL/OS will return zeroed memory
+    OldLength := NewLength;    // no FillcharFast() below
   end else begin
     dec(PtrUInt(p),SizeOf(TDynArrayRec)); // p^ = start of heap object
     OldLength := p^.length;
@@ -50620,9 +50525,60 @@ begin
   end;
 end;
 
-function DynArray(aTypeInfo: pointer; var aValue; aCountPointer: PInteger=nil): TDynArray;
+
+{ TDynArrayLoadFrom }
+
+function TDynArrayLoadFrom.Init(ArrayTypeInfo: pointer; Source: PAnsiChar;
+  SourceMaxLen: PtrInt): boolean;
+var fake: pointer;
 begin
-  result.Init(aTypeInfo,aValue,aCountPointer);
+  result := false;
+  Position := nil; // force Step() to return false if called aterwards
+  if Source=nil then
+    exit;
+  if SourceMaxLen=0 then
+    PositionEnd := nil else
+    PositionEnd := Source+SourceMaxLen;
+  DynArray.Init(ArrayTypeInfo,fake); // just to retrieve RTTI
+  Count := DynArray.LoadFromHeader(PByte(Source),PByte(PositionEnd));
+  if Count<0 then
+    exit;
+  Hash := pointer(Source);
+  Position := @Hash[1];
+  Current := 0;
+  result := true;
+end;
+
+function TDynArrayLoadFrom.Step(out Elem): boolean;
+begin
+  result := false;
+  if (Position<>nil) and (Current<Count) then begin
+    if DynArray.ElemType=nil then begin
+      if (PositionEnd<>nil) and (Position+DynArray.ElemSize>PositionEnd) then
+        exit;
+      MoveSmall(Position,@Elem,DynArray.ElemSize);
+      inc(Position,DynArray.ElemSize);
+    end else begin
+      ManagedTypeLoad(@Elem,Position,DynArray.ElemType,PositionEnd);
+      if Position=nil then
+         exit;
+    end;
+    inc(Current);
+    result := true;
+  end;
+end;
+
+function TDynArrayLoadFrom.FirstField(out Field): boolean;
+begin
+  if (Position<>nil) and (Current<Count) then
+    result := DynArray.LoadKnownType(@Field,Position,PositionEnd) else
+    result := false;
+end;
+
+function TDynArrayLoadFrom.CheckHash: boolean;
+begin
+  result := (Position<>nil) and
+     (Hash32(@Hash[1],Position-PAnsiChar(@Hash[1]))=Hash[0]);
 end;
 
 
@@ -51355,6 +51311,70 @@ begin
     inc(P,ElemSize);
   end;
   result := true;
+end;
+
+
+function DynArray(aTypeInfo: pointer; var aValue; aCountPointer: PInteger=nil): TDynArray;
+begin
+  result.Init(aTypeInfo,aValue,aCountPointer);
+end;
+
+function SimpleDynArrayLoadFrom(Source: PAnsiChar; aTypeInfo: pointer;
+  var Count, ElemSize: integer; NoHash32Check: boolean): pointer;
+var Hash: PCardinalArray absolute Source;
+    info: PTypeInfo;
+begin
+  result := nil;
+  info := GetTypeInfo(aTypeInfo,tkDynArray);
+  if info=nil then
+    exit; // invalid type information
+  if (info^.ElType<>nil) or (Source=nil) or
+     (Source[0]<>AnsiChar(info^.elSize)) or (Source[1]<>#0) then
+    exit; // invalid type information or Source content
+  ElemSize := info^.elSize {$ifdef FPC}and $7FFFFFFF{$endif};
+  inc(Source,2);
+  Count := FromVarUInt32(PByte(Source)); // dynamic array count
+  if (Count<>0) and (NoHash32Check or (Hash32(@Hash[1],Count*ElemSize)=Hash[0])) then
+    result := @Hash[1]; // returns valid Source content
+end;
+
+function IntegerDynArrayLoadFrom(Source: PAnsiChar; var Count: integer;
+  NoHash32Check: boolean): PIntegerArray;
+var Hash: PCardinalArray absolute Source;
+begin
+  result := nil;
+  if (Source=nil) or (Source[0]<>#4) or (Source[1]<>#0) then
+    exit; // invalid Source content
+  inc(Source,2);
+  Count := FromVarUInt32(PByte(Source)); // dynamic array count
+  if (Count<>0) and (NoHash32Check or (Hash32(@Hash[1],Count*4)=Hash[0])) then
+    result := @Hash[1]; // returns valid Source content
+end;
+
+function RawUTF8DynArrayLoadFromContains(Source: PAnsiChar;
+  Value: PUTF8Char; ValueLen: PtrInt; CaseSensitive: boolean): PtrInt;
+var Count, Len: PtrInt;
+begin
+  if (Value=nil) or (ValueLen=0) or
+     (Source=nil) or (Source[0]<>AnsiChar(SizeOf(PtrInt)))
+     {$ifndef FPC}or (Source[1]<>AnsiChar(tkLString)){$endif} then begin
+    result := -1;
+    exit; // invalid Source or Value content
+  end;
+  inc(Source,2);
+  Count := FromVarUInt32(PByte(Source)); // dynamic array count
+  inc(Source,SizeOf(cardinal)); // ignore Hash32 security checksum
+  for result := 0 to Count-1 do begin
+    Len := FromVarUInt32(PByte(Source));
+    if CaseSensitive then begin
+      if (Len=ValueLen) and CompareMemFixed(Value,Source,Len) then
+        exit;
+    end else
+      if UTF8ILComp(Value,pointer(Source),ValueLen,Len)=0 then
+        exit;
+    inc(Source,Len);
+  end;
+  result := -1;
 end;
 
 
