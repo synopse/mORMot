@@ -4655,6 +4655,13 @@ function ToVarInt32(Value: PtrInt; Dest: PByte): PByte;
 function FromVarUInt32(var Source: PByte): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// safely convert a 32-bit variable-length integer buffer into a cardinal
+// - slower but safer process checkout Source out of boundaries memory access
+// - SourceMax is expected to be not nil, and to point to the first byte
+// just after the input memory buffer
+// - returns nil on error, or point to next input data on successful decoding
+function FromVarUInt32Safe(Source, SourceMax: PByte; out Value: cardinal): PByte;
+
 /// convert a 32-bit variable-length integer buffer into a cardinal
 // - this version could be called if number is likely to be > $7f, so it
 // inlining the first byte won't make any benefit
@@ -4716,6 +4723,12 @@ procedure FromVarString(var Source: PByte; var Value: RawByteString;
 // - this overloaded function would include a trailing #0, so Value.buf could
 // be parsed as a valid PUTF8Char buffer (e.g. containing JSON)
 procedure FromVarString(var Source: PByte; var Value: TSynTempBuffer); overload;
+
+/// retrieve a variable-length UTF-8 encoded text buffer in a temporary buffer
+// - caller should call Value.Done after use of the Value.buf memory
+// - this overloaded function will also check for the SourceMax end of buffer
+function FromVarString(var Source: PByte; SourceMax: PByte;
+  var Value: TSynTempBuffer): boolean; overload;
 
 type
   /// kind of result returned by FromVarBlob() function
@@ -5433,7 +5446,12 @@ type
     // iterate over all items stored in a TDynArray.SaveTo memory buffer,
     // consider using TDynArrayLoadFrom object
     function LoadFrom(Source: PAnsiChar; AfterEach: TDynArrayAfterLoadFrom=nil;
-      NoCheckHash: boolean=false): PAnsiChar;
+      NoCheckHash: boolean=false; SourceMax: PAnsiChar=nil): PAnsiChar;
+    /// load the dynamic array content from a memory buffer
+    // - same as LoadFrom(), but will check for any buffer overflow since
+    // we know the actual end of input buffer
+    function LoadFromBinary(const Buffer: RawByteString;
+      NoCheckHash: boolean=false): boolean;
     /// serialize the dynamic array content as JSON
     // - is just a wrapper around TTextWriter.AddDynArrayJSON()
     // - this method will therefore recognize T*ObjArray types
@@ -5558,16 +5576,16 @@ type
     /// load an array element as saved by the ElemSave method into Elem variable
     // - warning: Elem must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (you can't write ElemLoad(P,i+10) e.g.)
-    procedure ElemLoad(Source: PAnsiChar; var Elem); overload;
+    procedure ElemLoad(Source: PAnsiChar; var Elem; SourceMax: PAnsiChar=nil); overload;
     /// load an array element as saved by the ElemSave method
     // - this overloaded method will retrieve the element as a memory buffer,
     // which should be cleared by ElemLoadClear() before release
-    function ElemLoad(Source: PAnsiChar): RawByteString; overload;
+    function ElemLoad(Source: PAnsiChar; SourceMax: PAnsiChar=nil): RawByteString; overload;
     /// search for an array element as saved by the ElemSave method
     // - same as ElemLoad() + Find()/IndexOf() + ElemLoadClear()
     // - will call Find() method if Compare property is set
     // - will call generic IndexOf() method if no Compare property is set
-    function ElemLoadFind(Source: PAnsiChar): integer;
+    function ElemLoadFind(Source: PAnsiChar; SourceMax: PAnsiChar=nil): integer;
     /// finalize a temporary buffer used to store an element via ElemLoad()
     // - will release any managed type referenced inside the RawByteString,
     // then void the variable
@@ -5726,7 +5744,10 @@ type
     function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil{$ifndef NOVARIANTS};
       CustomVariantOptions: PDocVariantOptions=nil{$endif}): PUTF8Char; inline;
     function SaveToLength: integer; inline;
-    function LoadFrom(Source: PAnsiChar): PAnsiChar;  inline;
+    function LoadFrom(Source: PAnsiChar; AfterEach: TDynArrayAfterLoadFrom=nil;
+      NoCheckHash: boolean=false; SourceMax: PAnsiChar=nil): PAnsiChar;  inline;
+    function LoadFromBinary(const Buffer: RawByteString;
+      NoCheckHash: boolean=false): boolean; inline;
     property Count: PtrInt read GetCount write SetCount;
     property Capacity: integer read GetCapacity write SetCapacity;
   private
@@ -7142,10 +7163,15 @@ function RecordSaveJSON(const Rec; TypeInfo: pointer;
 // of the string length - note that if you change the type definition, any
 // previously-serialized content will fail, maybe triggering unexpected GPF: you
 // may use TypeInfoToHash() if you share this binary data accross executables
+// - you can optionally provide the Source end buffer (i.e. first byte after
+// the memory buffer to decode), which will be used to avoid any unexpected
+// access - it would be mandatory e.g. when decoding the content from any
+// external process (e.g. a maybe-forged client) - with a performance penalty
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer;
-  Len: PInteger=nil): PAnsiChar; overload;
+  Len: PInteger=nil; SourceMax: PAnsiChar=nil): PAnsiChar; overload;
 
 /// fill a record content from a memory buffer as saved by RecordSave()
+// - will use the Source length to detect and avoid any buffer overlow
 // - returns false if the Source buffer was incorrect, true on success
 function RecordLoad(var Res; const Source: RawByteString; TypeInfo: pointer): boolean; overload;
 
@@ -7201,7 +7227,7 @@ procedure DynArrayCopy(var Dest; const Source; SourceMaxElem: integer;
 /// fill a dynamic array content from a binary serialization as saved by
 // DynArraySave() / TDynArray.Save()
 // - Value shall be set to the target dynamic array field
-// - just a function helper around TDynArray.Init + TDynArray.LoadFrom
+// - just a function helper around TDynArray.Init + TDynArray.*
 function DynArrayLoad(var Value; Source: PAnsiChar; TypeInfo: pointer): PAnsiChar;
 
 /// serialize a dynamic array content as binary, ready to be loaded by
@@ -14247,7 +14273,7 @@ function VariantSave(const Value: variant): RawByteString; overload;
 // read content
 // - how custom type variants are created can be defined via CustomVariantOptions
 function VariantLoad(var Value: variant; Source: PAnsiChar;
-  CustomVariantOptions: PDocVariantOptions): PAnsiChar; overload;
+  CustomVariantOptions: PDocVariantOptions; SourceMax: PAnsiChar=nil): PAnsiChar; overload;
 
 /// retrieve a variant value from our optimized binary serialization format
 // - follow the data layout as used by RecordLoad() or VariantSave() function
@@ -37701,7 +37727,7 @@ end;
 
 procedure TSynTimeZone.LoadFromBuffer(const Buffer: RawByteString);
 begin
-  fZones.LoadFrom(pointer(AlgoSynLZ.Decompress(Buffer)));
+  fZones.LoadFromBinary(AlgoSynLZ.Decompress(Buffer),{nohash=}true);
   fZones.ReHash(false);
   FreeAndNil(fIds);
   FreeAndNil(fDisplays);
@@ -40349,6 +40375,45 @@ begin // Values above 128
   Source := p;
 end;
 
+function FromVarUInt32Safe(Source, SourceMax: PByte; out Value: cardinal): PByte;
+var c: cardinal;
+begin
+  result := nil; // error
+  if PAnsiChar(Source)>=PAnsiChar(SourceMax) then exit;
+  c := Source^;
+  inc(Source);
+  Value := c;
+  if c>$7f then begin // Values between 128 and 16256
+    if PAnsiChar(Source)>=PAnsiChar(SourceMax) then exit;
+    c := Source^;
+    c := c shl 7;
+    Value := Value and $7F or c;
+    inc(Source);
+    if c>$7f shl 7 then begin // Values between 16257 and 2080768
+      if PAnsiChar(Source)>=PAnsiChar(SourceMax) then exit;
+      c := Source^;
+      c := c shl 14;
+      inc(Source);
+      Value := Value and $3FFF or c;
+      if c>$7f shl 14 then begin // Values between 2080769 and 266338304
+        if PAnsiChar(Source)>=PAnsiChar(SourceMax) then exit;
+        c := Source^;
+        c := c shl 21;
+        inc(Source);
+        Value := Value and $1FFFFF or c;
+        if c>$7f shl 21 then begin
+          if PAnsiChar(Source)>=PAnsiChar(SourceMax) then exit;
+          c := Source^;
+          c := c shl 28;
+          inc(Source);
+          Value := Value and $FFFFFFF or c;
+        end;
+      end;
+    end;
+  end;
+  result := Source;
+end;
+
 function FromVarInt32(var Source: PByte): integer;
 var c: cardinal;
     p: PByte;
@@ -40645,7 +40710,26 @@ begin
   inc(Source,len);
 end;
 
-procedure FromVarString(var Source: PByte; var Value: RawByteString; CodePage: integer);
+function FromVarString(var Source: PByte; SourceMax: PByte;
+  var Value: TSynTempBuffer): boolean;
+var len: cardinal;
+begin
+  if SourceMax=nil then
+    len := FromVarUInt32(Source) else begin
+    Source := FromVarUInt32Safe(Source,SourceMax,len);
+    if (Source=nil) or (PAnsiChar(Source)+len>PAnsiChar(SourceMax)) then begin
+      result := false;
+      exit;
+    end;
+  end;
+  Value.Init(Source,len);
+  PByteArray(Value.buf)[len] := 0; // include trailing #0
+  inc(Source,len);
+  result := true;
+end;
+
+procedure FromVarString(var Source: PByte; var Value: RawByteString;
+  CodePage: integer);
 var Len: PtrUInt;
 begin
   Len := FromVarUInt32(Source);
@@ -41034,49 +41118,60 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   end;
 end;
 
-function ManagedTypeLoad(data: PAnsiChar; var source: PAnsiChar; info: PTypeInfo): integer;
+function ManagedTypeLoad(data: PAnsiChar; var source: PAnsiChar;
+  info: PTypeInfo; sourceMax: PAnsiChar): integer;
 // returns source=nil on error, or final source + result=data^ length
 var DynArray: TDynArray;
     itemtype: PTypeInfo;
-    itemsize,i: integer;
+    itemsize: cardinal;
+    i: PtrInt;
 begin // info is expected to come from a DeRef() if retrieved from RTTI
+  result := SizeOf(PtrUInt); // size of most items
+  if info^.Kind in [tkLString{$ifdef FPC},tkLStringOld{$endif},tkWString
+      {$ifdef HASVARUSTRING},tkUString{$endif}] then
+    if sourceMax<>nil then begin
+      source := pointer(FromVarUInt32Safe(PByte(source),PByte(sourceMax),itemsize));
+      if source=nil then
+        exit;
+      if source+itemsize>sourceMax then begin
+        source := nil;
+        exit; // avoid buffer overflow
+      end;
+    end else
+      itemsize := FromVarUInt32(PByte(source)); // in source buffer bytes
   case info^.Kind of
   tkLString{$ifdef FPC}, tkLStringOld{$endif}: begin
-    itemsize := FromVarUInt32(PByte(source));
     {$ifdef HASCODEPAGE}
     FastSetStringCP(data^,source,itemsize,LStringCodePage(info));
     {$else}
     SetString(PRawUTF8(data)^,source,itemsize);
     {$endif HASCODEPAGE}
     inc(source,itemsize);
-    result := SizeOf(PtrUInt); // size of tkLString
   end;
   tkWString: begin
-    itemsize := FromVarUInt32(PByte(source)); // in bytes
     SetString(PWideString(data)^,PWideChar(source),itemsize shr 1);
     inc(source,itemsize);
-    result := SizeOf(PtrUInt); // size of tkWString
   end;
   {$ifdef HASVARUSTRING}
   tkUString: begin
-    itemsize := FromVarUInt32(PByte(source));
     SetString(PUnicodeString(data)^,PWideChar(source),itemsize shr 1);
     inc(source,itemsize);
-    result := SizeOf(PtrUInt); // size of tkUString
   end;
   {$endif}
   tkRecord{$ifdef FPC},tkObject{$endif}:
-    source := RecordLoad(data^,source,info,@result);
+    source := RecordLoad(data^,source,info,@result,sourceMax);
   tkArray: begin
     itemtype := ArrayItemType(info,result);
     if info=nil then
       source := nil else
-      if itemtype=nil then begin
-        MoveSmall(source,data,result);
-        inc(source,result);
-      end else
+      if itemtype=nil then
+        if (sourceMax<>nil) and (source+result>sourceMax) then
+          source := nil else begin
+          MoveSmall(source,data,result);
+          inc(source,result);
+        end else
         for i := 1 to info^.elCount do begin
-          inc(data,ManagedTypeLoad(data,source,itemtype));
+          inc(data,ManagedTypeLoad(data,source,itemtype,sourceMax));
           if source=nil then
             exit;
         end;
@@ -41089,20 +41184,20 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   {$endif NOVARIANTS}
   tkDynArray: begin
     DynArray.Init(info,data^);
-    source := DynArray.LoadFrom(source);
-    result := SizeOf(PtrUInt); // size of tkDynArray in record
+    source := DynArray.LoadFrom(source,nil,{nohash=}true,sourceMax);
   end;
   {$ifndef DELPHI5OROLDER}
   tkInterface: begin
+    if (sourceMax<>nil) and (source+SizeOf(Int64)>sourceMax) then begin
+      source := nil;
+      exit;
+    end;
     PIInterface(data)^ := PIInterface(source)^; // with proper refcount
     inc(source,SizeOf(Int64)); // consume 64-bit even on CPU32
-    result := SizeOf(PtrUInt);
   end;
   {$endif DELPHI5OROLDER}
-  else begin
-    source := nil;
-    result := 0;
-  end;
+  else
+    source := nil; // notify error for unexpected input type
   end;
 end;
 
@@ -41350,14 +41445,15 @@ begin
     result := Base64ToBin(Source,Len,temp);
   result := result and (temp.len>=4) and
     (crc32c(0,PAnsiChar(temp.buf)+4,temp.len-4)=PCardinal(temp.buf)^) and
-    (RecordLoad(Rec,PAnsiChar(temp.buf)+4,TypeInfo)<>nil);
+    (RecordLoad(Rec,PAnsiChar(temp.buf)+4,TypeInfo,nil,PAnsiChar(temp.buf)+temp.len)<>nil);
   temp.Done;
 end;
 
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer;
-  Len: PInteger): PAnsiChar;
+  Len: PInteger; SourceMax: PAnsiChar): PAnsiChar;
 var info,fieldinfo: PTypeInfo;
-    n, F, offset: integer;
+    n, F: integer;
+    offset: PtrInt;
     field: PFieldInfo;
     R: PAnsiChar;
 begin
@@ -41395,11 +41491,13 @@ begin
     {$endif};
     offset := integer(field^.Offset)-offset;
     if offset<>0 then begin
+      if (SourceMax<>nil) and (Source+offset>SourceMax) then
+        exit;
       MoveSmall(Source,R,offset);
       inc(Source,offset);
       inc(R,offset);
     end;
-    offset := ManagedTypeLoad(R,Source,fieldinfo);
+    offset := ManagedTypeLoad(R,Source,fieldinfo,SourceMax);
     if Source=nil then
       exit; // error at loading
     inc(R,offset);
@@ -41410,16 +41508,19 @@ begin
   if offset<0 then
     raise ESynException.Create('RecordLoad offset<0') else
   if offset<>0 then begin
+    if (SourceMax<>nil) and (Source+offset>SourceMax) then
+      exit;
     MoveSmall(Source,R,offset);
     result := Source+offset;
   end else
     result := Source;
 end;
 
-function RecordLoad(var Res; const Source: RawByteString; TypeInfo: pointer): boolean; overload;
+function RecordLoad(var Res; const Source: RawByteString; TypeInfo: pointer): boolean;
 var P: PAnsiChar;
 begin
-  P := RecordLoad(Res,pointer(Source),TypeInfo,nil);
+  P := pointer(Source);
+  P := RecordLoad(Res,P,TypeInfo,nil,P+length(Source));
   result := (P<>nil) and (P-pointer(Source)=length(Source));
 end;
 
@@ -42889,7 +42990,7 @@ begin // code below must match TTextWriter.AddRecordJSON
     Val := GetJSONField(JSON,JSON,@wasString,@EndOfObj,@ValLen);
     if (Val=nil) or not wasString or (ValLen<3) or
        (PInteger(Val)^ and $00ffffff<>JSON_BASE64_MAGIC) or
-       (RecordLoad(Rec,pointer(Base64ToBin(PAnsiChar(Val)+3,ValLen-3)),TypeInfo)=nil) then
+       not RecordLoad(Rec,Base64ToBin(PAnsiChar(Val)+3,ValLen-3),TypeInfo) then
       exit; // invalid content
   end else begin
     if not GlobalJSONCustomParsers.RecordSearch(TypeInfo,Reader) then
@@ -44682,40 +44783,54 @@ end;
 function VariantLoad(const Bin: RawByteString;
   CustomVariantOptions: PDocVariantOptions): variant;
 begin
-  if VariantLoad(result,Pointer(Bin),CustomVariantOptions)=nil then
+  if VariantLoad(result,Pointer(Bin),CustomVariantOptions,
+     PAnsiChar(pointer(Bin))+length(Bin))=nil then
     VarClear(result);
 end;
 
 function VariantLoad(var Value: variant; Source: PAnsiChar;
-  CustomVariantOptions: PDocVariantOptions): PAnsiChar;
+  CustomVariantOptions: PDocVariantOptions; SourceMax: PAnsiChar): PAnsiChar;
 var JSON: PUTF8Char;
+    n: cardinal;
     tmp: TSynTempBuffer; // GetJSON*() does in-place unescape -> private copy
 begin
+  result := nil; // error
   {$ifndef FPC}if TVarData(Value).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(Value);
+  if (SourceMax<>nil) and (Source+2>SourceMax) then exit;
   TVarData(Value).VType := PWord(Source)^;
   inc(Source,SizeOf(TVarData(Value).VType));
   case TVarData(Value).VType of
   varNull, varEmpty: ;
   varShortInt, varByte: begin
+    if (SourceMax<>nil) and (Source>=SourceMax) then exit;
     TVarData(Value).VByte := byte(Source^);
     inc(Source);
   end;
   varSmallint, varWord, varBoolean: begin
+    if (SourceMax<>nil) and (Source+2>SourceMax) then exit;
     TVarData(Value).VWord := PWord(Source)^;
     inc(Source,SizeOf(Word));
   end;
   varSingle, varLongWord, varInteger: begin
+    if (SourceMax<>nil) and (Source+4>SourceMax) then exit;
     TVarData(Value).VInteger := PInteger(Source)^;
     inc(Source,SizeOf(Integer));
   end;
   varInt64, varWord64, varDouble, varDate, varCurrency: begin
+    if (SourceMax<>nil) and (Source+8>SourceMax) then exit;
     TVarData(Value).VInt64 := PInt64(Source)^;
     inc(Source,SizeOf(Int64));
   end;
   varString, varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}: begin
     TVarData(Value).VAny := nil; // avoid GPF below when assigning a string variable to VAny
-    tmp.Len := FromVarUInt32(PByte(Source));
+    if SourceMax=nil then
+      tmp.Len := FromVarUInt32(PByte(Source)) else begin
+      Source := pointer(FromVarUInt32Safe(PByte(Source),PByte(SourceMax),n));
+      if (Source=nil) or (Source+n>SourceMax) then
+        exit;
+      tmp.Len := n;
+    end;
     case TVarData(Value).VType of
     varString:
       FastSetString(RawUTF8(TVarData(Value).VString),Source,tmp.Len); // explicit RawUTF8
@@ -44731,20 +44846,21 @@ begin
   else
     if CustomVariantOptions<>nil then begin
       try // expected format for complex type is JSON (VType may differ)
-        FromVarString(PByte(Source),tmp);
+        if FromVarString(PByte(Source),PByte(SourceMax),tmp) then
         try
           JSON := tmp.buf;
           TVarData(Value).VType := varEmpty; // avoid GPF below
           GetJSONToAnyVariant(Value,JSON,nil,CustomVariantOptions,false);
         finally
           tmp.Done;
-        end;
+        end else
+          exit;
       except
         on Exception do
-          Source := nil; // notify invalid/unhandled variant content
+          exit; // notify invalid/unhandled variant content
       end;
     end else
-      Source := nil; // notify unhandled type
+      exit;
   end;
   result := Source;
 end;
@@ -48756,7 +48872,7 @@ procedure TDynArray.LoadFromStream(Stream: TCustomMemoryStream);
 var P: PAnsiChar;
 begin
   P := PAnsiChar(Stream.Memory)+Stream.Seek(0,soFromCurrent);
-  Stream.Seek(LoadFrom(P)-P,soCurrent);
+  Stream.Seek(LoadFrom(P,nil,false,PAnsiChar(Stream.Memory)+Stream.Size)-P,soCurrent);
 end;
 
 function TDynArray.SaveToTypeInfoHash(crc: cardinal): cardinal;
@@ -49070,7 +49186,7 @@ begin
     info := KINDTYPE_INFO[fKnownType];
     if info=nil then
       result := false else
-      result := (ManagedTypeLoad(Data,Source,info)<>0) and (Source<>nil);
+      result := (ManagedTypeLoad(Data,Source,info,nil)<>0) and (Source<>nil);
   end;
 end;
 
@@ -49139,7 +49255,7 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
     Val := GetJSONField(P,P,@wasString,@EndOfObject);
     if (Val=nil) or not wasString or
        (PInteger(Val)^ and $00ffffff<>JSON_BASE64_MAGIC) or
-       (LoadFrom(pointer(Base64ToBin(Val+3)))=nil) then
+       not LoadFromBinary(Base64ToBin(Val+3)) then
       exit; // invalid content
   end else begin
     if GetIsObjArray then
@@ -49313,7 +49429,7 @@ begin
       MoveSmall(Position,@Elem,DynArray.ElemSize);
       inc(Position,DynArray.ElemSize);
     end else begin
-      ManagedTypeLoad(@Elem,Position,DynArray.ElemType);
+      ManagedTypeLoad(@Elem,Position,DynArray.ElemType,nil);
       if Position=nil then
          exit;
     end;
@@ -49335,22 +49451,35 @@ begin
      (Hash32(@Hash[1],Position-PAnsiChar(@Hash[1]))=Hash[0]);
 end;
 
+function TDynArray.LoadFromBinary(const Buffer: RawByteString;
+  NoCheckHash: boolean): boolean;
+var P: PAnsiChar;
+    len: PtrInt;
+begin
+  len := length(Buffer);
+  P := LoadFrom(pointer(Buffer),nil,NoCheckHash,PAnsiChar(pointer(Buffer))+len);
+  result := (P<>nil) and (P-pointer(Buffer)=len);
+end;
+
 function TDynArray.LoadFrom(Source: PAnsiChar; AfterEach: TDynArrayAfterLoadFrom;
-  NoCheckHash: boolean): PAnsiChar;
+  NoCheckHash: boolean; SourceMax: PAnsiChar): PAnsiChar;
 var i, n: integer;
     P: PAnsiChar;
     Hash: PCardinalArray;
 begin
   // check context
   result := nil;
-  if Source=nil then begin
-    SetCount(0);
+  SetCount(0); // always reset number of items
+  if (Source=nil) or (fValue=nil) then
     exit;
+  // ignore legacy element size for cross-platform compatibility
+  if SourceMax=nil then
+    FromVarUInt32(PByte(Source)) else begin
+    Source := pointer(FromVarUInt32Safe(PByte(Source),PByte(SourceMax),cardinal(n)));
+    if (Source=nil) or (Source>=SourceMax) then
+      exit;
   end;
-  if fValue=nil then
-    exit;
-  // check stored element size+type
-  FromVarUInt32(PByte(Source)); // ignore StoredElemSize to be Win32/64 compatible
+  // check stored element type
   if ElemType=nil then begin
     if Source^<>#0 then
       exit;
@@ -49361,7 +49490,11 @@ begin
       exit;
   inc(Source);
   // retrieve dynamic array count
-  n := FromVarUInt32(PByte(Source));
+  if SourceMax=nil then
+    n := FromVarUInt32(PByte(Source)) else begin
+    Source := pointer(FromVarUInt32Safe(PByte(Source),PByte(SourceMax),cardinal(n)));
+    if Source=nil then exit;
+  end;
   SetCount(n);
   if n=0 then begin
     result := Source;
@@ -49370,6 +49503,7 @@ begin
   // retrieve security checksum
   Hash := pointer(Source);
   inc(Source,SizeOf(cardinal));
+  if (SourceMax<>nil) and (Source>=SourceMax) then exit;
   // retrieve dynamic array elements content
   P := fValue^;
   if ElemType=nil then // FPC: nil also if not Kind in tkManagedTypes
@@ -49378,20 +49512,21 @@ begin
         [ArrayTypeShort^]) else begin
       // binary type was stored directly
       n := n*integer(ElemSize);
+      if (SourceMax<>nil) and (Source+n>SourceMax) then exit;
       {$ifdef FPC}Move{$else}MoveFast{$endif}(Source^,P^,n);
       inc(Source,n);
     end else
     if PTypeKind(ElemType)^ in tkRecordTypes then
       for i := 1 to n do begin
-        Source := RecordLoad(P^,Source,ElemType);
+        Source := RecordLoad(P^,Source,ElemType,nil,SourceMax);
+        if Source=nil then exit;
         if Assigned(AfterEach) then
           AfterEach(P^);
         inc(P,ElemSize);
       end else
       for i := 1 to n do begin
-        ManagedTypeLoad(P,Source,ElemType);
-        if Source=nil then
-           break;
+        ManagedTypeLoad(P,Source,ElemType,SourceMax);
+        if Source=nil then exit;
         if Assigned(AfterEach) then
           AfterEach(P^);
         inc(P,ElemSize);
@@ -50423,7 +50558,7 @@ begin
   FillCharFast(Elem,ElemSize,0); // always
 end;
 
-function TDynArray.ElemLoad(Source: PAnsiChar): RawByteString;
+function TDynArray.ElemLoad(Source,SourceMax: PAnsiChar): RawByteString;
 begin
   if (Source<>nil) and (ElemType=nil) then
     SetString(result,Source,ElemSize) else begin
@@ -50439,12 +50574,14 @@ begin
   ElemTemp := '';
 end;
 
-procedure TDynArray.ElemLoad(Source: PAnsiChar; var Elem);
+procedure TDynArray.ElemLoad(Source: PAnsiChar; var Elem; SourceMax: PAnsiChar);
 begin
   if Source<>nil then // avoid GPF
-    if ElemType=nil then
-      MoveSmall(Source,@Elem,ElemSize) else
-      ManagedTypeLoad(@Elem,Source,ElemType);
+    if ElemType=nil then begin
+      if (SourceMax=nil) or (Source+ElemSize<=SourceMax) then
+        MoveSmall(Source,@Elem,ElemSize);
+    end else
+      ManagedTypeLoad(@Elem,Source,ElemType,SourceMax);
 end;
 
 function TDynArray.ElemSave(const Elem): RawByteString;
@@ -50458,7 +50595,7 @@ begin
   end;
 end;
 
-function TDynArray.ElemLoadFind(Source: PAnsiChar): integer;
+function TDynArray.ElemLoadFind(Source, SourceMax: PAnsiChar): integer;
 var tmp: array[0..2047] of byte;
     data: pointer;
 begin
@@ -50468,7 +50605,7 @@ begin
   if ElemType=nil then
     data := Source else begin
     FillCharFast(tmp,ElemSize,0);
-    ManagedTypeLoad(@tmp,Source,ElemType);
+    ManagedTypeLoad(@tmp,Source,ElemType,SourceMax);
     if Source=nil then
       exit;
     data := @tmp;
@@ -50564,9 +50701,14 @@ function TDynArrayHashed.SaveTo: RawByteString;
 begin
   result := InternalDynArray.SaveTo;
 end;
-function TDynArrayHashed.LoadFrom(Source: PAnsiChar): PAnsiChar;
+function TDynArrayHashed.LoadFrom(Source: PAnsiChar; AfterEach: TDynArrayAfterLoadFrom;
+  NoCheckHash: boolean; SourceMax: PAnsiChar): PAnsiChar;
 begin
-  result := InternalDynArray.LoadFrom(Source);
+  result := InternalDynArray.LoadFrom(Source,AfterEach,NoCheckHash,SourceMax);
+end;
+function TDynArrayHashed.LoadFromBinary(const Buffer: RawByteString; NoCheckHash: boolean): boolean;
+begin
+  result := InternalDynArray.LoadFromBinary(Buffer,NoCheckHash);
 end;
 function TDynArrayHashed.SaveTo(Dest: PAnsiChar): PAnsiChar;
 begin
@@ -60295,17 +60437,20 @@ begin
 end;
 
 function TSynDictionary.LoadFromBinary(const binary: RawByteString): boolean;
-var P: PAnsiChar;
+var plain: RawByteString;
+    P,PEnd: PAnsiChar;
 begin
   result := false;
-  P := pointer(fCompressAlgo.Decompress(binary));
+  plain := fCompressAlgo.Decompress(binary);
+  P := pointer(plain);
   if P=nil then
     exit;
+  PEnd := P+length(plain);
   fSafe.Lock;
   try
-    P := fKeys.LoadFrom(P);
+    P := fKeys.LoadFrom(P,nil,{checkhash=}false,PEnd);
     if P<>nil then
-      P := fValues.LoadFrom(P);
+      P := fValues.LoadFrom(P,nil,{checkhash=}false,PEnd);
     if (P<>nil) and (fKeys.Count=fValues.Count) then begin
       SetTimeouts;  // set ComputeNextTimeOut for all items
       fKeys.ReHash; // optimistic: input from safe TSynDictionary.SaveToBinary
@@ -63642,7 +63787,8 @@ end;
 
 procedure TSynNameValue.SetBlobData(const aValue: RawByteString);
 begin
-  SetBlobDataPtr(pointer(aValue));
+  DynArray.LoadFromBinary(aValue);
+  DynArray.ReHash;
 end;
 
 function TSynNameValue.GetStr(const aName: RawUTF8): RawUTF8;

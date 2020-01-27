@@ -5604,25 +5604,28 @@ end;
 
 procedure InternalSQLFunctionDynArrayBlob(Context: TSQLite3FunctionContext;
   argc: integer; var argv: TSQLite3ValueArray); cdecl;
-var DynArray, Elem: pointer;
-    Func: TSQLDataBaseSQLFunctionDynArray;
+var P, item: PAnsiChar;
+    PLen, itemLen: PtrInt;
+    caller: TSQLDataBaseSQLFunctionDynArray;
 begin
   if argc<>2 then begin
     ErrorWrongNumberOfArgs(Context);
     exit; // two parameters expected
   end;
-  DynArray := sqlite3.value_blob(argv[0]);
-  Elem := sqlite3.value_blob(argv[1]);
-  Func := sqlite3.user_data(Context);
-  if (DynArray<>nil) and (Elem<>nil) and (Func<>nil) then
-  with Func.fDummyDynArray do
-  try
-    LoadFrom(DynArray); // temporary allocate all dynamic array content
+  P := sqlite3.value_blob(argv[0]);
+  PLen := sqlite3.value_bytes(argv[0]);
+  item := sqlite3.value_blob(argv[1]);
+  itemLen := sqlite3.value_bytes(argv[1]);
+  caller := sqlite3.user_data(Context);
+  if (P<>nil) and (PLen>0) and (item<>nil) and (itemLen>0) and (caller<>nil) then
+  with caller.fDummyDynArray do
+  try // temporary allocate all dynamic array content
     try
-      if ElemLoadFind(Elem)<0 then
-        DynArray := nil;
+      if (LoadFrom(P,nil,{nohash=}true,P+PLen)=nil) or
+         (ElemLoadFind(item,item+itemLen)<0) then
+        P := nil; // not found
     finally
-      Clear; // release temporary array content in fDummyDynArrayValue
+      Clear; // always release temporary array content
     end;
   except
     on Exception do begin
@@ -5630,8 +5633,8 @@ begin
       exit;
     end;
   end else
-    DynArray := nil;
-  sqlite3.result_int64(Context,Int64(DynArray<>nil));
+    P := nil;
+  sqlite3.result_int64(Context,Int64(P<>nil));
 end;
 
 constructor TSQLDataBaseSQLFunctionDynArray.Create(aTypeInfo: pointer;

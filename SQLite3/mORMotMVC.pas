@@ -1292,7 +1292,7 @@ begin
       if PRecordData=nil then
         result := tmp.head.session else
         if (PRecordTypeInfo<>nil) and (len>sizeof(tmp.head)) and
-           (RecordLoad(PRecordData^,@tmp.data,PRecordTypeInfo)<>nil) then
+           (RecordLoad(PRecordData^,@tmp.data,PRecordTypeInfo,nil,@tmp.data[high(tmp.data)])<>nil) then
           result := tmp.head.session;
     end;
   end;

@@ -2150,6 +2150,12 @@ begin
   Check(dyn1.Count=4);
   for i := 0 to 3 do
     Check(AB[i]=(i and 1=1));
+  dyn1.Clear;
+  Check(AB=nil);
+  Check(dyn1.LoadFromBinary(test));
+  Check(dyn1.Count=4);
+  for i := 0 to 3 do
+    Check(AB[i]=(i and 1=1));
   Check(dyniter.Init(TypeInfo(TBooleanDynArray),pointer(test)));
   Check(dyniter.Count=4);
   for i := 0 to 3 do begin
@@ -2204,6 +2210,10 @@ begin
     Check(AI[i]=1000-i);
   AIP.Clear;
   Check(AIP.LoadFrom(pointer(Test))<>nil);
+  for i := 0 to 1000 do
+    Check(AIP.IndexOf(i)=i);
+  AIP.Clear;
+  Check(AIP.LoadFromBinary(Test));
   for i := 0 to 1000 do
     Check(AIP.IndexOf(i)=i);
   for i := 1000 downto 0 do
@@ -2339,6 +2349,10 @@ begin
   Check(AUP.LoadFrom(pointer(Test))-pointer(Test)=length(Test));
   for i := 0 to 1000 do
     Check(GetInteger(pointer(AU[i]))=i+1000);
+  AUP.Clear;
+  Check(AUP.LoadFromBinary(Test));
+  for i := 0 to 1000 do
+    Check(GetInteger(pointer(AU[i]))=i+1000);
   Check(dyniter.Init(TypeInfo(TRawUTF8DynArray),pointer(test)));
   Check(dyniter.Count=1001);
   for i := 0 to 1000 do begin
@@ -2469,6 +2483,9 @@ begin
   Fill(F,0);
   Check(RecordLoad(F,pointer(Test),TypeInfo(TFV))-pointer(Test)=Len);
   Check(RecordEquals(F,AF[100],TypeInfo(TFV)));
+  Fill(F,0);
+  Check(RecordLoad(F,Test,TypeInfo(TFV)));
+  Check(RecordEquals(F,AF[100],TypeInfo(TFV)));
   Test := RecordSaveBase64(F,TypeInfo(TFV));
   Check(Test<>'');
   Fill(F,0);
@@ -2507,6 +2524,7 @@ begin
     AFP.ElemLoad(pointer(Test2),F);
     Check(AFP.ElemEquals(F,F1));
     Check(AFP.ElemLoadFind(pointer(Test2))=i);
+    Check(AFP.ElemLoadFind(pointer(Test2),PAnsiChar(Test2)+length(Test2))=i);
   end;
   W.CancelAll;
   W.AddDynArrayJSON(AFP);
@@ -2613,7 +2631,7 @@ begin
   Test := AFP.SaveTo;
   AFP.Clear;
   Check(AFP.Count=0);
-  Check(AFP.LoadFrom(pointer(Test))<>nil);
+  Check(AFP.LoadFromBinary(Test));
   Check(AFP.Count=1001);
   TestAF2;
   // validate https://synopse.info/forum/viewtopic.php?pid=16581#p16581
@@ -8825,13 +8843,13 @@ procedure CheckRegEx(o: variant);
 var u,u2: RawUTF8;
 begin
   u := VariantSaveMongoJSON(o,modMongoStrict);
-  Check(u='{"name":"John","field":'+REGEX+'}');
+  CheckEqual(u,'{"name":"John","field":'+REGEX+'}');
   u2 := VariantSaveMongoJSON(o,modMongoStrict);
-  Check(u2=u,'call twice');
+  CheckEqual(u,u2,'call twice');
   u2 := VariantSaveJSON(o);
-  Check(u2=u);
+  CheckEqual(u,u2);
   u := VariantSaveMongoJSON(o,modMongoShell);
-  Check(u=REGEX2);
+  CheckEqual(u,REGEX2);
 end;
 var o,od,o2,value: variant;
     d,d2: TDateTime;
@@ -8943,7 +8961,7 @@ begin
   Check(not elem.FromNext(b));
   Check(elem.Kind=betEof);
   u := BSONToJSON(pointer(bsonDat),betDoc,length(bsonDat));
-  Check(u='{"hello":"world"}');
+  CheckEqual(u,'{"hello":"world"}');
   elem.FromDocument(bsonDat);
   Check(elem.Kind=betDoc);
   Check(elem.DocItemToVariant('hello',value));
@@ -8975,17 +8993,17 @@ begin
   Check(not elem.FromNext(b));
   Check(elem.Kind=betEof);
   u := BSONToJSON(pointer(bsonDat),betDoc,length(bsonDat));
-  Check(u=BSONAWESOME);
+  CheckEqual(u,BSONAWESOME);
   u := VariantSaveMongoJSON(o,modMongoStrict);
-  Check(u=BSONAWESOME);
+  CheckEqual(u,BSONAWESOME);
   u := VariantSaveJSON(o);
-  Check(u=BSONAWESOME);
+  CheckEqual(u,BSONAWESOME);
   Check(BSON(['BSON',_Arr(['awesome',5.05, 1986])])=bsonDat);
   o2 := BSONVariantType[bsonDat];
   Check(VariantSaveJSON(o2)=u);
   o2 := BSONVariant('{"BSON": ["awesome", 5.05, 1986]}');
   u := VariantSaveMongoJSON(o2,modMongoStrict);
-  Check(u=BSONAWESOME);
+  CheckEqual(u,BSONAWESOME);
   o2 := BSONVariant(['BSON',_Arr(['awesome',5.05, 1986])]);
   Check(VariantSaveMongoJSON(o2,modMongoStrict)=BSONAWESOME);
   o2 := BSONVariant(TDocVariantData(o));
@@ -8997,7 +9015,7 @@ begin
   Check(o2=BSONAWESOME,'BSONVariant casted to string');
   {$endif}
   u := string(o2);
-  Check(u='{BSON:["awesome",5.05,1986]}','TBSONVariant: mongoShell syntax');
+  CheckEqual(u,'{BSON:["awesome",5.05,1986]}','TBSONVariant: mongoShell syntax');
   BSONParseLength(b);
   Check(BSONParseNextElement(b,name,value,asDocVariantPerReference));
   Check(name='BSON');
@@ -9075,7 +9093,7 @@ begin
   Check(VariantSaveMongoJSON(o,modMongoStrict)='{"BSON":["test",5.05,1986]}');
   u := VariantSaveMongoJSON(_Obj(['name','John',
     'doc',_Obj(['one',1,'two',_Arr(['one',2])])]),modMongoStrict);
-  Check(u='{"name":"John","doc":{"one":1,"two":["one",2]}}');
+  CheckEqual(u,'{"name":"John","doc":{"one":1,"two":["one",2]}}');
   Check(VariantSaveJson(BSONVariant(u))=u);
   Check(BSONDocumentToJSON(BSONFieldSelector(['a','b','c']))='{"a":1,"b":1,"c":1}');
   Check(BSONDocumentToJSON(BSONFieldSelector('a,b,c'))='{"a":1,"b":1,"c":1}');
@@ -9084,39 +9102,39 @@ begin
   o := _Obj(['id',ObjectID(BSONID),'name','John','date',variant(d2)]);
   u := VariantSaveMongoJSON(o,modNoMongo);
   u2 := FormatUTF8('{"id":"%","name":"John","date":"%"}',[BSONID,st]);
-  Check(u=u2);
+  CheckEqual(u,u2);
   u3 := VariantSaveJson(BSONVariant(u));
   Check(u3=FormatUTF8('{"id":"%","name":"John","date":{"$date":"%"}}',[BSONID,st]));
   u3 := VariantSaveMongoJSON(BSONVariant(u),modNoMongo);
   Check(u3=u);
   u := VariantSaveMongoJSON(o,modMongoShell);
-  Check(u=FormatUTF8('{id:ObjectId("%"),name:"John",date:ISODate("%")}',[BSONID,st]));
+  CheckEqual(u,FormatUTF8('{id:ObjectId("%"),name:"John",date:ISODate("%")}',[BSONID,st]));
   u3 := VariantSaveJson(BSONVariant(u));
   u := VariantSaveJSON(o);
-  Check(u=FormatUTF8('{"id":{"$oid":"%"},"name":"John","date":"%"}',[BSONID,st]));
+  CheckEqual(u,FormatUTF8('{"id":{"$oid":"%"},"name":"John","date":"%"}',[BSONID,st]));
   u := VariantSaveMongoJSON(o,modMongoStrict);
-  Check(u=FormatUTF8('{"id":{"$oid":"%"},"name":"John","date":{"$date":"%"}}',[BSONID,st]));
+  CheckEqual(u,FormatUTF8('{"id":{"$oid":"%"},"name":"John","date":{"$date":"%"}}',[BSONID,st]));
   Check(u3=u);
   _Json(u,o2);
   u := VariantSaveMongoJSON(o2,modMongoShell);
-  Check(u=FormatUTF8('{id:ObjectId("%"),name:"John",date:ISODate("%")}',[BSONID,st]));
+  CheckEqual(u,FormatUTF8('{id:ObjectId("%"),name:"John",date:ISODate("%")}',[BSONID,st]));
   _Json(u,o2);
   u := VariantSaveMongoJSON(o2,modNoMongo);
-  Check(u=u2);
+  CheckEqual(u,u2);
   o2 := _JsonFmt('{ id: objectID( "%" ) , name: "John", date: new date( "%" ) }',[BSONID,st],[]);
   u := VariantSaveMongoJSON(o2,modNoMongo);
-  Check(u=u2);
+  CheckEqual(u,u2);
   o2 := _JsonFmt('{id:objectID(?),name:?,date:ISODate(?)}',[],[BSONID,'John',st]);
   u := VariantSaveMongoJSON(o2,modNoMongo);
-  Check(u=u2);
+  CheckEqual(u,u2);
   u := VariantSaveMongoJSON(o2,modMongoShell);
-  Check(u=FormatUTF8('{id:ObjectId("%"),name:"John",date:ISODate("%")}',[BSONID,st]));
+  CheckEqual(u,FormatUTF8('{id:ObjectId("%"),name:"John",date:ISODate("%")}',[BSONID,st]));
   _Json(u,o2);
   u := VariantSaveMongoJSON(o2,modNoMongo);
-  Check(u=u2);
+  CheckEqual(u,u2);
   bin := VariantSave(o2);
   u := VariantSaveMongoJSON(VariantLoad(bin,@JSON_OPTIONS[true]),modNoMongo);
-  Check(u=u2);
+  CheckEqual(u,u2);
   check(VariantSaveMongoJSON(VariantLoad(bin,@JSON_OPTIONS[true]),modNoMongo)=u2,'twice to ensure bin is untouched');
   u := VariantSaveMongoJSON(_Json('{id:ObjectId(),name:"John"}'),modNoMongo);
   Check(IdemPChar(Pointer(u),'{"ID":"'),'ObjectId() constructor ');
@@ -9125,9 +9143,9 @@ begin
   Check(u2<>u,'should be genuine');
   o := _JSONFmt('{type:{$in:?}}',[],[_Arr(['food','snack'])]);
   u := VariantSaveJSON(o);
-  Check(u='{"type":{"$in":["food","snack"]}}');
+  CheckEqual(u,'{"type":{"$in":["food","snack"]}}');
   u := VariantSaveMongoJSON(o,modMongoShell);
-  Check(u='{type:{$in:["food","snack"]}}');
+  CheckEqual(u,'{type:{$in:["food","snack"]}}');
   o := _JSON('{"hello": null}');
   Check(TVarData(o).VType=DocVariantVType);
   check(string(o)='{"hello":null}');
@@ -9140,14 +9158,14 @@ begin
   temp := BSON(REGEX2);
   b := pointer(temp);
   u := BSONToJSON(b,betDoc,0,modMongoStrict);
-  Check(u='{"name":"John","field":'+REGEX+'}');
+  CheckEqual(u,'{"name":"John","field":'+REGEX+'}');
   o2 := BSONVariant(REGEX2);
   Check(string(o2)='{name:"John",field:/acme.*corp/i}','MongoShell in string cast');
   Check(VariantSaveJson(o2)=u);
   temp := BSON('{name:?,field:/%/i}',['acme.*corp'],['John']);
   b := pointer(temp);
   u2 := BSONToJSON(b,betDoc,0,modMongoStrict);
-  Check(u=u2);
+  CheckEqual(u,u2);
   u := VariantSaveMongoJSON(_Json('{name:"John",date: new date() , field: /acme.*corp/i}'),modMongoStrict);
   u2 := VariantSaveMongoJSON(_Json('{name:"John",date:new date(),field:/acme.*corp/i}'),modMongoStrict);
   o := _JSON(u);
@@ -9159,20 +9177,20 @@ begin
   Check(d2-d<0.1);
   u := VariantSaveMongoJSON(o.Field,modMongoStrict);
   u2 := VariantSaveMongoJSON(o2.Field,modMongoStrict);
-  Check(u=u2);
-  Check(u=REGEX);
+  CheckEqual(u,u2);
+  CheckEqual(u,REGEX);
   u := VariantSaveMongoJSON(o.Field,modMongoShell);
   u2 := VariantSaveMongoJSON(o2.Field,modMongoShell);
-  Check(u=u2);
-  Check(u='/acme.*corp/i');
+  CheckEqual(u,u2);
+  CheckEqual(u,'/acme.*corp/i');
   u := VariantSaveMongoJSON(o.Field,modMongoStrict);
   u2 := VariantSaveMongoJSON(o2.Field,modMongoStrict);
-  Check(u=u2);
-  Check(u=REGEX);
+  CheckEqual(u,u2);
+  CheckEqual(u,REGEX);
   u := VariantSaveJSON(o.Field);
   u2 := VariantSaveJSON(o2.Field);
-  Check(u=u2);
-  Check(u=REGEX);
+  CheckEqual(u,u2);
+  CheckEqual(u,REGEX);
   o := _Json('{ tags: { $in: [ /^be/, /^st/ ] } }');
   u := VariantSaveMongoJSON(o,modMongoStrict);
   CheckEqual(u,'{"tags":{"$in":[{"$regex":"^be","$options":""},{"$regex":"^st","$options":""}]}}');
@@ -9181,7 +9199,7 @@ begin
   u2 := VariantSaveMongoJSON(o,modMongoShell);
   Check(u2='{tags:{$in:[/^be/,/^st/]}}');
   u := VariantSaveMongoJSON(_Json(u),modMongoShell);
-  Check(u=u2);
+  CheckEqual(u,u2);
   u2 := BSONToJSON(b,betDoc,0,modMongoShell);
   CheckEqual(u,u2);
   temp := BSON('{id:ObjectId(),doc:{name:?,date:ISODate(?)}}',[],['John',NowUTC]);
@@ -9190,25 +9208,25 @@ begin
   Check(IdemPChar(pointer(u),'{ID:OBJECTID("'));
   Check(PosEx('"),doc:{name:"John",date:ISODate("',u)>10);
   u := BSONDocumentToJSON(BSON(['doc','{','name','John','year',1982,'}','id',123]));
-  Check(u='{"doc":{"name":"John","year":1982},"id":123}');
+  CheckEqual(u,'{"doc":{"name":"John","year":1982},"id":123}');
   u := BSONDocumentToJSON(BSON(['doc','{','name','John','abc','[','a','b','c',']','}','id',123]));
-  Check(u='{"doc":{"name":"John","abc":["a","b","c"]},"id":123}');
+  CheckEqual(u,'{"doc":{"name":"John","abc":["a","b","c"]},"id":123}');
   o2 := NumberDecimal('123.5600');
   u := VariantSaveJSON(o2);
-  Check(u='{"$numberDecimal":"123.5600"}');
+  CheckEqual(u,'{"$numberDecimal":"123.5600"}');
   o := _Json('{ num: '+u+'}');
   u := VariantSaveMongoJSON(o,modMongoStrict);
-  check(u='{"num":{"$numberDecimal":"123.5600"}}');
+  CheckEqual(u,'{"num":{"$numberDecimal":"123.5600"}}');
   u := VariantSaveMongoJSON(o,modMongoShell);
-  check(u='{num:NumberDecimal("123.5600")}');
+  CheckEqual(u,'{num:NumberDecimal("123.5600")}');
   o := BSONVariant(['num',o2]);
   u := VariantSaveMongoJSON(o,modMongoStrict);
-  check(u='{"num":{"$numberDecimal":"123.5600"}}');
+  CheckEqual(u,'{"num":{"$numberDecimal":"123.5600"}}');
   u := VariantSaveMongoJSON(o,modMongoShell);
-  check(u='{num:NumberDecimal("123.5600")}');
+  CheckEqual(u,'{num:NumberDecimal("123.5600")}');
   o := _ObjFast(['num',o2]);
   u := VariantSaveMongoJSON(o,modMongoStrict);
-  check(u='{"num":{"$numberDecimal":"123.5600"}}');
+  CheckEqual(u,'{"num":{"$numberDecimal":"123.5600"}}');
   o2 := _JsonFast(u);
   {$ifdef FPC} // TCustomVariantType.CompareOp not yet supported :(
   check(string(o)=string(o2),'o=o2');
@@ -9216,7 +9234,7 @@ begin
   check(o=o2,'o=o2');
   {$endif}
   u := VariantSaveMongoJSON(o,modMongoShell);
-  check(u='{num:NumberDecimal("123.5600")}');
+  CheckEqual(u,'{num:NumberDecimal("123.5600")}');
   o2 := _JsonFast(u);
   {$ifdef FPC} // TCustomVariantType.CompareOp not yet supported :(
   check(string(o)=string(o2),'o=o2');
@@ -9226,14 +9244,14 @@ begin
   temp := BSON(u,[],[]);
   b := pointer(temp);
   u2 := BSONToJSON(b,betDoc,0,modMongoShell);
-  Check(u=u2);
+  CheckEqual(u,u2);
   u2 := BSONToJSON(b,betDoc,0,modMongoStrict);
   check(u2='{"num":{"$numberDecimal":"123.5600"}}');
   check(dec.FromVariant(o2.num));
   check(dec.ToText='123.5600');
   o2 := dec.ToVariant;
   u := VariantSaveJSON(o2);
-  check(u='{"$numberDecimal":"123.5600"}');;
+  CheckEqual(u,'{"$numberDecimal":"123.5600"}');
 end;
 
 procedure TTestLowLevelTypes._TDocVariant;

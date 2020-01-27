@@ -24045,7 +24045,7 @@ begin
     da.Clear else
     try
       if (fObjArray=nil) and Base64MagicCheckAndDecode(Value,tmp) then
-        da.LoadFrom(tmp.buf) else
+        da.LoadFrom(tmp.buf,nil,{nohash=}true,PAnsiChar(tmp.buf)+tmp.len) else
         da.LoadFromJSON(tmp.Init(Value));
     finally
       tmp.Done;
@@ -24058,7 +24058,8 @@ var da: TDynArray;
 begin
   if aValue.VType=ftBlob then begin
     GetDynArray(Instance,da);
-    result := da.LoadFrom(aValue.VBlob)<>nil;
+    result := da.LoadFrom(aValue.VBlob,nil,{nohash=}true,
+      PAnsiChar(aValue.VBlob)+aValue.VBlobLen)<>nil;
   end else
     result := inherited SetFieldSQLVar(Instance,aValue);
 end;
@@ -24505,7 +24506,7 @@ end;
 procedure TSQLPropInfoRecordRTTI.SetVariant(Instance: TObject; const Source: Variant);
 begin
   if TVarData(Source).VType=varString then
-    RecordLoad(GetFieldAddr(Instance)^,TVarData(Source).VAny,fTypeInfo) else
+    RecordLoad(GetFieldAddr(Instance)^,RawByteString(TVarData(Source).VAny),fTypeInfo) else
     RecordClear(GetFieldAddr(Instance)^,fTypeInfo);
 end;
 {$endif NOVARIANTS}
@@ -24532,7 +24533,7 @@ procedure TSQLPropInfoRecordRTTI.SetValue(Instance: TObject; Value: PUTF8Char;
 var data: RawByteString;
 begin
   TextToBinary(Value,data);
-  RecordLoad(GetFieldAddr(Instance)^,pointer(data),fTypeInfo);
+  RecordLoad(GetFieldAddr(Instance)^,data,fTypeInfo);
 end;
 
 procedure TSQLPropInfoRecordRTTI.GetValueVar(Instance: TObject;
@@ -56809,7 +56810,7 @@ var exec: TServiceMethodExecute;
     log: ISynLog; // for Enter auto-leave to work with FPC
     {$endif}
 begin
-  if RecordLoad(call,pointer(Msg),TypeInfo(TInterfacedObjectAsynchCall))=nil then
+  if not RecordLoad(call,Msg,TypeInfo(TInterfacedObjectAsynchCall)) then
     exit; // invalid message (e.g. periodic execution)
   {$ifdef WITHLOG}
   log := fRest.LogClass.Enter('AsynchBackgroundExecute % %',
