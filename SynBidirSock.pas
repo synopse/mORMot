@@ -1037,7 +1037,6 @@ type
     /// low-level WebSocket protocol processing instance
     property WebSocketProcess: TWebSocketProcessServer read fProcess;
   end;
-  PWebSocketServerResp = ^TWebSocketServerResp;
 
   /// main HTTP/WebSockets server Thread using the standard Sockets API (e.g. WinSock)
   // - once upgraded to WebSockets from the client, this class is able to serve
@@ -1085,10 +1084,10 @@ type
       const aClientsConnectionID: THttpServerConnectionIDDynArray); overload;
     /// give access to the underlying connection from its ID
     // - also identifies an incoming THttpServerResp as a valid TWebSocketServerResp
-    function IsActiveWebSocket(ConnectionID: THttpServerConnectionID): TWebSocketServerResp; overload;
+    function IsActiveWebSocket(ConnectionID: THttpServerConnectionID): TWebSocketServerResp;
     /// give access to the underlying connection from its connection thread
     // - also identifies an incoming THttpServerResp as a valid TWebSocketServerResp
-    function IsActiveWebSocket(ConnectionThread: TSynThread): TWebSocketServerResp; overload;
+    function IsActiveWebSocketThread(ConnectionThread: TSynThread): TWebSocketServerResp;
     /// the settings to be used for WebSockets process
     // - note that those parameters won't be propagated to existing connections
     // - defined as a pointer so that you may be able to change the values
@@ -1233,8 +1232,6 @@ type
     // - note that those parameters won't be propagated to existing connections
     // - defined as a pointer so that you may be able to change the values
     function Settings: PWebSocketProcessSettings; {$ifdef HASINLINE}inline;{$endif}
-    /// low-level access to the WebSockets client layer
-    property Process: TWebSocketProcessClient read fProcess;
     /// this event handler will be executed for any incoming push notification
     property OnCallbackRequestProcess: TOnHttpServerRequest
       read fOnCallbackRequestProcess write fOnCallbackRequestProcess;
@@ -1253,7 +1250,7 @@ type
     // - points to the current WebSockets process instance, after a successful
     // WebSocketsUpgrade() call, so that you could use e.g. WebSockets.Protocol
     // to retrieve the protocol currently used
-    property WebSockets: TWebSocketProcessClient read fProcess write fProcess;
+    property WebSockets: TWebSocketProcessClient read fProcess;
   end;
 
 
@@ -1721,7 +1718,7 @@ begin
   result := false;
   if (self=nil) or (Sender=nil) or Sender.Terminated or
      not (Frame.opcode in [focText,focBinary]) or
-     ((Sender.Server as TWebSocketServer).IsActiveWebSocket(Sender)<>Sender) then
+     ((Sender.Server as TWebSocketServer).IsActiveWebSocketThread(Sender)<>Sender) then
     exit;
   tmp.opcode := frame.opcode;
   tmp.content := frame.content;
@@ -1735,7 +1732,7 @@ var frame: TWebSocketFrame;
 begin
   result := false;
   if (self=nil) or (Sender=nil) or Sender.Terminated or
-     ((Sender.Server as TWebSocketServer).IsActiveWebSocket(Sender)<>Sender) then
+     ((Sender.Server as TWebSocketServer).IsActiveWebSocketThread(Sender)<>Sender) then
     exit;
   frame.opcode := focText;
   frame.content := [];
@@ -3180,7 +3177,10 @@ begin
   result := fWebSocketConnections.SafeCount;
 end;
 
-function TWebSocketServer.IsActiveWebSocket(ConnectionThread: TSynThread): TWebSocketServerResp;
+type
+  PWebSocketServerResp = ^TWebSocketServerResp;
+
+function TWebSocketServer.IsActiveWebSocketThread(ConnectionThread: TSynThread): TWebSocketServerResp;
 var i: Integer;
     c: PWebSocketServerResp;
 begin // no need to optimize (not called often)
