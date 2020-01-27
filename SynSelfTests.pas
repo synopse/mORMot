@@ -1599,10 +1599,13 @@ begin
   Check(StrComp(PAnsiChar('ABCD'),PAnsiChar('ABCD'))=0);
   Check(StrComp(PAnsiChar('ABCD'),PAnsiChar('ABCE'))=-1);
   Check(StrComp(PAnsiChar('ABCD'),PAnsiChar('ABCC'))=1);
-  Check(AnsiIComp('abcD','ABcd')=0);
-  Check(AnsiIComp('abcD','ABcF')=StrComp(PAnsiChar('ABCD'),PAnsiChar('ABCF')));
-  Check(StrIComp(PAnsiChar('abcD'),PAnsiChar('ABcd'))=AnsiIComp('abcD','ABcd'));
-  Check(StrIComp(PAnsiChar('abcD'),PAnsiChar('ABcF'))=AnsiIComp('ABCD','ABCF'));
+  Check(SynCommons.AnsiIComp(pointer(PAnsiChar('abcD')),pointer(PAnsiChar('ABcd')))=0);
+  Check(SynCommons.AnsiIComp(pointer(PAnsiChar('abcD')),pointer(PAnsiChar('ABcF')))=
+    StrComp(PAnsiChar('ABCD'),PAnsiChar('ABCF')));
+  Check(StrIComp(PAnsiChar('abcD'),PAnsiChar('ABcd'))=
+    SynCommons.AnsiIComp(PAnsiChar('abcD'),PAnsiChar('ABcd')));
+  Check(StrIComp(PAnsiChar('abcD'),PAnsiChar('ABcF'))=
+    SynCommons.AnsiIComp(PAnsiChar('ABCD'),PAnsiChar('ABCF')));
   Check(strcspn(PAnsiChar('ab'),PAnsiChar('a'#0))=0);
   Check(strcspn(PAnsiChar('ab'),PAnsiChar('b'#0))=1);
   Check(strcspn(PAnsiChar('1234ab'),PAnsiChar('a'#0))=4);

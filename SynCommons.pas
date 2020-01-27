@@ -2995,7 +2995,7 @@ procedure TrimCopy(const S: RawUTF8; start,count: PtrInt;
   out result: RawUTF8);
 
 /// fast WinAnsi comparison using the NormToUpper[] array for all 8 bits values
-function AnsiIComp(Str1, Str2: PWinAnsiChar): PtrInt;
+function AnsiIComp(Str1, Str2: pointer): PtrInt;
   {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// extract a line from source array of chars
@@ -27448,7 +27448,7 @@ end;
 
 
 {$ifdef PUREPASCAL}
-function AnsiIComp(Str1, Str2: PWinAnsiChar): PtrInt;
+function AnsiIComp(Str1, Str2: pointer): PtrInt;
 var C1,C2: byte; // integer/PtrInt are actually slower on FPC
     lookupper: PByteArray; // better x86-64 / PIC asm generation
 begin
@@ -27468,7 +27468,7 @@ begin
     result := -1;     // Str1=''
 end;
 {$else}
-function AnsiIComp(Str1, Str2: PWinAnsiChar): PtrInt;
+function AnsiIComp(Str1, Str2: pointer): PtrInt;
 asm // fast 8 bits WinAnsi comparison using the NormToUpper[] array
         cmp     eax, edx
         je      @2
