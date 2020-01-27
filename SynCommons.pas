@@ -10430,8 +10430,9 @@ type
   public
     /// initialize the buffer, and specify a file to use for reading
     // - will try to map the whole file content in memory
-    // - if memory mapping failed, methods will use default slower file API
-    procedure Open(aFile: THandle);
+    // - if memory mapping failed, or aFileNotMapped is true, methods
+    // will use default slower file API
+    procedure Open(aFile: THandle; aFileNotMapped: boolean=false);
     /// initialize the buffer from an already existing memory block
     // - may be e.g. a resource or a TMemoryStream
     procedure OpenFrom(aBuffer: pointer; aBufferSize: PtrUInt); overload;
@@ -61500,11 +61501,13 @@ begin
   result := true
 end;
 
-procedure TFileBufferReader.Open(aFile: THandle);
+procedure TFileBufferReader.Open(aFile: THandle; aFileNotMapped: boolean);
 begin
   fCurrentPos := 0;
-  fMap.Map(aFile)
-  // if Windows failed to find a contiguous VA space -> fall back on direct read
+  if aFileNotMapped then
+    FillcharFast(fMap,SizeOf(fMap),0) else
+    fMap.Map(aFile)
+    // if Windows failed to find a contiguous VA space -> fall back on direct read
 end;
 
 function TFileBufferReader.Read(Data: pointer; DataLen: PtrInt): integer;
