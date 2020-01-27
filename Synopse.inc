@@ -657,9 +657,9 @@
 {$else}
   // there is a linking bug with Delphi XE4 on Win64
   {$ifdef CPUX64}
-    {$ifdef ISDELPHIXE4}
+    {$if CompilerVersion = 25.0} // exactly XE4
       {$define NOSQLITE3STATIC}
-    {$endif}
+    {$ifend}
   {$endif} // other Win32/Win64 Delphi platforms should work as expected
 {$endif FPC}
 
