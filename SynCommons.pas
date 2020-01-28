@@ -7182,7 +7182,7 @@ function RecordSaveJSON(const Rec; TypeInfo: pointer;
 // may use TypeInfoToHash() if you share this binary data accross executables
 // - you can optionally provide in SourceMax the first byte after the input
 // memory buffer, which will be used to avoid any unexpected buffer overflow -
-// coul dbe mandatory when decoding the content from any external process
+// would be mandatory when decoding the content from any external process
 // (e.g. a maybe-forged client) - only with slightly performance penalty
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer;
   Len: PInteger=nil; SourceMax: PAnsiChar=nil): PAnsiChar; overload;
@@ -40740,7 +40740,7 @@ function FromVarString(var Source: PByte; SourceMax: PByte;
 var len: cardinal;
 begin
   if not FromVarUInt32(Source,SourceMax,len) or
-     ((SourceMax<>nil) and (Source+len>SourceMax)) then
+     ((SourceMax<>nil) and (PAnsiChar(Source)+len>PAnsiChar(SourceMax))) then
     result := false else begin
     Value.Init(Source,len);
     PByteArray(Value.buf)[len] := 0; // include trailing #0
