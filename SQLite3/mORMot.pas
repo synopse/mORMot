@@ -5141,10 +5141,15 @@ const
   // - if you think this constant is too low, you are about to break
   // the "Interface Segregation" SOLID principle: so don't ask to increase
   // this value, we won't allow to write un-SOLID code! :)
-  // - used e.g. to avoid creating dynamic arrays if not needed, and
-  // ease method calls
   MAX_METHOD_COUNT = 128;
 
+  /// maximum number of method arguments handled by interfaces
+  // - if you consider this as a low value, you should better define some
+  // records/classes as DTOs instead of multiplicating parameters: so don't
+  // ask to increase this value, we rather encourage writing clean code
+  // - used e.g. to avoid creating dynamic arrays if not needed, and
+  // ease method calls
+  MAX_METHOD_ARGS = 32;
 
 type
   TSQLTable = class;
@@ -12709,7 +12714,7 @@ type
     /// the internal Instance ID, as remotely sent in "id":1
     // - is set to 0 when an entry in the array is free
     InstanceID: PtrUInt;
-    /// GetTickCount64() time stamp corresponding to the last access of
+    /// GetTickCount64() timestamp corresponding to the last access of
     // this instance
     LastAccess64: Int64;
     /// the associated client session
@@ -35424,7 +35429,7 @@ begin
     result := SQLite3Log else
     result := fLogClass;
 end;
-{$endif}
+{$endif WITHLOG}
 
 function TSQLRest.NewBackgroundThreadMethod(const Format: RawUTF8;
    const Args: array of const): TSynBackgroundThreadMethod;
@@ -35576,14 +35581,30 @@ begin
   end;
 end;
 
+procedure DoSign(const signer: TSynSigner; const url,body: RawUTF8; bodylen: integer;
+  out hash: THash512Rec);
+var L: integer;
+    P: PAnsiChar;
+    sign: TSynSigner;
+begin
+  sign := signer; // thread-safe copy
+  P := pointer(url);
+  L := length(url);
+  if P^='/' then begin
+    inc(P);
+    dec(L);
+  end;
+  sign.Update(P,L);
+  sign.Update(pointer(body),bodylen);
+  sign.Final(hash);
+end;
+
 procedure TSQLRest.InternalCustomDecrypt(Sender: TSQLRest; var Body,Head,Url: RawUTF8);
 var ct: RawUTF8;
-    payloadlen: integer;
-    signature: THash512Rec;
-    P: PAnsiChar;
-    sign: TSynSigner; // thread-safe copy
+    L: integer;
+    hash: THash512Rec;
 begin
-  if (fCustomEncryptContentPrefix='') or (Body='') or
+  if (fCustomEncryptContentPrefix='') or (Body='') or (Sender<>self) or
      (Url='') or IdemPChar(pointer(Url),pointer(fCustomEncryptUrlIgnore)) then
     exit;
   ct := FindIniNameValue(pointer(Head),HEADER_CONTENT_TYPE_UPPER);
@@ -35592,7 +35613,7 @@ begin
       // decrypt using PKCS7 + initial random/unique IV at the beginning
       Body := fCustomEncryptAES.DecryptPKCS7(Body,true,false);
       if Body='' then begin
-        InternalLog('CustomEncrypt %.DecryptPKCS7 reject',[fCustomEncryptAES.ClassType]);
+        InternalLog('CustomEncrypt %.DecryptPKCS7 reject',[fCustomEncryptAES.ClassType],sllUserAuth);
         exit;
       end;
     end;
@@ -35600,27 +35621,20 @@ begin
       // optionally uncompresss Body+signature
       Body := fCustomEncryptCompress.Decompress(Body);
       if Body='' then begin
-        InternalLog('CustomEncrypt %.Decompress reject',[fCustomEncryptCompress.ClassType]);
+        InternalLog('CustomEncrypt %.Decompress reject %',[fCustomEncryptCompress.ClassType]);
         exit;
       end;
     end;
-    payloadlen := length(Body)-fCustomEncryptSign.SignatureSize;
-    if (payloadlen>0) and (fCustomEncryptSign.SignatureSize<>0) then begin
+    L := length(Body)-fCustomEncryptSign.SignatureSize;
+    if (L>0) and (fCustomEncryptSign.SignatureSize<>0) then begin
       // validate the binary signature of supplied Url+Body at the Body end
-      sign := fCustomEncryptSign;
-      P := pointer(Url);
-      if P^='/' then
-        sign.Update(P+1,length(Url)-1) else
-        sign.Update(Url);
-      P := pointer(Body);
-      sign.Update(P,payloadlen);
-      sign.Final(signature);
-      if not CompareMem(@signature,P+payloadlen,sign.SignatureSize) then begin
+      DoSign(fCustomEncryptSign,Url,Body,L,hash);
+      if not CompareMemFixed(@hash,@PByteArray(Body)[L],fCustomEncryptSign.SignatureSize) then begin
         Body := '';
-        InternalLog('CustomEncrypt % reject',[ToText(sign.Algo)^]);
+        InternalLog('CustomEncrypt % reject',[ToText(fCustomEncryptSign.Algo)^],sllUserAuth);
         exit;
       end;
-      SetLength(Body,payloadlen);
+      SetLength(Body,L);
     end;
     system.delete(ct,1,length(fCustomEncryptContentPrefix));
     UpdateIniNameValue(Head,'',HEADER_CONTENT_TYPE_UPPER,ct);
@@ -35632,25 +35646,18 @@ end;
 
 procedure TSQLRest.InternalCustomEncrypt(Sender: TSQLRest; var Body,Head,Url: RawUTF8);
 var ct: RawUTF8;
-    payloadlen: integer;
-    P: PAnsiChar;
-    sign: TSynSigner; // thread-safe copy
+    L: integer;
+    hash: THash512Rec;
 begin
-  if (fCustomEncryptContentPrefix='') or (Body='') or
+  if (fCustomEncryptContentPrefix='') or (Body='') or (Sender<>self) or
      (Url='') or IdemPChar(pointer(Url),pointer(fCustomEncryptUrlIgnore)) then
     exit;
   if fCustomEncryptSign.SignatureSize<>0 then begin
     // append the binary signature of supplied Url+Body to the Body
-    payloadlen := length(Body);
-    sign := fCustomEncryptSign;
-    SetLength(Body,payloadlen+sign.SignatureSize);
-    P := pointer(Url);
-    if P^='/' then
-      sign.Update(P+1,length(Url)-1) else
-      sign.Update(Url);
-    P := pointer(Body);
-    sign.Update(P,payloadlen);
-    sign.Final(PHash512Rec(P+payloadlen)^);
+    L := length(Body);
+    DoSign(fCustomEncryptSign,Url,Body,L,hash);
+    SetLength(Body,L+fCustomEncryptSign.SignatureSize);
+    MoveSmall(@hash,@PByteArray(Body)[L],fCustomEncryptSign.SignatureSize);
   end;
   if fCustomEncryptCompress<>nil then
     // optionally compresss Body+signature
@@ -54459,9 +54466,6 @@ end;
 const
   // QueryInterface, _AddRef and _Release methods are hard-coded
   RESERVED_VTABLE_SLOTS = 3;
-  // used e.g. to avoid creating dynamic arrays if not needed, and
-  // ease method calls
-  MAX_METHOD_ARGS = 32; // should match TInterfaceFactoryMethodBits set
 
 // see http://docwiki.embarcadero.com/RADStudio/en/Program_Control
 
