@@ -730,7 +730,7 @@ begin
   except
     on E: Exception do begin
       if fBindShouldStoreValue then
-        SynDBLog.Add.Log(sllSQL,'Error % on % for "%" as "%"',
+        SynDBLog.Add.Log(sllSQL,'Error % on % for [%] as [%]',
           [E,DB.FileNameWithoutPath,SQL,SQLWithInlinedParams],self);
       raise;
     end;
@@ -795,7 +795,7 @@ begin
   except
     on E: Exception do begin
       if fBindShouldStoreValue then
-        SynDBLog.Add.Log(sllError,'Error % on % for "%" as "%"',
+        SynDBLog.Add.Log(sllError,'Error % on % for [%] as [%]',
           [E,TSQLDBSQLite3Connection(Connection).DB.FileNameWithoutPath,SQL,
           SQLWithInlinedParams],self);
       raise;

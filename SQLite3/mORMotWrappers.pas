@@ -925,7 +925,7 @@ var siz, i: integer;
 begin
   if typ=wUnknown then begin
     if typInfo=nil then
-      raise EWrapperContext.CreateUTF8('No RTTI nor typ for "%"',[typName]);
+      raise EWrapperContext.CreateUTF8('No RTTI nor typ for [%]',[typName]);
     typ := TYPES_ORM[typInfo.GetSQLFieldType];
     if typ=wUnknown then begin
       typ := TYPES_SIMPLE[TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType(typInfo)];
@@ -936,7 +936,7 @@ begin
         tkInterface:
           typ := wInterface;
         else
-          raise EWrapperContext.CreateUTF8('Not enough RTTI for "%"',[typInfo^.Name]);
+          raise EWrapperContext.CreateUTF8('Not enough RTTI for [%]',[typInfo^.Name]);
         end;
     end;
   end;
@@ -1029,7 +1029,7 @@ begin
       'toVariant','BlobToVariant','fromVariant','VariantToBlob'],result);
   wInterface:
     _ObjAddProps(['isInterface',true],result);
-  else raise EWrapperContext.CreateUTF8('Unexpected type % (%) for "%"',
+  else raise EWrapperContext.CreateUTF8('Unexpected type % (%) for [%]',
     [typeWrapper^,ord(typ),typName]);
   end;
 end;
@@ -1704,7 +1704,7 @@ begin
           inc(first);
         continue;
       end;
-      raise EServiceException.CreateUTF8('%.Execute: unknown option "%"', [self, p[n]]);
+      raise EServiceException.CreateUTF8('%.Execute: unknown option [%]', [self, p[n]]);
     end;
     if n < high(p) then
       inc(n);

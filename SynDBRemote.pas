@@ -372,7 +372,7 @@ begin
       '%.ProcessMessage: Error % from %',[self,status,fURI.URI]);
   if ContentType<>BINARY_CONTENT_TYPE then
     raise ESQLDBRemote.CreateUTF8(
-      '%.ProcessMessage: Invalid content type "%" from %',[self,ContentType,fURI.URI]);
+      '%.ProcessMessage: Invalid content type [%] from %',[self,ContentType,fURI.URI]);
   Output := Content;
 end;
 

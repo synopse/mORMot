@@ -43283,7 +43283,7 @@ begin
   end;
   if result=nil then
     raise ESynException.CreateUTF8(
-      '%: "%" type should not have been un-registered',[self,fCustomTypeName]);
+      '%: [%] type should not have been un-registered',[self,fCustomTypeName]);
 end;
 
 procedure TJSONCustomParserCustomRecord.CustomWriter(
@@ -46309,14 +46309,14 @@ var len: integer;
 begin
   if aName<>'' then begin
     if dvoIsArray in VOptions then
-      raise EDocVariant.CreateUTF8('Unexpected "%" property name in an array',[aName]);
+      raise EDocVariant.CreateUTF8('Add: Unexpected [%] object property in an array',[aName]);
     if not(dvoIsObject in VOptions) then begin
       VType := DocVariantVType; // may not be set yet
       include(VOptions,dvoIsObject);
     end;
   end else begin
     if dvoIsObject in VOptions then
-      raise EDocVariant.Create('Unexpected array item added to an object');
+      raise EDocVariant.Create('Add: Unexpected array item in an object');
     if not(dvoIsArray in VOptions) then begin
       VType := DocVariantVType; // may not be set yet
       include(VOptions,dvoIsArray);
@@ -46353,7 +46353,7 @@ begin
   if dvoCheckForDuplicatedNames in VOptions then begin
     result := GetValueIndex(aName);
     if result>=0 then
-      raise EDocVariant.CreateUTF8('Duplicated "%" name',[aName]);
+      raise EDocVariant.CreateUTF8('AddValue: Duplicated [%] name',[aName]);
   end;
   result := InternalAdd(aName);
   SetVariantByValue(aValue,VValue[result]);
@@ -46377,7 +46377,7 @@ begin
   end;
   result := GetValueIndex(aName);
   if not Update and (dvoCheckForDuplicatedNames in VOptions) and (result>=0) then
-    raise EDocVariant.CreateUTF8('Duplicated "%" name',[aName]);
+    raise EDocVariant.CreateUTF8('AddValueFromText: Duplicated [%] name',[aName]);
   if result<0 then
     result := InternalAdd(aName);
   VarClear(VValue[result]);
@@ -46920,7 +46920,7 @@ begin
     if dvoIsArray in VOptions then begin
       result := GetInteger(aName,err);
       if err<>0 then
-        raise EDocVariant.CreateUTF8('Impossible to find "%" property in an array',[aName]);
+        raise EDocVariant.CreateUTF8('Impossible to find [%] property in an array',[aName]);
       if cardinal(result)>=cardinal(VCount) then
         raise EDocVariant.CreateUTF8('Out of range [%] property in an array',[aName]);
       exit;
@@ -47336,7 +47336,7 @@ begin
   if ndx<0 then
     if dvoReturnNullForUnknownProperty in VOptions then
       SetVariantNull(Dest) else
-      raise EDocVariant.CreateUTF8('Unexpected "%" property',[aName]) else
+      raise EDocVariant.CreateUTF8('[%] property not found',[aName]) else
     RetrieveValueOrRaiseException(ndx,Dest,DestByRef);
 end;
 
@@ -47574,7 +47574,7 @@ begin
   if ndx<0 then
     if dvoReturnNullForUnknownProperty in VOptions then
       result := @DocVariantDataFake else
-      raise EDocVariant.CreateUTF8('Unexpected "%" property',[aName]) else
+      raise EDocVariant.CreateUTF8('[%] property not found',[aName]) else
     result := @VValue[ndx];
 end;
 
@@ -50830,7 +50830,7 @@ begin
     PRawUTF8(result)^ := aName; // store unique name at 1st elem position
   end else
     if ExceptionMsg='' then
-      raise ESynException.CreateUTF8('Duplicated "%" name',[aName]) else
+      raise ESynException.CreateUTF8('Duplicated [%] name',[aName]) else
       raise ESynException.CreateUTF8(ExceptionMsg,ExceptionArgs);
 end;
 

@@ -10358,7 +10358,7 @@ begin
       i := PosExChar(':',fPassword);
       if i>0 then
         raise ESynException.CreateUTF8('%.GetPassWordPlain unable to retrieve the '+
-          'stored value: current user is "%", but password in % was encoded for "%"',
+          'stored value: current user is [%], but password in % was encoded for [%]',
           [self,ExeVersion.User,AppSecret,copy(fPassword,1,i-1)]);
     end;
   end;
@@ -11727,7 +11727,7 @@ begin
                 {$ifdef DELPHI5OROLDER}
                 on E: Exception do
                   fBackgroundException := ESynException.CreateUTF8(
-                    'Redirected %: "%"',[E,E.Message]);
+                    'Redirected % [%]',[E,E.Message]);
                 {$else}
                 E := AcquireExceptionObject;
                 if E.InheritsFrom(Exception) then

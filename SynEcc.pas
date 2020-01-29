@@ -3739,7 +3739,7 @@ var plain,encrypted: RawByteString;
 begin
   plain := StringFromFile(FileToCrypt);
   if plain='' then
-    raise EECCException.CreateUTF8('File not found: "%"',[FileToCrypt]);
+    raise EECCException.CreateUTF8('File not found: [%]',[FileToCrypt]);
   if DestFile='' then
     dest := FileToCrypt+ENCRYPTED_FILEEXT else
     dest := DestFile;
@@ -4138,7 +4138,7 @@ var content: RawByteString;
 begin
   content := StringFromFile(FileToSign);
   if content='' then
-    raise EECCException.CreateUTF8('%.SignFile: "%" not found',[self,FileToSign]);
+    raise EECCException.CreateUTF8('%.SignFile: file [%] not found',[self,FileToSign]);
   sha := SHA256Digest(pointer(content),length(content));
   sign := SignToBase64(sha);
   meta.InitObject(['name',ExtractFileName(FileToSign),
@@ -4908,7 +4908,8 @@ begin
         ObjArrayAdd(fItems,auth);
         auth := nil;
       end else
-        raise EECCException.CreateUTF8('%.CreateFromFiles: invalid "%"',[self,files[i]]);
+        raise EECCException.CreateUTF8(
+          '%.CreateFromFiles: invalid file [%]',[self,files[i]]);
     finally
       auth.Free;
     end;

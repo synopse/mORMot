@@ -3497,8 +3497,8 @@ begin
   if (aConnection=nil) or (aConnection.fErrorMessage='') then
     Create(aMessage) else
   if aConnection.fErrorException=nil then
-    CreateUTF8('% "%"',[aMessage,aConnection.fErrorMessage]) else
-    CreateUTF8('% as % with message "%"',
+    CreateUTF8('% [%]',[aMessage,aConnection.fErrorMessage]) else
+    CreateUTF8('% as % with message [%]',
       [aMessage,aConnection.fErrorException,aConnection.fErrorMessage]);
 end;
 
@@ -3950,7 +3950,7 @@ begin
     ColumnName := UTF8ToString(fPrepared.ColumnName(i));
     h := fResult.FindHashedForAdding(ColumnName,added);
     if not added then
-      raise ESQLQueryException.CreateUTF8('Duplicated column name "%"',[ColumnName]);
+      raise ESQLQueryException.CreateUTF8('Duplicated column name [%]',[ColumnName]);
     with fResults[h] do begin
       fQuery := self;
       fRowIndex := 0;
@@ -4031,7 +4031,7 @@ begin
     paramName := UTF8DecodeToString(B,P-B);
     i := fParam.FindHashed(paramName);
     if i<0 then
-      raise ESQLQueryException.CreateUTF8('Parameter "%" not bound for "%"',[paramName,req]);
+      raise ESQLQueryException.CreateUTF8('Parameter [%] not bound for [%]',[paramName,req]);
     if col=length(cols) then
       SetLength(cols,col+64);
     cols[col] := i;
@@ -4062,7 +4062,7 @@ begin
       except
         on E: Exception do
           raise ESQLQueryException.CreateUTF8(
-            '% "%" when binding value for parameter "%" in "%"',
+            '% [%] when binding value for parameter [%] in [%]',
             [E,E.Message,fParams[cols[i]].fName,req]);
       end;
     fPrepared.ExecutePrepared;
@@ -4744,7 +4744,7 @@ begin
                      Query.BindBlob(i+1,pointer(Values[i]),length(Values[i]));
       sptDateTime: Query.BindDateTime(i+1,Iso8601ToDateTime(Values[i]));
       else raise ESQLDBException.CreateUTF8(
-        '%.PrepareInlined: Unrecognized parameter Type[%] = % in "%"',
+        '%.PrepareInlined: Unrecognized parameter Type[%] = % in [%]',
         [self,i+1,ord(Types[i]),aSQL]);
     end;
   result := Query;
@@ -6149,8 +6149,7 @@ begin
       end; // exception leaves Query=nil to raise exception
     end;
     if Query=nil then
-      raise ESQLDBException.CreateUTF8('%.MultipleValuesInsert: Query=nil for "%"',
-        [self,SQL]);
+      raise ESQLDBException.CreateUTF8('%.MultipleValuesInsert: Query=nil for [%]',[self,SQL]);
     try
       p := 1;
       for i := 1 to prevrowcount do begin
@@ -6975,7 +6974,7 @@ begin
   ftUTF8:     RawUTF8(Dest) := VariantToUTF8(Temp);
   {$endif}
   ftBlob:     VariantToRawByteString(Temp,RawByteString(Dest));
-  else raise ESQLDBException.CreateUTF8('%.ColumnToTypedValue: Invalid Type "%"',
+  else raise ESQLDBException.CreateUTF8('%.ColumnToTypedValue: Invalid Type [%]',
     [self,ToText(result)^]);
   end;
 end;

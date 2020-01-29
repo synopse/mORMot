@@ -3270,7 +3270,7 @@ begin
           ColumnValueDBSize := sizeof(POCIStmt);
           include(ColumnLongTypes,hasCURS);
         end;
-        else raise ESQLDBOracle.CreateUTF8('% - Column "%": unknown type %',
+        else raise ESQLDBOracle.CreateUTF8('% - Column [%]: unknown type %',
           [self,ColumnName,oType]);
         end;
         inc(RowSize,ColumnValueDBSize);
@@ -3287,7 +3287,7 @@ begin
               if (ColumnValueDBCharSet<>oCharSet) and
                  not SimilarCharSet(ColumnValueDBCharSet,oCharSet) then
                 // log a warning, but use the connection-level code page
-                SynDBLog.Add.Log(sllWarning,'Column "%" has % (%) charset - expected % (%) '+
+                SynDBLog.Add.Log(sllWarning,'Column [%] has % (%) charset - expected % (%) '+
                   '-> possible data loss',[ColumnName,
                    ColumnValueDBCharSet,OracleCharSetName(ColumnValueDBCharSet),
                    oCharSet,OracleCharSetName(oCharSet)]);

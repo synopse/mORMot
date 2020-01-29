@@ -596,7 +596,7 @@ begin
       ndx := fStoredClassRecordProps.Fields.IndexByName(doc.Names[i]);
       if ndx<0 then
         raise EORMMongoDBException.CreateUTF8(
-          '%.DocFromJSON: unkwnown field name "%"',[self,doc.Names[i]]);
+          '%.DocFromJSON: unkwnown field name [%]',[self,doc.Names[i]]);
       doc.Names[i] := fStoredClassMapping^.ExtFieldNames[ndx];
       info := fStoredClassRecordProps.Fields.List[ndx];
       V := @doc.Values[i];
@@ -917,7 +917,7 @@ begin
       name := fStoredClassMapping^.ExternalToInternalOrNull(doc.Names[i]);
       if name='' then
         raise EORMMongoDBException.CreateUTF8(
-          '%.JSONFromDoc: Unknown field "%" for %',[self,doc.Names[i],fStoredClass]);
+          '%.JSONFromDoc: Unknown field [%] for %',[self,doc.Names[i],fStoredClass]);
       W.AddFieldName(pointer(name),Length(name));
       W.AddVariant(doc.Values[i],twJSONEscape);
       W.Add(',');
@@ -987,7 +987,7 @@ begin
       if docv^.GetVarData(fBSONProjectionBlobFieldsNames[f],blob) then
         BSONVariantType.ToBlob(variant(blob),blobRaw) else
         raise EORMMongoDBException.CreateUTF8(
-          '%.RetrieveBlobFields(%): field "%" not found',
+          '%.RetrieveBlobFields(%): field [%] not found',
           [self,Value,fBSONProjectionBlobFieldsNames[f]]);
       (fStoredClassRecordProps.BlobFields[f] as TSQLPropInfoRTTIRawBlob).
         SetBlob(Value,blobRaw);
@@ -1117,7 +1117,7 @@ begin
     with Stmt.Where[w] do begin
       FieldName := fStoredClassMapping^.FieldNameByIndex(Field-1)+SubField;
       if not B.BSONWriteQueryOperator(FieldName,NotClause,Operator,ValueVariant) then begin
-        InternalLog('%.EngineList: operator % not supported for field "%" in [%]',
+        InternalLog('%.EngineList: operator % not supported for field [%] in [%]',
           [ClassType,ToText(Operator)^,FieldName,SQL],sllError);
         exit;
       end;

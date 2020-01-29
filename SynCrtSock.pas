@@ -7117,7 +7117,7 @@ begin
   WSAEMFILE:       result := 'WSAEMFILE';
   else result := '';
   end;
-  result := Format('%d %s "%s"',[Error,result,SysErrorMessage(Error)]);
+  result := Format('%d %s %s',[Error,result,SysErrorMessage(Error)]);
 end;
 constructor ECrtSocket.Create(const Msg: string);
 begin

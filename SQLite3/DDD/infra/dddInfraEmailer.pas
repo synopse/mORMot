@@ -358,7 +358,7 @@ begin
     readln(fSocket.SockIn^,Res);
   until (Length(Res)<4)or(Res[4]<>'-');
   if not IdemPChar(pointer(Res),pointer(Answer)) then
-    raise ECrtSocket.CreateFmt('returned "%s", expecting "%s"',[Res,Answer]);
+    raise ECrtSocket.CreateFmt('returned [%s], expecting [%s]',[Res,Answer]);
 end;
 
 procedure TSMTPServerSocketConnection.Exec(const Command,
@@ -406,8 +406,8 @@ begin
       result := ''; // for success
     except
       on E: Exception do
-        result := FormatUTF8('%.SendEmail(%:%) server failure "%" (%)',
-          [self,fOwner.Address,fOwner.Port,E.Message,E]);
+        result := FormatUTF8('%.SendEmail(%:%) server failure % [%]',
+          [self,fOwner.Address,fOwner.Port,E,E.Message]);
     end;
 end;
 

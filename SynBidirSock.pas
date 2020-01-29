@@ -3490,7 +3490,7 @@ begin
         result := 'Already upgraded to WebSockets';
         if IdemPropNameU(fProcess.Protocol.URI,aWebSocketsURI) then
           result := result+' on this URI' else
-          result := FormatUTF8('% with URI="%" but requested "%"',
+          result := FormatUTF8('% with URI=[%] but requested [%]',
             [result,fProcess.Protocol.URI,aWebSocketsURI]);
         exit;
       end;

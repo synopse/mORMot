@@ -4157,7 +4157,7 @@ begin
     UnLock;
     {$ifdef WITHLOG}
     if not NoLog then
-      fLog.Add.Log(sllSQL,'% % returned "%" for %',
+      fLog.Add.Log(sllSQL,'% % returned [%] for %',
         [Timer.Stop,FileNameWithoutPath,ID,aSQL],self);
     {$endif}
   end;
@@ -4575,7 +4575,7 @@ begin
     exit;
   {$ifdef WITHLOG}
   FPCLog := fLog.Enter(self{$ifndef DELPHI5OROLDER},'DBClose'{$endif});
-  FPCLog.Log(sllDB,'closing "%" %',[FileName, KB(GetFileSize)],self);
+  FPCLog.Log(sllDB,'closing [%] %',[FileName, KB(GetFileSize)],self);
   {$endif}
   if (sqlite3=nil) or not Assigned(sqlite3.close) then
     raise ESQLite3Exception.CreateUTF8('%.DBClose called with no sqlite3 global',[self]);
@@ -4597,7 +4597,7 @@ begin
     exit;
   {$ifdef WITHLOG}
   FPCLog := fLog.Enter;
-  FPCLog.Log(sllDB,'Enable custom tokenizer for "%"',[FileName],self);
+  FPCLog.Log(sllDB,'Enable custom tokenizer for [%]',[FileName],self);
   {$endif}
   if (sqlite3=nil) or not Assigned(sqlite3.db_config) then
     raise ESQLite3Exception.CreateUTF8('%.EnableCustomTokenizer called with no sqlite3 engine',[self]);
@@ -5758,7 +5758,7 @@ var res: integer;
 begin
   fn := fDestDB.FileName;
   {$ifdef WITHLOG}
-  SetCurrentThreadName('% "%" "%"',[self,fSourceDB.FileName,fn]);
+  SetCurrentThreadName('% [%] [%]',[self,fSourceDB.FileName,fn]);
   log := SynSQLite3Log.Enter(self{$ifndef DELPHI5OROLDER},'Execute'{$endif});
   {$endif}
   try

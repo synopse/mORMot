@@ -959,12 +959,12 @@ var
     end
     else begin
       error := GetLastError;
-      msg := FormatUTF8('Error % "%" occured with',
+      msg := FormatUTF8('Error % [%] occured with',
         [error, StringToUTF8(SysErrorMessage(error))]);
       TextColor(ccLightRed);
       ExitCode := 1; // notify error to caller batch
     end;
-    msg := FormatUTF8('% "%" (%) on Service "%"',
+    msg := FormatUTF8('% [%] (%) on Service [%]',
       [msg, param, cmdText, fSettings.ServiceName]);
     writeln(msg);
     AppendToTextFile(ExeVersion.User + ' ' +msg,

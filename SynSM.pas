@@ -1172,7 +1172,7 @@ begin
   end;
   if res=JS_FALSE then begin
     SynSMLog.Add.Log(sllError, 'Error compiling script %', FLastErrorFileName);
-    raise ESMException.CreateUTF8('%: Error compiling script "%". Line %',
+    raise ESMException.CreateUTF8('%: Error compiling script [%]. Line %',
       [self,FLastErrorFileName,FLastErrorLine]);
   end;
 end;

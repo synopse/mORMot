@@ -800,10 +800,10 @@ begin
       if rpmQuoteFieldName in options then
         fStoredClassMapping^.MapField(nfo.Name,'"'+SQL+'"') else 
       if fProperties.IsSQLKeyword(SQL) then begin
-        log.Log(sllWarning,'%.%: Field name "%" is not compatible with %',
+        log.Log(sllWarning,'%.%: Field name % is not compatible with %',
           [fStoredClass,nfo.Name,SQL,fProperties.DBMSEngineName],self);
         if rpmAutoMapKeywordFields in options then begin
-          log.Log(sllWarning,'-> %.% mapped to "%_"',[fStoredClass,nfo.Name,SQL],self);
+          log.Log(sllWarning,'-> %.% mapped to %_',[fStoredClass,nfo.Name,SQL],self);
           fStoredClassMapping^.MapField(nfo.Name,SQL+'_');
         end else
           log.Log(sllWarning,'-> you should better use MapAutoKeywordFields',self);
@@ -918,7 +918,7 @@ begin
       limit.Position := posNone else begin
       limit := fProperties.SQLLimitClause(Stmt);
       if limit.Position=posNone then begin
-        InternalLog('%.AdaptSQLForEngineList: unknown "%" LIMIT syntax for [%]',
+        InternalLog('%.AdaptSQLForEngineList: unknown % LIMIT syntax for [%]',
           [ClassType,ToText(fProperties.DBMS)^,SQL],sllWarning);
         exit;
       end;
@@ -1924,7 +1924,7 @@ begin
     k := fFieldsInternalToExternal[k+1]; // retrieve exact Types[f] from SynDB
     if k<0 then
       raise ESQLDBException.CreateUTF8(
-        '%.JSONDecodedPrepareToSQL(%): No column for "%" field in table %',
+        '%.JSONDecodedPrepareToSQL(%): No column for [%] field in table %',
         [self,StoredClass,Decoder.FieldNames[f],fTableName]);
     Types[f] := fFieldsExternal[k].ColumnType;
   end;
@@ -1988,7 +1988,7 @@ begin
       result := result+' desc';
   end;
   {$ifdef SQLVIRTUALLOGS}
-  SQLite3Log.Add.Log(sllDebug,'%.ComputeSQL "%" %',[ClassType,result,log],self);
+  SQLite3Log.Add.Log(sllDebug,'%.ComputeSQL [%] %',[ClassType,result,log],self);
   {$endif}
 end;
 

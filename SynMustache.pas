@@ -627,7 +627,7 @@ begin
     if Kind<>mtVariable then
       inc(fPos);
     if not Scan(fTagStop) then
-      raise ESynMustache.CreateUTF8('Unfinished {{tag "%"',[fPos]);
+      raise ESynMustache.CreateUTF8('Unfinished {{tag [%]',[fPos]);
     case Kind of
     mtSetDelimiter: begin
       if (fScanEnd-fScanStart<>6) or (fScanEnd[-1]<>'=') then

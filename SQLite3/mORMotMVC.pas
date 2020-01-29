@@ -1175,7 +1175,7 @@ begin
     Mustache := nil; // force reload ASAP
     Locker.Leave;
     raise EMVCException.CreateUTF8(
-      '%.Render(''%''): Void "%" Template - please put some content!',
+      '%.Render(''%''): Void [%] Template - please write some content!',
         [self,ShortFileName,FileName]);
   end;
 end;

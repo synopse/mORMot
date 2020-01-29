@@ -1424,7 +1424,7 @@ var ExpectedDataType: ShortInt;
   end;
   procedure RaiseError;
   begin
-    raise EODBCException.CreateUTF8('%.GetCol: "%" column had Indicator=%',
+    raise EODBCException.CreateUTF8('%.GetCol: [%] column had Indicator=%',
       [self,Col.ColumnName,Indicator]);
   end;
 begin
@@ -1466,7 +1466,7 @@ begin
   SQL_NO_TOTAL:
     if Col.ColumnType in FIXEDLENGTH_SQLDBFIELDTYPE then
       Col.ColumnDataState := colDataFilled else
-      raise EODBCException.CreateUTF8('%.GetCol: "%" column has no size',
+      raise EODBCException.CreateUTF8('%.GetCol: [%] column has no size',
         [self,Col.ColumnName]);
   else RaiseError;
   end;

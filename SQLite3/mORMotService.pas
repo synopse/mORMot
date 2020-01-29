@@ -847,7 +847,7 @@ begin
     SC_MANAGER_ALL_ACCESS);
   if FSCHandle=0 then begin
     backupError := GetLastError;
-    ServiceLog.Add.Log(sllLastError,'OpenSCManager("%","%") for "%"',
+    ServiceLog.Add.Log(sllLastError,'OpenSCManager(''%'',''%'') for [%]',
       [TargetComputer,DatabaseName,FName]);
     SetLastError(backupError);
     Exit;
@@ -873,7 +873,7 @@ begin
     GENERIC_READ);
   if FSCHandle = 0 then begin
     backupError := GetLastError;
-    ServiceLog.Add.Log(sllLastError,'OpenSCManager("%","%") for "%"',
+    ServiceLog.Add.Log(sllLastError,'OpenSCManager(''%'',''%'') for [%]',
       [TargetComputer,DatabaseName,FName]);
     SetLastError(backupError);
     Exit;
@@ -979,7 +979,7 @@ end;
 begin
   for i := 1 to ParamCount do begin
     param := SysUtils.LowerCase(paramstr(i));
-    ServiceLog.Add.Log(sllInfo,'Controling % with command "%"',[ServiceName,param]);
+    ServiceLog.Add.Log(sllInfo,'Controling % with command [%]',[ServiceName,param]);
     if param='/install' then
      TServiceController.Install(
        ServiceName,DisplayName,Description,true,ExeFileName,Dependencies) else
@@ -1058,7 +1058,7 @@ begin
   fStatusRec.dwCurrentState := SERVICE_STOPPED;
   fStatusRec.dwControlsAccepted := 31;
   fStatusRec.dwWin32ExitCode := NO_ERROR;
-  ServiceLog.Add.Log(sllInfo,'Create: % (%) running as "%"',
+  ServiceLog.Add.Log(sllInfo,'Create: % (%) running as [%]',
     [ServiceName,aDisplayName,ExeVersion.ProgramFullSpec],self);
 end;
 
@@ -2207,12 +2207,12 @@ var
     end
     else begin
       error := GetLastError;
-      msg := FormatUTF8('Error % "%" occured with',
+      msg := FormatUTF8('Error % [%] occured with',
         [error, StringToUTF8(SysErrorMessage(error))]);
       TextColor(ccLightRed);
       ExitCode := 1; // notify error to caller batch
     end;
-    msg := FormatUTF8('% "%" (%) on Service "%"',
+    msg := FormatUTF8('% [%] (%) on Service ''%''',
       [msg, param, cmdText, fSettings.ServiceName]);
     writeln(UTF8ToConsole(msg));
     TextColor(ccLightGray);

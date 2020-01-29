@@ -1301,7 +1301,7 @@ procedure TSynTestsLogged.Failed(const msg: string; aTest: TSynTestCase);
 begin
   inherited;
   with TestCase[fCurrentMethod] do begin
-    fLogFile.Log(sllFail,'%: % "%"',[Ident,TestName[fCurrentMethodIndex],msg],aTest);
+    fLogFile.Log(sllFail,'%: % [%]',[Ident,TestName[fCurrentMethodIndex],msg],aTest);
     {$ifdef KYLIX3}
     fLogFile.Flush(true);
     // we do not have a debugger for CrossKylix -> stop here!

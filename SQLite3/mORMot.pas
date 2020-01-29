@@ -24880,11 +24880,11 @@ begin
   // check that this property is not an ID/RowID (handled separately)
   if IsRowID(pointer(aItem.Name)) and not (pilAllowIDFields in fOptions) then
     raise EModelException.CreateUTF8(
-      '%.Add: % should not include a "%" published property',[self,fTable,aItem.Name]);
+      '%.Add: % should not include a [%] published property',[self,fTable,aItem.Name]);
   // check that this property name is not already defined
   for f := 0 to fCount-1 do
     if IdemPropNameU(fList[f].Name,aItem.Name) then
-      raise EModelException.CreateUTF8('%.Add: % has duplicated name "%"',
+      raise EModelException.CreateUTF8('%.Add: % has duplicated name [%]',
         [self,fTable,aItem.Name]);
   // add to the internal list
   result := fCount;
@@ -34338,7 +34338,7 @@ var N, i: integer;
 begin
   N := length(Tables);
   if N>SizeOf(SUPERVISOR_ACCESS_RIGHTS.Get)*8 then // TSQLAccessRights bits size
-    raise EModelException.CreateUTF8('% for "%" has too many Tables: %>%',
+    raise EModelException.CreateUTF8('% % has too many Tables: %>%',
       [self,aRoot,N,SizeOf(SUPERVISOR_ACCESS_RIGHTS.Get)*8]); // e.g. N>64
   // set the Tables to be associated with this Model, as TSQLRecord classes
   fTablesMax := N-1;
@@ -34519,11 +34519,10 @@ begin
   if self=nil then
     raise EModelException.Create('nil.GetTableIndexExisting');
   if aTable=nil then
-    raise EModelException.CreateUTF8('aTable=nil for % "%"',[self,Root]);
+    raise EModelException.CreateUTF8('%.GetTableIndexExisting(nil) %',[self,Root]);
   result := GetTableIndex(aTable);
   if result<0 then
-    raise EModelException.CreateUTF8('% should be part of the % "%"',
-      [aTable,self,Root]);
+    raise EModelException.CreateUTF8('% is not part of % %',[aTable,self,Root]);
 end;
 
 function TSQLModel.GetTableExactIndex(const TableName: RawUTF8): integer;
@@ -38775,7 +38774,7 @@ begin
     if (aResponse<>'') and (sllServiceReturn in fLogFamily.Level) then
       if IsHTMLContentTypeTextual(pointer(header)) then
         log.Log(sllServiceReturn,aResponse,self,MAX_SIZE_RESPONSE_LOG) else
-        log.Log(sllServiceReturn,'% bytes "%"',[length(aResponse),header],self);
+        log.Log(sllServiceReturn,'% bytes [%]',[length(aResponse),header],self);
     {$endif}
   end;
 end;
@@ -38887,7 +38886,7 @@ var retry: Integer;
     if Assigned(fOnIdle) then begin
       if fBackgroundThread=nil then
         fBackgroundThread := TSynBackgroundThreadEvent.Create(OnBackgroundProcess,
-          OnIdle,FormatUTF8('% "%" background',[Self,Model.Root]));
+          OnIdle,FormatUTF8('% % background',[Self,Model.Root]));
       if not fBackgroundThread.RunAndWait(@Call) then
         Call.OutStatus := HTTP_UNAVAILABLE;
     end else
@@ -41126,7 +41125,7 @@ begin
     {$endif}
     amBackgroundThread,amBackgroundORMSharedThread: begin
       if Thread=nil then
-        Thread := Server.NewBackgroundThreadMethod('% "%" %',
+        Thread := Server.NewBackgroundThreadMethod('% % %',
           [self,Server.Model.Root,ToText(Command)^]);
       BackgroundExecuteThreadMethod(Method,Thread);
     end;
@@ -41871,7 +41870,7 @@ begin
   GetInputByName(ParamName,'Int',v);
   result := GetInt64(pointer(v),err);
   if err<>0 then
-    raise EParsingException.CreateUTF8('%.InputInt[%]: "%" is not an integer',
+    raise EParsingException.CreateUTF8('%.InputInt[%]: ''%'' is not an integer',
       [self,ParamName,v]);
 end;
 
@@ -41882,7 +41881,7 @@ begin
   GetInputByName(ParamName,'Double',v);
   result := GetExtended(pointer(v),err);
   if err<>0 then
-    raise EParsingException.CreateUTF8('%.InputDouble[%]: "%" is not a float',
+    raise EParsingException.CreateUTF8('%.InputDouble[%]: ''%'' is not a float',
       [self,ParamName,v]);
 end;
 
@@ -43317,7 +43316,7 @@ end;
 
 procedure TSQLRestServer.SessionCreate(var User: TSQLAuthUser;
   Ctxt: TSQLRestServerURIContext; out Session: TAuthSession);
-var i: integer;
+var i: PtrInt;
 begin
   Session := nil;
   if (reOneSessionPerUser in Ctxt.Call^.RestAccessRights^.AllowRemoteExecute) and
@@ -43326,7 +43325,7 @@ begin
       if TAuthSession(fSessions.List[i]).User.fID=User.fID then begin
         {$ifdef WITHLOG}
         with TAuthSession(fSessions.List[i]) do
-          Ctxt.Log.Log(sllUserAuth,'User.LogonName=% already connected from "%/%"',
+          Ctxt.Log.Log(sllUserAuth,'User.LogonName=% already connected from %/%',
             [User.LogonName,RemoteIP,Ctxt.Call^.LowLevelConnectionID],self);
         {$endif}
         Ctxt.AuthenticationFailed(afSessionAlreadyStartedForThisUser);
@@ -43337,7 +43336,7 @@ begin
     if OnSessionCreate(self,Session,Ctxt) then begin // TRUE aborts session creation
       {$ifdef WITHLOG}
       Ctxt.Log.Log(sllUserAuth,'Session aborted by OnSessionCreate() callback '+
-         'for User.LogonName=% (connected from "%/%") - clients=%, sessions=%',
+         'for User.LogonName=% (connected from %/%) - clients=%, sessions=%',
         [User.LogonName,Session.RemoteIP,Ctxt.Call^.LowLevelConnectionID,
          fStats.GetClientsCurrent,fSessions.Count],self);
       {$endif}
@@ -44446,7 +44445,7 @@ begin
               '%.EngineBatchSend: DELETE not allowed on %',[self,RunTable]);
           if not RecordCanBeUpdated(RunTable,ID,seDelete,@ErrMsg) then
             raise EORMBatchException.CreateUTF8(
-              '%.EngineBatchSend: DELETE impossible: "%"',[self,ErrMsg]);
+              '%.EngineBatchSend: DELETE impossible [%]',[self,ErrMsg]);
         end;
         3: begin
           // '{"Table":[...,"SIMPLE",[values],...]}' or '[...,"SIMPLE@Table",[values],...]'
@@ -44465,7 +44464,7 @@ begin
               '%.EngineBatchSend: SIMPLE/Add impossible: %',[self,ErrMsg]);
         end;
         else raise EORMBatchException.CreateUTF8(
-          '%.EngineBatchSend: Unknown "%" method',[self,Method]);
+          '%.EngineBatchSend: Unknown [%] method',[self,Method]);
       end;
       if (Count=0) and (EndOfObject=']') then begin
         // single operation do not need a transaction nor InternalBatchStart/Stop
@@ -45867,7 +45866,7 @@ begin
           hash := fUniqueFields.List[i];
           ndx := hash.Scan(Rec,fValue.Count); // O(n) search to avoid hashing
           if ndx>=0 then begin
-            InternalLog('AddOne: Duplicated field "%" value for % and %',
+            InternalLog('AddOne: Duplicated field [%] value for % and %',
               [hash.Field.Name,Rec,TSQLRecord(fValue.List[ndx])]);
             result := 0; // duplicate unique fields -> error
             exit;
@@ -45890,7 +45889,7 @@ begin
     if (fUniqueFields<>nil) and not NoUniqueFieldCheckOnAdd then
       for i := 0 to fUniqueFields.Count-1 do // perform hash of List[Count-1]
       if not TListFieldHash(fUniqueFields.List[i]).EnsureJustAddedNotDuplicated then begin
-        InternalLog('AddOne: Duplicated field "%" value for %',
+        InternalLog('AddOne: Duplicated field [%] value for %',
           [TListFieldHash(fUniqueFields.List[i]).Field.Name,Rec]);
         result := 0; // duplicate unique fields -> error
         fValue.List[ndx] := nil; // avoid GPF within Delete()
@@ -53044,7 +53043,7 @@ begin
       fRemoteIP := aCtxt.RemoteIP;
       {$ifdef WITHLOG}
       aCtxt.Log.Log(sllUserAuth,
-        'New "%" session %/% created at %/% running %',
+        'New [%] session %/% created at %/% running %',
         [User.GroupRights.Ident,User.LogonName,fIDCardinal,fRemoteIP,
          aCtxt.Call^.LowLevelConnectionID,aCtxt.GetUserAgent],self);
       {$endif}
@@ -54898,7 +54897,7 @@ var method: PServiceMethod;
           if (arg>0) and not IdemPropName(method^.Args[arg].ParamName^,Val,ValLen) then begin
             arg := method^.ArgIndex(Val,ValLen,false); // only if were not in-order
             if arg<0 then
-              RaiseError('unexpected parameter "%"',[Val]);
+              RaiseError('unexpected parameter [%]',[Val]);
           end;
         end;
         with method^.Args[arg] do begin
@@ -55380,7 +55379,7 @@ var m,a,reg: integer;
   procedure RaiseError(const Args: array of const);
   begin
     raise EInterfaceFactoryException.CreateUTF8(
-     '%.Create: %.% "%" parameter has unexpected type %%',Args);
+      '%.Create: %.% [%] parameter has unexpected type %%',Args);
   end;
 begin
   if aInterface=nil then
@@ -55518,7 +55517,7 @@ begin
           for a := ArgsOutFirst to ArgsOutLast do
             if Args[a].ValueDirection in [smdVar,smdOut] then
               raise EInterfaceFactoryException.CreateUTF8('%.Create: I% '+
-                'var/out parameter "%" not allowed with TServiceCustomAnswer result',
+                'var/out parameter [%] not allowed with TServiceCustomAnswer result',
                 [self,InterfaceDotMethodName,Args[a].ParamName^]);
           ArgsResultIsServiceCustomAnswer := true;
         end;
@@ -57314,7 +57313,7 @@ begin
         if cardinal(ndx)>=cardinal(fMethod^.ArgsInputValuesCount) then
           break;
       end;
-  raise EInterfaceStub.Create(fSender,fMethod^,'unknown input parameter "%"',[aParamName]);
+  raise EInterfaceStub.Create(fSender,fMethod^,'unknown input parameter [%]',[aParamName]);
 end;
 
 function TOnInterfaceStubExecuteParamsVariant.GetInUTF8(const ParamName: RawUTF8): RawUTF8;
@@ -57342,7 +57341,7 @@ begin
         if cardinal(ndx)>=cardinal(fMethod^.ArgsOutputValuesCount) then
           break;
       end;
-  raise EInterfaceStub.Create(fSender,fMethod^,'unknown output parameter "%"',[aParamName]);
+  raise EInterfaceStub.Create(fSender,fMethod^,'unknown output parameter [%]',[aParamName]);
 end;
 
 procedure TOnInterfaceStubExecuteParamsVariant.SetResultFromOutput;
@@ -58532,8 +58531,8 @@ begin
   if fInterfaceURI[1] in ['I','i'] then
     delete(fInterfaceURI,1,1);
   if fRest.Model.GetTableIndex(fInterfaceURI)>=0 then
-    raise EServiceException.CreateUTF8('%.Create: "%" interface name '+
-      'is already used by a SQL table name',[self,fInterfaceURI]);
+    raise EServiceException.CreateUTF8('%.Create: I% routing name is '+
+      'already used by a % SQL table name',[self,fInterfaceURI,fInterfaceURI]);
   SetLength(fExecution,fInterface.fMethodsCount);
   // compute interface signature (aka "contract"), serialized as a JSON object
   FormatUTF8('{"contract":"%","implementation":"%","methods":%}',
@@ -61283,7 +61282,7 @@ begin
       i := ArgIndex(pointer(arg),length(arg),Input);
       if i<0 then
         if RaiseExceptionOnUnknownParam then
-          raise EServiceException.CreateUTF8('Unexpected "%" parameter for %',
+          raise EServiceException.CreateUTF8('Unexpected [%] parameter for %',
             [arg,InterfaceDotMethodName]) else
           ok := false;
       arginfo := @Args[i];

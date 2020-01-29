@@ -1473,7 +1473,7 @@ begin
 {$else}
     Int32ToUtf8(Status,msg);
 {$endif}
-  SynDBLog.Add.Log(sllError,'Invalid "%" status for column "%" at row % for %',
+  SynDBLog.Add.Log(sllError,'Invalid [%] status for column [%] at row % for %',
     [msg,Column^.ColumnName,fCurrentRow,fSQL],self);
 end;
 
@@ -1869,7 +1869,7 @@ begin
         for i := 0 to fParamCount-1 do
           case fParams[i].VType of
             ftUnknown: raise EOleDBException.CreateUTF8(
-              '%.Execute: missing #% bound parameter for "%"',[self,i+1,fSQL]);
+              '%.Execute: missing #% bound parameter for [%]',[self,i+1,fSQL]);
           end;
         P := pointer(fParams);
         SetLength(fParamBindings,fParamCount);
@@ -2274,7 +2274,7 @@ begin
         end;
       end;
       else raise EOleDBException.CreateUTF8(
-        '%.Execute: wrong column "%" (%) for "%"',[self,aName,
+        '%.Execute: wrong column [%] (%) for [%]',[self,aName,
           GetEnumName(TypeInfo(TSQLDBFieldType),ord(Col^.ColumnType))^,fSQL]);
       end;
       inc(nfo);
@@ -2596,7 +2596,7 @@ begin
         result := true;
       except
       end;
-    SynDBLog.Add.Log(sllDB,'CreateDatabase for "%" returned %',[ConnectionString,ord(result)]);
+    SynDBLog.Add.Log(sllDB,'CreateDatabase for [%] returned %',[ConnectionString,ord(result)]);
   finally
     DB := null;
     Catalog := nil;

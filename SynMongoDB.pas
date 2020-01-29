@@ -5969,7 +5969,7 @@ begin
         split(full,'.',db,coll);
         if db<>aDatabaseName then
           raise EMongoConnectionException.CreateUTF8(
-            '%.Create: invalid "%" collection name for DB "%"',
+            '%.Create: invalid [%] collection name for DB [%]',
             [self,full,aDatabaseName],Client.Connections[0]);
         fCollections.AddObject(coll,TMongoCollection.Create(self,coll));
       end;

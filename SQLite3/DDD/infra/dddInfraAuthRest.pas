@@ -205,7 +205,7 @@ begin
     fLogged := true;
     CqrsSetResult(cqrsSuccess,result);
   end else
-    CqrsSetResultMsg(cqrsBadRequest,'Wrong Password for "%"',[fChallengeLogonName],result);
+    CqrsSetResultMsg(cqrsBadRequest,'Wrong Password for [%]',[fChallengeLogonName],result);
   fChallengeNonce := '';
   fChallengeLogonName := '';
 end;
