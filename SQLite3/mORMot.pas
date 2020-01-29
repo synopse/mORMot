@@ -35283,7 +35283,7 @@ destructor TSQLRest.Destroy;
 var cmd: TSQLRestServerURIContextCommand;
     i: integer;
 begin
-  InternalLog('Destroy %',[fModel.SafeRoot],sllInfo); // self->GPF
+  InternalLog('TSQLRest.Destroy %',[fModel.SafeRoot],sllInfo); // self->GPF
   AsynchBatchStop(nil);
   FreeAndNil(fBackgroundTimer);
   FreeAndNil(fServices);
@@ -38573,7 +38573,7 @@ begin
      (fSessionID<>CONST_AUTHENTICATION_SESSION_NOT_STARTED) then
   try
     TimerDisable(SessionRenewEvent);
-    // notify session closed to server
+    InternalLog('SessionClose: notify server', sllTrace);
     CallBackGet('Auth',['UserName',fSessionUser.LogonName,'Session',fSessionID],tmp);
   finally
     fSessionID := CONST_AUTHENTICATION_SESSION_NOT_STARTED;

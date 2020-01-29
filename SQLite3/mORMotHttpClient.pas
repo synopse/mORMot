@@ -754,11 +754,13 @@ end;
 
 procedure TSQLHttpClientWinSock.InternalClose;
 begin
-  try
-    FreeAndNil(fSocket);
-  except
-    ; // ignore any error here
-  end;
+  if fSocket<>nil then
+    try
+      InternalLog('InternalClose: fSocket.Free', sllTrace);
+      FreeAndNil(fSocket);
+    except
+      ; // ignore any error here
+    end;
 end;
 
 function TSQLHttpClientWinSock.InternalRequest(const url, method: RawUTF8;
@@ -791,6 +793,7 @@ begin
     try
       if fSocketClass=nil then
         fSocketClass := THttpClientWebSockets;
+      InternalLog('InternalCheckOpen: calling %.Open', [fSocketClass]);
       result := inherited InternalCheckOpen;
       if result then begin
         include(fInternalState,isOpened);
