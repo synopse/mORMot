@@ -958,6 +958,7 @@ const
 
 var
   /// MIME content type used for JSON communication
+  // - i.e. 'application/json; charset=UTF-8'
   // - this global will be initialized with JSON_CONTENT_TYPE constant, to
   // avoid a memory allocation each time it is assigned to a variable
   JSON_CONTENT_TYPE_VAR: RawUTF8;
@@ -6725,7 +6726,14 @@ procedure ObjArraySetLength(var aObjArray; aLength: integer);
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 // - search is performed by address/reference, not by content
 // - returns -1 if the item is not found in the dynamic array
-function ObjArrayFind(const aObjArray; aItem: TObject): PtrInt;
+function ObjArrayFind(const aObjArray; aItem: TObject): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// wrapper to search an item in a T*ObjArray dynamic array storage
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - search is performed by address/reference, not by content
+// - returns -1 if the item is not found in the dynamic array
+function ObjArrayFind(const aObjArray; aCount: integer; aItem: TObject): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to count all not nil items in a T*ObjArray dynamic array storage
@@ -6743,6 +6751,12 @@ procedure ObjArrayDelete(var aObjArray; aItemIndex: PtrInt;
 // - search is performed by address/reference, not by content
 // - do nothing if the item is not found in the dynamic array
 function ObjArrayDelete(var aObjArray; aItem: TObject): PtrInt; overload;
+
+/// wrapper to delete an item in a T*ObjArray dynamic array storage
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - search is performed by address/reference, not by content
+// - do nothing if the item is not found in the dynamic array
+function ObjArrayDelete(var aObjArray; aCount: integer; aItem: TObject): PtrInt; overload;
 
 /// wrapper to sort the items stored in a T*ObjArray dynamic array
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
@@ -51622,6 +51636,11 @@ begin
     length(TObjectDynArray(aObjArray)),PtrUInt(aItem));
 end;
 
+function ObjArrayFind(const aObjArray; aCount: integer; aItem: TObject): PtrInt;
+begin
+  result := PtrUIntScanIndex(pointer(aObjArray),aCount,PtrUInt(aItem));
+end;
+
 function ObjArrayCount(const aObjArray): integer;
 var i: PtrInt;
     a: TObjectDynArray absolute aObjArray;
@@ -51659,9 +51678,17 @@ end;
 
 function ObjArrayDelete(var aObjArray; aItem: TObject): PtrInt;
 begin
-  result := ObjArrayFind(aObjArray,aItem);
+  result := PtrUIntScanIndex(pointer(aObjArray),
+    length(TObjectDynArray(aObjArray)),PtrUInt(aItem));
   if result>=0 then
     ObjArrayDelete(aObjArray,result);
+end;
+
+function ObjArrayDelete(var aObjArray; aCount: integer; aItem: TObject): PtrInt; overload;
+begin
+  result := PtrUIntScanIndex(pointer(aObjArray),aCount,PtrUInt(aItem));
+  if result>=0 then
+    ObjArrayDelete(aObjArray,result,false,@aCount);
 end;
 
 procedure ObjArraySort(var aObjArray; Compare: TDynArraySortCompare);
