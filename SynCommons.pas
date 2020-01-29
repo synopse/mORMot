@@ -10032,6 +10032,9 @@ type
     // - returns false if the queue is empty
     // - this method is thread-safe, since it will lock the instance
     function Pop(out aValue): boolean;
+    /// extract one matching item from the queue, as FIFO (First-In-First-Out)
+    // - the current pending item is compared with aAnother value
+    function PopEquals(aAnother: pointer; aCompare: TDynArraySortCompare; out aValue): boolean;
     /// lookup one item from the queue, as FIFO (First-In-First-Out)
     // - returns true if aValue has been filled with a pending item, without
     // removing it from the queue (as Pop method does)
@@ -10044,8 +10047,11 @@ type
     // - returns false if nothing was pushed into the queue in time, or if
     // WaitPopFinalize has been called
     // - aWhenIdle could be assigned e.g. to VCL/LCL Application.ProcessMessages
+    // - you can optionally compare the pending item before returning it (could
+    // be used e.g. when several threads are putting items into the queue)
     // - this method is thread-safe, but will lock the instance only if needed
-    function WaitPop(aTimeoutMS: integer; const aWhenIdle: TThreadMethod; out aValue): boolean;
+    function WaitPop(aTimeoutMS: integer; const aWhenIdle: TThreadMethod; out aValue;
+      aCompared: pointer=nil; aCompare: TDynArraySortCompare=nil): boolean;
     /// waiting lookup of one item from the queue, as FIFO (First-In-First-Out)
     // - returns a pointer to a pending item within the specified aTimeoutMS
     // time - the Safe.Lock is still there, so that caller could check its content,
@@ -10057,7 +10063,7 @@ type
     // - is always called by Destroy destructor
     // - could be also called e.g. from an UI OnClose event to avoid any lock
     // - this method is thread-safe, but will lock the instance only if needed
-    procedure WaitPopFinalize;
+    procedure WaitPopFinalize(aTimeoutMS: integer=100);
     /// delete all items currently stored in this queue, and void its capacity
     // - this method is thread-safe, since it will lock the instance
     procedure Clear;
@@ -12402,6 +12408,8 @@ procedure SetCurrentThreadName(const Format: RawUTF8; const Args: array of const
 /// name a thread so that it would be easily identified in the IDE debugger
 // - you can force this function to do nothing by setting the NOSETTHREADNAME
 // conditional, if you have issues with this feature when debugging your app
+// - most meanling less characters (like 'TSQL') are trimmed to reduce the
+// resulting length - which is convenient e.g. with POSIX truncation to 16 chars
 procedure SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
   const Args: array of const);
 
@@ -60688,12 +60696,24 @@ begin
   end;
 end;
 
+function TSynQueue.PopEquals(aAnother: pointer; aCompare: TDynArraySortCompare;
+  out aValue): boolean;
+begin
+  fSafe.Lock;
+  try
+    result := (fFirst>=0) and Assigned(aCompare) and Assigned(aAnother) and
+      (aCompare(fValues.ElemPtr(fFirst)^,aAnother^)=0) and Pop(aValue);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
 function TSynQueue.InternalDestroying(incPopCounter: integer): boolean;
 begin
   fSafe.Lock;
   try
     result := wpfDestroying in fWaitPopFlags;
-    inc(fWaitPopCounter, incPopCounter);
+    inc(fWaitPopCounter,incPopCounter);
   finally
     fSafe.UnLock;
   end;
@@ -60708,7 +60728,7 @@ begin
 end;
 
 function TSynQueue.WaitPop(aTimeoutMS: integer; const aWhenIdle: TThreadMethod;
-  out aValue): boolean;
+  out aValue; aCompared: pointer; aCompare: TDynArraySortCompare): boolean;
 var endtix: Int64;
 begin
   result := false;
@@ -60716,7 +60736,9 @@ begin
     try
       endtix := GetTickCount64+aTimeoutMS;
       repeat
-        result := Pop(aValue);
+        if Assigned(aCompared) and Assigned(aCompare) then
+          result := PopEquals(aCompared,aCompare,aValue) else
+          result := Pop(aValue);
       until result or InternalWaitDone(endtix,aWhenIdle);
     finally
       InternalDestroying(-1);
@@ -60745,18 +60767,18 @@ begin
     end;
 end;
 
-procedure TSynQueue.WaitPopFinalize;
+procedure TSynQueue.WaitPopFinalize(aTimeoutMS: integer);
 var endtix: Int64; // never wait forever
 begin
   fSafe.Lock;
   try
     include(fWaitPopFlags,wpfDestroying);
-    if fWaitPopCounter = 0 then
+    if fWaitPopCounter=0 then
       exit;
   finally
     fSafe.UnLock;
   end;
-  endtix := GetTickCount64 + 100;
+  endtix := GetTickCount64+aTimeoutMS;
   repeat
     SleepHiRes(1); // ensure WaitPos() is actually finished
   until (fWaitPopCounter=0) or (GetTickCount64>endtix);
@@ -64000,17 +64022,13 @@ procedure SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
 var name: RawUTF8;
 begin
   FormatUTF8(Format,Args,name);
+  name := StringReplaceAll(StringReplaceAll(StringReplaceAll(StringReplaceAll(StringReplaceAll(
+    name,'TSQLRest',''),'TSQL',''),'TWebSocket','WS'),'TSyn',''),'Thread','');
   SetThreadNameInternal(ThreadID,name);
 end;
 
 procedure SetThreadNameDefault(ThreadID: TThreadID; const Name: RawUTF8);
-{$ifdef FPC}
-begin
-  {$ifdef LINUX}
-  if ThreadID<>MainThreadID then // don't change the main process name
-    SetUnixThreadName(ThreadID, Name); // call pthread_setname_np()
-  {$endif}
-{$else}
+{$ifndef FPC}
 {$ifndef NOSETTHREADNAME}
 var s: RawByteString;
     {$ifndef ISDELPHIXE2}
@@ -64023,7 +64041,16 @@ var s: RawByteString;
     end;
     {$endif}
     {$endif}
+{$endif NOSETTHREADNAME}
+{$endif FPC}
 begin
+{$ifdef FPC}
+  {$ifdef LINUX}
+  if ThreadID<>MainThreadID then // don't change the main process name
+    SetUnixThreadName(ThreadID, Name); // call pthread_setname_np()
+  {$endif}
+{$else}
+{$ifndef NOSETTHREADNAME}
   {$ifdef MSWINDOWS}
   if not IsDebuggerPresent then
     exit;
