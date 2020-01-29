@@ -426,7 +426,8 @@ type
     fBytesIn: Int64;
     fBytesOut: Int64;
     fSocketLayer: TCrtSocketLayer;
-    fSockInEof, fTLS, fWasBind: boolean;
+    fSockInEofError: integer;
+    fTLS, fWasBind: boolean;
     // updated by every SockSend() call
     fSndBuf: SockString;
     fSndBufLen: integer;
@@ -1113,9 +1114,10 @@ type
   // - OutContent/OutContentType/OutCustomHeader are output parameters
   THttpServerRequest = class
   protected
-    fURL, fMethod, fInHeaders, fInContent, fInContentType, fAuthenticatedUser,
-    fOutContent, fOutContentType, fOutCustomHeaders: SockString;
+    fRemoteIP, fURL, fMethod, fInHeaders, fInContent, fInContentType,
+    fAuthenticatedUser, fOutContent, fOutContentType, fOutCustomHeaders: SockString;
     fServer: THttpServerGeneric;
+    fRequestID: integer;
     fConnectionID: THttpServerConnectionID;
     fConnectionThread: TSynThread;
     fUseSSL: boolean;
@@ -1124,6 +1126,8 @@ type
     fHttpApiRequest: Pointer;
     {$endif}
   public
+    /// low-level property which may be used during requests processing
+    Status: integer;
     /// initialize the context, associated to a HTTP server instance
     constructor Create(aServer: THttpServerGeneric;
       aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread); virtual;
@@ -1162,6 +1166,10 @@ type
     /// the associated server instance
     // - may be a THttpServer or a THttpApiServer class
     property Server: THttpServerGeneric read fServer;
+    /// the client remote IP, as specified to Prepare()
+    property RemoteIP: SockString read fRemoteIP write fRemoteIP;
+    /// a 31-bit sequential number identifying this instance on the server
+    property RequestID: integer read fRequestID;
     /// the ID of the connection which called this execution context
     // - e.g. SynCrtSock's TWebSocketProcess.NotifyCallback method would use
     // this property to specify the client connection to be notified
@@ -1251,7 +1259,8 @@ type
     /// set by RegisterCompress method
     fCompressAcceptEncoding: SockString;
     fServerName: SockString;
-    fCurrentConnectionID: integer; // thread-safe 31-bit sequence
+    fCurrentConnectionID: integer; // 31-bit NextConnectionID sequence
+    fCurrentRequestID: integer;
     fCanNotifyCallback: boolean;
     fRemoteIPHeader, fRemoteIPHeaderUpper: SockString;
     fRemoteConnIDHeader, fRemoteConnIDHeaderUpper: SockString;
@@ -2101,29 +2110,33 @@ type
   /// structure used to parse an URI into its components
   // - ready to be supplied e.g. to a THttpRequest sub-class
   // - used e.g. by class function THttpRequest.Get()
+  // - will decode standard HTTP/HTTPS urls or Unix sockets URI like
+  // 'http://unix:/path/to/socket.sock:/url/path'
   TURI = {$ifdef UNICODE}record{$else}object{$endif}
   public
     /// if the server is accessible via https:// and not plain http://
     Https: boolean;
+    /// either cslTcp for HTTP/HTTPS or cslUnix for Unix socket URI
+    Layer: TCrtSocketLayer;
     /// if the server is accessible via something else than http:// or https://
     // - e.g. 'ws' or 'wss' for ws:// or wss://
     Scheme: SockString;
     /// the server name
-    // - e.g. 'www.somewebsite.com'
+    // - e.g. 'www.somewebsite.com' or 'path/to/socket.sock' Unix socket URI
     Server: SockString;
     /// the server port
     // - e.g. '80'
     Port: SockString;
-    /// the resource address
+    /// the resource address, including optional parameters
     // - e.g. '/category/name/10?param=1'
     Address: SockString;
-    /// either cslTcp or cslUnix for unix socket URI
-    // - e.g. 'http://unix:/path/to/socket.sock:/url/path'
-    Layer: TCrtSocketLayer;
     /// fill the members from a supplied URI
+    // - recognize e.g. 'http://Server:Port/Address', 'https://Server/Address',
+    // 'Server/Address' (as http), or 'http://unix:/Server:/Address'
     // - returns TRUE is at least the Server has been extracted, FALSE on error
     function From(aURI: SockString; const DefaultPort: SockString=''): boolean;
     /// compute the whole normalized URI
+    // - e.g. 'https://Server:Port/Address' or 'http://unix:/Server:/Address'
     function URI: SockString;
     /// the server port, as integer value
     function PortInt: integer;
@@ -3913,7 +3926,7 @@ end;
 {$ifdef DELPHI5OROLDER}
 function Utf8ToAnsi(const UTF8: SockString): SockString;
 begin
-  result := UTF8; // no conversion
+  result := UTF8; // fallback to no conversion
 end;
 {$endif}
 
@@ -4640,7 +4653,7 @@ begin
     Inc(S,5); // 'http://unix:/path/to/socket.sock:/url/path'
     Inc(P,5);
     Layer := cslUNIX;
-    while not(S^ in [#0,':']) do inc(S);
+    while not(S^ in [#0,':']) do inc(S); // Server='path/to/socket.sock'
   end else
     while not(S^ in [#0,':','/']) do inc(S);
   SetString(Server,P,S-P);
@@ -4678,7 +4691,7 @@ end;
 function TURI.Root: SockString;
 var i: integer;
 begin
-  i := Pos({$ifdef HASCODEPAGE}SockString{$endif}('?'),Address);
+  i := System.Pos({$ifdef HASCODEPAGE}SockString{$endif}('?'),Address);
   if i=0 then
     Root := Address else
     Root := copy(Address,1,i-1);
@@ -4833,6 +4846,14 @@ begin
       result := -1; // on socket error -> raise ioresult error
 end;
 
+function WSAIsFatalError: boolean;
+var err: integer;
+begin
+  err := WSAGetLastError;
+  result := (err<>NO_ERROR) and (err<>WSATRY_AGAIN) and (err<>WSAEINTR)
+    {$ifdef MSWINDOWS}and (err<>WSAETIMEDOUT) and (err<>WSAEWOULDBLOCK){$endif};
+end;
+
 function InputSock(var F: TTextRec): Integer;
 // SockIn pseudo text file fill its internal buffer only with available data
 // -> no unwanted wait time is added
@@ -4847,22 +4868,16 @@ var Size: integer;
 begin
   F.BufEnd := 0;
   F.BufPos := 0;
-  result := -1; // on socket error -> raise ioresult error
   Sock := PCrtSocket(@F.UserData)^;
-  if (Sock=nil) or (Sock.Sock<=0) then
+  if (Sock=nil) or (Sock.Sock<=0) then begin
+    result := WSAECONNABORTED; // on socket error -> raise ioresult error
     exit; // file closed = no socket -> error
-  if Sock.TimeOut<>0 then begin // will wait for pending data
-    if IOCtlSocket(Sock.Sock,FIONREAD,Size)<>0 then // get exact count
-      exit else
-      if (Size<=0) or (Size>integer(F.BufSize)) then
-        Size := F.BufSize;
-  end else
-    Size := F.BufSize;
-  case Sock.SocketLayer of
-  cslTCP, cslUNIX: begin
-    if not Sock.TrySockRecv(F.BufPtr, Size, true) then
-      Size := -1; // fatal socket error
-  end else begin
+  end;
+  result := Sock.fSockInEofError;
+  if result<>0 then               
+    exit; // already reached error below
+  Size := F.BufSize;
+  if Sock.SocketLayer=cslUDP then begin
     {$ifdef MSWINDOWS}
     iSize := SizeOf(TSockAddr);
     Size := RecvFrom(Sock.Sock, F.BufPtr, Size, 0, @Sock.fPeerAddr, @iSize);
@@ -4871,16 +4886,22 @@ begin
     Sock.fPeerAddr.sin_port := sin.sin_port;
     Sock.fPeerAddr.sin_addr := sin.sin_addr;
     {$endif}
-  end;
-  end;
-  // Recv() may return Size=0 if no data is pending, but no TCP/IP error
+  end else // cslTCP/cslUNIX
+    if not Sock.TrySockRecv(F.BufPtr,Size,{nowait=}true) then
+      Size := -1; // fatal socket error
+  // TrySockRecv() may return Size=0 if no data is pending, but no TCP/IP error
   if Size>=0 then begin
     F.BufEnd := Size;
     inc(Sock.fBytesIn,Size);
     result := 0; // no error
   end else begin
-    Sock.fSockInEof := true; // error -> mark end of SockIn
-    result := -integer(WSAGetLastError); // integer() for FPC+Win target
+    if Sock.Sock<0 then // socket broken or closed
+      result := WSAECONNABORTED else begin
+      result := -integer(WSAGetLastError); // integer() for FPC+Win target
+      if result=0 then
+        result := WSAETIMEDOUT;
+    end;
+    Sock.fSockInEofError := result; // error -> mark end of SockIn
     // result <0 will update ioresult and raise an exception if {$I+}
   end;
 end;
@@ -4925,7 +4946,7 @@ begin
   result := false;
 end;
 
-constructor TCrtSocket.Bind(const aPort: SockString; aLayer: TCrtSocketLayer=cslTCP);
+constructor TCrtSocket.Bind(const aPort: SockString; aLayer: TCrtSocketLayer);
 var s,p: SockString;
 begin
   Create(10000);
@@ -5021,7 +5042,7 @@ begin
     ReceiveTimeout := TimeOut;
     SendTimeout := TimeOut;
   end;
-  if aLayer = cslTCP then begin
+  if aLayer=cslTCP then begin
     TCPNoDelay := 1; // disable Nagle algorithm since we use our own buffers
     KeepAlive := 1; // enable TCP keepalive (even if we rely on transport layer)
     if aTLS and (aSock<0) and not doBind then
@@ -5127,14 +5148,6 @@ begin
     raise ECrtSocket.CreateFmt('SndLow(%s) len=%d',[fServer,Len],-1);
 end;
 
-function WSAIsFatalError: boolean;
-var err: integer;
-begin
-  err := WSAGetLastError;
-  result := (err<>NO_ERROR) and {$ifdef MSWINDOWS}(err<>WSAEWOULDBLOCK) and{$endif}
-    (err<>WSATRY_AGAIN) and (err<>WSAEINTR);
-end;
-
 function TCrtSocket.TrySndLow(P: pointer; Len: integer): boolean;
 var sent: integer;
     endtix: Int64;
@@ -5218,7 +5231,7 @@ begin
     until Timeout=0;
   // direct receiving of the remaining bytes from socket
   if Length>0 then begin
-    SockRecv(Content,Length);
+    SockRecv(Content,Length); // raise ECrtSocket if failed to read Length
     inc(result,Length);
   end;
 end;
@@ -5354,9 +5367,11 @@ begin
 end;
 
 procedure TCrtSocket.SockRecv(Buffer: pointer; Length: integer);
+var read: integer;
 begin
-  if not TrySockRecv(Buffer,Length) then
-    raise ECrtSocket.CreateFmt('SockRecv(%d)',[Length]);
+  read := Length;
+  if not TrySockRecv(Buffer,read) or (Length<>read) then
+    raise ECrtSocket.CreateFmt('SockRecv(%d) failure (read=%d)',[Length,read]);
 end;
 
 function TCrtSocket.TrySockRecv(Buffer: pointer; var Length: integer;
@@ -5365,9 +5380,7 @@ var expected,read: PtrInt;
     endtix: Int64;
 begin
   result := false;
-  if (self=nil) or (fSock<0) then
-    exit;
-  if (Buffer<>nil) and (Length>0) then begin
+  if (self<>nil) and (fSock>0) and (Buffer<>nil) and (Length>0) then begin
     expected := Length;
     Length := 0;
     endtix := GetTick64+TimeOut;
@@ -5378,10 +5391,15 @@ begin
         read := fSecure.Receive(fSock,Buffer,read) else
       {$endif MSWINDOWS}
         read := AsynchRecv(fSock,Buffer,read);
-      if read=0 then begin // socket closed gracefully
-        if not StopBeforeLength then
-          Close;
-        exit;
+      if read=0 then begin // no more to read
+        if SockReceivePending(0)=cspSocketError then begin
+          Close; // connection broken or socket closed gracefully
+          exit;
+        end;
+        if StopBeforeLength then begin
+          result := true;
+          exit; // returns immediately or wait until we have something
+        end;
       end else
       if read>0 then begin
         inc(fBytesIn,read);
@@ -5395,8 +5413,8 @@ begin
         exit; // identify read timeout as error
       SleepHiRes(1);
     until false;
+    result := true;
   end;
-  result := true;
 end;
 
 function TCrtSocket.SockReceivePending(TimeOutMS: integer): TCrtSocketPending;
@@ -5570,7 +5588,7 @@ begin
     exit;
   resultlen := 0;
   repeat
-    if (IOCtlSocket(fSock, FIONREAD, available)<>0) or (fSock<=0) then
+    if (fSock<=0) or ((IOCtlSocket(fSock,FIONREAD,available)<>0) and WSAIsFatalError) then
       exit; // raw socket error
     if available=0 then // no data in the allowed timeout
       if result='' then begin // wait till something
@@ -5580,7 +5598,7 @@ begin
         break; // return what we have
     SetLength(result,resultlen+available); // append to result
     read := available;
-    if not TrySockRecv(@PByteArray(result)[resultlen],read,true) then begin
+    if not TrySockRecv(@PByteArray(result)[resultlen],read,{stopbeforelength=}true) then begin
       Close;
       SetLength(result,resultlen);
       exit;
@@ -5925,7 +5943,7 @@ begin
       GetNextItem(P,',',rec);
       rec := Trim(rec);
       if rec='' then continue;
-      if Pos({$ifdef HASCODEPAGE}SockString{$endif}('<'),rec)=0 then
+      if System.Pos({$ifdef HASCODEPAGE}SockString{$endif}('<'),rec)=0 then
         rec := '<'+rec+'>';
       Exec('RCPT TO:'+rec,'25');
       if ToList='' then
@@ -5979,11 +5997,23 @@ begin
   fConnectionThread := aConnectionThread;
 end;
 
+var
+  GlobalRequestID: integer;
+
 procedure THttpServerRequest.Prepare(const aURL, aMethod, aInHeaders,
   aInContent, aInContentType, aRemoteIP: SockString; aUseSSL: boolean);
+var id: PInteger;
 begin
+  if fServer=nil then
+    id := @GlobalRequestID else
+    id := @fServer.fCurrentRequestID;
+  fRequestID := InterLockedIncrement(id^);
+  if fRequestID=maxInt-2048 then // ensure no overflow (31-bit range)
+    id^ := 0;
+  fUseSSL := aUseSSL;
   fURL := aURL;
   fMethod := aMethod;
+  fRemoteIP := aRemoteIP;
   if aRemoteIP<>'' then
     if aInHeaders='' then
       fInHeaders := 'RemoteIP: '+aRemoteIP else
@@ -5994,7 +6024,6 @@ begin
   fOutContent := '';
   fOutContentType := '';
   fOutCustomHeaders := '';
-  fUseSSL := aUseSSL;
 end;
 
 procedure THttpServerRequest.AddInHeader(additionalHeader: SockString);
@@ -6972,10 +7001,17 @@ end;
 function THttpServerSocket.GetRequest(withBody: boolean; headerMaxTix: Int64): THttpServerSocketGetRequestResult;
 var P: PAnsiChar;
     status: cardinal;
+    pending: integer;
     reason, allheaders: SockString;
 begin
   result := grError;
   try
+    // abort now with no exception if socket is obviously broken
+    if fServer<>nil then begin
+      pending := SockInPending(100,{alsosocket=}true);
+      if (pending<0) or (fServer=nil) or fServer.Terminated then
+        exit;
+    end;
     // 1st line is command: 'GET /path HTTP/1.1' e.g.
     SockRecvLn(Command);
     if TCPPrefix<>'' then
@@ -6983,6 +7019,8 @@ begin
         exit else
         SockRecvLn(Command);
     P := pointer(Command);
+    if P=nil then
+      exit; // broken
     GetNextItem(P,' ',fMethod); // 'GET'
     GetNextItem(P,' ',fURL);    // '/path'
     fKeepAliveClient := ((fServer=nil) or (fServer.ServerKeepAliveTimeOut>0)) and
@@ -11864,14 +11902,13 @@ begin
          (integer(fHttps.Port) <> Uri.PortInt) then begin
         FreeAndNil(fHttp);
         fHttps.Free; // need a new HTTPS connection
-        fHttps := MainHttpClass.Create(Uri.Server, Uri.Port, Uri.Https, '', '',
-          5000, 5000, 5000);
+        fHttps := MainHttpClass.Create(Uri.Server,Uri.Port,Uri.Https,'','',5000,5000,5000);
         fHttps.IgnoreSSLCertificateErrors := fIgnoreSSLCertificateErrors;
         if fUserAgent<>'' then
           fHttps.UserAgent := fUserAgent;
       end;
-      result := fHttps.Request(Uri.Address, Method, KeepAlive, header,
-        data, datatype, fHeaders, fBody);
+      result := fHttps.Request(Uri.Address,Method,KeepAlive,
+        header,data,datatype,fHeaders,fBody);
       if KeepAlive = 0 then
         FreeAndNil(fHttps);
     except
@@ -11883,13 +11920,13 @@ begin
          (fHttp.Port <> Uri.Port) then begin
         FreeAndNil(fHttps);
         fHttp.Free; // need a new HTTP connection
-        fHttp := THttpClientSocket.Open(Uri.Server, Uri.Port, cslTCP, 5000, Uri.Https);
+        fHttp := THttpClientSocket.Open(Uri.Server,Uri.Port,cslTCP,5000,Uri.Https);
         if fUserAgent<>'' then
           fHttp.UserAgent := fUserAgent;
       end;
       if not fHttp.SockConnected then
         exit else
-        result := fHttp.Request(Uri.Address, Method, KeepAlive, header, data, datatype, true);
+        result := fHttp.Request(Uri.Address,Method,KeepAlive,header,data,datatype,true);
       fBody := fHttp.Content;
       fHeaders := fHttp.HeaderGetText;
       if KeepAlive = 0 then
@@ -11899,12 +11936,12 @@ begin
     end;
 end;
 
-function TSimpleHttpClient.Request(const uri, method, header, data, datatype: SockString;
+function TSimpleHttpClient.Request(const uri,method,header,data,datatype: SockString;
   keepalive: cardinal): integer;
 var u: TURI;
 begin
   if u.From(uri) then
-    result := RawRequest(u, method, header, data, datatype, keepalive) else
+    result := RawRequest(u,method,header,data,datatype,keepalive) else
     result := STATUS_NOTFOUND;
 end;
 
