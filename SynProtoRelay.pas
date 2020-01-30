@@ -133,10 +133,13 @@ uses
   Windows,
   SynWinSock,
   {$else}
+  SynFPCSock, // shared with Kylix
   {$ifdef KYLIX3}
   LibC,
   {$endif}
-  SynFPCSock, // shared with Kylix
+  {$ifdef FPC}
+  SynFPCLinux,
+  {$endif}
   {$endif}
   SysUtils,
   SynCommons,
@@ -146,13 +149,42 @@ uses
   SynCrypto,
   SynLog;
 
+{ ----------------- low-level shared definitions ------------ }
+
+const
+  /// as set to TRelayFrame
+  RELAYFRAME_VER = $aa00;
+
+  /// if TRelayFrame.payload is in fact a TRelayFrameRestPayload
+  focRestPayload = focReservedF;
+
+type
+  /// TRelayFrame.payload for opcode = focRestPayload = focReservedF
+  TRelayFrameRestPayload = packed record
+    status: integer;
+    url, method, headers, contenttype: RawUTF8;
+    content: RawByteString;
+  end;
+  TRelayFrameRestPayloadDynArray = array of TRelayFrameRestPayload;
+
+  /// internal binary serialized content for frames tunnelling
+  TRelayFrame = packed record
+    revision: word;
+    opcode: TWebSocketFrameOpCode;
+    content: TWebSocketFramePayloads;
+    connection: THttpServerConnectionID;
+    payload: RawByteString;
+  end;
+  PRelayFrame = ^TRelayFrame;
+
+
+{ ----------------- low-level WebSockets protocols involved ------------ }
+
 type
   ERelayProtocol = class(ESynException);
 
   TPublicRelay = class;
   TPrivateRelay = class;
-
-{ ----------------- low-level WebSockets protocols involved ------------ }
 
   /// regular mORMot client to Public Relay connection using
   // synopsejson/synopsebin/synopsebinary protocols
@@ -226,11 +258,16 @@ type
     fLog: TSynLogClass;
     fStarted: RawUTF8;
     fSent, fReceived: QWord;
-    fFrames, fValid, fInvalid, fRejected: integer;
+    fFrames, fValid, fInvalid, fRejected, fRestFrames: integer;
+    fRestFrame: array of THttpServerRequest;
+    fRestFrameCount: integer;
+    fRestPending, fRestTimeoutMS: integer;
     function EncapsulateAndSend(Process: TWebSocketProcess; const IP: RawUTF8;
       const Frame: TWebSocketFrame; Connection: THttpServerConnectionID): boolean;
     function Decapsulate(Protocol: TWebSocketProtocol; var Frame: TWebSocketFrame): THttpServerConnectionID;
   public
+    constructor Create(aLog: TSynLogClass); reintroduce;
+    destructor Destroy; override;
   published
     property Started: RawUTF8 read fStarted;
     property Frames: integer read fFrames;
@@ -239,6 +276,8 @@ type
     property Valid: integer read fValid;
     property Invalid: integer read fInvalid;
     property Rejected: integer read fRejected;
+    property RestFrames: integer read fRestFrames;
+    property RestPending: integer read fRestPending;
   end;
 
   /// implements a Public Relay server, e.g. located on a small Linux/BSD box
@@ -247,11 +286,13 @@ type
     fServerJWT: TJWTAbstract;
     fClients, fServer: TWebSocketServer;
     fServerConnected: TWebSocketProcess;
+    fServerConnectedToLocalHost: boolean;
     fStatCache: RawJSON;
     fStatTix: integer;
-    function OnBeforeBody(const aURL,aMethod,aInHeaders, aInContentType,
+    function OnServerBeforeBody(const aURL,aMethod,aInHeaders, aInContentType,
       aRemoteIP: SockString; aContentLength: integer; aUseSSL: boolean): cardinal;
-    function OnRequest(Ctxt: THttpServerRequest): cardinal;
+    function OnServerRequest(Ctxt: THttpServerRequest): cardinal;
+    function OnClientsRequest(Ctxt: THttpServerRequest): cardinal;
     function GetStats: RawJSON;
   public
     /// initialize the Public Relay
@@ -260,7 +301,8 @@ type
     // using the optional aServerKey for TWebSocketProtocol.SetEncryptKey(),
     // and aServerJWT to authenticate the incoming connection (owned by this instance)
     constructor Create(aLog: TSynLogClass; const aClientsPort, aServerPort: SockString;
-      const aServerKey: RawUTF8; aServerJWT: TJWTAbstract); reintroduce;
+      const aServerKey: RawUTF8; aServerJWT: TJWTAbstract;
+      aClientsThreadPoolCount: integer=2; aClientsKeepAliveTimeOut: integer=30000); reintroduce;
     /// finalize the Public Relay server
     destructor Destroy; override;
     /// access to the JWT authentication for TPrivateRelay communication
@@ -344,19 +386,6 @@ implementation
 
 { TAbstractRelay }
 
-const
-  RELAYFRAME_VER = $aa00;
-
-type
-  TRelayFrame = packed record
-    revision: word;
-    opcode: TWebSocketFrameOpCode;
-    content: TWebSocketFramePayloads;
-    connection: THttpServerConnectionID;
-    payload: RawByteString;
-  end;
-  PRelayFrame = ^TRelayFrame;
-
 function TAbstractRelay.EncapsulateAndSend(Process: TWebSocketProcess;
   const IP: RawUTF8; const Frame: TWebSocketFrame; Connection: THttpServerConnectionID): boolean;
 var
@@ -369,12 +398,13 @@ begin
     exit;
   encapsulated.revision := RELAYFRAME_VER;
   encapsulated.opcode := Frame.opcode;
-  encapsulated.content := [];
+  encapsulated.content := Frame.content;
   encapsulated.connection := Connection;
   encapsulated.payload := Frame.payload;
   encapsulated.payload := RecordSave(encapsulated, TypeInfo(TRelayFrame));
-  if encapsulated.opcode = focText then
-    trigger := 512
+  if (encapsulated.opcode in [focText,focRestPayload]) and
+     not (fopAlreadyCompressed in Frame.content) then
+    trigger := WebSocketsBinarySynLzThreshold
   else
     trigger := maxInt; // no compression, just crc32c to avoid most attacks
   encapsulated.payload := AlgoSynLZ.Compress(encapsulated.payload, trigger);
@@ -389,8 +419,8 @@ begin
     inc(fSent, length(Frame.payload));
     inc(fFrames);
   end;
-  fLog.Add.Log(LOG_DEBUGERROR[not result], 'Send % #% % %', [ToText(Frame.opcode)^,
-    Connection, IP, KBNoSpace(length(dest.payload))], self);
+  fLog.Add.Log(LOG_TRACEWARNING[not result], 'EncapsulateAndSend % #% % %',
+   [ToText(Frame.opcode)^, Connection, IP, KBNoSpace(length(dest.payload))], self);
 end;
 
 function TAbstractRelay.Decapsulate(Protocol: TWebSocketProtocol;
@@ -407,7 +437,7 @@ begin
      (length(Frame.payload) > 8) and
      (PRelayFrame(Frame.payload)^.revision = RELAYFRAME_VER) and
      (PRelayFrame(Frame.payload)^.opcode in
-       [focContinuation, focConnectionClose, focBinary, focText]) and
+       [focContinuation, focConnectionClose, focBinary, focText, focRestPayload]) and
      RecordLoad(encapsulated, Frame.payload, TypeInfo(TRelayFrame)) and
      (encapsulated.revision = RELAYFRAME_VER) then begin // paranoid
    Frame.opcode := encapsulated.opcode;
@@ -427,6 +457,31 @@ begin
   end;
 end;
 
+constructor TAbstractRelay.Create(aLog: TSynLogClass);
+begin
+  inherited Create;
+  fStarted := NowUTCToString;
+  if aLog = nil then
+    fLog := TSynLog
+  else
+    fLog := aLog;
+  fRestTimeoutMS := 10000; // wait 10 seconds for the REST request to be relayed
+end;
+
+destructor TAbstractRelay.Destroy;
+var
+  tix: Int64;
+begin
+  fStarted := ''; // notify destroying
+  if fRestPending <> 0 then begin
+   fLog.Add.Log(sllDebug, 'Destroy: RestPending=%', [fRestPending], self);
+    tix := GetTickCount64 + 500;
+    while (fRestPending <> 0) and (GetTickCount64 < tix) do
+      sleep(1);
+  end;
+  inherited Destroy;
+end;
+
 
 { TRelayServerProtocol }
 
@@ -436,7 +491,10 @@ var
   log: TSynLog;
   connection: THttpServerConnectionID;
   sent: boolean;
+  rest: TRelayFrameRestPayload;
   client: TWebSocketServerResp;
+  i: PtrInt;
+  p: ^THttpServerRequest;
 begin
   log := fOwner.fLog.Add;
   log.Log(sllTrace, 'ProcessIncomingFrame % %', [Sender.RemoteIP, ToText(Frame.opcode)^], self);
@@ -446,8 +504,10 @@ begin
       focContinuation:
         if fOwner.fServerConnected <> nil then
           raise ERelayProtocol.Create('Only a single server instance is allowed')
-        else
+        else begin
           fOwner.fServerConnected := Sender;
+          fOwner.fServerConnectedToLocalHost := Sender.RemoteIP = '';
+        end;
       focConnectionClose:
         if fOwner.fServerConnected = Sender then
           fOwner.fServerConnected := nil
@@ -459,21 +519,47 @@ begin
         connection := fOwner.Decapsulate(Sender.Protocol, Frame);
         if connection = 0 then
           exit;
-        client := fOwner.fClients.IsActiveWebSocket(connection);
-        if client = nil then begin
-          log.Log(sllWarning, 'ProcessIncomingFrame: unknown connection #%',
-            [connection], self);
-          if Frame.opcode <> focConnectionClose then begin
-            Frame.opcode := focConnectionClose;
-            Frame.payload := '';
-            fOwner.EncapsulateAndSend(Sender, 'removed', Frame, connection);
+        if Frame.opcode = focRestPayload then begin
+          if RecordLoad(rest, Frame.payload, TypeInfo(TRelayFrameRestPayload)) then begin
+            p := pointer(fOwner.fRestFrame);
+            for i := 1 to fOwner.fRestFrameCount do
+              if p^.RequestID = connection then begin
+                log.Log(sllTrace, 'ProcessIncomingFrame received #%.% % [%]',
+                  [p^.ConnectionID, p^.RequestID, p^.Method, rest.Status], self);
+                if rest.status = 0 then
+                  break;
+                p^.OutContent := rest.content;
+                if rest.contenttype = '' then
+                  p^.OutContentType := JSON_CONTENT_TYPE_VAR
+                else
+                  p^.OutContentType := rest.contenttype;
+                p^.OutCustomHeaders := rest.headers;
+                p^.Status := rest.status; // should be the latest set
+                exit; // will be intercepted by TPublicRelay.OnClientsRequest
+              end
+              else
+                inc(p);
           end;
+          raise ERelayProtocol.CreateUTF8(
+            'Unexpected #$.% focRestPayload in %.ProcessIncomingFrame',[connection, self]);
         end
-        else begin // redirect the frame to the final client
-          sent := client.WebSocketProcess.SendFrame(Frame);
-          log.Log(LOG_DEBUGERROR[not sent], 'ProcessIncomingFrame % #% % %',
-            [ToText(Frame.opcode)^, Connection, client.WebSocketProcess.RemoteIP,
-             KBNoSpace(length(Frame.payload))], self);
+        else begin
+          client := fOwner.fClients.IsActiveWebSocket(connection);
+          if client = nil then begin
+            log.Log(sllWarning, 'ProcessIncomingFrame: unknown connection #%',
+              [connection], self);
+            if Frame.opcode <> focConnectionClose then begin
+              Frame.opcode := focConnectionClose;
+              Frame.payload := '';
+              fOwner.EncapsulateAndSend(Sender, 'removed', Frame, connection);
+            end;
+          end
+          else begin // redirect the frame to the final client
+            sent := client.WebSocketProcess.SendFrame(Frame);
+            log.Log(LOG_DEBUGERROR[not sent], 'ProcessIncomingFrame % #% % %',
+              [ToText(Frame.opcode)^, connection, client.WebSocketProcess.RemoteIP,
+               KBNoSpace(length(Frame.payload))], self);
+          end;
         end;
       end;
       else
@@ -549,7 +635,7 @@ begin
     if not fOwner.EncapsulateAndSend(fOwner.fServerConnected, ip, Frame, Sender.OwnerConnection) and
        (Frame.opcode <> focConnectionClose) then
       raise ERelayProtocol.CreateUTF8('%.ProcessIncomingFrame: Error relaying % from #% % to server',
-        [ToText(Frame.opcode)^, Sender.OwnerConnection, ip])
+        [ToText(Frame.opcode)^, Sender.OwnerConnection, ip]);
   finally
     fOwner.Safe.UnLock;
   end;
@@ -558,7 +644,7 @@ end;
 
 { TPublicRelay }
 
-function TPublicRelay.OnBeforeBody(const aURL, aMethod, aInHeaders,
+function TPublicRelay.OnServerBeforeBody(const aURL, aMethod, aInHeaders,
   aInContentType, aRemoteIP: SockString; aContentLength: integer;
   aUseSSL: boolean): cardinal;
 var
@@ -585,7 +671,7 @@ begin
   end;
 end;
 
-function TPublicRelay.OnRequest(Ctxt: THttpServerRequest): cardinal;
+function TPublicRelay.OnServerRequest(Ctxt: THttpServerRequest): cardinal;
 begin
   if IdemPChar(pointer(Ctxt.URL), '/STAT') then begin
     Ctxt.OutContent := GetStats;
@@ -595,6 +681,81 @@ begin
   end
   else
     result := STATUS_NOTFOUND;
+end;
+
+procedure SetRestFrame(out frame: TWebSocketFrame; status: integer;
+  const url, method, headers, content, contenttype: RawByteString);
+var
+  rest: TRelayFrameRestPayload;
+begin
+  rest.status := status;
+  rest.url := url;
+  rest.method := method;
+  rest.headers := PurgeHeaders(pointer(headers));
+  if (contenttype <> '') and not IdemPropNameU(contenttype, JSON_CONTENT_TYPE_VAR) then
+    rest.contenttype := contenttype;
+  rest.content := content;
+  FrameInit(focRestPayload, rest.content, rest.contenttype, frame);
+  frame.payload := RecordSave(rest,TypeInfo(TRelayFrameRestPayload));
+end;
+
+function TPublicRelay.OnClientsRequest(Ctxt: THttpServerRequest): cardinal;
+var
+  frame: TWebSocketFrame;
+  start, diff: Int64;
+  log: ISynLog;
+begin
+  result := 504; // HTTP_GATEWAYTIMEOUT
+  log := fLog.Enter('OnClientsRequest #%.% % % %', [Ctxt.ConnectionID,
+    Ctxt.RequestID, Ctxt.RemoteIP, Ctxt.Method, Ctxt.URL], self);
+  if Ctxt.RequestID = 0 then
+    raise ERelayProtocol.CreateUTF8('%.OnClientsRequest: RequestID=0', [self]);
+  SetRestFrame(frame, 0, Ctxt.URL, Ctxt.Method, Ctxt.InHeaders,
+    Ctxt.InContent, Ctxt.InContentType);
+  Safe.Lock;
+  try
+    if fServerConnected = nil then
+      raise ERelayProtocol.CreateUTF8('%.OnClientsRequest: No server to relay to', [self]);
+    if not EncapsulateAndSend(fServerConnected, Ctxt.RemoteIP, frame, Ctxt.RequestID) then
+      raise ERelayProtocol.CreateUTF8('%.OnClientsRequest: Error relaying from #% % to server',
+        [Ctxt.ConnectionID, Ctxt.RemoteIP]);
+    ObjArrayAddCount(fRestFrame, Ctxt, fRestFrameCount);
+    inc(fRestFrames);
+  finally
+    Safe.UnLock;
+  end;
+  InterLockedIncrement(fRestPending); // now wait for the response to come
+  try
+    start := GetTickCount64;
+    repeat
+      if Ctxt.Status <> 0 then begin
+        log.Log(sllTrace, 'OnClientsRequest: answer [%] % %',
+          [Ctxt.Status, KB(Ctxt.OutContent), Ctxt.OutContentType], self);
+        result := Ctxt.Status;
+        break;
+      end;
+      diff := GetTickCount64 - start;
+      if (fStarted <> '') and (diff < fRestTimeoutMS) then begin
+        if (diff < 10) and fServerConnectedToLocalHost then
+          SleepHiRes(0) // faster on loopback (e.g. tests)
+        else
+          Sleep(1);
+        continue;
+      end;
+      log.Log(sllTrace, 'OnClientsRequest: timeout after %ms (start=% now=%)',
+        [diff, start, GetTickCount64], self);
+      break;
+    until false;
+  finally
+    InterLockedDecrement(fRestPending);
+    Safe.Lock;
+    try
+      if PtrArrayDelete(fRestFrame, Ctxt, @fRestFrameCount) < 0 then
+        log.Log(sllWarning, 'OnClientsRequest: no Ctxt in fRestFrame[]', self);
+    finally
+      Safe.UnLock;
+    end;
+  end;
 end;
 
 function TPublicRelay.GetStats: RawJSON;
@@ -611,36 +772,36 @@ begin
       ip := fServerConnected.RemoteIP;
     fStatCache := JSONReformat(JsonEncode([
       'version',ExeVersion.Version.Detailed, 'started',Started,
-      'mem',TSynMonitorMemory.ToVariant, 'disk',GetDiskPartitionsText,
+      'memory',TSynMonitorMemory.ToVariant, 'disk free',GetDiskPartitionsText,
       'exceptions',GetLastExceptions, 'connections',fClients.ServerConnectionCount,
       'rejected',Rejected, 'server',ip, 'sent','{','kb',KB(Sent), 'frames',Frames, '}',
       'received','{','kb',KB(Received), 'valid',Valid, 'invalid',Invalid, '}',
+      'rest','{', 'frames',fRestFrameCount, 'pending',fRestPending, '}',
       'connected',fClients.ServerConnectionActive, 'clients',fClients.WebSocketConnections]));
   end;
   result := fStatCache;
 end;
 
 constructor TPublicRelay.Create(aLog: TSynLogClass; const aClientsPort,
-  aServerPort: SockString; const aServerKey: RawUTF8; aServerJWT: TJWTAbstract);
+  aServerPort: SockString; const aServerKey: RawUTF8; aServerJWT: TJWTAbstract;
+  aClientsThreadPoolCount, aClientsKeepAliveTimeOut: integer);
+var
+  log: ISynLog;
 begin
-  if aLog = nil then
-    fLog := TSynLog
-  else
-    fLog := aLog;
-  with fLog.Enter('Create: bind clients on %, server on %, encrypted=% %',
-     [aClientsPort, aServerPort, BOOL_STR[aServerKey<>''], aServerJWT], self) do begin
-    inherited Create;
-    fStarted := NowUTCToString;
-    fServerJWT := aServerJWT;
-    fServer := TWebSocketServer.Create(aServerPort, nil, nil, 'relayserver');
-    if fServerJWT <> nil then
-      fServer.OnBeforeBody := OnBeforeBody;
-    fServer.OnRequest := OnRequest;
-    fServer.WebSocketProtocols.Add(TRelayServerProtocol.Create(self, aServerKey));
-    fClients := TWebSocketServer.Create(aClientsPort, nil, nil, 'relayclients');
-    fClients.WebSocketProtocols.Add(TSynopseServerProtocol.Create(self));
-    Log(sllDebug, 'Create: Server=% Clients=%', [fServer, fClients], self);
-  end;
+  inherited Create(aLog);
+  log := fLog.Enter('Create: bind clients on %, server on %, encrypted=% %',
+     [aClientsPort, aServerPort, BOOL_STR[aServerKey<>''], aServerJWT], self);
+  fServerJWT := aServerJWT;
+  fServer := TWebSocketServer.Create(aServerPort, nil, nil, 'relayserver');
+  if fServerJWT <> nil then
+    fServer.OnBeforeBody := OnServerBeforeBody;
+  fServer.OnRequest := OnServerRequest;
+  fServer.WebSocketProtocols.Add(TRelayServerProtocol.Create(self, aServerKey));
+  fClients := TWebSocketServer.Create(aClientsPort, nil, nil, 'relayclients',
+    aClientsThreadPoolCount, aClientsKeepAliveTimeOut);
+  fClients.WebSocketProtocols.Add(TSynopseServerProtocol.Create(self));
+  fClients.OnRequest := OnClientsRequest;
+  log.Log(sllDebug, 'Create: Server=% Clients=%', [fServer, fClients], self);
 end;
 
 destructor TPublicRelay.Destroy;
@@ -678,6 +839,8 @@ var
   server, tobedeleted: TServerClient;
   connection: THttpServerConnectionID;
   serverindex: integer;
+  rest: TRelayFrameRestPayload;
+  http: THttpClientSocket;
   log: TSynLog;
 begin
   log := fOwner.fLog.Add;
@@ -700,6 +863,36 @@ begin
   connection := fOwner.Decapsulate(Sender.Protocol, Frame);
   if connection = 0 then
     exit;
+  if Frame.opcode = focRestPayload then begin
+    if not RecordLoad(rest, Frame.payload, TypeInfo(TRelayFrameRestPayload)) then
+      raise ERelayProtocol.CreateUTF8('%.ProcessIncomingFrame: focRestPayload payload', [self]);
+    log.Log(sllTrace, 'ProcessIncomingFrame: relay #$.% %', [connection, rest.method], self);
+    try
+      http := THttpClientSocket.Open(fOwner.fServerHost, fOwner.fServerPort);
+      try // use a quick thread-pooled HTTP/1.0 request to the ORM/SOA server
+        if rest.contenttype = '' then
+          rest.contenttype := JSON_CONTENT_TYPE_VAR;
+        rest.status := http.Request(rest.url, rest.method, {keepalive=}0,
+          rest.headers, rest.content, rest.contenttype, {retry=}false);
+        SetRestFrame(Frame, rest.status, '', '', http.HeaderGetText,
+          http.Content, http.ContentType);
+        log.Log(sllTrace, 'ProcessIncomingFrame: answered [%] %', [rest.status, KB(http.content)], self);
+      finally
+        http.Free;
+      end;
+    except
+      on E: Exception do
+        SetRestFrame(Frame, 502 { = bad gateway }, '', '', '',
+          FormatUTF8('% failure: % %', [self, E, E.Message]), TEXT_CONTENT_TYPE);
+    end;
+    fOwner.Safe.Lock;
+    try
+      fOwner.EncapsulateAndSend(Sender, Sender.RemoteIP, Frame, connection);
+    finally
+      fOwner.Safe.UnLock;
+    end;
+    exit;
+  end;
   tobedeleted := nil;
   fOwner.Safe.Lock;
   try
@@ -796,11 +989,7 @@ end;
 constructor TPrivateRelay.Create(aLog: TSynLogClass; const aRelayHost, aRelayPort,
   aRelayKey, aRelayBearer, aServerHost, aServerPort, aServerRemoteIPHeader: RawUTF8);
 begin
-  inherited Create;
-  if aLog = nil then
-    fLog := TSynLog
-  else
-    fLog := aLog;
+  inherited Create(aLog);;
   fRelayHost := aRelayHost;
   fRelayPort := aRelayPort;
   fRelayKey := aRelayKey;
@@ -856,48 +1045,48 @@ function TPrivateRelay.NewServerClient(connection: THttpServerConnectionID;
   const ipprotocoluri: RawUTF8): TServerClient;
 var
   ip, protocol, url, header: RawUTF8;
+  log: ISynLog;
 begin // caller made fSafe.Lock
   split(ipprotocoluri, #13, ip, protocol);
   split(protocol, #13, protocol, url);
-  with fLog.Enter('NewServerClient(%:%) for #% %/% %', [fServerHost, fServerPort,
-     connection, ip, url, protocol], self) do begin
-    if fServerRemoteIPHeader <> '' then
-      header := fServerRemoteIPHeader + ip;
-    result := TServerClient(TServerClient.WebSocketsConnect(fServerHost, fServerPort,
-      TSynopseClientProtocol.Create(self, protocol), fLog, 'NewServerClient', url, header));
-    if result <> nil then begin
-      result.Connection := connection;
-      result.OriginIP := ip;
-      ObjArrayAddCount(fServers, result, fServersCount);
-    end;
-    Log(sllTrace, 'NewServerClient = %', [result], self);
+  log := fLog.Enter('NewServerClient(%:%) for #% %/% %', [fServerHost, fServerPort,
+     connection, ip, url, protocol], self);
+  if fServerRemoteIPHeader <> '' then
+    header := fServerRemoteIPHeader + ip;
+  result := TServerClient(TServerClient.WebSocketsConnect(fServerHost, fServerPort,
+    TSynopseClientProtocol.Create(self, protocol), fLog, 'NewServerClient', url, header));
+  if result <> nil then begin
+    result.Connection := connection;
+    result.OriginIP := ip;
+    ObjArrayAddCount(fServers, result, fServersCount);
   end;
+  log.Log(sllTrace, 'NewServerClient = %', [result], self);
 end;
 
 procedure TPrivateRelay.Disconnect;
 var
   threadsafe: TServerClients;
+  log: ISynLog;
   i: PtrInt;
 begin
   if not Connected then
     exit;
-  with fLog.Enter('Disconnect %:% count=%',
-      [fRelayHost, fRelayPort, fServersCount], self) do begin
-    fSafe.Lock; // avoid deadlock with focConnectionClose notification
-    try
-      threadsafe := fServers; // shutdown all current per-client links
-      SetLength(threadsafe, fServersCount + 1);
-      threadsafe[fServersCount] := pointer(fRelayClient); // + PublicRelay link
-      fServers := nil;
-      fServersCount := 0;
-      fRelayClient := nil;
-    finally
-      fSafe.UnLock;
-    end;
-    for i := 0 to high(threadsafe) do begin
-      Log(sllDebug, 'Disconnect %', [threadsafe[i]], self);
-      threadsafe[i].Free;
-    end;
+  log := fLog.Enter('Disconnect %:% count=%',
+      [fRelayHost, fRelayPort, fServersCount], self);
+  fSafe.Lock; // avoid deadlock with focConnectionClose notification
+  try
+    threadsafe := fServers; // shutdown all current per-client links
+    SetLength(threadsafe, fServersCount + 1);
+    threadsafe[fServersCount] := pointer(fRelayClient); // + PublicRelay link
+    fServers := nil;
+    fServersCount := 0;
+    fRelayClient := nil;
+  finally
+    fSafe.UnLock;
+  end;
+  for i := 0 to high(threadsafe) do begin
+    log.Log(sllDebug, 'Disconnect %', [threadsafe[i]], self);
+    threadsafe[i].Free;
   end;
 end;
 
@@ -916,9 +1105,8 @@ var
   log: ISynLog;
 begin
   log := fLog.Enter('TryConnect %:%', [fRelayHost, fRelayPort], self);
-  if Connected then begin
+  if Connected then
     Disconnect; // will do proper Safe.Lock/UnLock
-  end;
   fSafe.Lock;
   try
     fRelayClient := THttpClientWebSockets.WebSocketsConnect(
@@ -932,20 +1120,21 @@ begin
 end;
 
 destructor TPrivateRelay.Destroy;
+var
+  log: ISynLog;
 begin
-  with fLog.Enter(self, 'Destroy') do
-    try
-      Log(sllDebug, 'Destroying %', [self], self);
-      if Connected then begin
-        Disconnect;
-        Log(sllDebug, 'Destroy: disconnected as %', [self], self);
-      end;
-    except
+  log := fLog.Enter(self, 'Destroy');
+  try
+    log.Log(sllDebug, 'Destroying %', [self], self);
+    if Connected then begin
+      Disconnect;
+      log.Log(sllDebug, 'Destroy: disconnected as %', [self], self);
     end;
+  except
+  end;
   inherited Destroy;
 end;
 
 
-initialization
 end.
 

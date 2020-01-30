@@ -19266,17 +19266,15 @@ begin
     port := HTTP_DEFAULTPORT;
   c1 := NewClient(port);
   try
+    // check plain HTTP REST calls
+    Check(c1.ServerTimestampSynchronize);
+    ServiceDefine(c1,'1');
+    TestRest(c1);
+    // check WebSockets communication
+    CheckEqual(c1.WebSocketsUpgrade(WEBSOCKETS_KEY,Ajax,true), '', 'WebSocketsUpgrade1');
+    TestCallback(c1);
     c2 := NewClient(port);
     try
-      if not Relay then begin // HTTP link not relayed yet
-        Check(c1.ServerTimestampSynchronize);
-        ServiceDefine(c1,'1');
-        TestRest(c1);
-      end;
-      CheckEqual(c1.WebSocketsUpgrade(WEBSOCKETS_KEY,Ajax,true), '', 'WebSocketsUpgrade1');
-      if Relay then // register it now
-        ServiceDefine(c1,'1');
-      TestCallback(c1);
       CheckEqual(c2.WebSocketsUpgrade(WEBSOCKETS_KEY,Ajax,true), '', 'WebSocketsUpgrade2');
       ServiceDefine(c2,'2');
       TestCallback(c2);
@@ -19284,8 +19282,8 @@ begin
         stats := HttpGet('127.0.0.1',fPublicRelayPort,'/stats','');
         check(PosEx('"version"', stats)>0,'stats');
       end;
-      TestRest(c2);
       TestRest(c1);
+      TestRest(c2);
     finally
       c2.Free;
     end;
