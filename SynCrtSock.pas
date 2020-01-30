@@ -5383,13 +5383,13 @@ const
 function TCrtSocket.TrySockRecv(Buffer: pointer; var Length: integer;
   StopBeforeLength: boolean): boolean;
 var expected,read: PtrInt;
-    endtix: Int64;
+    start, diff: Int64;
 begin
   result := false;
   if (self<>nil) and (fSock>0) and (Buffer<>nil) and (Length>0) then begin
     expected := Length;
     Length := 0;
-    endtix := GetTick64+TimeOut;
+    start := GetTick64;
     repeat
       read := expected-Length;
       {$ifdef MSWINDOWS}
@@ -5415,13 +5415,16 @@ begin
           break; // good enough for now
         inc(PByte(Buffer),read);
       end;
-      if GetTick64>endtix then begin
+      diff := GetTick64-start;
+      if diff>=TimeOut then begin
         {$ifdef SYNCRTDEBUGLOW}
-        TSynLog.Add.Log(sllCustom2, 'TrySockRecv: timeout',self);
+        TSynLog.Add.Log(sllCustom2, 'TrySockRecv: timeout (diff=%>%)',[diff,TimeOut],self);
         {$endif}
         exit; // identify read timeout as error
       end;
-      SleepHiRes(1);
+      if diff<100 then
+        SleepHiRes(0) else
+        SleepHiRes(1);
     until false;
     result := true;
   end;
@@ -10465,7 +10468,8 @@ begin
   ProtocolHeaderFound := false;
   p := PHTTP_REQUEST(Ctxt.HttpApiRequest)^.Headers.pUnknownHeaders;
   for j := 1 to PHTTP_REQUEST(Ctxt.HttpApiRequest)^.Headers.UnknownHeaderCount do begin
-    if (p.NameLength=Length(sProtocolHeader)) and IdemPChar(p.pName,Pointer(sProtocolHeader)) then begin
+    if (p.NameLength=Length(sProtocolHeader)) and
+      IdemPChar(p.pName,Pointer(sProtocolHeader)) then begin
       ProtocolHeaderFound := True;
       for i := 0 to Length(fRegisteredProtocols^) - 1 do begin
         ch := p.pRawValue;
@@ -10629,18 +10633,20 @@ end;
 
 procedure TSynWebSocketGuard.Execute;
 var i, j: Integer;
+    prot: THttpApiWebSocketServerProtocol;
 begin
   if fServer.fPingTimeout>0 then
     while not Terminated do begin
       if fServer<>nil then
         for i := 0 to Length(fServer.fRegisteredProtocols^)-1 do begin
-          EnterCriticalSection(fServer.fRegisteredProtocols^[i].fSafe);
+          prot := fServer.fRegisteredProtocols^[i];
+          EnterCriticalSection(prot.fSafe);
           try
-            for j := 0 to fServer.fRegisteredProtocols^[i].fConnectionsCount - 1 do
-              if Assigned(fServer.fRegisteredProtocols^[i].fConnections[j]) then
-                fServer.fRegisteredProtocols^[i].fConnections[j].CheckIsActive;
+            for j := 0 to prot.fConnectionsCount - 1 do
+              if Assigned(prot.fConnections[j]) then
+                prot.fConnections[j].CheckIsActive;
           finally
-            LeaveCriticalSection(fServer.fRegisteredProtocols^[i].fSafe);
+            LeaveCriticalSection(prot.fSafe);
           end;
         end;
       i := 0;

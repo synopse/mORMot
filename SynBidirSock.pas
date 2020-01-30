@@ -73,14 +73,13 @@ uses
   Windows,
   SynWinSock,
   {$else}
+  SynFPCSock, // shared with Kylix
   {$ifdef KYLIX3}
   LibC,
   Types,
-  SynFPCSock, // shared with Kylix
   SynKylix,
   {$endif}
   {$ifdef FPC}
-  SynFPCSock,
   SynFPCLinux,
   {$endif}
   {$endif}
@@ -154,6 +153,10 @@ type
     /// read-only access to the connected server
     property URI: TURI read fURI;
   end;
+
+
+/// will remove most usual HTTP headers which are to be recomputed on sending
+function PurgeHeaders(P: PUTF8Char): RawUTF8;
 
 
 { ------------ client or server asynchronous process of multiple connections }
@@ -1067,10 +1070,11 @@ type
     // - in the current implementation, the ServerThreadPoolCount parameter will
     // use two threads by default to handle shortliving HTTP/1.0 "connection: close"
     // requests, and one thread will be maintained per keep-alive/websockets client
-    // - by design, the KeepAliveTimeOut=0 value is ignored with this server
+    // - by design, the KeepAliveTimeOut value is ignored with this server
+    // once it has been upgraded to WebSockets
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
       const ProcessName: SockString; ServerThreadPoolCount: integer=2;
-      KeepAliveTimeOut: integer=3000); override;
+      KeepAliveTimeOut: integer=30000); override;
     /// close the server
     destructor Destroy; override;
     /// will send a given frame to all connected clients
@@ -1149,6 +1153,10 @@ function ToText(opcode: TWebSocketFrameOpCode): PShortString; overload;
 
 /// used to return the text corresponding to a specified WebSockets sending mode
 function ToText(mode: TWebSocketProcessNotifyCallback): PShortString; overload;
+
+/// low-level intitialization of a TWebSocketFrame for proper REST content
+procedure FrameInit(opcode: TWebSocketFrameOpCode; const Content, ContentType: RawByteString;
+  out frame: TWebSocketFrame);
 
 
 { -------------- WebSockets Client classes for bidirectional remote access }
@@ -1391,6 +1399,32 @@ begin
     result := true;
 end;
 
+
+function PurgeHeaders(P: PUTF8Char): RawUTF8;
+var
+  tmp: TTextWriterStackBuffer;
+  next: PUTF8Char;
+  W: TTextWriter;
+begin
+  result := '';
+  W := nil;
+  try
+    while P <> nil do begin
+      next := GotoNextLine(P);
+      if IdemPCharArray(P, ['CONTENT-', 'CONNECTION:', 'KEEP-ALIVE:', 'TRANSFER-',
+         'X-POWERED', 'USER-AGENT', 'REMOTEIP:', 'HOST:', 'ACCEPT:']) < 0 then begin
+        if W = nil then
+          W := TTextWriter.CreateOwnedStream(tmp);
+        W.AddNoJSONEscape(P, next - P);
+      end;
+      P := next;
+    end;
+    if W <> nil then
+      W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
 
 
 { -------------- WebSockets shared classes for bidirectional remote access }
@@ -2020,6 +2054,17 @@ end;
 const
   FRAME_HEAD_SEP = #1;
 
+procedure FrameInit(opcode: TWebSocketFrameOpCode; const Content, ContentType: RawByteString;
+  out frame: TWebSocketFrame);
+begin
+  frame.opcode := opcode;
+  if (ContentType<>'') and (Content<>'') and
+     not IdemPChar(pointer(ContentType),'TEXT/') and
+     IsContentCompressed(pointer(Content),length(Content)) then
+    frame.content := [fopAlreadyCompressed] else
+    frame.content := [];
+end;
+
 procedure TWebSocketProtocolBinary.FrameCompress(const Head: RawUTF8;
   const Values: array of const; const Content, ContentType: RawByteString;
   var frame: TWebSocketFrame);
@@ -2027,12 +2072,7 @@ var item: RawUTF8;
     i: integer;
     W: TFileBufferWriter;
 begin
-  frame.opcode := focBinary;
-  if (ContentType<>'') and (Content<>'') and
-     not IdemPChar(pointer(ContentType),'TEXT/') and
-     IsContentCompressed(pointer(Content),length(Content)) then
-    frame.content := [fopAlreadyCompressed] else
-    frame.content := [];
+  FrameInit(focBinary,Content,ContentType,frame);
   W := TFileBufferWriter.Create(TRawByteStringStream);
   try
     W.WriteBinary(Head);
@@ -2620,7 +2660,7 @@ end;
 
 function TWebSocketProcess.RemoteIP: SockString;
 begin
-  if (self=nil) or (fProtocol=nil) then
+  if (self=nil) or (fProtocol=nil) or fProtocol.fRemoteLocalhost then
     result := '' else
     result := fProtocol.fRemoteIP;
 end;
