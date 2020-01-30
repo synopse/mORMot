@@ -26705,19 +26705,19 @@ function GetVersionEx(var lpVersionInformation: TOSVersionInfoEx): BOOL; stdcall
   external kernel32 name 'GetVersionExA';
 {$endif}
 
-var
-  GetTickXP: Int64Rec;
+threadvar // mandatory: GetTickCount seems per-thread on XP :(
+  LastTickXP: TQWordRec;
 
 function GetTickCount64ForXP: Int64; stdcall;
 var t32: cardinal;
-    t64: Int64Rec absolute result;
+    p: PQWordRec;
 begin // warning: GetSystemTimeAsFileTime() is fast, but not monotonic!
   t32 := Windows.GetTickCount;
-  t64 := GetTickXP; // (almost) atomic read
-  if t32<t64.Lo then
-    inc(t64.Hi); // wrap-up overflow after 49 days
-  t64.Lo := t32;
-  GetTickXP := t64; // (almost) atomic write
+  p := @LastTickXP;
+  if t32<p^.L then
+    inc(p^.H); // wrap-up overflow after 49 days
+  p^.L := t32;
+  result := p^.V;
 end; // warning: FPC's GetTickCount64 doesn't handle 49 days wrap :(
 
 {$ifdef FPC} // oddly not defined in fpc\rtl\win
