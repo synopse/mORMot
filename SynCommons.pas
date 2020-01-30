@@ -4218,15 +4218,13 @@ function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): Pt
 // - Count is the number of Int64 entries in P^
 // - returns P where P^=Value
 // - returns nil if Value was not found
-function Int64Scan(P: PInt64; Count: PtrInt; const Value: Int64): PInt64;
-  {$ifdef HASINLINE}inline;{$endif}
+function Int64Scan(P: PInt64Array; Count: PtrInt; const Value: Int64): PInt64;
 
 /// fast search of an integer position in a signed 64-bit integer array
 // - Count is the number of Int64 entries in P^
 // - returns index of P^[index]=Value
 // - returns -1 if Value was not found
-function Int64ScanIndex(P: PInt64; Count: PtrInt; const Value: Int64): PtrInt;
-  {$ifdef HASINLINE}inline;{$endif}
+function Int64ScanIndex(P: PInt64Array; Count: PtrInt; const Value: Int64): PtrInt;
 
 /// fast search of an integer position in an unsigned 64-bit integer array
 // - Count is the number of QWord entries in P^
@@ -4243,8 +4241,7 @@ function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): b
 /// fast search of an integer value in a 64-bit integer array
 // - returns true if P^=Value within Count entries
 // - returns false if Value was not found
-function Int64ScanExists(P: PInt64; Count: PtrInt; const Value: Int64): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+function Int64ScanExists(P: PInt64Array; Count: PtrInt; const Value: Int64): boolean;
 
 /// fast search of a pointer-sized unsigned integer position
 // in an pointer-sized integer array
@@ -4266,14 +4263,14 @@ function PtrUIntScanExists(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): boo
 // - Count is the number of Byte entries in P^
 // - return index of P^[index]=Value
 // - return -1 if Value was not found
-function ByteScanIndex(P: PByte; Count: PtrInt; Value: Byte): PtrInt;
+function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: Byte): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast search of an unsigned Word value position in a Word array
 // - Count is the number of Word entries in P^
 // - return index of P^[index]=Value
 // - return -1 if Value was not found
-function WordScanIndex(P: PWord; Count: PtrInt; Value: word): PtrInt;
+function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast search of a binary value position in a fixed-size array
@@ -30810,151 +30807,52 @@ begin
     result := false;
 end;
 
-function Int64ScanExists(P: PInt64; Count: PtrInt; const Value: Int64): boolean;
-begin // optimized for proper inlining
-  Count := Count shl 3;
-  if (Count<>0) and (P<>nil) then begin
+function Int64ScanExists(P: PInt64Array; Count: PtrInt; const Value: Int64): boolean;
+var i: PtrInt;
+begin
+  if P<>nil then begin
     result := true;
-    inc(Count,PtrInt(P));
-    repeat
-      if P^=Value then
+    for i := 1 to (Count shr 2) do   // 4 QWORD by loop - aligned read
+      if (P^[0]=Value) or (P^[1]=Value) or
+         (P^[2]=Value) or (P^[3]=Value) then
+        exit else
+        inc(PByte(P),SizeOf(P^[0])*4);
+    for i := 0 to (Count and 3)-1 do // last 0..3 QWORD
+      if P^[i]=Value then
         exit;
-      inc(P);
-    until PtrInt(PtrUInt(P))=Count;
   end;
   result := false;
 end;
 
-function Int64Scan(P: PInt64; Count: PtrInt; const Value: Int64): PInt64;
-begin // optimized for proper inlining
-  result := P;
-  if P=nil then
-    exit;
-  Count := Count shl 3;
-  if Count<>0 then begin
-    inc(Count,PtrInt(P));
-    repeat
-      if result^=Value then
+function Int64Scan(P: PInt64Array; Count: PtrInt; const Value: Int64): PInt64;
+var i: PtrInt;
+begin
+  if P<>nil then begin
+    for i := 1 to Count shr 2 do      // 4 QWORD by loop - aligned read
+      if P^[0]<>Value then
+      if P^[1]<>Value then
+      if P^[2]<>Value then
+      if P^[3]=Value then begin
+        result := @P^[3];
         exit;
-      inc(result);
-    until PtrInt(PtrUInt(result))=Count;
-    result := nil;
-  end;
-end;
-
-function Int64ScanIndex(P: PInt64; Count: PtrInt; const Value: Int64): PtrInt;
-begin // optimized for proper inlining
-  Count := Count shl 3;
-  if (Count<>0) and (P<>nil) then begin
-    result := 0;
-    inc(Count,PtrInt(P));
-    repeat
-      if P^=Value then
+      end else
+        inc(PByte(P),SizeOf(P^[0])*4) else begin
+        result := @P^[2];
         exit;
-      inc(result);
-      inc(P);
-    until PtrInt(PtrUInt(P))=Count;
-  end;
-  result := -1;
-end;
-
-function QWordScanIndex(P: PQWordArray; Count: PtrInt; const Value: QWord): PtrInt;
-begin
-  result := Int64ScanIndex(pointer(P),Count,Value); // this is the very same code
-end;
-
-function PtrUIntScanExists(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): boolean;
-{$ifdef HASINLINE}
-begin
-  result := {$ifdef CPU64}Int64ScanExists{$else}IntegerScanExists{$endif}(pointer(P),Count,Value);
-end;
-{$else}
-asm
-  jmp IntegerScanExists;
-end;
-{$endif HASINLINE}
-
-function PtrUIntScanIndex(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): PtrInt;
-{$ifdef HASINLINE}
-begin
-  result := {$ifdef CPU64}Int64ScanIndex{$else}IntegerScanIndex{$endif}(pointer(P),Count,Value);
-end;
-{$else}
-asm // identical to IntegerScanIndex() asm stub
-        push    eax
-        call    IntegerScan
-        pop     edx
-        test    eax, eax
-        jnz     @e
-        dec     eax // returns -1
-        ret
-@e:     sub     eax, edx
-        shr     eax, 2
-end;
-{$endif HASINLINE}
-
-function ByteScanIndex(P: PByte; Count: PtrInt; Value: Byte): PtrInt;
-begin
-{$ifdef FPC}
-  result := IndexByte(P^,Count,Value); // will use fast FPC SSE version
-{$else}
-  if (Count>0) and (P<>nil) then begin
-    result := 0;
-    inc(Count,PtrInt(P));
-    repeat
-      if P^=Value then
+      end else begin
+        result := @P^[1];
         exit;
-      inc(result);
-      inc(P);
-    until PtrInt(PtrUInt(P))=Count;
-  end;
-  result := -1;
-{$endif FPC}
-end;
-
-function WordScanIndex(P: PWord; Count: PtrInt; Value: word): PtrInt;
-begin
-{$ifdef FPC}
-  result := IndexWord(P^,Count,Value); // will use fast FPC SSE version
-{$else}
-  if (Count>0) and (P<>nil) then begin
-    result := 0;
-    inc(Count,PtrInt(P));
-    repeat
-      if P^=Value then
+      end else begin
+        result := pointer(P);
         exit;
-      inc(result);
-      inc(P);
-    until PtrInt(PtrUInt(P))=Count;
+      end;
+    for i := 0 to (Count and 3)-1 do  // last 0..3 QWORD
+      if P^[i]=Value then begin
+        result := @P^[i];
+        exit;
+      end;
   end;
-  result := -1;
-{$endif FPC}
-end;
-
-function AnyScanIndex(P,Elem: pointer; Count,ElemSize: PtrInt): PtrInt;
-begin
-  case ElemSize of
-    // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
-    1: result := ByteScanIndex(P,Count,PByte(Elem)^);
-    2: result := WordScanIndex(P,Count,PWord(Elem)^);
-    4: result := IntegerScanIndex(P,Count,PInteger(Elem)^);
-    8: result := Int64ScanIndex(P,Count,PInt64(Elem)^);
-    // small ElemSize version (<SizeOf(PtrInt))
-    3{$ifdef CPU64},5..7{$endif}: begin
-      for result := 0 to Count-1 do
-        if CompareMemSmall(P,Elem,ElemSize) then
-          exit else
-          inc(PByte(P),ElemSize);
-      result := -1;
-    end;
-  else begin // generic binary comparison (fast with inlined CompareMemFixed)
-    for result := 0 to Count-1 do
-      if CompareMemFixed(P,Elem,ElemSize) then
-        exit else
-        inc(PByte(P),ElemSize);
-    result := -1;
-  end;
-  end;
+  result := nil;
 end;
 
 function AddInteger(var Values: TIntegerDynArray; Value: integer;
@@ -31565,6 +31463,122 @@ function Int64DynArrayToCSV(const Values: TInt64DynArray;
   const Prefix: RawUTF8; const Suffix: RawUTF8; InlinedValue: boolean): RawUTF8;
 begin
   result := Int64DynArrayToCSV(pointer(Values),length(Values),Prefix,Suffix,InlinedValue);
+end;
+
+function Int64ScanIndex(P: PInt64Array; Count: PtrInt; const Value: Int64): PtrInt;
+var i: PtrInt; // optimized code for speed
+begin
+  if P<>nil then begin
+    result := 0;
+    for i := 1 to Count shr 2 do // 4 PtrUInt by loop - aligned read
+      if P^[0]<>Value then
+      if P^[1]<>Value then
+      if P^[2]<>Value then
+      if P^[3]<>Value then begin
+        inc(PByte(P),SizeOf(P^[0])*4);
+        inc(result,4);
+      end else begin
+        inc(result,3);
+        exit;
+      end else begin
+        inc(result,2);
+        exit;
+      end else begin
+        inc(result,1);
+        exit;
+      end else
+        exit;
+    for i := 0 to (Count and 3)-1 do // last 0..3 Int64
+      if P^[i]=Value then
+        exit else
+        inc(result);
+  end;
+  result := -1;
+end;
+
+function QWordScanIndex(P: PQWordArray; Count: PtrInt; const Value: QWord): PtrInt;
+begin
+  result := Int64ScanIndex(pointer(P),Count,Value); // this is the very same code
+end;
+
+function PtrUIntScanExists(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): boolean;
+{$ifdef HASINLINE}
+begin
+  result := {$ifdef CPU64}Int64ScanExists{$else}IntegerScanExists{$endif}(pointer(P),Count,Value);
+end;
+{$else}
+asm
+  jmp IntegerScanExists;
+end;
+{$endif HASINLINE}
+
+function PtrUIntScanIndex(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): PtrInt;
+{$ifdef HASINLINE}
+begin
+  result := {$ifdef CPU64}Int64ScanIndex{$else}IntegerScanIndex{$endif}(pointer(P),Count,Value);
+end;
+{$else}
+asm // identical to IntegerScanIndex() asm stub
+        push    eax
+        call    IntegerScan
+        pop     edx
+        test    eax, eax
+        jnz     @e
+        dec     eax // returns -1
+        ret
+@e:     sub     eax, edx
+        shr     eax, 2
+end;
+{$endif HASINLINE}
+
+function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: Byte): integer;
+begin
+{$ifdef FPC}
+  result := IndexByte(P^,Count,Value); // will use fast FPC SSE version
+{$else}
+  for result := 0 to Count-1 do
+    if P^[result]=Value then
+      exit;
+  result := -1;
+{$endif FPC}
+end;
+
+function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): integer;
+begin
+{$ifdef FPC}
+  result := IndexWord(P^,Count,Value); // will use fast FPC SSE version
+{$else}
+  for result := 0 to Count-1 do
+    if P^[result]=Value then
+      exit;
+  result := -1;
+{$endif FPC}
+end;
+
+function AnyScanIndex(P,Elem: pointer; Count,ElemSize: PtrInt): PtrInt;
+begin
+  case ElemSize of
+    // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
+    1: result := ByteScanIndex(P,Count,PByte(Elem)^);
+    2: result := WordScanIndex(P,Count,PWord(Elem)^);
+    4: result := IntegerScanIndex(P,Count,PInteger(Elem)^);
+    8: result := Int64ScanIndex(P,Count,PInt64(Elem)^);
+    // small ElemSize version (<SizeOf(PtrInt))
+    3{$ifdef CPU64},5..7{$endif}: begin
+      for result := 0 to Count-1 do
+        if CompareMemSmall(P,Elem,ElemSize) then
+          exit else
+          inc(PByte(P),ElemSize);
+      result := -1;
+    end;
+  else begin // generic binary comparison (fast with inlined CompareMemFixed)
+    for result := 0 to Count-1 do
+      if CompareMemFixed(P,Elem,ElemSize) then
+        exit else
+        inc(PByte(P),ElemSize);
+    result := -1;
+  end;
+  end;
 end;
 
 procedure QuickSortInteger(ID: PIntegerArray; L,R: PtrInt);
