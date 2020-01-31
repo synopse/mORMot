@@ -13806,8 +13806,9 @@ function GetTickCount64: Int64;
 /// overloaded function optimized for one pass file reading
 // - will use e.g. the FILE_FLAG_SEQUENTIAL_SCAN flag under Windows, as stated
 // by http://blogs.msdn.com/b/oldnewthing/archive/2012/01/20/10258690.aspx
-// - under XP, we observed ERROR_NO_SYSTEM_RESOURCES problems with FileRead()
-// bigger than 32MB
+// - note: under XP, we observed ERROR_NO_SYSTEM_RESOURCES problems when calling
+// FileRead() for chunks bigger than 32MB on files opened with this flag,
+// so it would use regular FileOpen() on this deprecated OS
 // - under POSIX, calls plain FileOpen(FileName,fmOpenRead or fmShareDenyNone)
 // - is used e.g. by StringFromFile() and TSynMemoryStreamMapped.Create()
 function FileOpenSequentialRead(const FileName: string): Integer;
@@ -23021,11 +23022,12 @@ begin
   if (uppersubstr<>nil) and (str<>nil) then begin
     {$ifndef CPUX86NOTPIC}table := @NormToUpperAnsi7;{$endif}
     u := uppersubstr^;
+    inc(uppersubstr);
     result := str;
     while result^<>#0 do begin
       if table[result^]=u then
         if {$ifdef CPUX86NOTPIC}IdemPChar({$else}IdemPChar2(table,{$endif}
-           result+1,PAnsiChar(uppersubstr)+1) then
+           result+1,PAnsiChar(uppersubstr)) then
           exit;
       inc(result);
     end;
@@ -27098,12 +27100,12 @@ end;
 function FileOpenSequentialRead(const FileName: string): Integer;
 begin
   {$ifdef MSWINDOWS}
-  result := CreateFile(pointer(FileName),GENERIC_READ,
-    FILE_SHARE_READ or FILE_SHARE_WRITE,nil, // same as fmShareDenyNone
-    OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN,0);
-  {$else}
-  result := FileOpen(FileName,fmOpenRead or fmShareDenyNone);
+  if OSVersion>=wVista then // don't use the flag on XP
+    result := CreateFile(pointer(FileName),GENERIC_READ,
+      FILE_SHARE_READ or FILE_SHARE_WRITE,nil, // same as fmShareDenyNone
+      OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN,0) else
   {$endif MSWINDOWS}
+    result := FileOpen(FileName,fmOpenRead or fmShareDenyNone);
 end;
 
 function FileStreamSequentialRead(const FileName: string): TFileStream;
@@ -62597,15 +62599,11 @@ begin
   end;
 end;
 
-const
-  /// 128 MB default buffer
-  FILESYNLZ_BLOCKSIZE = 128*1024*1024;
-
 function FileSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
 var src,dst: RawByteString;
     S,D: TFileStream;
     Head: TSynLZHead;
-    Count: Int64;
+    Count,Max: Int64;
 begin
   result := false;
   if FileExists(Source) then
@@ -62613,19 +62611,29 @@ begin
     S := FileStreamSequentialRead(Source);
     try
       DeleteFile(Dest);
+      Max := 128 shl 20; // 128 MB default compression chunk
       D := TFileStream.Create(Dest,fmCreate);
       try
         Head.Magic := Magic;
         Count := S.Size;
         while Count>0 do begin
-          if Count>FILESYNLZ_BLOCKSIZE then
-            Head.UnCompressedSize := FILESYNLZ_BLOCKSIZE else
+          if Count>Max then
+            Head.UnCompressedSize := Max else
             Head.UnCompressedSize := Count;
           if src='' then
             SetString(src,nil,Head.UnCompressedSize);
           if dst='' then
             SetString(dst,nil,SynLZcompressdestlen(Head.UnCompressedSize));
-          S.Read(pointer(src)^,Head.UnCompressedSize);
+          Head.UnCompressedSize := S.Read(pointer(src)^,Head.UnCompressedSize);
+          {$ifdef MSWINDOWS}
+          if (Head.UnCompressedSize<=0) and
+             (GetLastError=ERROR_NO_SYSTEM_RESOURCES) then begin
+            Max := 32 shl 20; // we observed a 32MB chunk size limitation on XP
+            Head.UnCompressedSize := S.Read(pointer(src)^,Max);
+          end;
+          {$endif MSWINDOWS}
+          if Head.UnCompressedSize<=0 then
+            exit; // read error
           Head.HashUncompressed := Hash32(pointer(src),Head.UnCompressedSize);
           Head.CompressedSize :=
             SynLZcompress1(pointer(src),Head.UnCompressedSize,pointer(dst));
