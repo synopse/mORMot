@@ -1124,20 +1124,18 @@ type
     fBatchSendingAbilities: TSQLDBStatementCRUDs;
     fBatchMaxSentAtOnce: integer;
     fLoggedSQLMaxSize: integer;
-    fLogSQLStatementOnException: boolean;
     fOnBatchInsert: TOnBatchInsert;
+    fDBMS: TSQLDBDefinition;
+    fUseCache, fStoreVoidStringAsNull, fLogSQLStatementOnException,
+    fRollbackOnDisconnect, fReconnectAfterConnectionError: boolean;
     {$ifndef UNICODE}
     fVariantWideString: boolean;
     {$endif}
-    fUseCache: boolean;
-    fRollbackOnDisconnect: boolean;
-    fStoreVoidStringAsNull: boolean;
     fForeignKeys: TSynNameValue;
     fSQLCreateField: TSQLDBFieldTypeDefinition;
     fSQLCreateFieldMax: cardinal;
     fSQLGetServerTimestamp: RawUTF8;
     fEngineName: RawUTF8;
-    fDBMS: TSQLDBDefinition;
     fOnProcess: TOnSQLDBProcess;
     fOnStatementInfo: TOnSQLDBInfo;
     fConnectionTimeOutTicks: Int64;
@@ -1331,6 +1329,14 @@ type
     // amLocked, amBackgroundThread or amMainThread
     property ConnectionTimeOutMinutes: cardinal
       read GetConnectionTimeOutMinutes write SetConnectionTimeOutMinutes;
+    /// intercept connection errors at statement preparation and try to reconnect
+    // - i.e. detect TSQLDBConnection.LastErrorWasAboutConnection in
+    // TSQLDBConnection.NewStatementPrepared
+    // - warning: no connection shall still be used on the background (e.g. in
+    // multi-threaded applications), or some unexpected issues may occur - see
+    // AcquireExecutionMode[] recommendations in ConnectionTimeOutMinutes
+    property ReconnectAfterConnectionError: boolean
+      read fReconnectAfterConnectionError write fReconnectAfterConnectionError;
     /// create a new thread-safe statement
     // - this method will call ThreadSafeConnection.NewStatement
     function NewThreadSafeStatement: TSQLDBStatement;
@@ -1776,10 +1782,12 @@ type
     // - this method should return a prepared statement instance on success
     // - on error, if RaiseExceptionOnError=false (by default), it returns nil
     // and you can check LastErrorMessage and LastErrorException properties to
-    // retrieve correspnding error information
+    // retrieve corresponding error information
+    // - if TSQLDBConnectionProperties.ReconnectAfterConnectionError is set,
+    // any connection error will be trapped, unless AllowReconnect is false
     // - on error, if RaiseExceptionOnError=true, an exception is raised
-    function NewStatementPrepared(const aSQL: RawUTF8;
-      ExpectResults: Boolean; RaiseExceptionOnError: Boolean=false): ISQLDBStatement; virtual;
+    function NewStatementPrepared(const aSQL: RawUTF8; ExpectResults: Boolean;
+      RaiseExceptionOnError: Boolean=false; AllowReconnect: Boolean=true): ISQLDBStatement; virtual;
     /// begin a Transaction for this connection
     // - this default implementation will check and set TransactionCount
     procedure StartTransaction; virtual;
@@ -4039,14 +4047,15 @@ begin
   until P^=#0;
   Connection.InternalProcess(speActive);
   try
-    fPrepared := Connection.NewStatementPrepared(new,ExpectResults);
+    fPrepared := Connection.NewStatementPrepared(new,ExpectResults,
+      {raiseexc=}false,{allowreconnect=}false);
     if fPrepared=nil then
       try
         if Connection.LastErrorWasAboutConnection then begin
           SynDBLog.Add.Log(sllDB,'TQuery.Execute() now tries to reconnect');
           Connection.Disconnect;
           Connection.Connect;
-          fPrepared := Connection.NewStatementPrepared(new,ExpectResults);
+          fPrepared := Connection.NewStatementPrepared(new,ExpectResults,false,false);
           if fPrepared=nil then
             raise ESQLQueryException.CreateFromError('Unable to reconnect DB',Connection);
         end else
@@ -4221,17 +4230,52 @@ begin
 end;
 
 function TSQLDBConnection.NewStatementPrepared(const aSQL: RawUTF8;
-  ExpectResults: Boolean; RaiseExceptionOnError: Boolean=false): ISQLDBStatement;
+  ExpectResults, RaiseExceptionOnError, AllowReconnect: Boolean): ISQLDBStatement;
 var Stmt: TSQLDBStatement;
     ToCache: boolean;
     ndx,altern: integer;
     cachedSQL: RawUTF8;
-begin
-  fErrorMessage := '';
-  if length(aSQL)<5 then begin
-    result := nil;
-    exit;
+
+  procedure TryPrepare(doraise: boolean);
+  var Stmt: TSQLDBStatement;
+  begin
+    Stmt := nil;
+    try
+      InternalProcess(speActive);
+      try
+        Stmt := NewStatement;
+        Stmt.Prepare(aSQL,ExpectResults);
+        if ToCache then begin
+          if fCache=nil then
+            fCache := TRawUTF8ListHashed.Create(true);
+          fCache.AddObject(cachedSQL,Stmt);
+          Stmt._AddRef;
+        end;
+        result := Stmt;
+      finally
+        InternalProcess(speNonActive);
+      end;
+    except
+      on E: Exception do begin
+        with SynDBLog.Add do
+          if [sllSQL,sllDB,sllException,sllError]*Family.Level<>[] then
+            LogLines(sllSQL,pointer(Stmt.SQLWithInlinedParams),self,'--');
+        Stmt.Free;
+        result := nil;
+        StringToUTF8(E.Message,fErrorMessage);
+        fErrorException := PPointer(E)^;
+        if doraise then
+          raise;
+      end;
+    end;
   end;
+begin
+  result := nil;
+  fErrorMessage := '';
+  fErrorException := nil;
+  if length(aSQL)<5 then
+    exit;
+  // first check if could be retrieved from cache
   ToCache := fProperties.IsCachable(Pointer(aSQL));
   if ToCache and (fCache<>nil) then begin
     cachedSQL := aSQL;
@@ -4262,33 +4306,32 @@ begin
       end;
     end;
   end;
-  // default implementation with no cache
-  Stmt := nil;
-  try
-    InternalProcess(speActive);
+  // not in cache (or not cachable) -> prepare now
+  if fProperties.ReconnectAfterConnectionError and AllowReconnect then begin
+    TryPrepare({doraise=}false);
+    if result<>nil then
+      exit; // success
+    if LastErrorWasAboutConnection then
     try
-      Stmt := NewStatement;
-      Stmt.Prepare(aSQL,ExpectResults);
-      if ToCache then begin
-        if fCache=nil then
-          fCache := TRawUTF8ListHashed.Create(true);
-        fCache.AddObject(cachedSQL,Stmt);
-        Stmt._AddRef;
+      SynDBLog.Add.Log(sllDB, 'NewStatementPrepared: reconnect after %',[fErrorException],self);
+      Disconnect;
+      Connect;
+      TryPrepare(RaiseExceptionOnError);
+      if result=nil then begin
+        SynDBLog.Add.Log(sllDB, 'NewStatementPrepared: unable to reconnect',self);
+        InternalProcess(speConnectionLost);
       end;
-      result := Stmt;
-    finally
-      InternalProcess(speNonActive);
-    end;
-  except
-    on E: Exception do begin
-      Stmt.Free;
+    except
       if RaiseExceptionOnError then
-        raise;
-      StringToUTF8(E.Message,fErrorMessage);
-      fErrorException := PPointer(E)^;
-      result := nil;
-    end;
-  end;
+        raise else
+        result := nil;
+    end
+    else if RaiseExceptionOnError and (fErrorException<>nil) then
+      // propagate error not related to connection (e.g. SQL syntax error)
+      raise fErrorException.Create(UTF8ToString(fErrorMessage));
+  end else
+    // regular preparation, with no connection error interception
+    TryPrepare(RaiseExceptionOnError);
 end;
 
 procedure TSQLDBConnection.Rollback;
@@ -5963,8 +6006,8 @@ begin // see more complete list in feature request [f024266c0839]
     result := IdemPCharArray(PosErrorNumber(aMessage,'['),
       ['08001','08S01','08007','28000','42000'])>=0;
   dMySQL:
-    result := (aMessage = 'SQL Error: Lost connection to MySQL server during query') or
-              (aMessage = 'SQL Error: MySQL server has gone away');
+    result := (PosEx('Lost connection to MySQL server',aMessage)>0) or
+              (PosEx('MySQL server has gone away',aMessage)>0);
   else
     result := PosI(' CONNE',aMessage)>0;
   end;
