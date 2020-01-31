@@ -1110,21 +1110,21 @@ type
     fRestServer: TSQLRestServerDB;
     // Http server
     fHttpServer: TSQLHttpServer;
-    /// Will create as many Clients as specified by aClient.
-    // - Each client will perform as many Requests as specified by aRequests.
-    // - This function will wait for all Clients until finished.
+    /// will create as many Clients as specified by aClient.
+    // - each client will perform as many Requests as specified by aRequests.
+    // - this function will wait for all Clients until finished.
     function ClientTest(const aClients, aRequests: integer): boolean;
   protected
-    /// Cleaning up the test
+    /// cleaning up the test
     procedure CleanUp; override;
   published
-    /// Delete any old Test database on start
+    /// delete any old Test database on start
     procedure DeleteOldDatabase;
-    /// Start the whole DDD Server (http and rest)
+    /// start the whole DDD Server (http and rest)
     procedure StartServer;
-    /// Test straight-forward access using 1 thread and 1 client
+    /// test straight-forward access using 1 thread and 1 client
     procedure SingleClientTest;
-    /// Test concurrent access with multiple clients
+    /// test concurrent access with multiple clients
     procedure MultiThreadedClientsTest;
   end;
 

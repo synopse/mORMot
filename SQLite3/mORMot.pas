@@ -48,6 +48,7 @@ unit mORMot;
     Pavel Mashlyakovskii (mpv)
     Sabbiolina
     Transmogrifix
+    Uian2000
     Vadim Orel
 
   Alternatively, the contents of this file may be used under the terms of
@@ -11519,6 +11520,7 @@ type
     /// initialize an instance, defining one dependency resolver
     // - the resolver may be e.g. a TServiceContainer
     // - once the DI/IoC is defined, will call the AutoResolve() protected method
+    // - as called by  TServiceFactoryServer.CreateInstance
     constructor CreateWithResolver(aResolver: TInterfaceResolver;
       aRaiseEServiceExceptionIfNotFound: boolean=true); virtual;
     /// can be used to perform an DI/IoC for a given interface type information
@@ -11555,6 +11557,13 @@ type
     fFactory: TServiceFactoryServer;
     fServer: TSQLRestServer;
   public
+    /// initialize an instance, defining associated dependencies
+    // - the resolver may be e.g. a TServiceContainer
+    // - once the DI/IoC is defined, will call the AutoResolve() protected method
+    // - as called by  TServiceFactoryServer.CreateInstance
+    constructor CreateWithResolverAndRest(aResolver: TInterfaceResolver;
+      aFactory: TServiceFactoryServer; aServer: TSQLRestServer;
+      aRaiseEServiceExceptionIfNotFound: boolean=true); virtual;
     /// access to the associated interface factory
     // - this property will be injected by TServiceFactoryServer.CreateInstance,
     // so may be nil if the instance was created outside the SOA context
@@ -11565,6 +11574,9 @@ type
     // so may be nil if the instance was created outside the SOA context
     property Server: TSQLRestServer read fServer;
   end;
+
+  /// class-reference type (metaclass) of a TInjectableObjectRest type
+  TInjectableObjectRestClass = class of TInjectableObjectRest;
 
   /// used to set the published properties of a TInjectableAutoCreateFields
   // - TInjectableAutoCreateFields.Create will check any resolver able to
@@ -58513,6 +58525,18 @@ begin
 end;
 
 
+{ TInjectableObjectRest }
+
+constructor TInjectableObjectRest.CreateWithResolverAndRest(
+  aResolver: TInterfaceResolver; aFactory: TServiceFactoryServer;
+  aServer: TSQLRestServer; aRaiseEServiceExceptionIfNotFound: boolean);
+begin
+  fFactory := aFactory; // may be needed by overriden Create
+  fServer := aServer;
+  CreateWithResolver(aResolver,aRaiseEServiceExceptionIfNotFound);
+end;
+
+
 { TServiceFactory }
 
 constructor TServiceFactory.Create(aRest: TSQLRest;
@@ -59610,14 +59634,12 @@ begin
   case fImplementationClassKind of
   ickWithCustomCreate:
     result := TInterfacedObjectWithCustomCreateClass(fImplementationClass).Create;
-  ickInjectable, ickInjectableRest: begin
+  ickInjectable:
     result := TInjectableObjectClass(fImplementationClass).
-       CreateWithResolver(Rest.Services,true);
-    if fImplementationClassKind=ickInjectableRest then begin
-      TInjectableObjectRest(result).fFactory := self;
-      TInjectableObjectRest(result).fServer := RestServer;
-    end;
-  end;
+      CreateWithResolver(Rest.Services,true);
+  ickInjectableRest:
+    result := TInjectableObjectRestClass(fImplementationClass).
+      CreateWithResolverAndRest(Rest.Services,self,RestServer,true);
   ickFromInjectedResolver: begin
     dummyObj := nil;
     if not TSQLRestServer(Rest).Services.
