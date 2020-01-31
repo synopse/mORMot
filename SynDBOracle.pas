@@ -219,6 +219,7 @@ type
     /// initialize fForeignKeys content with all foreign keys of this DB
     // - used by GetForeignKey method
     procedure GetForeignKeys; override;
+    procedure PasswordChanged(const ANewPassword: RawUTF8);
   public
     /// initialize the connection properties
     // - we don't need a database name parameter for Oracle connection: only
@@ -238,7 +239,9 @@ type
     /// extract the TNS listener name from a Oracle full connection string
     // - e.g. ExtractTnsName('1.2.3.4:1521/dbname') returns 'dbname'
     class function ExtractTnsName(const aServerName: RawUTF8): RawUTF8;
-    procedure PasswordChanged(const ANewPassword: RawUTF8);
+    /// determine if the SQL statement can be cached
+    // - always returns false, to force server-side caching only on this driver
+    function IsCachable(P: PUTF8Char): boolean; override;
     function SQLLimitClause(AStmt: TSynTableStatement): TSQLDBDefinitionLimitClause; override;
   published
     /// returns the Client version e.g. 'oci.dll rev. 11.2.0.1'
@@ -321,16 +324,12 @@ type
     /// return TRUE if Connect has been already successfully called
     function IsConnected: boolean; override;
     /// initialize a new SQL query statement for the given connection
-    // - the caller should free the instance after use
-    function NewStatement: TSQLDBStatement; override;
-    /// initialize a new SQL query statement for the given connection
     // - if UseCache=true, this overridden implementation will use server-side
     // Oracle statement cache - in this case, StatementCacheSize will define
-    // how many statements are to be cached
-    // - this method should return nil in case of error, or a prepared statement
-    // instance in case of success (with default RaiseExceptionOnError=false)
-    function NewStatementPrepared(const aSQL: RawUTF8;
-      ExpectResults: Boolean; RaiseExceptionOnError: Boolean=false): ISQLDBStatement; override;
+    // how many statements are to be cached - not that IsCachable() has been
+    // overriden to return false, so statement cache on client side is disabled
+    // - the caller should free the instance after use
+    function NewStatement: TSQLDBStatement; override;
     /// begin a Transaction for this connection
     // - current implementation do not support nested transaction with those
     // methods: exception will be raised in such case
@@ -1618,7 +1617,7 @@ begin
       msg := 'OCI_CONTINUE';
   end;
   if LogLevelNoRaise<>sllNone then
-    SynDBLog.Add.Log(LogLevelNoRaise,msg) else
+    SynDBLog.Add.Log(LogLevelNoRaise,msg,self) else
     if Stmt=nil then
       raise ESQLDBOracle.CreateUTF8('% error: %',[self,msg]) else
       raise ESQLDBOracle.CreateUTF8('% error: %',[Stmt,msg]);
@@ -1653,7 +1652,7 @@ begin
         if Conn.PasswordChange then
           Exit;
     if LogLevelNoRaise<>sllNone then
-      SynDBLog.Add.Log(LogLevelNoRaise,msg) else
+      SynDBLog.Add.Log(LogLevelNoRaise,msg,self) else
       if Stmt=nil then
         raise ESQLDBOracle.CreateUTF8('% error: %',[self,msg]) else
         raise ESQLDBOracle.CreateUTF8('% error: %',[Stmt,msg]);
@@ -1836,6 +1835,11 @@ begin
     result := copy(aServerName,i+1,100);
 end;
 
+function TSQLDBOracleConnectionProperties.IsCachable(P: PUTF8Char): boolean;
+begin
+  result := false;
+end;
+
 constructor TSQLDBOracleConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUTF8);
 begin
@@ -1877,8 +1881,8 @@ end;
 
 procedure TSQLDBOracleConnectionProperties.PasswordChanged(const ANewPassword: RawUTF8);
 begin
+  SynDBLog.Add.Log(sllDB, 'PasswordChanged called',self);
   fPassWord := ANewPassword;
-  SynDBLog.Add.Log(sllDB, 'Password to database account was changed.');
   if Assigned(FOnPasswordChanged) then
     FOnPasswordChanged(Self);
 end;
@@ -1919,7 +1923,7 @@ const
     type_Varchar2ListName: RawUTF8 = 'ODCIVARCHAR2LIST';
     type_Credential: array[boolean] of integer = (OCI_CRED_RDBMS,OCI_CRED_EXT);
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Connect'{$endif});
+  Log := SynDBLog.Enter(self,'Connect');
   Disconnect; // force fTrans=fError=fServer=fContext=nil
   Props := Properties as TSQLDBOracleConnectionProperties;
   with OCI do
@@ -2011,7 +2015,7 @@ end;
 constructor TSQLDBOracleConnection.Create(aProperties: TSQLDBConnectionProperties);
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Create'{$endif});
+  Log := SynDBLog.Enter(self,'Create');
   if not aProperties.InheritsFrom(TSQLDBOracleConnectionProperties) then
     raise ESQLDBOracle.CreateUTF8('Invalid %.Create(%)',[self,aProperties]);
   OCI.RetrieveVersion;
@@ -2033,7 +2037,7 @@ begin
   finally
     if (fError<>nil) and (OCI<>nil) then
     with OCI do begin
-      Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Disconnect'{$endif});
+      Log := SynDBLog.Enter(self,'Disconnect');
       if fTrans<>nil then begin
         // close any opened session
         HandleFree(fTrans,OCI_HTYPE_TRANS);
@@ -2061,33 +2065,8 @@ end;
 function TSQLDBOracleConnection.NewStatement: TSQLDBStatement;
 begin
   result := TSQLDBOracleStatement.Create(self);
-end;
-
-function TSQLDBOracleConnection.NewStatementPrepared(const aSQL: RawUTF8;
-  ExpectResults: Boolean; RaiseExceptionOnError: Boolean=false): ISQLDBStatement;
-var Stmt: TSQLDBOracleStatement;
-begin
-  fErrorMessage := '';
-  Stmt := nil;
-  try
-    Stmt := TSQLDBOracleStatement.Create(self);
-    if fProperties.UseCache then
-      Stmt.fUseServerSideStatementCache := true;
-    Stmt.Prepare(aSQL,ExpectResults);
-    result := Stmt;
-  except
-    on E: Exception do begin
-      with SynDBLog.Add do
-        if [sllSQL,sllDB,sllException,sllError]*Family.Level<>[] then
-          LogLines(sllSQL,pointer(Stmt.SQLWithInlinedParams),self,'--');
-      Stmt.Free;
-      if RaiseExceptionOnError then
-        raise;
-      fErrorException := PPointer(E)^;
-      StringToUTF8(E.Message,fErrorMessage);
-      result := nil;
-    end;
-  end;
+  if fProperties.UseCache then // client-side cache is disabled in this unit
+    TSQLDBOracleStatement(result).fUseServerSideStatementCache := true;
 end;
 
 function TSQLDBOracleConnection.PasswordChange: Boolean;
@@ -2117,7 +2096,7 @@ end;
 procedure TSQLDBOracleConnection.StartTransaction;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'StartTransaction'{$endif});
+  Log := SynDBLog.Enter(self,'StartTransaction');
   if TransactionCount>0 then
     raise ESQLDBOracle.CreateUTF8('Invalid %.StartTransaction: nested '+
       'transactions are not supported by the Oracle driver',[self]);
@@ -2529,7 +2508,8 @@ begin
   try
     fTimeElapsed.Resume;
     FreeHandles(false);
-    SynDBLog.Add.Log(sllDB,'% row(s) in %',[TotalRowsRetrieved,fTimeElapsed.Stop],self);
+    SynDBLog.Add.Log(sllDB,'Destroy: stats = % row(s) in %',
+      [TotalRowsRetrieved,fTimeElapsed.Stop],self);
   finally
     inherited;
   end;
@@ -2976,7 +2956,7 @@ begin
             fBoundCursor[i] := PPointer(@VInt64)^; // available via BoundCursor()
           end else // on error, release bound statement resource
             if OCI.HandleFree(PPointer(@VInt64)^,OCI_HTYPE_STMT)<>OCI_SUCCESS then
-              SynDBLog.Add.Log(sllError,'SQLT_RSET param release');
+              SynDBLog.Add.Log(sllError,'ExecutePrepared: SQLT_RSET param release',self);
       ftInt64:
         if VDBType=SQLT_FLT then // retrieve OUT integer parameter
           VInt64 := trunc(unaligned(PDouble(@VInt64)^));
@@ -2990,7 +2970,7 @@ begin
         SQLT_TIMESTAMP: begin // release OCIDateTime resource
           oOCIDateTime := PPointer(VData)^;
           if OCI.DescriptorFree(oOCIDateTime,OCI_DTYPE_TIMESTAMP)<>OCI_SUCCESS then
-            SynDBLog.Add.Log(sllError,'OCI_DTYPE_TIMESTAMP param release');
+            SynDBLog.Add.Log(sllError,'ExecutePrepared: OCI_DTYPE_TIMESTAMP param release',self);
           VData := '';
         end;
         end;
@@ -3062,10 +3042,10 @@ begin
             case ColumnValueDBType of
             SQLT_CLOB, SQLT_BLOB:
               if OCI.DescriptorFree(P^,OCI_DTYPE_LOB)<>OCI_SUCCESS then
-                SynDBLog.Add.Log(sllError,'Invalid Blob Release');
+                SynDBLog.Add.Log(sllError,'FreeHandles: Invalid Blob Release',self);
             SQLT_RSET:
               if OCI.HandleFree(P^,OCI_HTYPE_STMT)<>OCI_SUCCESS then
-                SynDBLog.Add.Log(sllError,'Invalid Cursor Release');
+                SynDBLog.Add.Log(sllError,'FreeHandles: Invalid Cursor Release',self);
             else raise ESQLDBOracle.CreateUTF8(
               '%.FreeHandles: Wrong % type for inlined column %',
               [self,ColumnValueDBType,ColumnName]);
@@ -3287,10 +3267,10 @@ begin
               if (ColumnValueDBCharSet<>oCharSet) and
                  not SimilarCharSet(ColumnValueDBCharSet,oCharSet) then
                 // log a warning, but use the connection-level code page
-                SynDBLog.Add.Log(sllWarning,'Column [%] has % (%) charset - expected % (%) '+
-                  '-> possible data loss',[ColumnName,
-                   ColumnValueDBCharSet,OracleCharSetName(ColumnValueDBCharSet),
-                   oCharSet,OracleCharSetName(oCharSet)]);
+                SynDBLog.Add.Log(sllWarning,'Column [%] has % (%) charset - '+
+                  'expected % (%) -> possible data loss',[ColumnName,
+                  ColumnValueDBCharSet,OracleCharSetName(ColumnValueDBCharSet),
+                  oCharSet,OracleCharSetName(oCharSet)],self);
           end;
           SQLCS_NCHAR: // NVARCHAR2 -> set max UTF-8 bytes from chars
             if ColumnValueInlined then begin
@@ -3302,7 +3282,7 @@ begin
       end;
       // avoid memory leak for cached statement
       if DescriptorFree(oHandle, OCI_DTYPE_PARAM)<>OCI_SUCCESS then
-        SynDBLog.Add.Log(sllError, 'Invalid column descriptor release');
+        SynDBLog.Add.Log(sllError, 'Invalid column descriptor release',self);
     end;
     assert(fColumn.Count=integer(ColCount));
     // 3. Dispatch data in row buffer
@@ -3372,7 +3352,7 @@ end;
 procedure TSQLDBOracleStatement.Prepare(const aSQL: RawUTF8;
   ExpectResults: Boolean);
 var oSQL: RawUTF8;
-    Env: POCIEnv;
+    env: POCIEnv;
 begin
   with fTimeElapsed do if Started then Resume else Start;
   try
@@ -3383,20 +3363,20 @@ begin
       inherited Prepare(aSQL,ExpectResults); // set fSQL + Connect if necessary
       fPreparedParamsCount := ReplaceParamsByNames(aSQL,oSQL);
       // 2. prepare statement
-      Env := (Connection as TSQLDBOracleConnection).fEnv;
+      env := (Connection as TSQLDBOracleConnection).fEnv;
       with OCI do begin
-        HandleAlloc(Env,fError,OCI_HTYPE_ERROR);
+        HandleAlloc(env,fError,OCI_HTYPE_ERROR);
         if fUseServerSideStatementCache then begin
           if StmtPrepare2(TSQLDBOracleConnection(Connection).fContext,fStatement,
             fError,pointer(oSQL),length(oSQL),nil,0,OCI_NTV_SYNTAX,OCI_PREP2_CACHE_SEARCHONLY) = OCI_SUCCESS then
-            SynDBLog.Add.Log(sllDebug, 'Statement cache HIT')
+            SynDBLog.Add.Log(sllDebug,'Prepare: Statement cache HIT',self)
           else begin
             Check(nil,self,StmtPrepare2(TSQLDBOracleConnection(Connection).fContext,fStatement,
               fError,pointer(oSQL),length(oSQL),nil,0,OCI_NTV_SYNTAX,OCI_DEFAULT),fError);
-            SynDBLog.Add.Log(sllDebug, 'Statement cache miss');
+            SynDBLog.Add.Log(sllDebug,'Prepare: Statement cache miss',self);
           end;
         end else begin
-          HandleAlloc(Env,fStatement,OCI_HTYPE_STMT);
+          HandleAlloc(env,fStatement,OCI_HTYPE_STMT);
           Check(nil,self,StmtPrepare(fStatement,fError,pointer(oSQL),length(oSQL),
             OCI_NTV_SYNTAX,OCI_DEFAULT),fError);
         end;
