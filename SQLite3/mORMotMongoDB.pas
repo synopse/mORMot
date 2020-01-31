@@ -325,7 +325,7 @@ begin
   if aMongoCollectionName='' then
     aMongoCollectionName := Props.Props.SQLTableName;
   Props.ExternalDB.Init(aClass,aMongoCollectionName,
-    aMongoDatabase.CollectionOrCreate[aMongoCollectionName],true);
+    aMongoDatabase.CollectionOrCreate[aMongoCollectionName],true,[]);
   Props.ExternalDB.MapField('ID','_id');
   result := TSQLRestStorageMongoDB.Create(aClass,aServer);
   aServer.StaticDataAdd(result);

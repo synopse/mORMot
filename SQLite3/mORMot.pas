@@ -4494,6 +4494,7 @@ procedure DocVariantToObjArray(var arr: TDocVariantData; var objArray;
 function ObjectDefaultToVariant(aClass: TClass; aOptions: TDocVariantOptions): variant; overload;
 {$endif}
 
+
 { ************ cross-cutting classes and types }
 
 type
@@ -9525,10 +9526,12 @@ type
   // the rpmMissingFieldNameCaseSensitive option is set
   // - rpmQuoteFieldName will quote the field names - to be used e.g. with
   // FireBird in its Dialect 3
+  // - rpmClearPoolOnConnectionIssue will enable detecting connection loss
   TSQLRecordPropertiesMappingOptions = set of (
     rpmAutoMapKeywordFields,
     rpmNoCreateMissingTable, rpmNoCreateMissingField,
-    rpmMissingFieldNameCaseSensitive, rpmQuoteFieldName);
+    rpmMissingFieldNameCaseSensitive, rpmQuoteFieldName,
+    rpmClearPoolOnConnectionIssue);
 
   /// pointer to external database properties for ORM
   // - is used e.g. to allow a "fluent" interface for MapField() method
@@ -9603,7 +9606,8 @@ type
     // - will left void fSortedFieldsName[] and fSortedFieldsIndex[], to disable
     // custom field mapping
     procedure Init(Table: TSQLRecordClass; const MappedTableName: RawUTF8;
-      MappedConnection: TObject; AutoComputeSQL: boolean); overload;
+      MappedConnection: TObject; AutoComputeSQL: boolean;
+      MappingOptions: TSQLRecordPropertiesMappingOptions);
     /// map a field name from its internal name to its external name
     // - raise an EORMException if the supplied field name is not defined in
     // the TSQLRecord as ID or a published property
@@ -9995,12 +9999,13 @@ type
     // - aClass parameter could be either a TSQLRecordVirtual class, either
     // a TSQLRecord class which has its kind set to rCustomForcedID or
     // rCustomAutoID (e.g. TSQLRecordMany calling VirtualTableExternalRegister)
-    // - optional aExternalTableName and aExternalDataBase can be used to
-    // specify e.g. connection parameters as expected by mORMotDB
+    // - optional aExternalTableName, aExternalDataBase and aMappingOptions can
+    // be used to specify e.g. connection parameters as expected by mORMotDB
     // - call it before TSQLRestServer.Create()
     function VirtualTableRegister(aClass: TSQLRecordClass;
       aModule: TSQLVirtualTableClass; const aExternalTableName: RawUTF8='';
-      aExternalDataBase: TObject=nil): boolean;
+      aExternalDataBase: TObject=nil;
+      aMappingOptions: TSQLRecordPropertiesMappingOptions=[]): boolean;
     /// retrieve a Virtual Table module associated to a class
     function VirtualTableModule(aClass: TSQLRecordClass): TSQLVirtualTableClass;
 
@@ -33734,8 +33739,9 @@ end;
 
 procedure TSQLRecordPropertiesMapping.Init(Table: TSQLRecordClass;
   const MappedTableName: RawUTF8; MappedConnection: TObject;
-  AutoComputeSQL: boolean);
+  AutoComputeSQL: boolean; MappingOptions: TSQLRecordPropertiesMappingOptions);
 begin
+  fOptions := MappingOptions;
   fProps := Table.RecordProps;
   if MappedTableName='' then
     fTableName := fProps.SQLTableName else
@@ -34867,8 +34873,8 @@ begin
 end;
 
 function TSQLModel.VirtualTableRegister(aClass: TSQLRecordClass;
-  aModule: TSQLVirtualTableClass; const aExternalTableName: RawUTF8='';
-  aExternalDataBase: TObject=nil): boolean;
+  aModule: TSQLVirtualTableClass; const aExternalTableName: RawUTF8;
+  aExternalDataBase: TObject; aMappingOptions: TSQLRecordPropertiesMappingOptions): boolean;
 var i: integer;
 begin
   result := false;
@@ -34880,7 +34886,7 @@ begin
         SetKind(rCustomAutoID) else // SetKind() recompute all SQL
         raise EModelException.CreateUTF8('Invalid %.VirtualTableRegister(%) call: '+
           'impossible to set class as virtual',[self,aClass]);
-    ExternalDB.Init(aClass,aExternalTableName,aExternalDataBase,true);
+    ExternalDB.Init(aClass,aExternalTableName,aExternalDataBase,true,aMappingOptions);
   end;
   if high(fVirtualTableModule)<>fTablesMax then
     SetLength(fVirtualTableModule,fTablesMax+1);

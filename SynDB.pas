@@ -1358,8 +1358,11 @@ type
     // - this method should return a prepared statement instance on success
     // - on error, returns nil and you can check Connnection.LastErrorMessage /
     // Connection.LastErrorException to retrieve correspnding error information
+    // (if RaiseExceptionOnError is left to default FALSE value, otherwise, it will
+    // raise an exception)
     function NewThreadSafeStatementPrepared(const SQLFormat: RawUTF8;
-      const Args: array of const; ExpectResults: Boolean): ISQLDBStatement; overload;
+      const Args: array of const; ExpectResults: Boolean;
+      RaiseExceptionOnError: Boolean=false): ISQLDBStatement; overload;
     /// create, prepare and bound inlined parameters to a thread-safe statement
     // - this implementation will call the NewThreadSafeStatement virtual method,
     // then bound inlined parameters as :(1234): and return the resulting statement
@@ -4859,15 +4862,18 @@ begin
 end;
 
 function TSQLDBConnectionProperties.NewThreadSafeStatementPrepared(
-  const aSQL: RawUTF8; ExpectResults: Boolean; RaiseExceptionOnError: Boolean=false): ISQLDBStatement;
+  const aSQL: RawUTF8; ExpectResults, RaiseExceptionOnError: Boolean): ISQLDBStatement;
 begin
-  result := ThreadSafeConnection.NewStatementPrepared(aSQL,ExpectResults,RaiseExceptionOnError);
+  result := ThreadSafeConnection.NewStatementPrepared(
+    aSQL,ExpectResults,RaiseExceptionOnError);
 end;
 
 function TSQLDBConnectionProperties.NewThreadSafeStatementPrepared(
-  const SQLFormat: RawUTF8; const Args: array of const; ExpectResults: Boolean): ISQLDBStatement;
+  const SQLFormat: RawUTF8; const Args: array of const;
+  ExpectResults, RaiseExceptionOnError: Boolean): ISQLDBStatement;
 begin
-  result := NewThreadSafeStatementPrepared(FormatUTF8(SQLFormat,Args),ExpectResults);
+  result := NewThreadSafeStatementPrepared(FormatUTF8(SQLFormat,Args),
+    ExpectResults,RaiseExceptionOnError);
 end;
 
 function TSQLDBConnectionProperties.SharedTransaction(SessionID: cardinal;
@@ -6451,7 +6457,7 @@ end;
 { TSQLDBConnectionPropertiesThreadSafe }
 
 procedure TSQLDBConnectionPropertiesThreadSafe.ClearConnectionPool;
-var i: integer;
+var i: PtrInt;
 begin
   EnterCriticalSection(fConnectionCS);
   try

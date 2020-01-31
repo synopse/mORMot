@@ -283,6 +283,8 @@ type
       out ExternalFields: TRawUTF8DynArray; out Types: TSQLDBFieldTypeArray;
       Occasion: TSQLOccasion; BatchOptions: TSQLRestBatchOptions): RawUTF8;
     function GetConnectionProperties: TSQLDBConnectionProperties;
+    /// check rpmClearPoolOnConnectionIssue in fStoredClassMapping.Options
+    function HandleClearPoolOnConnectionIssue: boolean;
   public
     /// initialize the remote database connection
     // - you should not use this, but rather call VirtualTableExternalRegister()
@@ -367,19 +369,6 @@ type
     // a TSQLRestStorageExternal
     class function ConnectionProperties(aClass: TSQLRecordClass;
       aServer: TSQLRestServer): TSQLDBConnectionProperties; overload;
-  published
-    /// the associated external database connection
-    property Properties: TSQLDBConnectionProperties read GetConnectionProperties;
-    /// by default, any INSERT will compute the new ID from an internal variable
-    // - it is very fast and reliable, unless external IDs can be created
-    // outside this engine
-    // - you can set EngineAddUseSelectMaxID=true to execute a slower
-    // 'select max(ID) from TableName' SQL statement before each EngineAdd()
-    // - a lighter alternative may be to call EngineAddForceSelectMaxID only
-    // when required, i.e. when the external DB has just been modified
-    // by a third-party/legacy SQL process
-    property EngineAddUseSelectMaxID: Boolean read fEngineAddUseSelectMaxID
-      write fEngineAddUseSelectMaxID;
     /// disable internal ID generation for INSERT
     // - by default, a new ID will be set (either with 'select max(ID)' or via
     // the OnEngineLockedNextID event)
@@ -398,6 +387,19 @@ type
     // expected (e.g. using a SQL sequence)
     property OnEngineAddComputeID: TOnEngineAddComputeID read
       fOnEngineAddComputeID write fOnEngineAddComputeID;
+  published
+    /// the associated external SynDB database connection properties
+    property Properties: TSQLDBConnectionProperties read GetConnectionProperties;
+    /// by default, any INSERT will compute the new ID from an internal variable
+    // - it is very fast and reliable, unless external IDs can be created
+    // outside this engine
+    // - you can set EngineAddUseSelectMaxID=true to execute a slower
+    // 'select max(ID) from TableName' SQL statement before each EngineAdd()
+    // - a lighter alternative may be to call EngineAddForceSelectMaxID only
+    // when required, i.e. when the external DB has just been modified
+    // by a third-party/legacy SQL process
+    property EngineAddUseSelectMaxID: Boolean read fEngineAddUseSelectMaxID
+      write fEngineAddUseSelectMaxID;
   end;
 
   /// A Virtual Table cursor for reading a TSQLDBStatement content
@@ -407,6 +409,8 @@ type
     fStatement: ISQLDBStatement;
     fSQL: RawUTF8;
     fHasData: boolean;
+    // on exception, release fStatement and optionally clear the pool
+    procedure HandleClearPoolOnConnectionIssue;
   public
     /// called to begin a search in the virtual table, creating a SQL query
     // - the TSQLVirtualTablePrepared parameters were set by
@@ -506,29 +510,48 @@ type
 // - the supplied aExternalDB parameter is stored within aClass.RecordProps, so
 // the instance must stay alive until all database access to this external table
 // is finished (e.g. use a private/protected property)
+// - aMappingOptions can be specified now, or customized later
 // - server-side may omit a call to VirtualTableExternalRegister() if the need of
 // an internal database is expected: it will allow custom database configuration
 // at runtime, depending on the customer's expectations (or license)
 // - after registration, you can tune the field-name mapping by calling
 // ! aModel.Props[aClass].ExternalDB.MapField(..)
 function VirtualTableExternalRegister(aModel: TSQLModel; aClass: TSQLRecordClass;
-  aExternalDB: TSQLDBConnectionProperties;
-  const aExternalTableName: RawUTF8=''): boolean; overload;
+  aExternalDB: TSQLDBConnectionProperties; const aExternalTableName: RawUTF8='';
+  aMappingOptions: TSQLRecordPropertiesMappingOptions=[]): boolean; overload;
 
 /// register several tables of the model to be external
 // - just a wrapper over the overloaded VirtualTableExternalRegister() method
 function VirtualTableExternalRegister(aModel: TSQLModel;
-  const aClass: array of TSQLRecordClass;
-  aExternalDB: TSQLDBConnectionProperties): boolean; overload;
+  const aClass: array of TSQLRecordClass; aExternalDB: TSQLDBConnectionProperties;
+  aMappingOptions: TSQLRecordPropertiesMappingOptions=[]): boolean; overload;
 
 /// register one table of the model to be external, with optional mapping
 // - this method would allow to chain MapField() or MapAutoKeywordFields
 // definitions, in a fluent interface:
 function VirtualTableExternalMap(aModel: TSQLModel;
   aClass: TSQLRecordClass; aExternalDB: TSQLDBConnectionProperties;
-  const aExternalTableName: RawUTF8=''): PSQLRecordPropertiesMapping;
+  const aExternalTableName: RawUTF8=''; aMapping: TSQLRecordPropertiesMappingOptions=[]): PSQLRecordPropertiesMapping;
 
-/// register all tables of the model to be external
+type
+  /// all possible options for VirtualTableExternalRegisterAll/TSQLRestExternalDBCreate
+  // - by default, TSQLAuthUser and TSQLAuthGroup tables will be handled via the
+  // external DB, but you can avoid it for speed when handling session and security
+  // by setting regDoNotRegisterUserGroupTables
+  // - you can set regMapAutoKeywordFields to ensure that the mapped field names
+  // won't conflict with a SQL reserved keyword on the external database by
+  // mapping a name with a trailing '_' character for the external column
+  // - regClearPoolOnConnectionIssue will call ClearConnectionPool when a
+  // connection-linked exception is discovered
+  TVirtualTableExternalRegisterOption = (
+    regDoNotRegisterUserGroupTables,
+    regMapAutoKeywordFields,
+    regClearPoolOnConnectionIssue
+    );
+  /// set of options for VirtualTableExternalRegisterAll/TSQLRestExternalDBCreate functions
+  TVirtualTableExternalRegisterOptions = set of TVirtualTableExternalRegisterOption;
+
+/// register all tables of the model to be external, with some options
 // - by default, all tables are handled by the SQLite3 engine, unless they
 // are explicitely declared as external via VirtualTableExternalRegister: this
 // function can be used to register all tables to be handled by an external DBs
@@ -539,31 +562,22 @@ function VirtualTableExternalMap(aModel: TSQLModel;
 // and released globaly when the ORM is no longer needed
 // - by default, TSQLAuthUser and TSQLAuthGroup tables will be handled via the
 // external DB, but you can avoid it for speed when handling session and security
-// by setting DoNotRegisterUserGroupTables
+// by setting regDoNotRegisterUserGroupTables in aExternalOptions
+// - other aExternalOptions can be defined to tune the ORM process e.g. about
+// mapping or connection loss detection
 // - after registration, you can tune the field-name mapping by calling
 // ! aModel.Props[aClass].ExternalDB.MapField(..)
 function VirtualTableExternalRegisterAll(aModel: TSQLModel;
-  aExternalDB: TSQLDBConnectionProperties; DoNotRegisterUserGroupTables: boolean=false): boolean; overload;
-
-type
-  /// all possible options for VirtualTableExternalRegisterAll/TSQLRestExternalDBCreate
-  // - by default, TSQLAuthUser and TSQLAuthGroup tables will be handled via the
-  // external DB, but you can avoid it for speed when handling session and security
-  // by setting regDoNotRegisterUserGroupTables
-  // - you can set regMapAutoKeywordFields to ensure that the mapped field names
-  // won't conflict with a SQL reserved keyword on the external database by
-  // mapping a name with a trailing '_' character for the external column
-  TVirtualTableExternalRegisterOption = (
-    regDoNotRegisterUserGroupTables,
-    regMapAutoKeywordFields
-    );
-  /// set of options for VirtualTableExternalRegisterAll/TSQLRestExternalDBCreate functions
-  TVirtualTableExternalRegisterOptions = set of TVirtualTableExternalRegisterOption;
-
-/// register all tables of the model to be external, with some options
-function VirtualTableExternalRegisterAll(aModel: TSQLModel;
   aExternalDB: TSQLDBConnectionProperties;
-  aOptions: TVirtualTableExternalRegisterOptions): boolean; overload;
+  aExternalOptions: TVirtualTableExternalRegisterOptions): boolean; overload;
+
+/// register all tables of the model to be external
+// - mainly for retro-compatibility with existing code
+// - just a wrapper around the VirtualTableExternalRegisterAll() overloaded
+// function with some boolean flags instead of TVirtualTableExternalRegisterOptions
+function VirtualTableExternalRegisterAll(aModel: TSQLModel;
+  aExternalDB: TSQLDBConnectionProperties; DoNotRegisterUserGroupTables: boolean=false;
+  ClearPoolOnConnectionIssue: boolean=false): boolean; overload;
 
 
 /// create a new TSQLRest instance, and possibly an external database, from its
@@ -577,13 +591,14 @@ function VirtualTableExternalRegisterAll(aModel: TSQLModel;
 // TSQLRest or TSQLDBConnectionProperties types
 function TSQLRestExternalDBCreate(aModel: TSQLModel;
   aDefinition: TSynConnectionDefinition; aHandleAuthentication: boolean;
-  aExternalDBOptions: TVirtualTableExternalRegisterOptions): TSQLRest; overload;
+  aExternalOptions: TVirtualTableExternalRegisterOptions): TSQLRest; overload;
 
 
 implementation
 
 function VirtualTableExternalRegister(aModel: TSQLModel; aClass: TSQLRecordClass;
-  aExternalDB: TSQLDBConnectionProperties; const aExternalTableName: RawUTF8): boolean;
+  aExternalDB: TSQLDBConnectionProperties; const aExternalTableName: RawUTF8;
+  aMappingOptions: TSQLRecordPropertiesMappingOptions): boolean;
 var ExternalTableName: RawUTF8;
     Props: TSQLModelRecordProperties;
 begin
@@ -598,60 +613,71 @@ begin
     ExternalTableName := Props.Props.SQLTableName else
     ExternalTableName := aExternalTableName;
   result := aModel.VirtualTableRegister(aClass,TSQLVirtualTableExternal,
-    aExternalDB.SQLFullTableName(ExternalTableName),aExternalDB);
+    aExternalDB.SQLFullTableName(ExternalTableName),aExternalDB,aMappingOptions);
 end;
 
 function VirtualTableExternalRegister(aModel: TSQLModel;
-  const aClass: array of TSQLRecordClass;
-  aExternalDB: TSQLDBConnectionProperties): boolean;
+  const aClass: array of TSQLRecordClass; aExternalDB: TSQLDBConnectionProperties;
+  aMappingOptions: TSQLRecordPropertiesMappingOptions): boolean;
 var i: integer;
 begin
   result := true;
   for i := 0 to High(aClass) do
-    if not VirtualTableExternalRegister(aModel,aClass[i],aExternalDB) then
+    if not VirtualTableExternalRegister(aModel,aClass[i],
+       aExternalDB,'',aMappingOptions) then
       result := false;
 end;
 
 function VirtualTableExternalRegisterAll(aModel: TSQLModel;
-  aExternalDB: TSQLDBConnectionProperties; DoNotRegisterUserGroupTables: boolean): boolean;
-const OPT: array[boolean] of TVirtualTableExternalRegisterOptions =
-  ([],[regDoNotRegisterUserGroupTables]);
+  aExternalDB: TSQLDBConnectionProperties;
+  DoNotRegisterUserGroupTables, ClearPoolOnConnectionIssue: boolean): boolean;
+var opt: TVirtualTableExternalRegisterOptions;
 begin
-  result := VirtualTableExternalRegisterAll(
-    aModel,aExternalDB,OPT[DoNotRegisterUserGroupTables]);
+  opt := []; // to call the overloaded function below with proper options
+  if DoNotRegisterUserGroupTables then
+    include(opt,regDoNotRegisterUserGroupTables);
+  if ClearPoolOnConnectionIssue then
+    include(opt,regClearPoolOnConnectionIssue);
+  result := VirtualTableExternalRegisterAll(aModel,aExternalDB,opt);
 end;
 
 function VirtualTableExternalRegisterAll(aModel: TSQLModel;
   aExternalDB: TSQLDBConnectionProperties;
-  aOptions: TVirtualTableExternalRegisterOptions): boolean; overload;
-var i: integer;
+  aExternalOptions: TVirtualTableExternalRegisterOptions): boolean;
+var i: PtrInt;
+    rec: TSQLRecordClass;
+    opt: TSQLRecordPropertiesMappingOptions;
 begin
   result := (aModel<>nil) and (aExternalDB<>nil);
   if not result then
     exit; // avoid GPF
-  for i := 0 to high(aModel.Tables) do
-    if (regDoNotRegisterUserGroupTables in aOptions) and
-       (aModel.Tables[i].InheritsFrom(TSQLAuthGroup) or
-        aModel.Tables[i].InheritsFrom(TSQLAuthUser)) then
+  opt := [];
+  if regClearPoolOnConnectionIssue in aExternalOptions then
+    include(opt,rpmClearPoolOnConnectionIssue);
+  for i := 0 to high(aModel.Tables) do begin
+    rec := aModel.Tables[i];
+    if (regDoNotRegisterUserGroupTables in aExternalOptions) and
+       (rec.InheritsFrom(TSQLAuthGroup) or rec.InheritsFrom(TSQLAuthUser)) then
       continue else
-    if not VirtualTableExternalRegister(aModel,aModel.Tables[i],aExternalDB,'') then
+    if not VirtualTableExternalRegister(aModel,rec,aExternalDB,'',opt) then
       result := false else
-      if regMapAutoKeywordFields in aOptions then
+      if regMapAutoKeywordFields in aExternalOptions then
         aModel.TableProps[i].ExternalDB.MapAutoKeywordFields;
+  end;
 end;
 
 function VirtualTableExternalMap(aModel: TSQLModel;
   aClass: TSQLRecordClass; aExternalDB: TSQLDBConnectionProperties;
-  const aExternalTableName: RawUTF8=''): PSQLRecordPropertiesMapping;
+  const aExternalTableName: RawUTF8; aMapping: TSQLRecordPropertiesMappingOptions): PSQLRecordPropertiesMapping;
 begin
-  if VirtualTableExternalRegister(aModel,aClass,aExternalDB,aExternalTableName) then
+  if VirtualTableExternalRegister(aModel,aClass,aExternalDB,aExternalTableName,aMapping) then
     result := @aModel.Props[aClass].ExternalDB else
     result := nil;
 end;
 
 function TSQLRestExternalDBCreate(aModel: TSQLModel;
   aDefinition: TSynConnectionDefinition; aHandleAuthentication: boolean;
-  aExternalDBOptions: TVirtualTableExternalRegisterOptions): TSQLRest;
+  aExternalOptions: TVirtualTableExternalRegisterOptions): TSQLRest;
 var propsClass: TSQLDBConnectionPropertiesClass;
     props: TSQLDBConnectionProperties;
 begin
@@ -664,7 +690,7 @@ begin
     try // aDefinition.Kind was a TSQLDBConnectionProperties -> all external DB
       props := propsClass.Create(aDefinition.ServerName,aDefinition.DatabaseName,
         aDefinition.User,aDefinition.PassWordPlain);
-      VirtualTableExternalRegisterAll(aModel,props,aExternalDBOptions);
+      VirtualTableExternalRegisterAll(aModel,props,aExternalOptions);
       result := TSQLRestServer.CreateInMemoryForAllVirtualTables(
         aModel,aHandleAuthentication);
     except
@@ -788,7 +814,7 @@ begin
   options := fStoredClassMapping^.Options;
   fTableName := fStoredClassMapping^.TableName;
   fProperties := fStoredClassMapping^.ConnectionProperties as TSQLDBConnectionProperties;
-  log.Log(sllInfo,'% % Server=%',[StoredClass,fProperties,Owner],self);
+  log.Log(sllInfo,'% as % % Server=%',[StoredClass,fTableName,fProperties,Owner],self);
   if fProperties=nil then
     raise EBusinessLayerException.CreateUTF8(
       '%.Create: no external DB defined for %',[self,StoredClass]);
@@ -1046,12 +1072,12 @@ function TSQLRestStorageExternal.EngineLockedNextID: TID;
   procedure RetrieveFromDB;
   // fProperties.SQLCreate: ID Int64 PRIMARY KEY -> compute unique RowID
   // (not all DB engines handle autoincrement feature - e.g. Oracle does not)
-  var Rows: ISQLDBRows;
+  var rows: ISQLDBRows;
   begin
-    Rows := ExecuteDirect('select max(%) from %',
+    rows := ExecuteDirect('select max(%) from %',
       [fStoredClassMapping^.RowIDFieldName,fTableName],[],true);
-    if (Rows<>nil) and Rows.Step then
-      fEngineLockedMaxID := Rows.ColumnInt(0) else
+    if (rows<>nil) and rows.Step then
+      fEngineLockedMaxID := rows.ColumnInt(0) else
       fEngineLockedMaxID := 0;
   end;
 
@@ -1185,13 +1211,13 @@ begin
       n := BatchEnd-BatchBegin+1;
       if n<=0 then
         break;
-      if (fBatchMethod=mPost) and Assigned(fProperties.OnBatchInsert) then
-        // use multiple insert dedicated function if available
-        fProperties.OnBatchInsert(
-          fProperties,fTableName,ExternalFields,Types,n,Values) else begin
-        // use array binding
-        Query := fProperties.NewThreadSafeStatementPrepared(SQL,false);
-        try
+      try
+        if (fBatchMethod=mPost) and Assigned(fProperties.OnBatchInsert) then
+          // use multiple insert dedicated function if available
+          fProperties.OnBatchInsert(
+            fProperties,fTableName,ExternalFields,Types,n,Values) else begin
+          // use array binding
+          Query := fProperties.NewThreadSafeStatementPrepared(SQL,{results=}false,{except=}true);
           case fBatchMethod of
           mPost, mPut:
             for i := 0 to high(Values) do
@@ -1200,9 +1226,12 @@ begin
             Query.BindArray(1,ftInt64,Values[0],n);
           end;
           Query.ExecutePrepared;
-        finally
           Query := nil;
         end;
+      except
+        Query := nil;
+        HandleClearPoolOnConnectionIssue;
+        raise;
       end;
       if Owner<>nil then begin
         // add/update/delete should flush DB cache
@@ -1355,14 +1384,19 @@ function TSQLRestStorageExternal.EngineList(const SQL: RawUTF8;
   ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8;
 var Stmt: ISQLDBStatement;
 begin
+  result := '';
   if ReturnedRowCount<>nil then
     raise ESQLDBException.CreateUTF8('%.EngineList(ReturnedRowCount<>nil) for %',
       [self,StoredClass]);
   Stmt := PrepareInlinedForRows(SQL);
-  if Stmt=nil then
-    result := '' else
+  if Stmt<>nil then
+  try
     Stmt.ExecutePreparedAndFetchAllAsJSON(
-      ForceAJAX or (Owner=nil) or not Owner.NoAJAXJSON,result);
+      ForceAJAX or (Owner=nil) or not Owner.NoAJAXJSON, result);
+  except
+    Stmt := nil;
+    HandleClearPoolOnConnectionIssue;
+  end;
 end;
 
 function TSQLRestStorageExternal.EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8;
@@ -1372,13 +1406,17 @@ begin // TableModelIndex is not useful here
   if (self=nil) or (ID<=0) then
     exit;
   Stmt := PrepareDirectForRows(pointer(fSelectOneDirectSQL),[],[ID]);
-  if Stmt<>nil then begin
+  if Stmt<>nil then
+  try
     Stmt.ExecutePreparedAndFetchAllAsJSON(true,result); // Expanded=true -> '[{"ID":10,...}]'#10
     if IsNotAjaxJSON(pointer(result)) then
       // '{"fieldCount":2,"values":["ID","FirstName"]}'#$A -> ID not found
       result := '' else
       // list '[{...}]'#10 -> object '{...}'
       result := copy(result,2,length(result)-3);
+  except
+    Stmt := nil;
+    HandleClearPoolOnConnectionIssue;
   end;
 end;
 
@@ -1391,53 +1429,53 @@ begin
 end;
 
 function TSQLRestStorageExternal.TableHasRows(Table: TSQLRecordClass): boolean;
-var Rows: ISQLDBRows;
+var rows: ISQLDBRows;
 begin
   if (self=nil) or (Table<>fStoredClass) then
     result := false else begin
-    Rows := ExecuteDirect(pointer(fSelectTableHasRowsSQL),[],[],true);
-    if Rows=nil then
+    rows := ExecuteDirect(pointer(fSelectTableHasRowsSQL),[],[],true);
+    if rows=nil then
       result := false else
-      result := Rows.Step;
+      result := rows.Step;
   end;
 end;
 
 function TSQLRestStorageExternal.TableRowCount(Table: TSQLRecordClass): Int64;
-var Rows: ISQLDBRows;
+var rows: ISQLDBRows;
 begin
   if (self=nil) or (Table<>fStoredClass) then
     result := 0 else begin
-    Rows := ExecuteDirect('select count(*) from %',[fTableName],[],true);
-    if (Rows=nil) or not Rows.Step then
+    rows := ExecuteDirect('select count(*) from %',[fTableName],[],true);
+    if (rows=nil) or not rows.Step then
       result := 0 else
-      result := Rows.ColumnInt(0);
+      result := rows.ColumnInt(0);
   end;
 end;
 
 function TSQLRestStorageExternal.EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
-var Rows: ISQLDBRows;
+var rows: ISQLDBRows;
 begin
   result := false;
   if (aID<=0) or not BlobField^.IsBlob or
      (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
     exit;
   with fStoredClassMapping^ do
-    Rows := ExecuteDirect('select % from % where %=?',
-      [InternalToExternal(BlobField^.Name),fTableName,RowIDFieldName],[aID],true);
-  if (Rows<>nil) and Rows.Step then
+    rows := ExecuteDirect('select % from % where %=?',[InternalToExternal(BlobField^.Name),
+      fTableName,RowIDFieldName],[aID],{results=}true);
+  if (rows<>nil) and rows.Step then
   try
-    BlobData := Rows.ColumnBlob(0);
+    BlobData := rows.ColumnBlob(0);
+    rows := nil;
     result := true; // success
-    Rows := nil;
   except
-    on Exception do
-      result := false;
+    rows := nil;
+    HandleClearPoolOnConnectionIssue;
   end;
 end;
 
 function TSQLRestStorageExternal.RetrieveBlobFields(Value: TSQLRecord): boolean;
-var Rows: ISQLDBRows;
+var rows: ISQLDBRows;
     f: Integer;
     data: TSQLVar;
     temp: RawByteString;
@@ -1446,27 +1484,26 @@ begin
   if (Value<>nil) and (Value.ID>0) and (PSQLRecordClass(Value)^=fStoredClass) then
   with Value.RecordProps do
   if BlobFields<>nil then begin
-    Rows := ExecuteDirect('select % from % where %=?',
+    rows := ExecuteDirect('select % from % where %=?',
       [fRetrieveBlobFieldsSQL,fTableName,fStoredClassMapping^.RowIDFieldName],
       [Value.ID],true);
-    if (Rows<>nil) and Rows.Step then
+    if (rows<>nil) and rows.Step then
     try
       for f := 0 to High(BlobFields) do begin
-        Rows.ColumnToSQLVar(f,data,temp);
+        rows.ColumnToSQLVar(f,data,temp);
         BlobFields[f].SetFieldSQLVar(Value,data);
       end;
+      rows := nil;
       result := true; // success
-      Rows := nil;
     except
-      on Exception do
-        result := false;
+      HandleClearPoolOnConnectionIssue;
     end;
   end;
 end;
 
 function TSQLRestStorageExternal.EngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
-var Rows: ISQLDBRows;
+var rows: ISQLDBRows;
     ExtWhereFieldName, JSON: RawUTF8;
 begin
   if (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
@@ -1478,13 +1515,13 @@ begin
          ExtWhereFieldName,WhereValue],false)<>nil;
       if result and (Owner<>nil) then begin
         if Owner.InternalUpdateEventNeeded(TableModelIndex) then begin
-          Rows := ExecuteInlined('select % from % where %=:(%):',
+          rows := ExecuteInlined('select % from % where %=:(%):',
             [RowIDFieldName,fTableName,ExtWhereFieldName,WhereValue],true);
-          if Rows=nil then
+          if rows=nil then
             exit;
           JSONEncodeNameSQLValue(SetFieldName,SetValue,JSON);
-          while Rows.Step do
-            Owner.InternalUpdateEvent(seUpdate,TableModelIndex,Rows.ColumnInt(0),JSON,nil);
+          while rows.Step do
+            Owner.InternalUpdateEvent(seUpdate,TableModelIndex,rows.ColumnInt(0),JSON,nil);
         end;
         Owner.FlushInternalDBCache;
       end;
@@ -1511,8 +1548,7 @@ begin
       if result and (Owner<>nil) then
         Owner.FlushInternalDBCache;
     except
-      on Exception do
-        result := false;
+      HandleClearPoolOnConnectionIssue;
     end;
 end;
 
@@ -1530,8 +1566,8 @@ begin
       Owner.FlushInternalDBCache;
     with fStoredClassMapping^ do
       Statement := fProperties.NewThreadSafeStatementPrepared(
-        'update % set %=? where %=?',
-        [fTableName,InternalToExternal(BlobField^.Name),RowIDFieldName],false);
+        'update % set %=? where %=?',[fTableName,InternalToExternal(BlobField^.Name),
+        RowIDFieldName],{results=}false,{except=}true);
     if Statement<>nil then begin
       if BlobData='' then
         Statement.BindNull(1) else
@@ -1546,8 +1582,8 @@ begin
       result := true; // success
     end;
   except
-    on Exception do
-      result := false;
+    Statement := nil;
+    HandleClearPoolOnConnectionIssue; // leave result=false to notify error
   end;
 end;
 
@@ -1583,17 +1619,19 @@ begin
 end;
 
 function TSQLRestStorageExternal.PrepareInlinedForRows(const aSQL: RawUTF8): ISQLDBStatement;
+var stmt: ISQLDBStatement;
 begin
   result := nil; // returns nil interface on error
   if self=nil then
     exit;
   try
-    result := fProperties.PrepareInlined(aSQL,true);
-    if (result<>nil) and (sftDateTimeMS in fStoredClassRecordProps.HasTypeFields) then
-      result.ForceDateWithMS := true;
+    stmt := fProperties.PrepareInlined(aSQL,true);
+    if (stmt<>nil) and (sftDateTimeMS in fStoredClassRecordProps.HasTypeFields) then
+      stmt.ForceDateWithMS := true;
+    result := stmt;
   except
-    on Exception do
-      result := nil;
+    stmt := nil;
+    HandleClearPoolOnConnectionIssue;
   end;
 end;
 
@@ -1615,8 +1653,8 @@ begin
     stmt.ExecutePrepared;
     result := stmt;
   except
-    on Exception do
-      result := nil;
+    stmt := nil;
+    HandleClearPoolOnConnectionIssue; // leave result=nil to notify error
   end;
 end;
 
@@ -1628,58 +1666,57 @@ end;
 
 function TSQLRestStorageExternal.PrepareDirectForRows(SQLFormat: PUTF8Char;
   const Args, Params: array of const): ISQLDBStatement;
-var Query: ISQLDBStatement;
+var stmt: ISQLDBStatement;
 begin
   result := nil;
-  if self=nil then
-    exit;
-  Query := fProperties.NewThreadSafeStatementPrepared(SQLFormat,Args,true);
-  if Query<>nil then
+  if self<>nil then
   try
-    Query.Bind(Params);
+    stmt := fProperties.NewThreadSafeStatementPrepared(SQLFormat,Args,{results=}true,{except=}true);
+    if stmt=nil then
+      exit;
+    stmt.Bind(Params);
     if sftDateTimeMS in fStoredClassRecordProps.HasTypeFields then
-      Query.ForceDateWithMS := true;
-    result := Query;
+      stmt.ForceDateWithMS := true;
+    result := stmt;
   except
-    on Exception do
-      result := nil;
+    stmt := nil;
+    HandleClearPoolOnConnectionIssue;
   end;
 end;
 
 function TSQLRestStorageExternal.ExecuteDirect(SQLFormat: PUTF8Char;
   const Args, Params: array of const; ExpectResults: Boolean): ISQLDBRows;
-var Query: ISQLDBStatement;
+var stmt: ISQLDBStatement;
 begin
   result := nil;
   if self=nil then
     exit;
   if not ExpectResults and (Owner<>nil) then
     Owner.FlushInternalDBCache; // add/update/delete should flush DB cache
-  Query := fProperties.NewThreadSafeStatementPrepared(SQLFormat,Args,ExpectResults);
-  if Query<>nil then
   try
-    Query.Bind(Params);
+    stmt := fProperties.NewThreadSafeStatementPrepared(SQLFormat,Args,ExpectResults,{except=}true);
+    stmt.Bind(Params);
     if ExpectResults and (sftDateTimeMS in fStoredClassRecordProps.HasTypeFields) then
-      Query.ForceDateWithMS := true;
-    Query.ExecutePrepared;
-    result := Query;
+      stmt.ForceDateWithMS := true;
+    stmt.ExecutePrepared;
+    result := stmt;
   except
-    on Exception do
-      result := nil;
+    stmt := nil;
+    HandleClearPoolOnConnectionIssue; // leave result=nil to notify error
   end;
 end;
 
 function TSQLRestStorageExternal.ExecuteDirectSQLVar(SQLFormat: PUTF8Char;
   const Args: array of const; var Params: TSQLVarDynArray; const LastIntegerParam: Int64;
   ParamsMatchCopiableFields: boolean): boolean;
-var Query: ISQLDBStatement;
+var stmt: ISQLDBStatement;
     ParamsCount, f: integer;
 begin
   result := false;
   if Self<>nil then
   try
-    Query := fProperties.NewThreadSafeStatementPrepared(SQLFormat,Args,false);
-    if Query=nil then
+    stmt := fProperties.NewThreadSafeStatementPrepared(SQLFormat,Args,{results=}false,{except=}true);
+    if stmt=nil then
       exit;
     ParamsCount := length(Params);
     if ParamsMatchCopiableFields and
@@ -1691,32 +1728,37 @@ begin
          (fStoredClassRecordProps.CopiableFields[f].SQLFieldTypeStored in
            [sftDateTime,sftDateTimeMS]) and
          (Params[f].VType=ftUTF8) then
-        Query.BindDateTime(f+1,Iso8601ToDateTimePUTF8Char(Params[f].VText)) else
-        Query.Bind(f+1,Params[f]);
+        stmt.BindDateTime(f+1,Iso8601ToDateTimePUTF8Char(Params[f].VText)) else
+        stmt.Bind(f+1,Params[f]);
     if LastIntegerParam<>0 then
-      Query.Bind(ParamsCount+1,LastIntegerParam);
-    Query.ExecutePrepared;
-    result := true; // success
+      stmt.Bind(ParamsCount+1,LastIntegerParam);
+    stmt.ExecutePrepared;
+    result := true;
   except
-    on Exception do
-      result := false;
+    stmt := nil;
+    HandleClearPoolOnConnectionIssue; // leave result=false to notify error
   end;
 end;
 
-function TSQLRestStorageExternal.EngineSearchField(
-  const FieldName: ShortString; const FieldValue: array of const;
-  out ResultID: TIDDynArray): boolean;
+function TSQLRestStorageExternal.EngineSearchField(const FieldName: ShortString;
+  const FieldValue: array of const; out ResultID: TIDDynArray): boolean;
 var n: Integer;
-    Rows: ISQLDBRows;
+    rows: ISQLDBRows;
 begin
-  n := 0;
-  Rows := ExecuteDirect('select % from % where %=?',
-    [fStoredClassMapping^.RowIDFieldName,fTableName,FieldName],FieldValue,true);
-  if Rows<>nil then
-    while Rows.Step do
-      AddInt64(TInt64DynArray(ResultID),n,Rows.ColumnInt(0));
-  SetLength(ResultID,n);
-  result := n>0;
+  result := false;
+  try
+    n := 0;
+    rows := ExecuteDirect('select % from % where %=?',
+      [fStoredClassMapping^.RowIDFieldName,fTableName,FieldName],FieldValue,true);
+    if rows<>nil then
+      while rows.Step do
+        AddInt64(TInt64DynArray(ResultID),n,rows.ColumnInt(0));
+    SetLength(ResultID,n);
+    result := n>0;
+  except
+    rows := nil;
+    HandleClearPoolOnConnectionIssue; // leave result=false to notify error
+  end;
 end;
 
 function TSQLRestStorageExternal.SearchField(const FieldName: RawUTF8;
@@ -1835,6 +1877,22 @@ begin
     result := fProperties;
 end;
 
+function TSQLRestStorageExternal.HandleClearPoolOnConnectionIssue: boolean;
+var conn: TSQLDBConnection;
+begin
+  result := false;
+  if (self<>nil) and (fStoredClassMapping<>nil) and
+     (rpmClearPoolOnConnectionIssue in fStoredClassMapping.Options) then begin
+    conn := fProperties.ThreadSafeConnection;
+    if conn.LastErrorWasAboutConnection then begin
+      InternalLog('HandleClearPoolOnConnectionIssue: ClearConnectionPool after %',
+        [conn.LastErrorException],sllDB);
+      fProperties.ClearConnectionPool;
+      result := true;
+    end;
+  end;
+end;
+
 function TSQLRestStorageExternal.ExecuteFromJSON(
   const SentData: RawUTF8; Occasion: TSQLOccasion; UpdatedID: TID): TID;
 var Decoder: TJSONObjectDecoder;
@@ -1843,7 +1901,7 @@ var Decoder: TJSONObjectDecoder;
     ExternalFields: TRawUTF8DynArray;
     InsertedID: TID;
     F: integer;
-    Query: ISQLDBStatement;
+    stmt: ISQLDBStatement;
 begin
   result := 0;
   StorageLock(false,'ExecuteFromJson'); // avoid race condition against max(ID)
@@ -1877,16 +1935,18 @@ begin
     if Occasion=soUpdate then  // Int64ToUTF8(var) fails on D2007
       Decoder.FieldValues[Decoder.FieldCount-1] := Int64ToUTF8(UpdatedID);
     // execute statement
-    Query := fProperties.NewThreadSafeStatementPrepared(SQL,false);
-    if Query=nil then
-      exit;
     try
+      stmt := fProperties.NewThreadSafeStatementPrepared(SQL,{results=}false,{except=}true);
+      if stmt=nil then
+        exit;
       for F := 0 to Decoder.FieldCount-1 do
       if Decoder.FieldTypeApproximation[F]=ftaNull then
-        Query.BindNull(F+1) else
-        Query.Bind(F+1,Types[F],Decoder.FieldValues[F],true);
-      Query.ExecutePrepared;
+        stmt.BindNull(F+1) else
+        stmt.Bind(F+1,Types[F],Decoder.FieldValues[F],true);
+      stmt.ExecutePrepared;
     except
+      stmt := nil;
+      HandleClearPoolOnConnectionIssue;
       exit; // leave result=0
     end;
     // mark success
@@ -1995,6 +2055,14 @@ end;
 
 { TSQLVirtualTableCursorExternal }
 
+procedure TSQLVirtualTableCursorExternal.HandleClearPoolOnConnectionIssue;
+begin
+  fStatement := nil;
+  fHasData := false;
+  if (self<>nil) and (Table<>nil) and (Table.Static<>nil) then
+    (Table.Static as TSQLRestStorageExternal).HandleClearPoolOnConnectionIssue;
+end;
+
 function TSQLVirtualTableCursorExternal.Column(aColumn: integer;
   var aResult: TSQLVar): boolean;
 var n: cardinal;
@@ -2010,8 +2078,7 @@ begin
     fStatement.ColumnToSQLVar(aColumn,aResult,fColumnTemp);
     result := aResult.VType<>ftUnknown;
   except
-    on Exception do
-      result := false;
+    HandleClearPoolOnConnectionIssue;
   end;
 end;
 
@@ -2028,26 +2095,27 @@ begin
     fHasData := fStatement.Step;
     result := true; // success (may be with no more data)
   except
-    on Exception do
-      fHasData := false; // returns false on error + HasData=false
+    HandleClearPoolOnConnectionIssue;
   end;
 end;
 
 function TSQLVirtualTableCursorExternal.Search(
   const Prepared: TSQLVirtualTablePrepared): boolean;
 var i: integer;
+    storage: TSQLRestStorageExternal;
 begin
   result := false;
-  if (Self<>nil) and (Table<>nil) and (Table.Static<>nil) then
-  with Table.Static as TSQLRestStorageExternal do begin
+  if (Self<>nil) and (Table<>nil) and (Table.Static<>nil) then begin
+    storage := Table.Static as TSQLRestStorageExternal;
     {$ifndef SQLVIRTUALLOGS}
     if fSQL='' then
     {$endif}
-      fSQL := ComputeSQL(Prepared);
+      fSQL := storage.ComputeSQL(Prepared);
     try
-      fStatement := fProperties.NewThreadSafeStatementPrepared(fSQL,true);
+      fStatement := storage.fProperties.NewThreadSafeStatementPrepared(
+        fSQL,{results=}true,{except=}true);
       if fStatement<>nil then begin
-        if sftDateTimeMS in fStoredClassRecordProps.HasTypeFields then
+        if sftDateTimeMS in storage.fStoredClassRecordProps.HasTypeFields then
           fStatement.ForceDateWithMS := true;
         for i := 1 to Prepared.WhereCount do
           fStatement.Bind(i,Prepared.Where[i-1].Value);
@@ -2055,8 +2123,7 @@ begin
         result := Next; // on execution success, go to the first row
       end;
     except
-      on Exception do
-        fStatement := nil;
+      self.HandleClearPoolOnConnectionIssue;
     end;
   end;
 end;

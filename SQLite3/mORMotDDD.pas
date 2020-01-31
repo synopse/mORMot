@@ -1294,7 +1294,7 @@ begin
   if (aAggregate=nil) or (fRest=nil) or (fTable=nil) then
     raise EDDDRepository.CreateUTF8(self,'Invalid %.Create(nil)',[self]);
   fAggregate.Init(aAggregate);
-  fPropsMapping.Init(aTable,RawUTF8(aAggregate.ClassName),aRest,false);
+  fPropsMapping.Init(aTable,RawUTF8(aAggregate.ClassName),aRest,false,[]);
   fPropsMapping.MapFields(['ID','####']); // no ID/RowID for our aggregates
   fPropsMapping.MapFields(TableAggregatePairs);
   fAggregateRTTI := TSQLPropInfoList.Create(aAggregate, GetAggregateRTTIOptions);
