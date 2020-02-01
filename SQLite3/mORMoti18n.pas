@@ -212,13 +212,16 @@ interface
 {$endif}
 
 uses
-  Windows, SysUtils, Classes,
+  Windows,
+  SysUtils,
+  Classes,
   {$ifdef USEFORMCREATEHOOK}
   {$ifndef LVCL}
   Menus,
   {$endif}
   {$endif USEFORMCREATEHOOK}
-  StdCtrls, Forms,
+  StdCtrls,
+  Forms,
   SynCommons,     // some basic types and functions
   mORmot;         // need extended RTTI information
 
@@ -708,7 +711,9 @@ uses
   UxTheme,
   {$endif}
 {$endif}
-  Controls, ExtCtrls, Graphics;
+  Controls,
+  ExtCtrls,
+  Graphics;
 
 var
   // to speed up search in LanguageAbrToIndex():
@@ -864,14 +869,6 @@ const
         RUSSIAN_CHARSET, // 'mk' Macedonian CP1251, iso-8859-5
         ARABIC_CHARSET // 'ap' Pashto (Afghanistan)
      );
-
-type
-  PPatchEvent = ^TPatchEvent;
-  /// asm opcode hack to patch an existing routine
-  TPatchEvent = packed record
-    Jump: byte;
-    Offset: PtrInt;
-  end;
 
 
 {$ifndef ENHANCEDRTL}
@@ -1061,15 +1058,17 @@ end;
 function i18nInnerCompareText(const S1, S2: AnsiString): Integer;
 var Str1, Str2: PByte;
     C1, C2: byte;
+    table: {$ifdef CPUX86NOTPIC}TNormTableByte absolute i18nToUpperByte{$else}PNormTableByte{$endif};
 begin
   Str1 := pointer(S1);
   Str2 := pointer(S2);
   if Str1<>Str2 then
   if Str1<>nil then
   if Str2<>nil then begin
+    {$ifndef CPUX86NOTPIC}table := @i18nToUpperByte;{$endif}
     repeat
-      C1 := i18nToUpperByte[Str1^];
-      C2 := i18nToUpperByte[Str2^];
+      C1 := table[Str1^];
+      C2 := table[Str2^];
       if (C1<>C2) or (C1=0) then
         break;
       Inc(Str1);
@@ -1081,7 +1080,8 @@ begin
   result := -1 else // Str1=''
   result := 0;      // Str1=Str2
 end;
-{$else}
+
+{$else PUREPASCAL}
 
 {$ifndef ENHANCEDRTL}
 function i18nInnerCompareStr(const S1, S2: AnsiString): Integer;
@@ -1311,7 +1311,8 @@ begin
     end;
     CharUpperBuffA(i18nToUpper,256); // get values from current user locale
     CharLowerBuffA(i18nToLower,256);
-    if not(CharSet in [GB2312_CHARSET,SHIFTJIS_CHARSET,HANGEUL_CHARSET,ARABIC_CHARSET]) and
+    if not((CharSet in [GB2312_CHARSET,SHIFTJIS_CHARSET,HANGEUL_CHARSET,ARABIC_CHARSET])
+       {$ifndef LVCL} or SysLocale.FarEast{$endif}) and
       (LanguageCharSet[LCIDToLanguage(GetUserDefaultLCID)]=CharSet) then begin
       // NormToUpper/Lower[] was filled with LOCALE_USER_DEFAULT values
       // -> OK if same CHARSET, and not multi-byte
@@ -2563,6 +2564,7 @@ initialization
   // avoid call nil functions -> set default function to point to
   i18nCompareStr := {$ifdef ENHANCEDRTL}CompareStr{$else}i18nInnerCompareStr{$endif};
   move(NormToUpper,i18nToUpper,sizeof(NormToUpper));
+  move(NormToLower,i18nToLower,sizeof(NormToUpper));
   i18nCompareText := i18nInnerCompareText;
 {$ifndef ENHANCEDRTL}
   RedirectCode(@System.LoadResString,@mORmoti18n.LoadResString,@BackupLoadResString);

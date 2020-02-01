@@ -2367,7 +2367,7 @@ begin
     result := TSQLRecord.CaptionName(@Action) else
     if Obj.InheritsFrom(TSQLRecord) then
       result := TSQLRecord(Obj).CaptionName else
-      result := TSQLRecord.CaptionNameFromRTTI(PPointer(PtrInt(Obj.ClassType)+vmtClassName)^);
+      result := TSQLRecord.CaptionNameFromRTTI(ClassNameShort(Obj));
   if Index>=0 then
     result := result+' '+IntToStr(Index);
 end;

@@ -524,7 +524,7 @@ begin
     if IdemPChar(Pointer(id),'TSYN') then
       if IdemPChar(Pointer(id),'TSYNTEST') then
         Delete(id,1,8) else
-      Delete(id,1,4) else
+        Delete(id,1,4) else
     if IdemPChar(Pointer(id),'TTEST') then
       Delete(id,1,5) else
     if id[1]='T' then
