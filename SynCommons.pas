@@ -4707,6 +4707,9 @@ function ToVarUInt64(Value: QWord; Dest: PByte): PByte;
 /// convert a 64-bit variable-length integer buffer into a UInt64
 function FromVarUInt64(var Source: PByte): QWord;
 
+/// convert a 64-bit variable-length integer buffer into a UInt64
+function FromVarUInt64Safe(Source, SourceMax: PByte; out Value: QWord): PByte;
+
 /// convert a Int64 into a 64-bit variable-length integer buffer
 function ToVarInt64(Value: Int64; Dest: PByte): PByte; {$ifdef HASINLINE}inline;{$endif}
 
@@ -4728,6 +4731,10 @@ function GotoNextVarString(Source: PByte): pointer; {$ifdef HASINLINE}inline;{$e
 
 /// retrieve a variable-length UTF-8 encoded text buffer in a newly allocation RawUTF8
 function FromVarString(var Source: PByte): RawUTF8; overload;
+
+/// safe retrieve a variable-length UTF-8 encoded text buffer in a newly allocation RawUTF8
+// - supplied SourceMax value will avoid any potential buffer overflow
+function FromVarString(var Source: PByte; SourceMax: PByte): RawUTF8; overload;
 
 /// retrieve a variable-length text buffer
 // - this overloaded function will set the supplied code page to the AnsiString
@@ -10583,7 +10590,7 @@ type
     /// retrieve the current in-memory pointer
     // - if file was not memory-mapped, returns nil
     // - if DataLen>0, will increment the current in-memory position
-    function CurrentMemory(DataLen: PtrUInt=0): pointer;
+    function CurrentMemory(DataLen: PtrUInt=0; PEnd: PPAnsiChar=nil): pointer;
     /// retrieve the current in-memory position
     // - if file was not memory-mapped, returns -1
     function CurrentPosition: integer;
@@ -40467,7 +40474,7 @@ begin
       end;
     end;
   end;
-  result := Source;
+  result := Source; // safely decoded
 end;
 
 function FromVarInt32(var Source: PByte): integer;
@@ -40625,6 +40632,33 @@ begin
   Source := p;
 end;
 
+function FromVarUInt64Safe(Source, SourceMax: PByte; out Value: QWord): PByte;
+var c,n: PtrUInt;
+begin
+  result := nil; // error
+  if PAnsiChar(Source)>=PAnsiChar(SourceMax) then exit;
+  c := Source^;
+  inc(Source);
+  if c>$7f then begin
+    Value := c and $7F;
+    n := 7;
+    repeat
+      if PAnsiChar(Source)>=PAnsiChar(SourceMax) then
+        exit;
+      c := Source^;
+      inc(Source);
+      if c<=$7f then
+        break;
+      c := c and $7f;
+      Value := Value or (QWord(c) shl n);
+      inc(n,7);
+    until false;
+    Value := Value or (QWord(c) shl n);
+  end else
+    Value := c;
+  result := Source; // safely decoded
+end;
+
 function FromVarInt64(var Source: PByte): Int64;
 var c,n: PtrUInt;
 begin // 0=0,1=1,2=-1,3=2,4=-2...
@@ -40753,6 +40787,16 @@ function FromVarString(var Source: PByte): RawUTF8;
 var Len: PtrUInt;
 begin
   Len := FromVarUInt32(Source);
+  FastSetStringCP(Result,Source,Len,CP_UTF8);
+  inc(Source,Len);
+end;
+
+function FromVarString(var Source: PByte; SourceMax: PByte): RawUTF8;
+var Len: cardinal;
+begin
+  Source := FromVarUInt32Safe(Source,SourceMax,Len);
+  if Source=nil then
+    Len := 0;
   FastSetStringCP(Result,Source,Len,CP_UTF8);
   inc(Source,Len);
 end;
@@ -61802,11 +61846,13 @@ begin // read Isize + buffer in P,PEnd
   PEnd := pointer(PtrUInt(P)+PtrUInt(len));
 end;
 
-function TFileBufferReader.CurrentMemory(DataLen: PtrUInt): pointer;
+function TFileBufferReader.CurrentMemory(DataLen: PtrUInt; PEnd: PPAnsiChar): pointer;
 begin
   if (fMap.fBuf=nil) or (fCurrentPos+DataLen>=fMap.fBufSize) then
     result := nil else begin
     result := @fMap.fBuf[fCurrentPos];
+    if PEnd<>nil then
+      PEnd^ := @fMap.fBuf[fMap.fBufSize];
     inc(fCurrentPos,DataLen);
   end;
 end;
