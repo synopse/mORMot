@@ -4853,6 +4853,14 @@ begin
     {$ifdef MSWINDOWS}and (err<>WSAETIMEDOUT) and (err<>WSAEWOULDBLOCK){$endif};
 end;
 
+function WSAErrorAtShutdown(sock: TSocket): integer;
+var dummy: byte;
+begin
+  if AsynchRecv(sock,@dummy,SizeOf(dummy))<0 then
+    result := WSAGetLastError else
+    result := 0; // read access allowed = socket was closed gracefully
+end;
+
 function InputSock(var F: TTextRec): Integer;
 // SockIn pseudo text file fill its internal buffer only with available data
 // -> no unwanted wait time is added
@@ -12569,7 +12577,7 @@ begin
     if sock<>0 then
       try
         slot.socket := 0; // notify ProcessRead/ProcessWrite to abort
-        slot.lastWSAError := WSAGetLastError;
+        slot.lastWSAError := WSAErrorAtShutdown(sock);
         fRead.Unsubscribe(sock,TPollSocketTag(connection));
         fWrite.Unsubscribe(sock,TPollSocketTag(connection));
         result := true;
