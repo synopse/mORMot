@@ -3404,9 +3404,10 @@ type
     /// append the property value into a binary buffer
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); virtual; abstract;
     /// read the property value from a binary buffer
+    // - PEnd should point to the end of the input buffer, to avoid any overflow
     // - returns next char in input buffer on success, or nil in case of invalid
     // content supplied e.g.
-    function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; virtual; abstract;
+    function SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar; virtual; abstract;
     /// copy a property value from one instance to another
     // - both objects should have the same exact property
     procedure CopyValue(Source, Dest: TObject); virtual;
@@ -3527,7 +3528,7 @@ type
       var temp: RawByteString); override;
     function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
-    function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
+    function SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar; override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
@@ -3585,7 +3586,7 @@ type
       var temp: RawByteString); override;
     function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
-    function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
+    function SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar; override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
@@ -3620,7 +3621,7 @@ type
       var temp: RawByteString); override;
     function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
-    function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
+    function SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
@@ -3638,7 +3639,7 @@ type
       var temp: RawByteString); override;
     function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
-    function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
+    function SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
@@ -3671,7 +3672,7 @@ type
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure CopyValue(Source, Dest: TObject); override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
-    function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
+    function SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar; override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
     procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
       var temp: RawByteString); override;
@@ -3742,7 +3743,7 @@ type
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure CopyValue(Source, Dest: TObject); override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
-    function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
+    function SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar; override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
@@ -3760,7 +3761,7 @@ type
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure CopyValue(Source, Dest: TObject); override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
-    function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
+    function SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar; override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
     procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
       var temp: RawByteString); override;
@@ -3795,7 +3796,7 @@ type
       var temp: RawByteString); override;
     function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
-    function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
+    function SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar; override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
@@ -3838,7 +3839,7 @@ type
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
-    function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
+    function SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar; override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
@@ -3945,7 +3946,7 @@ type
       var temp: RawByteString); override;
     function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
-    function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
+    function SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar; override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
@@ -3984,7 +3985,7 @@ type
       var temp: RawByteString); override;
     function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
-    function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
+    function SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar; override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
@@ -4062,7 +4063,7 @@ type
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
-    function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
+    function SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
   end;
 
@@ -5342,7 +5343,7 @@ type
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
-    function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
+    function SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
@@ -5357,7 +5358,7 @@ type
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
-    function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
+    function SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar; override;
   end;
 
   TSQLPropInfoRTTIManyObjArray = array of TSQLPropInfoRTTIMany;
@@ -7843,18 +7844,21 @@ type
     // - won't read the ID field (should be read before, with the Count e.g.)
     // - returns true on success, or false in case of invalid content in P^ e.g.
     // - P is updated to the next pending content after the read values
-    function SetBinaryValues(var P: PAnsiChar): Boolean;
+    function SetBinaryValues(var P: PAnsiChar; PEnd: PAnsiChar): Boolean;
     /// set the simple field values from a binary buffer
     // - won't read the ID field (should be read before, with the Count e.g.)
     // - returns true on success, or false in case of invalid content in P^ e.g.
     // - P is updated to the next pending content after the read values
-    function SetBinaryValuesSimpleFields(var P: PAnsiChar): Boolean;
+    function SetBinaryValuesSimpleFields(var P: PAnsiChar; PEnd: PAnsiChar): Boolean;
     /// write the record fields into RawByteString a binary buffer
     // - same as GetBinaryValues(), but also writing the ID field first
     function GetBinary: RawByteString;
     /// set the record fields from a binary buffer saved by GetBinary()
     // - same as SetBinaryValues(), but also reading the ID field first
-    function SetBinary(P: PAnsiChar): Boolean;
+    function SetBinary(P,PEnd: PAnsiChar): Boolean; overload;
+    /// set the record fields from a binary buffer saved by GetBinary()
+    // - same as SetBinaryValues(), but also reading the ID field first
+    function SetBinary(const binary: RawByteString): Boolean; overload;
     /// set all field values from a supplied array of TSQLVar values
     // - Values[] array must match the RecordProps.Field[] order: will return
     // false if the Values[].VType does not match RecordProps.FieldType[]
@@ -15932,7 +15936,7 @@ type
     function GetGroupID: TID;
     procedure SaveTo(W: TFileBufferWriter); virtual;
     procedure ComputeProtectedValues; virtual;
-    constructor CreateFrom(var P: PAnsiChar; Server: TSQLRestServer); virtual;
+    constructor CreateFrom(var P: PAnsiChar; PEnd: PAnsiChar; Server: TSQLRestServer); virtual;
   public
     /// initialize a session instance with the supplied TSQLAuthUser instance
     // - this aUser instance will be handled by the class until Destroy
@@ -22467,10 +22471,14 @@ begin
     result := fPropInfo.GetOrdProp(Item1)-fPropInfo.GetOrdProp(Item2);
 end;
 
-function TSQLPropInfoRTTIInt32.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
+function TSQLPropInfoRTTIInt32.SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar;
+var c: cardinal;
 begin
-  if P<>nil then
-    fPropInfo.SetOrdProp(Instance,integer(FromVarUInt32(PByte(P))));
+  if P<>nil then begin
+    P := pointer(FromVarUInt32Safe(pointer(P),pointer(PEnd),c));
+    if P<>nil then
+      fPropInfo.SetOrdProp(Instance,integer(c));
+  end;
   result := P;
 end;
 
@@ -22721,12 +22729,14 @@ begin
   end;
 end;
 
-function TSQLPropInfoRTTIInt64.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
+function TSQLPropInfoRTTIInt64.SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar;
 begin
   if P=nil then
     result := nil else begin
-    fPropInfo.SetInt64Prop(Instance,PInt64(P)^);
     result := P+SizeOf(Int64);
+    if result>PEnd then
+      result := nil else
+      fPropInfo.SetInt64Prop(Instance,PInt64(P)^);
   end;
 end;
 
@@ -22836,12 +22846,14 @@ type
   unaligned = Double;
 {$endif}
 
-function TSQLPropInfoRTTIDouble.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
+function TSQLPropInfoRTTIDouble.SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar;
 begin
   if P=nil then
     result := nil else begin
-    fPropInfo.SetDoubleProp(Instance,unaligned(PDouble(P)^));
     result := P+SizeOf(double);
+    if result>PEnd then
+      result := nil else
+      fPropInfo.SetDoubleProp(Instance,unaligned(PDouble(P)^));
   end;
 end;
 
@@ -22952,12 +22964,14 @@ begin
   W.Write(@V,SizeOf(V));
 end;
 
-function TSQLPropInfoRTTICurrency.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
+function TSQLPropInfoRTTICurrency.SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar;
 begin
   if P=nil then
     result := nil else begin
-    fPropInfo.SetCurrencyProp(Instance,PCurrency(P)^);
     result := P+SizeOf(Currency);
+    if result>PEnd then
+      result := nil else
+      fPropInfo.SetCurrencyProp(Instance,PCurrency(P)^);
   end;
 end;
 
@@ -23043,7 +23057,7 @@ procedure TSQLPropInfoRTTIMany.GetBinary(Instance: TObject; W: TFileBufferWriter
 begin
 end;
 
-function TSQLPropInfoRTTIMany.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
+function TSQLPropInfoRTTIMany.SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar;
 begin
   result := P;
 end;
@@ -23173,12 +23187,12 @@ begin
   W.Write(ObjectToJSON(GetInstance(Instance)));
 end;
 
-function TSQLPropInfoRTTIObject.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
+function TSQLPropInfoRTTIObject.SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar;
 var valid: boolean;
     tmp: TSynTempBuffer;
 begin
   // unserialize object from JSON UTF-8 TEXT - not fast, but works
-  FromVarString(PByte(P),tmp);
+  FromVarString(PByte(P),PByte(PEnd),tmp);
   try
     PropInfo^.ClassFromJSON(Instance,tmp.buf,valid,JSONTOOBJECT_TOLERANTOPTIONS);
   finally
@@ -23282,7 +23296,7 @@ begin
   end;
 end;
 
-function TSQLPropInfoRTTIAnsi.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
+function TSQLPropInfoRTTIAnsi.SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar;
 var tmp: RawByteString;
 begin
   FromVarString(PByte(P),tmp,fEngine.CodePage);
@@ -23707,9 +23721,10 @@ begin
   end;
 end;
 
-function TSQLPropInfoRTTIWide.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
+function TSQLPropInfoRTTIWide.SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar;
 begin
-  fPropInfo.SetWideStrProp(Instance,UTF8ToWideString(FromVarString(PByte(P))));
+  fPropInfo.SetWideStrProp(Instance,
+    UTF8ToWideString(FromVarString(PByte(P),pointer(PEnd))));
   result := P;
 end;
 
@@ -23798,9 +23813,10 @@ begin
   end;
 end;
 
-function TSQLPropInfoRTTIUnicode.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
+function TSQLPropInfoRTTIUnicode.SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar;
 begin
-  fPropInfo.SetUnicodeStrProp(Instance,UTF8DecodeToUnicodeString(FromVarString(PByte(P))));
+  fPropInfo.SetUnicodeStrProp(Instance,
+    UTF8DecodeToUnicodeString(FromVarString(PByte(P),pointer(PEnd))));
   result := P;
 end;
 
@@ -24043,18 +24059,19 @@ begin
   end;
 end;
 
-function TSQLPropInfoRTTIDynArray.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
+function TSQLPropInfoRTTIDynArray.SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar;
 var tmp: TSynTempBuffer; // LoadFromJSON() may change the input buffer
     da: TDynArray;
 begin
   GetDynArray(Instance,da);
   if fObjArray<>nil then begin
-    FromVarString(PByte(P),tmp);
-    da.LoadFromJSON(tmp.buf);
+    FromVarString(PByte(P),PByte(PEnd),tmp);
+    da.LoadFromJSON(tmp.buf); // T*ObjArray would use JSON serialization
     tmp.Done;
     result := P;
   end else
-    result := da.LoadFrom(P);
+    // regular dynamic arrays use our binary encoding
+    result := da.LoadFrom(P,nil,{nohash=}true,PEnd);
 end;
 
 procedure TSQLPropInfoRTTIDynArray.SetValue(Instance: TObject;
@@ -24381,12 +24398,12 @@ begin
       result := CompareWithLocalTempCopy;
 end;
 
-function TSQLPropInfoRTTIVariant.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
+function TSQLPropInfoRTTIVariant.SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar;
 var value: Variant;
-begin
+begin // use our VariantLoad() binary serialization
   if fSQLFieldType=sftNullable then
-    result := VariantLoad(value,P,nil) else
-    result := VariantLoad(value,P,@DocVariantOptions);
+    result := VariantLoad(value,P,nil,PEnd) else
+    result := VariantLoad(value,P,@DocVariantOptions,PEnd);
   fPropInfo.SetVariantProp(Instance,value);
 end;
 
@@ -24545,9 +24562,9 @@ begin
     result := PtrInt(Item1)-PtrInt(Item2); // pseudo comparison
 end;
 
-function TSQLPropInfoRecordRTTI.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
-begin
-  result := RecordLoad(GetFieldAddr(Instance)^,P,fTypeInfo);
+function TSQLPropInfoRecordRTTI.SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar;
+begin // use our RecordLoad() binary serialization
+  result := RecordLoad(GetFieldAddr(Instance)^,P,fTypeInfo,nil,PEnd);
 end;
 
 procedure TSQLPropInfoRecordRTTI.SetValue(Instance: TObject; Value: PUTF8Char;
@@ -24676,12 +24693,12 @@ begin
   end;
 end;
 
-function TSQLPropInfoRecordFixedSize.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
+function TSQLPropInfoRecordFixedSize.SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar;
 begin
-  if P=nil then
-    FillCharFast(GetFieldAddr(Instance)^,fRecordSize,0) else
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,GetFieldAddr(Instance)^,fRecordSize);
   result := P+fRecordSize;
+  if result>PEnd then
+    result := nil else
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,GetFieldAddr(Instance)^,fRecordSize);
 end;
 
 procedure TSQLPropInfoRecordFixedSize.SetValue(Instance: TObject; Value: PUTF8Char;
@@ -24777,10 +24794,9 @@ begin
   W.Write(JSON);
 end;
 
-function TSQLPropInfoCustomJSON.SetBinary(Instance: TObject;
-  P: PAnsiChar): PAnsiChar;
-begin
-  SetValue(Instance,pointer(FromVarString(PByte(P))),false);
+function TSQLPropInfoCustomJSON.SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar;
+begin // stored as JSON VarString in the binary stream
+  SetValue(Instance,pointer(FromVarString(PByte(P),PByte(PEnd))),false);
   result := P;
 end;
 
@@ -32317,32 +32333,39 @@ begin
   end;
 end;
 
-function TSQLRecord.SetBinary(P: PAnsiChar): Boolean;
+function TSQLRecord.SetBinary(P,PEnd: PAnsiChar): Boolean;
 begin
-  fID := FromVarUInt64(PByte(P));
-  result := SetBinaryValues(P);
+  P := pointer(FromVarUInt64Safe(pointer(P),pointer(PEnd),PQWord(@fID)^));
+  result := SetBinaryValues(P,PEnd);
 end;
 
-function TSQLRecord.SetBinaryValues(var P: PAnsiChar): boolean;
+function TSQLRecord.SetBinary(const binary: RawByteString): Boolean;
+begin
+  result := SetBinary(pointer(binary),PAnsiChar(pointer(binary))+length(binary));
+end;
+
+function TSQLRecord.SetBinaryValues(var P: PAnsiChar; PEnd: PAnsiChar): boolean;
 var f: integer;
 begin
   result := false;
+  if P=nil then
+    exit; // on error
   with RecordProps do
     for f := 0 to Fields.Count-1 do begin
-      P := Fields.List[f].SetBinary(self,P);
+      P := Fields.List[f].SetBinary(self,P,PEnd);
       if P=nil then
-        exit; // on error
+        exit;
     end;
   result := true;
 end;
 
-function TSQLRecord.SetBinaryValuesSimpleFields(var P: PAnsiChar): Boolean;
+function TSQLRecord.SetBinaryValuesSimpleFields(var P: PAnsiChar; PEnd: PAnsiChar): Boolean;
 var f: integer;
 begin
   result := false;
   with RecordProps do
     for f := 0 to SimpleFieldCount-1 do begin
-      P := SimpleFields[f].SetBinary(self,P);
+      P := SimpleFields[f].SetBinary(self,P,PEnd);
       if P=nil then
         exit; // on error
     end;
@@ -43570,7 +43593,7 @@ end;
 var i,n: integer;
     s: RawByteString;
     R: TFileBufferReader;
-    P: PAnsiChar;
+    P,PEnd: PAnsiChar;
 begin
   if self=nil then
     exit;
@@ -43587,10 +43610,10 @@ begin
        not SQLAuthGroupClass.RecordProps.CheckBinaryHeader(R) then
       ContentError;
     n := R.ReadVarUInt32;
-    P := R.CurrentMemory;
+    P := R.CurrentMemory(0,@PEnd);
     fSessions.Clear;
     for i := 1 to n do begin
-      fSessions.Add(fSessionClass.CreateFrom(P,self));
+      fSessions.Add(fSessionClass.CreateFrom(P,PEnd,self));
       fStats.ClientConnect;
     end;
     fSessionCounter := PCardinal(P)^;
@@ -43805,22 +43828,27 @@ end;
 
 function TSQLRecordHistory.HistoryGet(Index: integer;
   out Event: TSQLHistoryEvent; out Timestamp: TModTime; Rec: TSQLRecord): boolean;
-var P: PAnsiChar;
+var P,PEnd: PAnsiChar;
 begin
+  result := false;
   if cardinal(Index)>=cardinal(HistoryCount) then
-    result := false else begin
-    P := pointer(fHistoryUncompressed);
-    inc(P,fHistoryUncompressedOffset[Index]);
-    Event := TSQLHistoryEvent(P^); inc(P);
-    Timestamp := FromVarUInt64(PByte(P));
-    if (Rec<>nil) and (Rec.RecordClass=fHistoryTable)  then begin
-      if Event=heDelete then
-        Rec.ClearProperties else
-        Rec.SetBinaryValuesSimpleFields(P);
-      Rec.fID := ModifiedID;
-    end;
-    result := true;
+    exit;
+  P := pointer(fHistoryUncompressed);
+  PEnd := P+length(fHistoryUncompressed);
+  inc(P,fHistoryUncompressedOffset[Index]);
+  Event := TSQLHistoryEvent(P^); inc(P);
+  P := pointer(FromVarUInt64Safe(pointer(P),pointer(PEnd),PQWord(@Timestamp)^));
+  if P=nil then
+    exit;
+  if (Rec<>nil) and (Rec.RecordClass=fHistoryTable)  then begin
+    if Event=heDelete then
+      Rec.ClearProperties else
+      Rec.SetBinaryValuesSimpleFields(P,PEnd);
+    Rec.fID := ModifiedID;
+    if P=nil then
+      exit;
   end;
+  result := true;
 end;
 
 function TSQLRecordHistory.HistoryGet(Index: integer; Rec: TSQLRecord): boolean;
@@ -46688,7 +46716,7 @@ var R: TFileBufferReader;
     i,n,f: integer;
     rec: PSQLRecordArray;
     ID32: TIntegerDynArray;
-    P: PAnsiChar;
+    P,PEnd: PAnsiChar;
     aRecord: TSQLRecord;
     lastID,newID: TID;
     s: RawUTF8;
@@ -46732,11 +46760,11 @@ begin
         rec[i] := aRecord;
       end;
     // read content, grouped by field (for better compression)
-    P := R.CurrentMemory;
+    P := R.CurrentMemory(0,@PEnd);
     for f := 0 to Fields.Count-1 do
       with Fields.List[f] do
         for i := 0 to fValue.Count-1 do begin
-          P := SetBinary(rec[i],P);
+          P := SetBinary(rec[i],P,PEnd);
           if P=nil then begin
             fValue.Clear; // on error, reset whole
             exit;
@@ -53120,22 +53148,37 @@ begin
   W.Write(fSentHeaders);
 end; // TODO: persist ORM/SOA stats? -> rather integrate them before saving
 
-constructor TAuthSession.CreateFrom(var P: PAnsiChar; Server: TSQLRestServer);
+constructor TAuthSession.CreateFrom(var P: PAnsiChar; PEnd: PAnsiChar; Server: TSQLRestServer);
+  procedure RaiseError;
+  begin
+    raise ESynException.CreateUTF8('%.CreateFrom() with invalid format',[self]);
+  end;
 var PB: PByte absolute P;
+    i32: cardinal;
 begin
   if PB^=TAUTHSESSION_MAGIC then
     inc(PB) else
-    raise ESynException.CreateUTF8('%.CreateFrom() with invalid format',[self]);
-  fIDCardinal := FromVarUInt32(PB);
+    RaiseError;
+  PB := FromVarUInt32Safe(PB,pointer(PEnd),fIDCardinal);
+  if PB=nil then
+    RaiseError;
   UInt32ToUtf8(fIDCardinal,fID);
   fUser := Server.SQLAuthUserClass.Create;
-  fUser.fID := FromVarUInt32(PB);
-  fUser.SetBinaryValues(P); // fUser.fGroup will be overriden by true instance
+  PB := FromVarUInt32Safe(PB,pointer(PEnd),i32);
+  if PB=nil then
+    RaiseError;
+  fUser.fID := i32;
+  fUser.SetBinaryValues(P,PEnd); // fUser.fGroup will be overriden by true instance
   fUser.fGroup := Server.SQLAuthGroupClass.Create;
-  fUser.fGroup.fID := FromVarUInt32(PB);
-  fUser.fGroup.SetBinaryValues(P);
-  fPrivateKey := FromVarString(PB);
-  fSentHeaders := FromVarString(PB);
+  PB := FromVarUInt32Safe(PB,pointer(PEnd),i32);
+  if PB=nil then
+    RaiseError;
+  fUser.fGroup.fID := i32;
+  fUser.fGroup.SetBinaryValues(P,PEnd);
+  fPrivateKey := FromVarString(PB,pointer(PEnd));
+  fSentHeaders := FromVarString(PB,pointer(PEnd));
+  if PB=nil then
+    RaiseError;
   ComputeProtectedValues;
   fRemoteIP := FindIniNameValue(pointer(fSentHeaders),HEADER_REMOTEIP_UPPER);
 end;

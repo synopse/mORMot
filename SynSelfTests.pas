@@ -3878,6 +3878,7 @@ procedure TTestLowLevelCommon.NumericalConversions;
 var i, j, b, err: integer;
     juint: cardinal absolute j;
     k,l: Int64;
+    q: QWord;
     s,s2: RawUTF8;
     d,e: double;
     {$ifndef DELPHI5OROLDER}
@@ -3890,7 +3891,7 @@ var i, j, b, err: integer;
     st: TFastReader;
     PB,PC: PByte;
     P: PUTF8Char;
-    crc, n: cardinal;
+    crc, u32, n: cardinal;
     Timer: TPrecisionTimer;
 begin
   Check(Plural('row',0)='0 row');
@@ -4210,6 +4211,9 @@ begin
     PB := @varint;
     Check(PtrInt(FromVarUint32(PB))=i);
     Check(PB=PC);
+    PB := FromVarUInt32Safe(@varint,PC,u32);
+    Check(PtrInt(u32)=i);
+    Check(PB=PC);
     PC := ToVarInt32(j,@varint);
     Check(PC<>nil);
     PB := @varint;
@@ -4225,6 +4229,9 @@ begin
     Check(PtrInt(PC)-PtrInt(@varint)=integer(ToVarUInt32Length(juint)));
     PB := @varint;
     Check(PtrUInt(FromVarUint64(PB))=juint);
+    Check(PB=PC);
+    PB := FromVarUInt64Safe(@varint,PC,q);
+    Check(q=juint);
     Check(PB=PC);
     PC := ToVarInt64(k,@varint);
     Check(PC<>nil);
@@ -10533,7 +10540,10 @@ begin
     Check(s=s1+',"Data":"","ValVariant":{"name":"John","int":1234}}');
     bin := T.GetBinary;
     T2.ClearProperties;
-    Check(T2.SetBinary(pointer(bin)));
+    Check(T2.SetBinary(pointer(bin),PAnsiChar(pointer(bin))+length(bin)));
+    Check(T.SameValues(T2));
+    T2.ClearProperties;
+    Check(T2.SetBinary(bin));
     Check(T.SameValues(T2));
     bin := VariantSave(T.ValVariant);
     Check(bin<>'');
