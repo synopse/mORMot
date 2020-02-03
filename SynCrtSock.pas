@@ -12552,6 +12552,14 @@ begin
 end;
 
 function TPollAsynchSockets.Stop(connection: TObject): boolean;
+  function ForceGetLastError(sock: TSocket): Integer;
+  var temp: byte;
+  begin
+    Result := 0;
+    // Recv to force an error if client disconnected non gracefully
+    if (AsynchRecv(sock,@temp, sizeof(temp)) < 0) then
+      Result := WSAGetLastError;
+  end;
 var slot: PPollSocketsSlot;
     sock: TSocket;
     endtix: Int64;
@@ -12569,7 +12577,7 @@ begin
     if sock<>0 then
       try
         slot.socket := 0; // notify ProcessRead/ProcessWrite to abort
-        slot.lastWSAError := WSAGetLastError;
+        slot.lastWSAError := ForceGetLastError(sock);
         fRead.Unsubscribe(sock,TPollSocketTag(connection));
         fWrite.Unsubscribe(sock,TPollSocketTag(connection));
         result := true;
