@@ -3404,7 +3404,7 @@ type
     /// append the property value into a binary buffer
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); virtual; abstract;
     /// read the property value from a binary buffer
-    // - PEnd should point to the end of the input buffer, to avoid any overflow
+    // - PEnd should point to the end of the P input buffer, to avoid any overflow
     // - returns next char in input buffer on success, or nil in case of invalid
     // content supplied e.g.
     function SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar; virtual; abstract;
@@ -7842,19 +7842,22 @@ type
     procedure GetBinaryValuesSimpleFields(W: TFileBufferWriter);
     /// set the field values from a binary buffer
     // - won't read the ID field (should be read before, with the Count e.g.)
+    // - PEnd should point just after the P input buffer, to avoid buffer overflow
     // - returns true on success, or false in case of invalid content in P^ e.g.
     // - P is updated to the next pending content after the read values
     function SetBinaryValues(var P: PAnsiChar; PEnd: PAnsiChar): Boolean;
     /// set the simple field values from a binary buffer
     // - won't read the ID field (should be read before, with the Count e.g.)
+    // - PEnd should point just after the P input buffer, to avoid buffer overflow
     // - returns true on success, or false in case of invalid content in P^ e.g.
-    // - P is updated to the next pending content after the read values
+    // - P is updated to the next pending content after the read values,
     function SetBinaryValuesSimpleFields(var P: PAnsiChar; PEnd: PAnsiChar): Boolean;
     /// write the record fields into RawByteString a binary buffer
     // - same as GetBinaryValues(), but also writing the ID field first
     function GetBinary: RawByteString;
     /// set the record fields from a binary buffer saved by GetBinary()
     // - same as SetBinaryValues(), but also reading the ID field first
+    // - PEnd should point to the end of the P input buffer, to avoid any overflow
     function SetBinary(P,PEnd: PAnsiChar): Boolean; overload;
     /// set the record fields from a binary buffer saved by GetBinary()
     // - same as SetBinaryValues(), but also reading the ID field first
@@ -23299,7 +23302,7 @@ end;
 function TSQLPropInfoRTTIAnsi.SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar;
 var tmp: RawByteString;
 begin
-  FromVarString(PByte(P),tmp,fEngine.CodePage);
+  FromVarString(PByte(P),PByte(PEnd),tmp,fEngine.CodePage);
   fPropInfo.SetLongStrProp(Instance,tmp);
   result := P;
 end;
@@ -24066,8 +24069,11 @@ begin
   GetDynArray(Instance,da);
   if fObjArray<>nil then begin
     FromVarString(PByte(P),PByte(PEnd),tmp);
-    da.LoadFromJSON(tmp.buf); // T*ObjArray would use JSON serialization
-    tmp.Done;
+    try // T*ObjArray use JSON serialization
+      da.LoadFromJSON(tmp.buf);
+    finally
+      tmp.Done;
+    end;
     result := P;
   end else
     // regular dynamic arrays use our binary encoding
@@ -24795,8 +24801,15 @@ begin
 end;
 
 function TSQLPropInfoCustomJSON.SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar;
+var tmp: TSynTempBuffer;
 begin // stored as JSON VarString in the binary stream
-  SetValue(Instance,pointer(FromVarString(PByte(P),PByte(PEnd))),false);
+  if FromVarString(PByte(P),PByte(PEnd),tmp) then
+    try
+      SetValue(Instance,tmp.buf,false);
+    finally
+      tmp.Done;
+    end else
+    P := nil;
   result := P;
 end;
 
@@ -24832,14 +24845,23 @@ end;
 procedure TSQLPropInfoCustomJSON.SetValue(Instance: TObject;
   Value: PUTF8Char; wasString: boolean);
 var Data: PByte;
+    B: PUTF8Char;
+    len: PtrInt;
     tmp: RawUTF8;
 begin
   Data := GetFieldAddr(Instance);
-  if Value<>nil then
-  if ((Value[0]<>'{')or(Value[StrLen(Value)-1]<>'}')) and
-     ((Value[0]<>'[')or(Value[StrLen(Value)-1]<>']')) then begin
-    QuotedStr(Value,'"',tmp);
-    Value := pointer(tmp);
+  if Value<>nil then begin // exact JSON string, array of objet ?
+    B := GotoNextJSONObjectOrArray(Value);
+    if (B=nil) and (Value^='"') then begin
+      B := GotoEndOfJSONString(Value);
+      if B^<>'"' then
+        B := nil;
+    end;
+    len := StrLen(Value);
+    if (B=nil) or (B-Value<>len) then begin
+      QuotedStrJSON(Value,len,tmp); // need escaping as JSON string
+      Value := pointer(tmp);
+    end;
   end;
   fCustomParser.ReadOneLevel(Value,Data,
     [soReadIgnoreUnknownFields,soCustomVariantCopiedByReference],nil);
@@ -43836,6 +43858,8 @@ begin
   P := pointer(fHistoryUncompressed);
   PEnd := P+length(fHistoryUncompressed);
   inc(P,fHistoryUncompressedOffset[Index]);
+  if P>=PEnd then
+    exit;
   Event := TSQLHistoryEvent(P^); inc(P);
   P := pointer(FromVarUInt64Safe(pointer(P),pointer(PEnd),PQWord(@Timestamp)^));
   if P=nil then
