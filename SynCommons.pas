@@ -4710,10 +4710,20 @@ function FromVarInt32(var Source: PByte): integer;
 function ToVarUInt64(Value: QWord; Dest: PByte): PByte;
 
 /// convert a 64-bit variable-length integer buffer into a UInt64
-function FromVarUInt64(var Source: PByte): QWord;
+function FromVarUInt64(var Source: PByte): QWord; overload;
+
+/// safely convert a 64-bit variable-length integer buffer into a UInt64
+// - slower but safer process checking out of boundaries memory access in Source
+// - SourceMax is expected to be not nil, and to point to the first byte
+// just after the Source memory buffer
+// - returns nil on error, or point to next input data on successful decoding
+function FromVarUInt64Safe(Source, SourceMax: PByte; out Value: QWord): PByte;
 
 /// convert a 64-bit variable-length integer buffer into a UInt64
-function FromVarUInt64Safe(Source, SourceMax: PByte; out Value: QWord): PByte;
+// - will call FromVarUInt64() if SourceMax=nil, or FromVarUInt64Safe() if set
+// - returns false on error, true if Value has been set properly
+function FromVarUInt64(var Source: PByte; SourceMax: PByte; out Value: Qword): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a Int64 into a 64-bit variable-length integer buffer
 function ToVarInt64(Value: Int64; Dest: PByte): PByte; {$ifdef HASINLINE}inline;{$endif}
@@ -4746,6 +4756,13 @@ function FromVarString(var Source: PByte; SourceMax: PByte): RawUTF8; overload;
 procedure FromVarString(var Source: PByte; var Value: RawByteString;
   CodePage: integer); overload;
 
+/// retrieve a variable-length text buffer
+// - this overloaded function will set the supplied code page to the AnsiString
+// and will also check for the SourceMax end of buffer
+// - returns TRUE on success, or FALSE on any buffer overload detection
+function FromVarString(var Source: PByte; SourceMax: PByte;
+  var Value: RawByteString; CodePage: integer): boolean; overload;
+
 /// retrieve a variable-length UTF-8 encoded text buffer in a temporary buffer
 // - caller should call Value.Done after use of the Value.buf memory
 // - this overloaded function would include a trailing #0, so Value.buf could
@@ -4754,7 +4771,8 @@ procedure FromVarString(var Source: PByte; var Value: TSynTempBuffer); overload;
 
 /// retrieve a variable-length UTF-8 encoded text buffer in a temporary buffer
 // - caller should call Value.Done after use of the Value.buf memory
-// - this overloaded function will also check for the SourceMax end of buffer
+// - this overloaded function will also check for the SourceMax end of buffer,
+// returning TRUE on success, or FALSE on any buffer overload detection
 function FromVarString(var Source: PByte; SourceMax: PByte;
   var Value: TSynTempBuffer): boolean; overload;
 
@@ -40437,10 +40455,13 @@ end;
 
 function FromVarUInt32(var Source: PByte; SourceMax: PByte; out Value: cardinal): boolean;
 begin
-  if SourceMax=nil then
-    Value := FromVarUInt32(Source) else
+  if SourceMax=nil then begin
+    Value := FromVarUInt32(Source);
+    result := true;
+  end else begin
     Source := FromVarUInt32Safe(Source,SourceMax,Value);
-  result := Source<>nil;
+    result := Source<>nil;
+  end;
 end;
 
 function FromVarUInt32Safe(Source, SourceMax: PByte; out Value: cardinal): PByte;
@@ -40664,6 +40685,17 @@ begin
   result := Source; // safely decoded
 end;
 
+function FromVarUInt64(var Source: PByte; SourceMax: PByte; out Value: QWord): boolean;
+begin
+  if SourceMax=nil then begin
+    Value := FromVarUInt64(Source);
+    result := true;
+  end else begin
+    Source := FromVarUInt64Safe(Source,SourceMax,Value);
+    result := Source<>nil;
+  end;
+end;
+
 function FromVarInt64(var Source: PByte): Int64;
 var c,n: PtrUInt;
 begin // 0=0,1=1,2=-1,3=2,4=-2...
@@ -40800,7 +40832,7 @@ function FromVarString(var Source: PByte; SourceMax: PByte): RawUTF8;
 var Len: cardinal;
 begin
   Source := FromVarUInt32Safe(Source,SourceMax,Len);
-  if Source=nil then
+  if (Source=nil) or (PAnsiChar(Source)+Len>PAnsiChar(SourceMax)) then
     Len := 0;
   FastSetStringCP(Result,Source,Len,CP_UTF8);
   inc(Source,Len);
@@ -40836,6 +40868,19 @@ begin
   Len := FromVarUInt32(Source);
   FastSetStringCP(Value,Source,Len,CodePage);
   inc(Source,Len);
+end;
+
+function FromVarString(var Source: PByte; SourceMax: PByte;
+  var Value: RawByteString; CodePage: integer): boolean;
+var len: cardinal;
+begin
+  if not FromVarUInt32(Source,SourceMax,len) or
+     ((SourceMax<>nil) and (PAnsiChar(Source)+len>PAnsiChar(SourceMax))) then
+    result := false else begin
+    FastSetStringCP(Value,Source,Len,CodePage);
+    inc(Source,Len);
+    result := true;
+  end;
 end;
 
 function FromVarBlob(Data: PByte): TValueResult;
