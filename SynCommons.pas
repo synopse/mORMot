@@ -3123,14 +3123,21 @@ function QuotedStr(const S: RawUTF8; Quote: AnsiChar=''''): RawUTF8; overload;
 // single quotes in a row - as in Pascal."
 procedure QuotedStr(const S: RawUTF8; Quote: AnsiChar; var result: RawUTF8); overload;
 
-/// convert a buffered text content into a JSON string
+/// convert UTF-8 content into a JSON string
 // - with proper escaping of the content, and surounding " characters
 procedure QuotedStrJSON(const aText: RawUTF8; var result: RawUTF8;
   const aPrefix: RawUTF8=''; const aSuffix: RawUTF8=''); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
-/// convert a buffered text content into a JSON string
+/// convert UTF-8 buffer into a JSON string
 // - with proper escaping of the content, and surounding " characters
-function QuotedStrJSON(const aText: RawUTF8): RawUTF8; overload; {$ifdef HASINLINE}inline;{$endif}
+procedure QuotedStrJSON(P: PUTF8Char; PLen: PtrInt; var result: RawUTF8;
+  const aPrefix: RawUTF8=''; const aSuffix: RawUTF8=''); overload;
+
+/// convert UTF-8 content into a JSON string
+// - with proper escaping of the content, and surounding " characters
+function QuotedStrJSON(const aText: RawUTF8): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// unquote a SQL-compatible string
 // - the first character in P^ must be either ' or " then internal double quotes
@@ -4671,9 +4678,9 @@ function FromVarUInt32(var Source: PByte): cardinal; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// safely convert a 32-bit variable-length integer buffer into a cardinal
-// - slower but safer process checkout Source out of boundaries memory access
+// - slower but safer process checking out of boundaries memory access in Source
 // - SourceMax is expected to be not nil, and to point to the first byte
-// just after the input memory buffer
+// just after the Source memory buffer
 // - returns nil on error, or point to next input data on successful decoding
 function FromVarUInt32Safe(Source, SourceMax: PByte; out Value: cardinal): PByte;
 
@@ -23228,55 +23235,61 @@ begin
 end;
 
 procedure QuotedStr(const S: RawUTF8; Quote: AnsiChar; var result: RawUTF8);
-var i,L,quote1,nquote,dualquotes: PtrInt;
-    P: PUTF8Char;
+var i,L,quote1,nquote: PtrInt;
+    P,R: PUTF8Char;
+    tmp: pointer; // will hold a RawUTF8 with no try..finally exception block
     c: AnsiChar;
 begin
+  tmp := nil;
   L := length(S);
+  P := pointer(S);
+  if (P<>nil) and (P=pointer(result)) then begin
+    RawUTF8(tmp) := S; // make private ref-counted copy for QuotedStr(U,'"',U)
+    P := pointer(tmp);
+  end;
+  nquote := 0;
   {$ifdef FPC} // will use fast FPC SSE version
-  quote1 := IndexByte(pointer(S)^,L,byte(Quote))+1;
-  if quote1>0 then begin
-    nquote := 1;
-    for i := quote1+1 to L do
-      if S[i]=Quote then
+  quote1 := IndexByte(P^,L,byte(Quote));
+  if quote1>=0 then
+    for i := quote1 to L-1 do
+      if P[i]=Quote then
         inc(nquote);
-  end else
-    nquote := 0;
   {$else}
   quote1 := 0;
-  nquote := 0;
-  for i := 1 to L do
-    if S[i]=Quote then begin
+  for i := 0 to L-1 do
+    if P[i]=Quote then begin
       if nquote=0 then
         quote1 := i;
       inc(nquote);
     end;
   {$endif}
   FastSetString(result,nil,L+nquote+2);
-  P := pointer(result);
-  P^ := Quote;
-  inc(P);
+  R := pointer(result);
+  R^ := Quote;
+  inc(R);
   if nquote=0 then begin
-    Move(pointer(s)^,P^,L);
-    P[L] := Quote;
+    Move(P^,R^,L);
+    R[L] := Quote;
   end else begin
-    dualquotes := ord(Quote)+ord(Quote)shl 8;
-    Move(pointer(s)^,P^,quote1);
-    inc(P,quote1);
-    P^ := Quote;
-    inc(P);
-    for i := quote1+1 to L do begin
-      c := S[i];
-      if c=Quote then begin
-        PWord(P)^ := dualquotes;
-        inc(P,2);
-      end else begin
-        P^ := c;
-        inc(P);
-      end;
-    end;
-    P^ := Quote;
+    Move(P^,R^,quote1);
+    inc(R,quote1);
+    inc(quote1,PtrInt(P)); // trick for reusing a register on FPC
+    repeat
+      c := PAnsiChar(quote1)^;
+      if c=#0 then
+        break;
+      inc(quote1);
+      R^ := c;
+      inc(R);
+      if c<>Quote then
+        continue;
+      R^ := c;
+      inc(R);
+    until false;
+    R^ := Quote;
   end;
+  if tmp<>nil then
+    {$ifdef FPC}Finalize(RawUTF8(tmp)){$else}RawUTF8(tmp) := ''{$endif};
 end;
 
 function GotoEndOfQuotedString(P: PUTF8Char): PUTF8Char;
@@ -23296,29 +23309,51 @@ begin // P^=" or P^=' at function call
   result := P;
 end; // P^='"' at function return
 
-procedure QuotedStrJSON(const aText: RawUTF8; var result: RawUTF8;
-   const aPrefix, aSuffix: RawUTF8);
+procedure QuotedStrJSON(P: PUTF8Char; PLen: PtrInt; var result: RawUTF8;
+  const aPrefix, aSuffix: RawUTF8);
 var temp: TTextWriterStackBuffer;
+    Lp,Ls: PtrInt;
+    D: PUTF8Char;
 begin
-  if NeedsJsonEscape(aText) then
+  if (pointer(result)=pointer(P)) or NeedsJsonEscape(P) then
     with TTextWriter.CreateOwnedStream(temp) do
     try
       AddString(aPrefix);
       Add('"');
-      AddJSONEscape(pointer(aText));
+      AddJSONEscape(P,PLen);
       Add('"');
       AddString(aSuffix);
       SetText(result);
       exit;
     finally
       Free;
-    end else
-    result := aPrefix+'"'+aText+'"'+aSuffix;
+    end else begin
+    Lp := length(aPrefix);
+    Ls := length(aSuffix);
+    FastSetString(result,nil,PLen+Lp+Ls+2);
+    D := pointer(result); // we checked dest result <> source P above
+    if Lp>0 then begin
+      MoveSmall(pointer(aPrefix),D,Lp);
+      inc(D,Lp);
+    end;
+    D^ := '"';
+    Move(P^,D[1],PLen);
+    inc(D,PLen);
+    D[1] := '"';
+    if Ls>0 then
+      MoveSmall(pointer(aSuffix),D+2,Ls);
+  end;
+end;
+
+procedure QuotedStrJSON(const aText: RawUTF8; var result: RawUTF8;
+  const aPrefix, aSuffix: RawUTF8);
+begin
+  QuotedStrJSON(pointer(aText),Length(aText),result,aPrefix,aSuffix);
 end;
 
 function QuotedStrJSON(const aText: RawUTF8): RawUTF8;
 begin
-  QuotedStrJSON(aText,result,'','');
+  QuotedStrJSON(pointer(aText),Length(aText),result,'','');
 end;
 
 function GotoEndOfJSONString(P: PUTF8Char): PUTF8Char;
@@ -56339,10 +56374,10 @@ begin // match GotoNextJSONObjectOrArray() and overloaded GetJSONPropName()
   end;
   '"': begin
     inc(Name);
-    P := GotoEndOfJSONString(P); // won't unescape JSON strings
+    P := GotoEndOfJSONString(P);
     if P^<>'"' then
       exit;
-    SetString(PropName,Name,P-Name);
+    SetString(PropName,Name,P-Name); // note: won't unescape JSON strings
     repeat inc(P) until (P^>' ') or (P^=#0);
     if P^<>':' then begin
       PropName[0] := #0;
@@ -56497,50 +56532,6 @@ begin
     result := true; // don't begin with a numerical value -> must be a string
 end;
 
-function GotoEndJSONItem(P: PUTF8Char; strict: boolean): PUTF8Char;
-label ok;
-begin
-  result := nil; // to notify unexpected end
-  if P=nil then
-    exit;
-  while (P^<=' ') and (P^<>#0) do inc(P);
-  case P^ of
-  #0: exit;
-  '"': begin
-    P := GotoEndOfJSONString(P);
-    if P^<>'"' then
-      exit;
-    inc(P);
-    goto ok;
-  end;
-  '[','{': begin
-    P := GotoNextJSONObjectOrArray(P);
-    if P=nil then
-      exit;
-ok: while (P^<=' ') and (P^<>#0) do inc(P);
-    result := P;
-    exit;
-  end;
-  end;
-  if strict then
-    case P^ of
-    't': if PInteger(P)^=TRUE_LOW then begin inc(P,4); goto ok; end;
-    'f': if PInteger(P+1)^=FALSE_LOW2 then begin inc(P,5); goto ok; end;
-    'n': if PInteger(P)^=NULL_LOW then begin inc(P,4); goto ok; end;
-    '-','+','0'..'9': begin
-      repeat inc(P) until not (P^ in DigitFloatChars);
-      goto ok;
-    end;
-    end else
-    repeat // numeric or true/false/null or MongoDB extended {age:{$gt:18}}
-      inc(P);
-      if P^=#0 then exit; // unexpected end
-    until P^ in [':',',',']','}'];
-  if P^=#0 then
-    exit;
-  result := P;
-end;
-
 function IsValidJSON(const s: RawUTF8): boolean;
 begin
   result := IsValidJSON(pointer(s),length(s));
@@ -56587,44 +56578,6 @@ begin
     FastSetString(output,V,VLen);
     result := true;
   end;
-end;
-
-function GotoNextJSONItem(P: PUTF8Char; NumberOfItemsToJump: cardinal;
-  EndOfObject: PAnsiChar): PUTF8Char;
-label next;
-begin
- result := nil; // to notify unexpected end
- while NumberOfItemsToJump>0 do begin
-   while (P^<=' ') and (P^<>#0) do inc(P);
-   // get a field
-   case P^ of
-   #0: exit;
-   '"': begin
-     P := GotoEndOfJSONString(P);
-     if P^<>'"' then
-       exit; // P^ should be '"' here
-   end;
-   '[','{': begin
-     P := GotoNextJSONObjectOrArray(P);
-     if P=nil then
-       exit;
-     while (P^<=' ') and (P^<>#0) do inc(P);
-     goto next;
-   end;
-   end;
-   repeat // numeric or true/false/null or MongoDB extended {age:{$gt:18}}
-     inc(P);
-     if P^=#0 then exit; // unexpected end
-   until P^ in [':',',',']','}'];
-next:
-   if P^=#0 then
-     exit;
-   if EndOfObject<>nil then
-     EndOfObject^ := P^;
-   inc(P);
-   dec(NumberOfItemsToJump);
- end;
- result := P;
 end;
 
 function GotoNextJSONObjectOrArrayInternal(P,PMax: PUTF8Char; EndChar: AnsiChar): PUTF8Char;
@@ -56699,6 +56652,100 @@ Prop: if not (ord(P^) in IsJsonIdentifierFirstChar) then
       exit;
   until P^=EndChar;
   result := P+1;
+end;
+
+function GotoEndJSONItem(P: PUTF8Char; strict: boolean): PUTF8Char;
+label pok,ok;
+begin
+  result := nil; // to notify unexpected end
+  if P=nil then
+    exit;
+  while (P^<=' ') and (P^<>#0) do inc(P);
+  case P^ of
+  #0: exit;
+  '"': begin
+    P := GotoEndOfJSONString(P);
+    if P^<>'"' then
+      exit;
+    inc(P);
+    goto ok;
+  end;
+  '[': begin
+    repeat inc(P) until (P^>' ') or (P^=#0);
+    P := GotoNextJSONObjectOrArrayInternal(P,nil,']');
+    goto pok;
+  end;
+  '{': begin
+    repeat inc(P) until (P^>' ') or (P^=#0);
+    P := GotoNextJSONObjectOrArrayInternal(P,nil,'}');
+pok:if P=nil then
+      exit;
+ok: while (P^<=' ') and (P^<>#0) do inc(P);
+    result := P;
+    exit;
+  end;
+  end;
+  if strict then
+    case P^ of
+    't': if PInteger(P)^=TRUE_LOW then begin inc(P,4); goto ok; end;
+    'f': if PInteger(P+1)^=FALSE_LOW2 then begin inc(P,5); goto ok; end;
+    'n': if PInteger(P)^=NULL_LOW then begin inc(P,4); goto ok; end;
+    '-','+','0'..'9': begin
+      repeat inc(P) until not (P^ in DigitFloatChars);
+      goto ok;
+    end;
+    end else
+    repeat // numeric or true/false/null or MongoDB extended {age:{$gt:18}}
+      inc(P);
+      if P^=#0 then exit; // unexpected end
+    until P^ in [':',',',']','}'];
+  if P^=#0 then
+    exit;
+  result := P;
+end;
+
+function GotoNextJSONItem(P: PUTF8Char; NumberOfItemsToJump: cardinal;
+  EndOfObject: PAnsiChar): PUTF8Char;
+label pok,next;
+begin
+ result := nil; // to notify unexpected end
+ while NumberOfItemsToJump>0 do begin
+   while (P^<=' ') and (P^<>#0) do inc(P);
+   // get a field
+   case P^ of
+   #0: exit;
+   '"': begin
+     P := GotoEndOfJSONString(P);
+     if P^<>'"' then
+       exit; // P^ should be '"' here
+   end;
+   '[': begin
+     repeat inc(P) until (P^>' ') or (P^=#0);
+     P := GotoNextJSONObjectOrArrayInternal(P,nil,']');
+     goto pok;
+   end;
+   '{': begin
+     repeat inc(P) until (P^>' ') or (P^=#0);
+     P := GotoNextJSONObjectOrArrayInternal(P,nil,'}');
+pok: if P=nil then
+       exit;
+     while (P^<=' ') and (P^<>#0) do inc(P);
+     goto next;
+   end;
+   end;
+   repeat // numeric or true/false/null or MongoDB extended {age:{$gt:18}}
+     inc(P);
+     if P^=#0 then exit; // unexpected end
+   until P^ in [':',',',']','}'];
+next:
+   if P^=#0 then
+     exit;
+   if EndOfObject<>nil then
+     EndOfObject^ := P^;
+   inc(P);
+   dec(NumberOfItemsToJump);
+ end;
+ result := P;
 end;
 
 function GotoNextJSONObjectOrArray(P: PUTF8Char): PUTF8Char;
