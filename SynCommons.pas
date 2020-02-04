@@ -2654,7 +2654,12 @@ function JsonPropNameValid(P: PUTF8Char): boolean;
 /// returns TRUE if the given text buffers would be escaped when written as JSON
 // - e.g. if contains " or \ characters, as defined by
 // http://www.ietf.org/rfc/rfc4627.txt
-function NeedsJsonEscape(const Text: RawUTF8): boolean;
+function NeedsJsonEscape(const Text: RawUTF8): boolean; overload;
+
+/// returns TRUE if the given text buffers would be escaped when written as JSON
+// - e.g. if contains " or \ characters, as defined by
+// http://www.ietf.org/rfc/rfc4627.txt
+function NeedsJsonEscape(P: PUTF8Char): boolean; overload;
 
 /// case insensitive comparison of ASCII identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
@@ -23058,7 +23063,7 @@ begin
   result := 0;
 end;
 
-// same as PosExPas() but using PChar internally for proper string process
+// same as PosExPas() but using char/PChar for (unicode)string process
 function PosExStringPas(pSub, p: PChar; Offset: PtrUInt): PtrInt;
 var len, lenSub: PtrInt;
     ch: char;
@@ -54718,6 +54723,7 @@ const
   // "set of byte" uses BT[mem] opcode which is actually slower than three SUB
 {$endif}
 var
+  // fast 256-byte branchless lookup table
   JSON_ESCAPE_BYTE: TSynByteBoolean;
 
 function NeedsJsonEscape(const Text: RawUTF8): boolean;
@@ -54732,6 +54738,21 @@ begin
     if tab[P^[i]] then
       exit;
   result := false;
+end;
+
+function NeedsJsonEscape(P: PUTF8Char): boolean;
+var tab: ^TSynByteBoolean;
+begin
+  result := false;
+  tab := @JSON_ESCAPE_BYTE;
+  repeat
+    if tab[ord(P^)] then
+      if P^=#0 then
+        exit else
+        break;
+    inc(P);
+  until false;
+  result := true;
 end;
 
 procedure TTextWriter.InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: Cardinal;
