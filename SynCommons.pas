@@ -47071,34 +47071,45 @@ begin
     end;
 end;
 
+function GetValueIndexLookupCaseSensitive(n: PPtrInt; last: integer;
+  name: PUTF8Char; len: PtrInt): integer;
+begin // FPC does proper inlining in this loop
+  for result := 0 to last do // VName[] are knwown to be <> '' so n^ <> nil
+    if (PStrRec(Pointer(n^-STRRECSIZE))^.length=len) and
+       CompareMemFixed(pointer(n^),name,len) then
+      exit else
+      inc(n);
+  result := -1;
+end;
+
+function GetValueIndexLookupCaseInsensitive(n: PPtrInt; last: integer;
+  name: PUTF8Char; len: PtrInt): integer;
+begin
+  for result := 0 to last do
+    if (PStrRec(Pointer(n^-STRRECSIZE))^.length=len) and
+       IdemPropNameUSameLen(pointer(n^),name,len) then
+      exit else
+      inc(n);
+  result := -1;
+end;
+
 function TDocVariantData.GetValueIndex(aName: PUTF8Char; aNameLen: PtrInt;
   aCaseSensitive: boolean): integer;
 var err: integer;
-    n: PRawUTF8;
 begin
-  if (VType=word(DocVariantVType)) and (VCount>0) then begin
+  if (VType=word(DocVariantVType)) and (VCount>0) then
     if dvoIsArray in VOptions then begin
       result := GetInteger(aName,err);
       if err<>0 then
         raise EDocVariant.CreateUTF8('Impossible to find [%] property in an array',[aName]);
       if cardinal(result)>=cardinal(VCount) then
         raise EDocVariant.CreateUTF8('Out of range [%] property in an array',[aName]);
-      exit;
-    end;
-    // O(n) lookup for object names -> huge count may take some time
-    n := pointer(VName);
-    if aCaseSensitive then begin
-      for result := 0 to VCount-1 do
-        if (length(n^)=aNameLen) and CompareMem(pointer(n^),aName,aNameLen) then
-          exit else
-          inc(n);
     end else
-      for result := 0 to VCount-1 do
-        if (length(n^)=aNameLen) and IdemPropNameUSameLen(pointer(n^),aName,aNameLen) then
-          exit else
-          inc(n);
-  end;
-  result := -1;
+    // O(n) lookup for object names -> efficient brute force sub-functions
+    if aCaseSensitive then
+      result := GetValueIndexLookupCaseSensitive(pointer(VName),VCount-1,aName,aNameLen) else
+      result := GetValueIndexLookupCaseInsensitive(pointer(VName),VCount-1,aName,aNameLen) else
+    result := -1;
 end;
 
 function TDocVariantData.GetValueOrRaiseException(const aName: RawUTF8): variant;
