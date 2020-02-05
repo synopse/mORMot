@@ -9082,8 +9082,8 @@ type
   // is used, otherwise random GPF issues may occur
   TSQLTableRowVariant = class(TSynInvokeableVariantType)
   protected
-    procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar); override;
-    procedure IntSet(const V, Value: TVarData; Name: PAnsiChar); override;
+    procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar; NameLen: PtrInt); override;
+    procedure IntSet(const V, Value: TVarData; Name: PAnsiChar; NameLen: PtrInt); override;
   public
     /// customization of variant into JSON serialization
     procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind); override;
@@ -9105,9 +9105,9 @@ type
   // which convert all properties into a TDocVariant, so may use more resource
   TObjectVariant = class(TSynInvokeableVariantType)
   protected
-    function GetInfo(const V: TVarData; Name: PUTF8Char): PPropInfo;
-    procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar); override;
-    procedure IntSet(const V, Value: TVarData; Name: PAnsiChar); override;
+    function GetInfo(const V: TVarData; Name: PUTF8Char; NameLen: PtrInt): PPropInfo;
+    procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar; NameLen: PtrInt); override;
+    procedure IntSet(const V, Value: TVarData; Name: PAnsiChar; NameLen: PtrInt); override;
   public
     /// initialize a new custom variant instance, wrapping the specified object
     // - warning: this custom variant is just a wrapper around an existing TObject
@@ -28464,7 +28464,7 @@ end;
 { TSQLTableRowVariant }
 
 procedure TSQLTableRowVariant.IntGet(var Dest: TVarData;
-  const V: TVarData; Name: PAnsiChar);
+  const V: TVarData; Name: PAnsiChar; NameLen: PtrInt);
 var r,f: integer;
 begin
   if (TSQLTableRowVariantData(V).VTable=nil) or (Name=nil) then
@@ -28481,7 +28481,8 @@ begin
   TSQLTableRowVariantData(V).VTable.GetVariant(r,f,Variant(Dest));
 end;
 
-procedure TSQLTableRowVariant.IntSet(const V, Value: TVarData; Name: PAnsiChar);
+procedure TSQLTableRowVariant.IntSet(const V, Value: TVarData;
+  Name: PAnsiChar; NameLen: PtrInt);
 begin
   raise ESQLTableException.CreateUTF8('% is read-only',[self]);
 end;
@@ -28545,12 +28546,11 @@ begin
   W.WriteObject(TVarData(Value).VPointer);
 end;
 
-function TObjectVariant.GetInfo(const V: TVarData; Name: PUTF8Char): PPropInfo;
+function TObjectVariant.GetInfo(const V: TVarData; Name: PUTF8Char; NameLen: PtrInt): PPropInfo;
 begin
   if (V.VPointer=nil) or (Name=nil) then
     raise EObjectVariant.CreateUTF8('Invalid %.% call',[self,Name]);
-  result := ClassFieldPropWithParentsFromUTF8(PPointer(V.VPointer)^,
-    Name, StrLen(Name));
+  result := ClassFieldPropWithParentsFromUTF8(PPointer(V.VPointer)^,Name,NameLen);
   if (result=nil) and IsRowID(Name) and TObject(V.VPointer).InheritsFrom(TSQLRecord) then
     result := pointer(1); // recognize TSQLRecord.ID pseudo-property
   if result=nil then
@@ -28558,10 +28558,10 @@ begin
 end;
 
 procedure TObjectVariant.IntGet(var Dest: TVarData; const V: TVarData;
-  Name: PAnsiChar);
+  Name: PAnsiChar; NameLen: PtrInt);
 var info: PPropInfo;
 begin
-  info := GetInfo(V,PUTF8Char(Name));
+  info := GetInfo(V,PUTF8Char(Name),NameLen);
   if info=pointer(1) then
     variant(Dest) := TSQLRecord(V.VPointer).IDValue else
     if info^.PropType^.Kind=tkClass then
@@ -28569,10 +28569,10 @@ begin
       info^.GetVariant(V.VPointer,Variant(Dest));
 end;
 
-procedure TObjectVariant.IntSet(const V, Value: TVarData; Name: PAnsiChar);
+procedure TObjectVariant.IntSet(const V, Value: TVarData; Name: PAnsiChar; NameLen: PtrInt);
 var info: PPropInfo;
 begin
-  info := GetInfo(V,PUTF8Char(Name));
+  info := GetInfo(V,PUTF8Char(Name),NameLen);
   if info=pointer(1) then
     VariantToInt64(Variant(Value),PInt64(@TSQLRecord(V.VPointer).fID)^) else
     info^.SetFromVariant(V.VPointer,Variant(Value));

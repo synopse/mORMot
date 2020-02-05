@@ -588,8 +588,8 @@ type
   // - use ISQLDBRows.RowData method to retrieve such a Variant
   TSQLDBRowVariantType = class(TSynInvokeableVariantType)
   protected
-    procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar); override;
-    procedure IntSet(const V, Value: TVarData; Name: PAnsiChar); override;
+    procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar; NameLen: PtrInt); override;
+    procedure IntSet(const V, Value: TVarData; Name: PAnsiChar; NameLen: PtrInt); override;
   end;
 {$endif}
 {$endif}
@@ -4029,7 +4029,7 @@ begin
       end;
       inc(P);
     end;
-   SetString(tmp,PAnsiChar(B),P-B);
+    FastSetString(tmp,B,P-B);
     if P^=#0 then begin
       new := new+tmp;
       break;
@@ -6360,7 +6360,7 @@ function TSQLDBConnectionProperties.GetDBMSName: RawUTF8;
 var PS: PShortString;
 begin
   PS := ToText(DBMS);
-  SetString(result,PAnsiChar(@PS^[2]),ord(PS^[0])-1);
+  FastSetString(result,@PS^[2],ord(PS^[0])-1);
 end;
 
 function TSQLDBConnectionProperties.GetDatabaseNameSafe: RawUTF8;
@@ -7512,7 +7512,7 @@ begin
               dec(L); // avoid return of invalid UTF-8 buffer
             if L=0 then
               L := MaxCharCount;
-            SetString(result,PAnsiChar(VAny),L);
+            FastSetString(result,VAny,L);
           end else
             result := RawUTF8(VAny);
         end;
@@ -7688,19 +7688,19 @@ end;
 { TSQLDBRowVariantType }
 
 procedure TSQLDBRowVariantType.IntGet(var Dest: TVarData;
-  const V: TVarData; Name: PAnsiChar);
+  const V: TVarData; Name: PAnsiChar; NameLen: PtrInt);
 var Rows: TSQLDBStatement;
     col: RawUTF8;
 begin
   Rows := TSQLDBStatement(TVarData(V).VPointer);
   if Rows=nil then
     raise ESQLDBException.CreateUTF8('Invalid % call',[self]);
-  SetString(col,Name,StrLen(Name));
+  FastSetString(col,Name,NameLen);
   Rows.ColumnToVariant(Rows.ColumnIndex(col),Variant(Dest));
 end;
 
 procedure TSQLDBRowVariantType.IntSet(const V, Value: TVarData;
-  Name: PAnsiChar);
+  Name: PAnsiChar; NameLen: PtrInt);
 begin
   raise ESQLDBException.CreateUTF8('% is read-only',[self]);
 end;
@@ -7805,7 +7805,7 @@ procedure TSQLDBStatementWithParams.BindTextP(Param: Integer;
 begin
   if (Value=nil) and (fConnection<>nil) and fConnection.fProperties.StoreVoidStringAsNull then
     CheckParam(Param,ftNull,IO) else
-    SetString(CheckParam(Param,ftUTF8,IO)^.VData,PAnsiChar(Value),StrLen(Value));
+    FastSetString(RawUTF8(CheckParam(Param,ftUTF8,IO)^.VData),Value,StrLen(Value));
 end;
 
 procedure TSQLDBStatementWithParams.BindTextW(Param: Integer;
@@ -8056,11 +8056,11 @@ begin
 end;
 
 function ReplaceParamsByNames(const aSQL: RawUTF8; var aNewSQL: RawUTF8): integer;
-var i,j,B,L: integer;
+var i,j,B,L: PtrInt;
     P: PAnsiChar;
     c: array[0..3] of AnsiChar;
     tmp: RawUTF8;
-const SQL_KEYWORDS: array[0..17] of AnsiChar = 'ASBYIFINISOFONORTO';
+const SQL_KEYWORDS: array[0..19] of AnsiChar = 'ASATBYIFINISOFONORTO';
 begin
   result := 0;
   L := Length(aSQL);
@@ -8085,7 +8085,7 @@ begin
         end;
         inc(i);
       end;
-      SetString(tmp,P+B,i-B);
+      FastSetString(tmp,P+B,i-B);
       aNewSQL := aNewSQL+tmp;
       if i=L then break;
       // store :AA :BA ..
@@ -8242,7 +8242,7 @@ begin // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
   cGetForeignKeys:
     OutputSynNameValue.SetBlobDataPtr(O);
   cExecute, cExecuteToBinary, cExecuteToJSON, cExecuteToExpandedJSON:
-    SetString(OutputRawUTF8,O,length(msgOutput)-sizeof(header));
+    FastSetString(OutputRawUTF8,O,length(msgOutput)-sizeof(header));
   cExceptionRaised: // msgOutput is ExceptionClassName+#0+ExceptionMessage
     raise ESQLDBRemote.CreateUTF8('%.Process(%): server raised % with ''%''',
       [self,ToText(Command)^,O,O+StrLen(O)+1]);
@@ -8596,7 +8596,7 @@ begin
   ftDouble: result := DoubleToStr(unaligned(PDouble(Data)^));
   ftCurrency: result := Curr64ToStr(PInt64(Data)^);
   ftDate: DateTimeToIso8601TextVar(PDateTime(Data)^,'T',result);
-  ftBlob, ftUTF8: with FromVarBlob(Data) do SetString(result,Ptr,Len);
+  ftBlob, ftUTF8: with FromVarBlob(Data) do FastSetString(result,Ptr,Len);
   else raise ESQLDBException.CreateUTF8('%.ColumnUTF8()',[self]);
   end;
 end;

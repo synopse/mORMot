@@ -808,8 +808,8 @@ var plain: Int64;    // bytes 16..23 should always be unencrypted
     iv: THash128Rec; // is genuine and AES-protected (since not random)
 begin
   if (len and AESBlockMod<>0) or (len<=0) or (integer(page)<=0) then
-   raise ESQLite3Exception.CreateUTF8('CodeEncryptDecrypt(%) has len=%', [page,len]);
-  iv.c0 := page xor 668265263;
+    raise ESQLite3Exception.CreateUTF8('CodeEncryptDecrypt(page=%,len=%)', [page,len]);
+  iv.c0 := page xor 668265263; // prime-based initialization
   iv.c1 := page*2654435761;
   iv.c2 := page*2246822519;
   iv.c3 := page*3266489917;

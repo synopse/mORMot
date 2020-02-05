@@ -115,6 +115,7 @@ type
   /// states the section content according to a given value
   // - msNothing for false values or empty lists
   // - msSingle for non-false values but not a list
+  // - msSinglePseudo is for *-first *-last *-odd and helper values
   // - msList for non-empty lists
   TSynMustacheSectionType = (msNothing,msSingle,msSinglePseudo,msList);
 
@@ -1300,6 +1301,7 @@ var i,space,helper: Integer;
     Value := res^;
     if valFree then
       VarClear(variant(val));
+    result := msSinglePseudo;
   end;
 
 begin
@@ -1316,7 +1318,6 @@ begin
     helper := TSynMustache.HelperFind(Helpers,pointer(ValueName),space-1);
     if helper>=0 then begin
       ProcessHelper;
-      result := msSinglePseudo;
       exit;
     end; // if helper not found, will return the unprocessed value
   end;
@@ -1343,10 +1344,8 @@ begin
   if space=0 then begin
     space := length(ValueName); // {{helper}}
     helper := TSynMustache.HelperFind(Helpers,pointer(ValueName),space);
-    if helper>=0 then begin
+    if helper>=0 then
       ProcessHelper;
-      result := msSinglePseudo;
-    end;
   end;
 end;
 

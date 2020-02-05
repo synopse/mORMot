@@ -1741,8 +1741,8 @@ type
   // - uses internally a TSynTableData object
   TSynTableVariantType = class(TSynInvokeableVariantType)
   protected
-    procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar); override;
-    procedure IntSet(const V, Value: TVarData; Name: PAnsiChar); override;
+    procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar; NameLen: PtrInt); override;
+    procedure IntSet(const V, Value: TVarData; Name: PAnsiChar; NameLen: PtrInt); override;
   public
     /// retrieve the SBF compact binary format representation of a record content
     class function ToSBF(const V: Variant): TSBFString;
@@ -3891,15 +3891,19 @@ begin
 end;
 
 procedure TSynTableVariantType.IntGet(var Dest: TVarData;
-  const V: TVarData; Name: PAnsiChar);
+  const V: TVarData; Name: PAnsiChar; NameLen: PtrInt);
+var aName: RawUTF8;
 begin
-  TSynTableData(V).GetFieldVariant(RawByteString(Name),variant(Dest));
+  FastSetString(aName,Name,NameLen);
+  TSynTableData(V).GetFieldVariant(aName,variant(Dest));
 end;
 
 procedure TSynTableVariantType.IntSet(const V, Value: TVarData;
-  Name: PAnsiChar);
+  Name: PAnsiChar; NameLen: PtrInt);
+var aName: RawUTF8;
 begin
-  TSynTableData(V).SetFieldValue(RawByteString(Name),Variant(Value));
+  FastSetString(aName,Name,NameLen);
+  TSynTableData(V).SetFieldValue(aName,Variant(Value));
 end;
 
 class function TSynTableVariantType.ToID(const V: Variant): integer;
