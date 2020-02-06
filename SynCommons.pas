@@ -13060,11 +13060,11 @@ function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): Boolean
 
 /// retrieve the current Date, in the ISO 8601 layout, but expanded and
 // ready to be displayed
-function NowToString(Expanded: boolean=true; FirstTimeChar: AnsiChar = ' '): RawUTF8;
+function NowToString(Expanded: boolean=true; FirstTimeChar: AnsiChar=' '): RawUTF8;
 
 /// retrieve the current UTC Date, in the ISO 8601 layout, but expanded and
 // ready to be displayed
-function NowUTCToString(Expanded: boolean=true; FirstTimeChar: AnsiChar = ' '): RawUTF8;
+function NowUTCToString(Expanded: boolean=true; FirstTimeChar: AnsiChar=' '): RawUTF8;
 
 /// convert some date/time to the ISO 8601 text layout, including milliseconds
 // - i.e. 'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
@@ -16292,8 +16292,8 @@ type
     function Started: boolean; {$ifdef HASINLINE}inline;{$endif}
     /// stop the timer, setting the Time elapsed since last Start
     procedure ComputeTime; {$ifdef LINUX}{$ifdef HASINLINE}inline;{$endif}{$endif}
-    /// stop the timer, returning the time elapsed as text with time resolution
-    // (us,ms,s)
+    /// stop the timer, returning the total time elapsed as text
+    // - with appened time resolution (us,ms,s) - from MicroSecToString()
     // - is just a wrapper around ComputeTime + Time
     function Stop: TShort16;
     /// stop the timer, ready to continue its time measurement via Resume
@@ -16337,15 +16337,18 @@ type
     function ByCount(Count: QWord): TShort16;
     /// returns e.g. '16.9 MB in 102.20ms i.e. 165.5 MB/s'
     function SizePerSec(Size: QWord): shortstring;
-    /// textual representation of time after counter stopped
-    // - with appened time resolution (us,ms,s)
-    // - not to be used in normal code, but e.g. for custom performance analysis
+    /// textual representation of total time elapsed
+    // - with appened time resolution (us,ms,s) - from MicroSecToString()
+    // - not to be used in normal code (which could rather call the Stop method),
+    // but e.g. for custom performance analysis
     function Time: TShort16;
     /// time elapsed in micro seconds after counter stopped
     // - not to be used in normal code, but e.g. for custom performance analysis
     property TimeInMicroSec: TSynMonitorTotalMicroSec read fTime write fTime;
     /// textual representation of last process timing after counter stopped
-    // - with appened time resolution (us,ms,s)
+    // - Time returns a total elapsed time, whereas this method only returns
+    // the latest resumed time
+    // - with appened time resolution (us,ms,s) - from MicroSecToString()
     // - not to be used in normal code, but e.g. for custom performance analysis
     function LastTime: TShort16;
     /// timing in micro seconds of the last process
@@ -19234,7 +19237,7 @@ begin
     result := Utf8DecodeToRawUnicode(pointer(S),length(S));
 end;
 
-function Utf8DecodeToRawUnicodeUI(const S: RawUTF8; DestLen: PInteger=nil): RawUnicode;
+function Utf8DecodeToRawUnicodeUI(const S: RawUTF8; DestLen: PInteger): RawUnicode;
 var L: integer;
 begin
   L := Utf8DecodeToRawUnicodeUI(S,result);
@@ -21434,7 +21437,7 @@ end;
 {$endif HASINLINE}
 
 function DynArrayTypeInfoToRecordInfo(aDynArrayTypeInfo: pointer;
-  aDataSize: PInteger=nil): pointer;
+  aDataSize: PInteger): pointer;
 var info: PTypeInfo;
 begin
   result := nil;
@@ -26280,7 +26283,7 @@ begin
   end;
 end;
 
-function Split(const Str, SepStr: RawUTF8; var LeftStr: RawUTF8; ToUpperCase: boolean=false): RawUTF8;
+function Split(const Str, SepStr: RawUTF8; var LeftStr: RawUTF8; ToUpperCase: boolean): RawUTF8;
 begin
   Split(Str,SepStr,LeftStr,result,ToUpperCase);
 end;
@@ -29495,7 +29498,7 @@ begin
 end;
 
 function FindRawUTF8(const Values: TRawUTF8DynArray; const Value: RawUTF8;
-  CaseSensitive: boolean=true): integer;
+  CaseSensitive: boolean): integer;
 begin
   if CaseSensitive then begin
     for result := 0 to length(Values)-1 do
@@ -29509,7 +29512,7 @@ begin
 end;
 
 function FindRawUTF8(const Values: array of RawUTF8; const Value: RawUTF8;
-  CaseSensitive: boolean=true): integer;
+  CaseSensitive: boolean): integer;
 begin
   if CaseSensitive then begin
     for result := 0 to high(Values) do
@@ -29557,7 +29560,7 @@ end;
 {$endif HASINLINE}
 
 function AddRawUTF8(var Values: TRawUTF8DynArray; const Value: RawUTF8;
-  NoDuplicates: boolean=false; CaseSensitive: boolean=true): boolean;
+  NoDuplicates, CaseSensitive: boolean): boolean;
 var i: integer;
 begin
   if NoDuplicates then begin
@@ -29971,7 +29974,7 @@ begin
 end;
 
 function DeleteSection(var Content: RawUTF8; const SectionName: RawUTF8;
-  EraseSectionHeader: boolean=true): boolean;
+  EraseSectionHeader: boolean): boolean;
 var P: PUTF8Char;
     UpperSection: array[byte] of AnsiChar;
 begin
@@ -29983,7 +29986,7 @@ begin
 end;
 
 function DeleteSection(SectionFirstLine: PUTF8Char; var Content: RawUTF8;
-  EraseSectionHeader: boolean=true): boolean;
+  EraseSectionHeader: boolean): boolean;
 var PEnd: PUTF8Char;
     IndexBegin: PtrInt;
 begin
@@ -30716,7 +30719,7 @@ begin
 end;
 
 function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
-var i,n: integer;
+var i,n: PtrInt;
 begin
   Finalize(result);
   n := length(Files);
@@ -30726,7 +30729,7 @@ begin
 end;
 
 function EnsureDirectoryExists(const Directory: TFileName;
-  RaiseExceptionOnCreationFailure: boolean=false): TFileName;
+  RaiseExceptionOnCreationFailure: boolean): TFileName;
 begin
   result := IncludeTrailingPathDelimiter(ExpandFileName(Directory));
   if not DirectoryExists(result) then
@@ -30958,7 +30961,7 @@ begin
 end;
 
 function AddInteger(var Values: TIntegerDynArray; Value: integer;
-  NoDuplicates: boolean=false): boolean;
+  NoDuplicates: boolean): boolean;
 var n: PtrInt;
 begin
   n := Length(Values);
@@ -34265,7 +34268,7 @@ begin
 end;
 
 function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TObject;
-  Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
+  Options: TTextWriterWriteObjectOptions): RawUTF8;
 var i,n: integer;
     temp: TTextWriterStackBuffer;
 begin
@@ -34699,7 +34702,7 @@ begin
 end;
 
 function UrlDecodeExtended(U: PUTF8Char; const Upper: RawUTF8;
-  var Value: TSynExtended; Next: PPUTF8Char=nil): boolean;
+  var Value: TSynExtended; Next: PPUTF8Char): boolean;
 var tmp: RawUTF8;
     err: integer;
 begin
@@ -34712,7 +34715,7 @@ begin
 end;
 
 function UrlDecodeDouble(U: PUTF8Char; const Upper: RawUTF8; var Value: double;
-  Next: PPUTF8Char=nil): boolean;
+  Next: PPUTF8Char): boolean;
 var tmp: RawUTF8;
     err: integer;
 begin
@@ -36921,7 +36924,7 @@ begin
 end;
 
 procedure DateTimeToIso8601ExpandedPChar(const Value: TDateTime; Dest: PUTF8Char;
-  FirstChar: AnsiChar='T'; WithMS: boolean=false);
+  FirstChar: AnsiChar; WithMS: boolean);
 begin
   if Value<>0 then begin
     if trunc(Value)<>0 then begin
@@ -36936,7 +36939,7 @@ begin
   Dest^ := #0;
 end;
 
-function Iso8601ToTimeLogPUTF8Char(P: PUTF8Char; L: integer; ContainsNoTime: PBoolean=nil): TTimeLog;
+function Iso8601ToTimeLogPUTF8Char(P: PUTF8Char; L: integer; ContainsNoTime: PBoolean): TTimeLog;
 // bits: S=0..5 M=6..11 H=12..16 D=17..21 M=22..25 Y=26..38
 // i.e. S<64 M<64 H<32 D<32 M<16 Y<4096: power of 2 -> use fast shl/shr
 var V,B: PtrUInt;
@@ -37366,14 +37369,14 @@ begin
   PTimeLogBits(@result)^.FromUTCTime;
 end;
 
-function NowToString(Expanded: boolean=true; FirstTimeChar: AnsiChar = ' '): RawUTF8;
+function NowToString(Expanded: boolean; FirstTimeChar: AnsiChar): RawUTF8;
 var I: TTimeLogBits;
 begin
   I.FromNow;
   result := I.Text(Expanded,FirstTimeChar);
 end;
 
-function NowUTCToString(Expanded: boolean=true; FirstTimeChar: AnsiChar = ' '): RawUTF8;
+function NowUTCToString(Expanded: boolean; FirstTimeChar: AnsiChar): RawUTF8;
 var I: TTimeLogBits;
 begin
   I.FromUTCTime;
@@ -38527,7 +38530,7 @@ begin
   MoveSmall(P,Dest,result);
 end;
 
-function StrToCurr64(P: PUTF8Char; NoDecimal: PBoolean=nil): Int64;
+function StrToCurr64(P: PUTF8Char; NoDecimal: PBoolean): Int64;
 var c: cardinal;
     minus: boolean;
     Dec: cardinal;
@@ -40141,7 +40144,7 @@ end;
 {$endif MSWINDOWS}
 
 procedure PatchCodePtrUInt(Code: PPtrUInt; Value: PtrUInt;
-  LeaveUnprotected: boolean=false);
+  LeaveUnprotected: boolean);
 begin
   PatchCode(Code,@Value,SizeOf(Code^),nil,LeaveUnprotected);
 end;
@@ -47321,7 +47324,7 @@ begin
 end;
 
 function TDocVariantData.GetAsDocVariant(const aName: RawUTF8; out aValue: PDocVariantData;
-  aSortedCompare: TUTF8Compare=nil): boolean;
+  aSortedCompare: TUTF8Compare): boolean;
 var found: PVarData;
 begin
   found := GetVarData(aName,aSortedCompare);
@@ -47343,7 +47346,7 @@ begin
 end;
 
 function TDocVariantData.GetAsPVariant(const aName: RawUTF8; out aValue: PVariant;
-  aSortedCompare: TUTF8Compare=nil): boolean;
+  aSortedCompare: TUTF8Compare): boolean;
 begin
   aValue := pointer(GetVarData(aName,aSortedCompare));
   result := aValue<>nil;
@@ -49536,10 +49539,10 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
      (PCardinal(P)^=JSON_BASE64_MAGIC_QUOTE) then begin
     if n<>1 then
       exit; // expect one Base64 encoded string value preceded by \uFFF0
-    Val := GetJSONField(P,P,@wasString,@EndOfObject);
-    if (Val=nil) or not wasString or
+    Val := GetJSONField(P,P,@wasString,@EndOfObject,@ValLen);
+    if (Val=nil) or (ValLen<3) or not wasString or
        (PInteger(Val)^ and $00ffffff<>JSON_BASE64_MAGIC) or
-       not LoadFromBinary(Base64ToBin(Val+3)) then
+       not LoadFromBinary(Base64ToBin(PAnsiChar(Val)+3,ValLen-3)) then
       exit; // invalid content
   end else begin
     if GetIsObjArray then
@@ -49755,32 +49758,32 @@ begin
     result := Find(Elem);
 end;
 
-function TDynArray.FindAndFill(var Elem; aIndex: PIntegerDynArray=nil;
-  aCompare: TDynArraySortCompare=nil): integer;
+function TDynArray.FindAndFill(var Elem; aIndex: PIntegerDynArray;
+  aCompare: TDynArraySortCompare): integer;
 begin
   result := FindIndex(Elem,aIndex,aCompare);
   if result>=0 then // if found, fill Elem with the matching item
     ElemCopy(PAnsiChar(fValue^)[cardinal(result)*ElemSize],Elem);
 end;
 
-function TDynArray.FindAndDelete(const Elem; aIndex: PIntegerDynArray=nil;
-  aCompare: TDynArraySortCompare=nil): integer;
+function TDynArray.FindAndDelete(const Elem; aIndex: PIntegerDynArray;
+  aCompare: TDynArraySortCompare): integer;
 begin
   result := FindIndex(Elem,aIndex,aCompare);
   if result>=0 then
     Delete(result);
 end;
 
-function TDynArray.FindAndUpdate(const Elem; aIndex: PIntegerDynArray=nil;
-  aCompare: TDynArraySortCompare=nil): integer;
+function TDynArray.FindAndUpdate(const Elem; aIndex: PIntegerDynArray;
+  aCompare: TDynArraySortCompare): integer;
 begin
   result := FindIndex(Elem,aIndex,aCompare);
   if result>=0 then // if found, fill Elem with the matching item
     ElemCopy(Elem,PAnsiChar(fValue^)[cardinal(result)*ElemSize]);
 end;
 
-function TDynArray.FindAndAddIfNotExisting(const Elem; aIndex: PIntegerDynArray=nil;
-  aCompare: TDynArraySortCompare=nil): integer;
+function TDynArray.FindAndAddIfNotExisting(const Elem; aIndex: PIntegerDynArray;
+  aCompare: TDynArraySortCompare): integer;
 begin
   result := FindIndex(Elem,aIndex,aCompare);
   if result<0 then
@@ -51354,7 +51357,7 @@ end;
 {$endif NOVARIANTS}
 
 procedure TDynArrayHashed.InitSpecific(aTypeInfo: pointer; var aValue;
-  aKind: TDynArrayKind; aCountPointer: PInteger=nil; aCaseInsensitive: boolean=false);
+  aKind: TDynArrayKind; aCountPointer: PInteger; aCaseInsensitive: boolean);
 var Comp: TDynArraySortCompare;
     Hasher: TDynArrayHashOne;
 begin
@@ -51604,7 +51607,7 @@ begin
 end;
 
 
-function DynArray(aTypeInfo: pointer; var aValue; aCountPointer: PInteger=nil): TDynArray;
+function DynArray(aTypeInfo: pointer; var aValue; aCountPointer: PInteger): TDynArray;
 begin
   result.Init(aTypeInfo,aValue,aCountPointer);
 end;
@@ -53468,7 +53471,7 @@ begin
 end;
 
 class function TTextWriter.RegisterCustomJSONSerializerFindParser(
-  aTypeInfo: pointer; aAddIfNotExisting: boolean=false): TJSONRecordAbstract;
+  aTypeInfo: pointer; aAddIfNotExisting: boolean): TJSONRecordAbstract;
 var ndx: integer;
 begin
   result := nil;
@@ -53833,8 +53836,7 @@ begin
   result := JSON;
 end;
 
-function TTextWriter.AddJSONToXML(JSON: PUTF8Char; ArrayName: PUTF8Char=nil;
-  EndOfObject: PUTF8Char=nil): PUTF8Char;
+function TTextWriter.AddJSONToXML(JSON: PUTF8Char; ArrayName,EndOfObject: PUTF8Char): PUTF8Char;
 var objEnd: AnsiChar;
     Name,Value: PUTF8Char;
     n,c: integer;
@@ -58898,7 +58900,7 @@ end;
 
 procedure TLockedDocVariant.ReplaceAndUnlock(
   const Name: RawUTF8; const Value: Variant; out LocalValue: Variant);
-begin
+begin // caller made fLock.Enter
   try
     SetValue(Name,Value);
     LocalValue := Value;
@@ -58927,7 +58929,7 @@ end;
 procedure TLockedDocVariant.AddNewPropAndUnlock(const Name: RawUTF8;
   const Value: variant;
   var Obj: variant);
-begin
+begin // caller made fLock.Enter
   try
     SetValue(Name,Value);
     _ObjAddProps([Name,Value],Obj);
@@ -58953,8 +58955,7 @@ begin
 end;
 
 procedure TLockedDocVariant.AddNewProp(const Name: RawUTF8;
-  const Value: variant;
-  var Obj: variant);
+  const Value: variant; var Obj: variant);
 begin
   fLock.Enter;
   try
@@ -59589,7 +59590,7 @@ begin
   end;
 end;
 
-function TRawUTF8List.PopFirst(out aText: RawUTF8; aObject: PObject=nil): boolean;
+function TRawUTF8List.PopFirst(out aText: RawUTF8; aObject: PObject): boolean;
 begin
   result := fCount>0;
   if not result then
@@ -59602,7 +59603,7 @@ begin
   Delete(0);
 end;
 
-function TRawUTF8List.PopLast(out aText: RawUTF8; aObject: PObject=nil): boolean;
+function TRawUTF8List.PopLast(out aText: RawUTF8; aObject: PObject): boolean;
 var ndx: integer;
 begin
   result := fCount>0;
@@ -59881,7 +59882,7 @@ end;
 
 { TObjectListLocked }
 
-constructor TObjectListLocked.Create(AOwnsObjects: Boolean=true);
+constructor TObjectListLocked.Create(AOwnsObjects: Boolean);
 begin
   inherited Create(AOwnsObjects);
   fSafe.Init;
@@ -60129,7 +60130,7 @@ begin
   end;
 end;
 
-function TRawUTF8ListHashedLocked.PopFirst(out aText: RawUTF8; aObject: PObject=nil): boolean;
+function TRawUTF8ListHashedLocked.PopFirst(out aText: RawUTF8; aObject: PObject): boolean;
 begin
   fSafe.Lock;
   try
@@ -60139,7 +60140,7 @@ begin
   end;
 end;
 
-function TRawUTF8ListHashedLocked.PopLast(out aText: RawUTF8; aObject: PObject=nil): boolean;
+function TRawUTF8ListHashedLocked.PopLast(out aText: RawUTF8; aObject: PObject): boolean;
 begin
   fSafe.Lock;
   try
