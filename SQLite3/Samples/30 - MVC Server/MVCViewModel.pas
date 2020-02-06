@@ -65,7 +65,7 @@ type
     fHasFTS: boolean;
     procedure ComputeMinimalData; virtual;
     procedure FlushAnyCache; override;
-    function GetViewInfo(MethodIndex: integer): variant; override;
+    procedure GetViewInfo(MethodIndex: integer; out info: variant); override;
     function GetLoggedAuthorID(Right: TSQLAuthorRight; ContentToFillAuthor: TSQLContent): TID;
     procedure MonthToText(const Value: variant; out result: variant);
     procedure TagToText(const Value: variant; out result: variant);
@@ -111,6 +111,10 @@ begin
     SetCache('Default',cacheRootIfNoSession,15).
     SetCache('ArticleView',cacheWithParametersIfNoSession,60).
     SetCache('AuthorView',cacheWithParametersIgnoringSession,60);
+  with TMVCRunOnRestServer(fMainRunner) do begin
+    PublishOptions := PublishOptions - [cacheStatic];
+    StaticCacheControlMaxAge := 60*30; // 30 minutes
+  end;
   (TMVCRunOnRestServer(fMainRunner).Views as TMVCViewsMustache).
     RegisterExpressionHelpers(['MonthToText'],[MonthToText]).
     RegisterExpressionHelpers(['TagToText'],[TagToText]);
@@ -168,16 +172,27 @@ begin
   auto := TSQLRecord.AutoFree([ // avoid several try..finally
     @info,TSQLBlogInfo, @article,TSQLArticle, @comment,TSQLComment, @tag,TSQLTag]);
   if not RestModel.Retrieve('',info) then begin // retrieve first item
-    info.Title := 'mORMot BLOG';
+    tmp := StringFromFile('/home/ab/Downloads/2020-01-16-a8003957c2ae6bde5be6ea279c9c9ce4-backup.txt');
     info.Language := 'en';
-    info.Description := 'Sample Blog Web Application using Synopse mORMot MVC';
-    info.Copyright := '&copy;2020 <a href=https://synopse.info>Synopse Informatique</a>';
-    info.About := TSynTestCase.RandomTextParagraph(30,'!');
+  if tmp<>'' then begin
+      info.Title := 'Synopse Blog';
+      info.Description := 'Articles, announcements, news, updates and more '+
+        'about our Open Source projects';
+      info.About := 'Latest information about Synopse Open Source librairies, '+
+        'mainly the mORMot ORM/SOA/MVC framework, and SynPDF.';
+    end else begin
+      info.Title := 'mORMot BLOG';
+      info.Description := 'Sample Blog Web Application using Synopse mORMot MVC';
+      info.About := TSynTestCase.RandomTextParagraph(10,'!');
+    end;
+    info.About := info.About+#13#10'Website powered by mORMot MVC '+
+      SYNOPSE_FRAMEWORK_VERSION+', compiled with '+GetDelphiCompilerVersion+
+      ', running on '+ToText(OSVersion32)+'.';
+    info.Copyright := '&copy;'+ToUTF8(CurrentYear)+'<a href=https://synopse.info>Synopse Informatique</a>';
     RestModel.Add(info,true);
   end;
   if RestModel.TableHasRows(TSQLArticle) then
     exit;
-  tmp := StringFromFile('d:\download\2014-12-27-a8003957c2ae6bde5be6ea279c9c9ce4-backup.txt');
   if tmp<>'' then begin
     DotClearFlatImport(RestModel,tmp,fTagsLookup,'http://blog.synopse.info',
       (TMVCRunOnRestServer(fMainRunner).Views as TMVCViewsMustache).ViewStaticFolder);

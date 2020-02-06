@@ -452,78 +452,133 @@ var T,tagTable,postTable: TDotClearTable;
     tagsCount: integer;
     batch: TSQLRestBatch;
     PublicFolder: TFileName;
+    notfound: TRawUTF8DynArray;
     r,ndx,post_url,meta_id,meta_type,tag_post_id,postID,post_id: integer;
-function FixLinks(P: PUTF8Char): RawUTF8;
-var B,H: PUTF8Char;
-    url: RawUTF8;
-    i,urlLen: integer;
-    FN: TFileName;
-procedure GetUrl(H: PUTF8Char);
-begin
-  url := GetNextItem(H,'"');
-  urlLen := length(url);
-  url := UrlDecode(url);
-end;
-begin
-  with TTextWriter.CreateOwnedStream(16384) do
-  try
-    B := P;
-    while P<>nil do begin
-      while P^<>' ' do
-        if P^=#0 then
-          break else
-          inc(P);
-      if P^=#0 then
-        break;
-      inc(P);
-      H := P; // makes compiler happy
-      if IdemPChar(P,'HREF=') then
-        inc(H,5) else
-      if IdemPChar(P,'SRC=') then
-        inc(H,4) else
-        continue;
-      if H^='"' then inc(H);
-      AddNoJSONEscape(B,H-B);
-      P := H;
-      if P^='/' then
-        if IdemPChar(P+1,'POST/') then begin
-          GetUrl(P+6);
-          i := PosEx('?',url);
-          if i>0 then
-            SetLength(url,i-1);
-          i := urls.IndexOf(url);
-          if i>=0 then begin
-            AddShort('articleView?id=');
-            Add(i+1);
-            inc(P,urlLen+6);
-          end else
-            AddString(aDotClearRoot);
-        end else
-        if IdemPChar(P+1,'PUBLIC/') then begin
-          if PublicFolder<>'' then begin
-            GetUrl(P+8);
-            FN := PublicFolder+UTF8ToString(StringReplaceChars(url,'/',PathDelim));
-            EnsureDirectoryExists(ExtractFilePath(FN));
-            if not FileExists(FN) then
-              FileFromString({$ifdef MSWINDOWS}TWinHTTP.Get{$else}HttpGet{$endif}(
-                aDotClearRoot+'/public/'+url),FN);
-            AddShort('.static');
-          end else
-            AddString(aDotClearRoot);
-        end;
-      B := P;
+
+  function FixLinks(P: PUTF8Char): RawUTF8;
+  var B,H: PUTF8Char;
+      url,urlnoparam: RawUTF8;
+      i,urlLen,status: integer;
+      pic: RawByteString;
+      FN: TFileName;
+      tag: (href, src);
+      tmp: TTextWriterStackBuffer;
+
+    procedure GetUrl(H: PUTF8Char);
+    var i: integer;
+    begin
+      url := GetNextItem(H,'"');
+      urlLen := length(url);
+      url := UrlDecode(url);
+      i := PosExChar('?',url);
+      if i>0 then
+        urlnoparam := copy(url,1,i-1) else
+        urlnoparam := url;
     end;
-    AddNoJSONEscape(B);
-    SetText(result);
-  finally
-    Free;
+
+  begin
+    tag := href;
+    with TTextWriter.CreateOwnedStream(tmp) do
+    try
+      B := P;
+      while P<>nil do begin
+        while P^<>' ' do
+          if P^=#0 then
+            break else
+            inc(P);
+        if P^=#0 then
+          break;
+        inc(P);
+        H := P; // makes compiler happy
+        if IdemPChar(P,'HREF="') then begin
+          tag := href;
+          inc(H,6);
+        end else
+        if IdemPChar(P,'SRC="') then begin
+          tag := src;
+          inc(H,5);
+        end else
+          continue;
+        AddNoJSONEscape(B,H-B);
+        P := H;
+        if IdemPChar(P,'HTTP://SYNOPSE.INFO') then begin
+          AddShort('https://synopse.info');
+          inc(P,19);
+        end else if P^='/' then begin
+          if IdemPChar(P+1,'POST/') then begin
+            GetUrl(P+6);
+            i := urls.IndexOf(urlnoparam);
+            if i>=0 then begin
+              AddShort('articleView?id=');
+              Add(i+1);
+              inc(P,urlLen+6);
+            end else
+              AddString(aDotClearRoot);
+          end else
+          if IdemPChar(P+1,'PUBLIC/') then begin
+            if PublicFolder<>'' then begin
+              GetUrl(P+8);
+              FN := PublicFolder+UTF8ToString(StringReplaceChars(url,'/',PathDelim));
+              EnsureDirectoryExists(ExtractFilePath(FN));
+              if not FileExists(FN) then
+                FileFromString(HttpGet(
+                  aDotClearRoot+'/public/'+url,nil,{forceNotSocket=}true),FN);
+              AddShort('.static/public/'); // will append 'fullfilename">...'
+              inc(P,8);
+            end else
+              AddString(aDotClearRoot);
+          end;
+        end else if (tag=src) and IdemPChar(P,'HTTP') then begin
+          GetUrl(P);
+          if IdemFileExts(pointer(urlnoparam),['.JP','.PNG','.GIF','.SVG'])>=0 then begin
+            if FindRawUTF8(notfound,url)<0 then begin
+              FN := 'ext-'+Ansi7ToString(MD5(url))+SysUtils.lowercase(ExtractFileExt(UTF8ToString(urlnoparam)));
+              if not FileExists(PublicFolder+FN) then begin
+                write(urlnoparam);
+                pic := HttpGet(url,nil,{forceNotSocket=}true,@status);
+                if (status<>200) or (pic='') or (PosExChar(#0,pic)=0) or
+                   IdemPChar(pointer(pic),'<!DOCTYPE') then begin
+                  if IdemPChar(pointer(url),'HTTP:') then begin
+                    pic := url;
+                    insert('s',pic,5);
+                    write(' https? ');
+                    pic := HttpGet(pic,nil,{forceNotSocket=}true,@status);
+                    if (status<>200) or (pic='') or (PosExChar(#0,pic)=0) or
+                       IdemPChar(pointer(pic),'<!DOCTYPE') then
+                      pic := '';
+                  end;
+                end;
+                if pic='' then begin
+                  AddRawUTF8(notfound,url);
+                  writeln(': KO (',status,')');
+                end else begin
+                  writeln(': ',status,' = ',FN);
+                  FileFromString(pic,PublicFolder+FN);
+                end;
+              end;
+              AddShort('.static/public/');
+              AddNoJSONEscapeString(FN);
+              inc(P,urlLen);
+            end;
+          end;
+        end;
+        B := P;
+      end;
+      AddNoJSONEscape(B);
+      SetText(result);
+    finally
+      Free;
+    end;
   end;
-end;
+
 var auto1,auto2: IAutoFree; // mandatory only for FPC
 begin
   if aStaticFolder<>'' then begin
     PublicFolder := IncludeTrailingPathDelimiter(aStaticFolder)+'public'+PathDelim;
     EnsureDirectoryExists(PublicFolder);
+    HTTP_DEFAULT_RESOLVETIMEOUT := 1000; // don't wait forever
+    HTTP_DEFAULT_CONNECTTIMEOUT := 1000;
+    HTTP_DEFAULT_RECEIVETIMEOUT := 2000;
   end;
   auto1 := TAutoFree.Several([
     @data,TDotClearTable.Parse(aFlatFile),
@@ -590,6 +645,7 @@ begin
   end;
   Rest.BatchSend(batch);
   aTagsLookup.SaveOccurence(Rest);
+  writeln(#13#10'-- import finished!');
 end;
 
 
