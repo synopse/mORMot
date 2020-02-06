@@ -2006,6 +2006,10 @@ type
   /// used to store a set of 8-bit unsigned integers as 256 booleans
   TSynByteBoolean = array[byte] of boolean;
 
+/// check all character within text are spaces or control chars
+// - i.e. a faster alternative to trim(text)=''
+function IsVoid(const text: RawUTF8): boolean;
+
 /// returns the supplied text content, without any control char
 // - a control char has an ASCII code #0 .. #32, i.e. text[]<=' '
 // - you can specify a custom char set to be excluded, if needed
@@ -2766,6 +2770,13 @@ function EndWithArray(const text: RawUTF8; const upArray: array of RawUTF8): int
 // - could be used e.g. like IdemFileExt(aFileName,'.JP');
 function IdemFileExt(p: PUTF8Char; extup: PAnsiChar; sepChar: AnsiChar='.'): Boolean;
 
+/// returns matching file name extension index as extup^
+// - ignore case - extup[] must be already Upper
+// - chars are compared as WinAnsi (codepage 1252), not as UTF-8
+// - could be used e.g. like IdemFileExts(aFileName,['.PAS','.INC']);
+function IdemFileExts(p: PUTF8Char; const extup: array of PAnsiChar;
+  sepChar: AnsiChar='.'): integer;
+
 /// internal function, used to retrieve a UCS4 char (>127) from UTF-8
 // - not to be called directly, but from inlined higher-level functions
 // - here U^ shall be always >= #80
@@ -3093,6 +3104,7 @@ function SplitRight(const Str: RawUTF8; SepChar: AnsiChar; LeftStr: PRawUTF8=nil
 function SplitRights(const Str, SepChar: RawUTF8): RawUTF8;
 
 /// actual replacement function called by StringReplaceAll() on first match
+// - not to be called as such, but defined globally for proper inlining
 function StringReplaceAllProcess(const S, OldPattern, NewPattern: RawUTF8;
   found: integer): RawUTF8;
 
@@ -14207,7 +14219,7 @@ function VarIs(const V: Variant; const VTypes: TVarDataTypes): Boolean;
 type
   /// an abstract ancestor for faster access of properties
   // - default GetProperty/SetProperty methods are called via some protected
-  // virtual IntGet/IntSet methods, with less overhead
+  // virtual IntGet/IntSet methods, with less overhead (to be overriden)
   // - these kind of custom variants will be faster than the default
   // TInvokeableVariantType for properties getter/setter, but you should
   // manually register each type by calling SynRegisterCustomVariantType()
@@ -14221,8 +14233,8 @@ type
     {$endif}
     {$endif}
     /// override those two abstract methods for fast getter/setter implementation
-    procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar); virtual; abstract;
-    procedure IntSet(const V, Value: TVarData; Name: PAnsiChar); virtual; abstract;
+    procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar; NameLen: PtrInt); virtual;
+    procedure IntSet(const V, Value: TVarData; Name: PAnsiChar; NameLen: PtrInt); virtual;
   public
     /// customization of JSON parsing into variants
     // - will be called by e.g. by VariantLoadJSON() or GetVariantFromJSON()
@@ -14591,8 +14603,8 @@ type
     fInternNames: TRawUTF8Interning;
     fInternValues: TRawUTF8Interning;
     /// fast getter/setter implementation
-    procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar); override;
-    procedure IntSet(const V, Value: TVarData; Name: PAnsiChar); override;
+    procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar; NameLen: PtrInt); override;
+    procedure IntSet(const V, Value: TVarData; Name: PAnsiChar; NameLen: PtrInt); override;
   public
     /// initialize a variant instance to store some document-based content
     // - by default, every internal value will be copied, so access of nested
@@ -20751,6 +20763,16 @@ begin
   finally
     tmp.Done(dest,result);
   end;
+end;
+
+function IsVoid(const text: RawUTF8): boolean;
+var i: PtrInt;
+begin
+  result := false;
+  for i := 1 to length(text) do
+    if text[i]>' ' then
+      exit;
+  result := true;
 end;
 
 function TrimControlChars(const text: RawUTF8; const controls: TSynAnsicharSet): RawUTF8;
@@ -32993,11 +33015,26 @@ begin
         ext := p; // get last '.' position from p into ext
       inc(p);
     until p^=#0;
-    if ext<>nil then
-      result := IdemPChar(ext,extup) else
-      result := false;
+    result := IdemPChar(ext,extup);
   end else
     result := false;
+end;
+
+function IdemFileExts(p: PUTF8Char; const extup: array of PAnsiChar;
+  sepChar: AnsiChar): integer;
+var ext: PUTF8Char;
+begin
+  result := -1;
+  if (p<>nil) and (high(extup)>0) then begin
+    ext := nil;
+    repeat
+      if p^=sepChar then
+        ext := p; // get last '.' position from p into ext
+      inc(p);
+    until p^=#0;
+    if ext<>nil then
+      result := IdemPCharArray(ext,extup);
+  end;
 end;
 
 function IdemPCharWithoutWhiteSpace(p: PUTF8Char; up: PAnsiChar): boolean;
@@ -45227,7 +45264,7 @@ begin
        Handler.InheritsFrom(TSynInvokeableVariantType) then
     try // handle any kind of document storage: TSynTableVariant,TBSONVariant...
       LookupVar.VType := varEmpty;
-      Handler.IntGet(LookupVar,DestVar,pointer(itemName));
+      Handler.IntGet(LookupVar,DestVar,pointer(itemName),length(itemName));
       if LookupVar.VType<=varNull then
         exit; // assume varNull means not found
       DestVar := LookupVar;
@@ -45276,6 +45313,18 @@ end;
 {$endif DELPHI6OROLDER}
 {$endif FPC}
 
+procedure TSynInvokeableVariantType.IntGet(var Dest: TVarData; const V: TVarData;
+  Name: PAnsiChar; NameLen: PtrInt);
+begin
+  raise ESynException.CreateUTF8('Unexpected %.IntGet(%)',[self,Name]);
+end;
+
+procedure TSynInvokeableVariantType.IntSet(const V, Value: TVarData; Name: PAnsiChar; NameLen: PtrInt);
+begin
+  raise ESynException.CreateUTF8('Unexpected %.IntSet(%)',[self,Name]);
+end;
+
+
 function TSynInvokeableVariantType.GetProperty(var Dest: TVarData;
   const V: TVarData; const Name: String): Boolean;
 {$ifdef UNICODE}
@@ -45283,10 +45332,9 @@ var Buf: array[byte] of AnsiChar; // to avoid heap allocation
 {$endif}
 begin
 {$ifdef UNICODE}
-  RawUnicodeToUtf8(Buf,SizeOf(Buf),pointer(Name),length(Name),[]);
-  IntGet(Dest,V,Buf);
+  IntGet(Dest,V,Buf,RawUnicodeToUtf8(Buf,SizeOf(Buf),pointer(Name),length(Name),[]));
 {$else}
-  IntGet(Dest,V,pointer(Name));
+  IntGet(Dest,V,pointer(Name),length(Name));
 {$endif}
   result := True;
 end;
@@ -45300,15 +45348,17 @@ function TSynInvokeableVariantType.SetProperty(const V: TVarData;
 {$endif}
 var ValueSet: TVarData;
     PropName: PAnsiChar;
+    PropNameLen: PtrInt;
 {$ifdef UNICODE}
     Buf: array[byte] of AnsiChar; // to avoid heap allocation
 {$endif}
 begin
 {$ifdef UNICODE}
-  RawUnicodeToUtf8(Buf,SizeOf(Buf),pointer(Name),length(Name),[]);
+  PropNameLen := RawUnicodeToUtf8(Buf,SizeOf(Buf),pointer(Name),length(Name),[]);
   PropName := @Buf[0];
 {$else}
   PropName := pointer(Name);
+  PropNameLen := length(Name);
 {$endif}
   ValueSet.VString := nil; // to avoid GPF in RawUTF8(ValueSet.VString) below
   if Value.VType=varByRef or varOleStr then
@@ -45326,21 +45376,21 @@ begin
       RawUTF8(ValueSet.VString)) else
   {$endif}
   if SetVariantUnRefSimpleValue(variant(Value),ValueSet) then begin
-    IntSet(V,ValueSet,PropName);
+    IntSet(V,ValueSet,PropName,PropNameLen);
     result := true;
     exit;
   end else begin
-    IntSet(V,Value,PropName);
+    IntSet(V,Value,PropName,PropNameLen);
     result := true;
     exit;
   end;
   try // unpatched RTL does not like Unicode values :( -> transmit a RawUTF8
     ValueSet.VType := varString;
-    IntSet(V,ValueSet,PropName);
+    IntSet(V,ValueSet,PropName,PropNameLen);
   finally
     RawUTF8(ValueSet.VString) := ''; // avoid memory leak
   end;
-  result := True;
+  result := true;
 end;
 
 procedure TSynInvokeableVariantType.Clear(var V: TVarData);
@@ -45770,7 +45820,8 @@ begin
            (CacheDispInvokeType.VarType=TVarData(Instance).VType) and
            (CallDesc^.CallType in [GET_PROP, DO_PROP]) and
            (Result<>nil) and (CallDesc^.ArgCount=0) then begin
-          CacheDispInvokeType.IntGet(Result^,Instance,@CallDesc^.ArgTypes[0]);
+          CacheDispInvokeType.IntGet(Result^,Instance,
+            @CallDesc^.ArgTypes[0],StrLen(@CallDesc^.ArgTypes[0]));
           exit;
         end;
       end;
@@ -45780,14 +45831,16 @@ begin
           case CallDesc^.CallType of
           GET_PROP, DO_PROP: // fast direct call of our IntGet() virtual method
             if (Result<>nil) and (CallDesc^.ArgCount=0) then begin
-              Handler.IntGet(Result^,Instance,@CallDesc^.ArgTypes[0]);
+              Handler.IntGet(Result^,Instance,
+                @CallDesc^.ArgTypes[0],StrLen(@CallDesc^.ArgTypes[0]));
               LastDispInvokeType := Handler; // speed up in loop
               exit;
             end;
           SET_PROP: // fast direct call of our IntSet() virtual method
             if (Result=nil) and (CallDesc^.ArgCount=1) then begin
               ParseParamPointer(@Params,CallDesc^.ArgTypes[0],Value);
-              Handler.IntSet(Instance,Value,@CallDesc^.ArgTypes[1]);
+              Handler.IntSet(Instance,Value,
+                @CallDesc^.ArgTypes[1],StrLen(@CallDesc^.ArgTypes[1]));
               exit;
             end;
           end;
@@ -47869,10 +47922,9 @@ begin
   fInternValues.Free;
 end;
 
-procedure TDocVariant.IntGet(var Dest: TVarData;
-  const V: TVarData; Name: PAnsiChar);
-  procedure Execute(ndx: integer;
-    const source: TDocVariantData; var Dest: variant);
+procedure TDocVariant.IntGet(var Dest: TVarData; const V: TVarData;
+  Name: PAnsiChar; NameLen: PtrInt);
+  procedure Execute(ndx: integer; const source: TDocVariantData; var Dest: variant);
   begin
     case ndx of
     0: Dest := source.Count;
@@ -47880,10 +47932,9 @@ procedure TDocVariant.IntGet(var Dest: TVarData;
     2: RawUTF8ToVariant(source.ToJSON,Dest);
     end;
   end;
-var NameLen, ndx: integer;
+var ndx: integer;
 begin
   //Assert(V.VType=DocVariantVType);
-  NameLen := StrLen(PUTF8Char(Name));
   // 1. search for any  _*  pseudo properties
   if (NameLen>4) and (Name[0]='_') then begin
     ndx := IdemPCharArray(@Name[1],['COUNT','KIND','JSON']);
@@ -47897,7 +47948,7 @@ begin
     PUTF8Char(Name),NameLen,false,variant(Dest),true);
 end;
 
-procedure TDocVariant.IntSet(const V, Value: TVarData; Name: PAnsiChar);
+procedure TDocVariant.IntSet(const V, Value: TVarData; Name: PAnsiChar; NameLen: PtrInt);
 var ndx: Integer;
     aName: RawUTF8;
     Data: TDocVariantData absolute V;
@@ -47909,10 +47960,11 @@ begin
       DocVariantType.InternValues.UniqueVariant(Data.VValue[ndx]);
     exit;
   end;
-  FastSetString(aName,Name,StrLen(PUTF8Char(Name)));
-  ndx := Data.GetValueIndex(aName);
-  if ndx<0 then
+  ndx := Data.GetValueIndex(PUTF8Char(Name),NameLen,dvoNameCaseSensitive in Data.VOptions);
+  if ndx<0 then begin
+    FastSetString(aName,Name,NameLen);
     ndx := Data.InternalAdd(aName);
+  end;
   SetVariantByValue(variant(Value),Data.VValue[ndx]);
   if dvoInternValues in Data.VOptions then
     DocVariantType.InternValues.UniqueVariant(Data.VValue[ndx]);
