@@ -240,11 +240,17 @@ type
     // method, which will free the instances as soon as it finishes
     class function CreateOwned(const Partials: variant): TSynMustachePartials; overload;
     /// register a {{>partialName}} template
-    procedure Add(const aName,aTemplate: RawUTF8); overload;
+    // - returns the parsed template
+    function Add(const aName,aTemplate: RawUTF8): TSynMustache; overload;
     /// register a {{>partialName}} template
-    procedure Add(const aName: RawUTF8; aTemplateStart,aTemplateEnd: PUTF8Char); overload;
+    // - returns the parsed template
+    function Add(const aName: RawUTF8; aTemplateStart,aTemplateEnd: PUTF8Char): TSynMustache; overload;
+    /// search some text withing the {{mustache}} partial
+    function FoundInTemplate(const text: RawUTF8): PtrInt;
     /// delete the partials
     destructor Destroy; override;
+    /// low-level access to the internal partials list
+    property List: TRawUTF8ListHashed read fList;
   end;
 
   /// stores one {{mustache}} pre-rendered template
@@ -416,6 +422,8 @@ type
       Partials: TSynMustachePartials=nil; Helpers: TSynMustacheHelpers=nil;
       OnTranslate: TOnStringTranslate=nil;
       EscapeInvert: boolean=false): RawUTF8; overload;
+    /// search some text withing the {{mustache}} template text
+    function FoundInTemplate(const text: RawUTF8): boolean;
 
     /// read-only access to the raw {{mustache}} template content
     property Template: RawUTF8 read fTemplate;
@@ -536,7 +544,7 @@ begin
       while (aEnd>aStart) and (aEnd[-1]<=' ') do dec(aEnd);
       if aEnd=aStart then
         raise ESynMustache.CreateUTF8('Void % identifier',[KindToText(aKind)^]);
-      SetString(Value,PAnsiChar(aStart),aEnd-aStart);
+      FastSetString(Value,aStart,aEnd-aStart);
     end;
     end;
   end;
@@ -887,6 +895,11 @@ destructor TSynMustache.Destroy;
 begin
   FreeAndNil(fInternalPartials);
   inherited;
+end;
+
+function TSynMustache.FoundInTemplate(const text: RawUTF8): boolean;
+begin // internal partials are part of fTemplate
+  result := (self<>nil) and (text<>'') and (PosEx(text,fTemplate)>0);
 end;
 
 class procedure TSynMustache.HelperAdd(var Helpers: TSynMustacheHelpers;
@@ -1426,17 +1439,26 @@ end;
 
 { TSynMustachePartials }
 
-procedure TSynMustachePartials.Add(const aName, aTemplate: RawUTF8);
+function TSynMustachePartials.Add(const aName, aTemplate: RawUTF8): TSynMustache;
 begin
-  fList.AddObject(aName,TSynMustache.Parse(aTemplate));
+  result := TSynMustache.Parse(aTemplate);
+  if result<>nil then
+    fList.AddObject(aName,result);
 end;
 
-procedure TSynMustachePartials.Add(const aName: RawUTF8;
-  aTemplateStart, aTemplateEnd: PUTF8Char);
+function TSynMustachePartials.Add(const aName: RawUTF8;
+  aTemplateStart, aTemplateEnd: PUTF8Char): TSynMustache;
 var aTemplate: RawUTF8;
 begin
-  SetString(aTemplate,PAnsiChar(aTemplateStart),aTemplateEnd-aTemplateStart);
-  Add(aName,aTemplate);
+  FastSetString(aTemplate,aTemplateStart,aTemplateEnd-aTemplateStart);
+  result := Add(aName,aTemplate);
+end;
+
+function TSynMustachePartials.FoundInTemplate(const text: RawUTF8): PtrInt;
+begin
+  if self<>nil then
+    result := fList.Contains(text) else
+    result := -1;
 end;
 
 constructor TSynMustachePartials.Create;
@@ -1475,15 +1497,14 @@ begin
   inherited;
 end;
 
-function TSynMustachePartials.GetPartial(
-  const PartialName: RawUTF8): TSynMustache;
+function TSynMustachePartials.GetPartial(const PartialName: RawUTF8): TSynMustache;
 var i: integer;
 begin
   if self=nil then begin
     result := nil;
     exit;
   end;
-  i := fList.IndexOf(PartialName);
+  i := fList.IndexOf(PartialName); // using O(1) hashing
   if i<0 then
     result := nil else
     result := TSynMustache(fList.Objects[i]);
