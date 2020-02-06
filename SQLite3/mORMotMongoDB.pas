@@ -918,7 +918,7 @@ begin
       if name='' then
         raise EORMMongoDBException.CreateUTF8(
           '%.JSONFromDoc: Unknown field [%] for %',[self,doc.Names[i],fStoredClass]);
-      W.AddFieldName(pointer(name),Length(name));
+      W.AddProp(pointer(name),Length(name));
       W.AddVariant(doc.Values[i],twJSONEscape);
       W.Add(',');
     end;

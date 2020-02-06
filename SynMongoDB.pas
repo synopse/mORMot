@@ -3203,7 +3203,7 @@ begin
           W.AddNoJSONEscape(item.Name,item.NameLen);
           W.Add(':');
         end else
-          W.AddFieldName(item.Name,item.NameLen);
+          W.AddProp(item.Name,item.NameLen);
         item.AddMongoJSON(W,Mode);
         W.Add(',');
       end;

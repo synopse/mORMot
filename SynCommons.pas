@@ -8476,7 +8476,7 @@ type
     // - you may set LocalTime=TRUE to write the local date and time instead
     // - this method is very fast, and avoid most calculation or API calls
     procedure AddCurrentNCSALogTime(LocalTime: boolean);
-    /// append a time period, specified in micro seconds
+    /// append a time period, specified in micro seconds, in 00.000.000 TSynLog format
     procedure AddMicroSec(MS: cardinal);
     /// append an Integer Value as a 4 digits String with comma
     procedure Add4(Value: PtrUInt);
@@ -8504,12 +8504,20 @@ type
     /// append a UTF-8 String excluding any space or control char
     // - this won't escape the text as expected by JSON
     procedure AddTrimSpaces(P: PUTF8Char); overload;
+    /// append a property name, as '"PropName":'
+    // - PropName content should not need to be JSON escaped (e.g. no " within,
+    // and only ASCII 7-bit characters)
+    // - if twoForceJSONExtended is defined in CustomOptions, it would append
+    // 'PropName:' without the double quotes
+    procedure AddProp(PropName: PUTF8Char; PropNameLen: PtrInt);
     /// append a ShortString property name, as '"PropName":'
     // - PropName content should not need to be JSON escaped (e.g. no " within,
     // and only ASCII 7-bit characters)
     // - if twoForceJSONExtended is defined in CustomOptions, it would append
     // 'PropName:' without the double quotes
+    // - is a wrapper around AddProp()
     procedure AddPropName(const PropName: ShortString);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append a JSON field name, followed by an escaped UTF-8 JSON String and
     // a comma (',')
     procedure AddPropJSONString(const PropName: shortstring; const Text: RawUTF8);
@@ -8517,11 +8525,11 @@ type
     procedure AddPropJSONInt64(const PropName: shortstring; Value: Int64);
     /// append a RawUTF8 property name, as '"FieldName":'
     // - FieldName content should not need to be JSON escaped (e.g. no " within)
-    procedure AddFieldName(const FieldName: RawUTF8); overload;
+    // - if twoForceJSONExtended is defined in CustomOptions, it would append
+    // 'PropName:' without the double quotes
+    // - is a wrapper around AddProp()
+    procedure AddFieldName(const FieldName: RawUTF8);
       {$ifdef HASINLINE}inline;{$endif}
-    /// append a UTF8-encoded property name, as '"FieldName":'
-    // - FieldName content should not need to be JSON escaped (e.g. no " within)
-    procedure AddFieldName(FieldName: PUTF8Char; FieldNameLen: PtrInt); overload;
     /// append the class name of an Object instance as text
     // - aClass must be not nil
     procedure AddClassName(aClass: TClass);
@@ -9455,7 +9463,7 @@ type
     // - default is TRUE
     property CaseSensitive: boolean read fCaseSensitive write SetCaseSensitive;
     /// retrieve the corresponding Name when stored as 'Name=Value' pairs
-    property names[Index: PtrInt]: RawUTF8 read GetName;
+    property Names[Index: PtrInt]: RawUTF8 read GetName;
     /// access to the corresponding 'Name=Value' pairs
     // - search on Name is case-insensitive with 'Name=Value' pairs
     property Values[const Name: RawUTF8]: RawUTF8 read GetValue write SetValue;
@@ -55302,56 +55310,47 @@ begin
   AddAnyAnsiString(s,twJSONEscape,0);
 end;
 
-procedure TTextWriter.AddPropName(const PropName: ShortString);
-var L: PtrInt;
+procedure TTextWriter.AddProp(PropName: PUTF8Char; PropNameLen: PtrInt);
 begin
-  L := ord(PropName[0]);
-  if L=0 then
+  if PropNameLen=0 then
     exit; // paranoid check
-  if BEnd-B<=L+3 then
+  if BEnd-B<=PropNameLen+3 then
     FlushToStream;
   if twoForceJSONExtended in CustomOptions then begin
-    MoveSmall(@PropName[1],B+1,L);
-    inc(B,L+1);
+    MoveSmall(PropName,B+1,PropNameLen);
+    inc(B,PropNameLen+1);
     B^ := ':';
   end else begin
     B[1] := '"';
-    MoveSmall(@PropName[1],B+2,L);
-    inc(B,L+2);
+    MoveSmall(PropName,B+2,PropNameLen);
+    inc(B,PropNameLen+2);
     PWord(B)^ := ord('"')+ord(':')shl 8;
     inc(B);
   end;
 end;
 
+procedure TTextWriter.AddPropName(const PropName: ShortString);
+begin
+  AddProp(@PropName[1],ord(PropName[0]));
+end;
+
 procedure TTextWriter.AddPropJSONString(const PropName: shortstring; const Text: RawUTF8);
 begin
-  AddPropName(PropName);
+  AddProp(@PropName[1],ord(PropName[0]));
   AddJSONString(Text);
   Add(',');
 end;
 
 procedure TTextWriter.AddPropJSONInt64(const PropName: shortstring; Value: Int64);
 begin
-  AddPropName(PropName);
+  AddProp(@PropName[1],ord(PropName[0]));
   Add(Value);
   Add(',');
 end;
 
 procedure TTextWriter.AddFieldName(const FieldName: RawUTF8);
 begin
-  AddFieldName(Pointer(FieldName),length(FieldName));
-end;
-
-procedure TTextWriter.AddFieldName(FieldName: PUTF8Char; FieldNameLen: PtrInt);
-begin
-  if BEnd-B<=FieldNameLen+3 then
-    FlushToStream;
-  B[1] := '"';
-  if FieldNameLen>0 then
-    MoveSmall(FieldName,B+2,FieldNameLen);
-  inc(B,FieldNameLen+2);
-  PWord(B)^ := ord('"')+ord(':')shl 8;
-  inc(B);
+  AddProp(Pointer(FieldName),length(FieldName));
 end;
 
 procedure TTextWriter.AddClassName(aClass: TClass);
