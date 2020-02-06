@@ -4851,7 +4851,9 @@ const
   /// you can use this cookie value to delete a cookie on the browser side
   COOKIE_EXPIRED = '; Expires=Sat, 01 Jan 2010 00:00:01 GMT';
 
-  /// used e.g. by THttpApiServer.Request for http.sys to send a static file
+  /// internal HTTP content-type for efficient static file sending
+  // - detected e.g. by http.sys' THttpApiServer.Request or via the NGINX
+  // X-Accel-Redirect header's THttpServer.Process for direct sending
   // - the OutCustomHeader should contain the proper 'Content-type: ....'
   // corresponding to the file (e.g. by calling GetMimeContentType() function
   // from SynCommons supplyings the file name)
@@ -4866,8 +4868,7 @@ const
   // - should match HTTP_RESP_NORESPONSE constant defined in SynCrtSock.pas unit
   NORESPONSE_CONTENT_TYPE = '!NORESPONSE';
 
-  /// HTTP header used e.g. by THttpApiServer.Request for http.sys to send
-  // a static file in kernel mode
+  /// internal HTTP content-type Header for efficient static file sending
   STATICFILE_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE+STATICFILE_CONTENT_TYPE;
   /// uppercase version of HTTP header for static file content serving
   STATICFILE_CONTENT_TYPE_HEADER_UPPPER = HEADER_CONTENT_TYPE_UPPER+STATICFILE_CONTENT_TYPE;
@@ -6528,7 +6529,7 @@ type
     // InHeader['remoteip'] or InHeader['User-Agent']
     property InHeader[const HeaderName: RawUTF8]: RawUTF8 read GetInHeader;
     /// retrieve an incoming HTTP cookie value
-    // - the supplied cookie name is case-insensitive
+    // - cookie name are case-sensitive
     property InCookie[CookieName: RawUTF8]: RawUTF8 read GetInCookie write SetInCookie;
     /// define a new 'name=value' cookie to be returned to the client
     // - if not void, TSQLRestServer.URI() will define a new 'set-cookie: ...'
@@ -6594,9 +6595,11 @@ type
     // content will be hashed (using crc32c) and in case of no modification
     // will return HTTP_NOTMODIFIED to the browser, without the actual result
     // content (to save bandwidth)
+    // - set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
     procedure Returns(const Result: RawUTF8; Status: integer=HTTP_SUCCESS;
       const CustomHeader: RawUTF8=''; Handle304NotModified: boolean=false;
-      HandleErrorAsRegularResult: boolean=false); overload;
+      HandleErrorAsRegularResult: boolean=false; CacheControlMaxAge: integer=0;
+      ServerHash: RawUTF8=''); overload;
     /// use this method to send back a JSON object to the caller
     // - this method will encode the supplied values e.g. as
     // ! JSONEncode(['name','John','year',1972]) = '{"name":"John","year":1972}'
@@ -6627,12 +6630,15 @@ type
     // from the supplied Blob binary buffer, and optional a file name
     // - by default, the HTTP_NOTMODIFIED process will take place, to minimize
     // bandwidth between the server and the client
+    // - set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
     procedure ReturnBlob(const Blob: RawByteString; Status: integer=HTTP_SUCCESS;
-      Handle304NotModified: boolean=true; const FileName: TFileName='');
+      Handle304NotModified: boolean=true; const FileName: TFileName='';
+      CacheControlMaxAge: integer=0);
     /// use this method to send back a file to the caller
     // - this method will let the HTTP server return the file content
     // - if Handle304NotModified is TRUE, will check the file age to ensure
-    // that the file content will be sent back to the server only if it changed
+    // that the file content will be sent back to the server only if it changed;
+    // set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
     // - if ContentType is left to default '', method will guess the expected
     // mime-type from the file name extension
     // - if the file name does not exist, a generic 404 error page will be
@@ -6642,7 +6648,8 @@ type
     // the URI does not match the expected file name
     procedure ReturnFile(const FileName: TFileName;
       Handle304NotModified: boolean=false; const ContentType: RawUTF8='';
-      const AttachmentFileName: RawUTF8=''; const Error404Redirect: RawUTF8='');
+      const AttachmentFileName: RawUTF8=''; const Error404Redirect: RawUTF8='';
+      CacheControlMaxAge: integer=0);
     /// use this method to send back a file from a local folder to the caller
     // - URIBlobFieldName value, as parsed from the URI, will containn the
     // expected file name in the local folder, using DefaultFileName if the
@@ -6650,9 +6657,10 @@ type
     // - this method will let the HTTP server return the file content
     // - if Handle304NotModified is TRUE, will check the file age to ensure
     // that the file content will be sent back to the server only if it changed
+    // set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
     procedure ReturnFileFromFolder(const FolderName: TFileName;
       Handle304NotModified: boolean=true; const DefaultFileName: TFileName='index.html';
-      const Error404Redirect: RawUTF8='');
+      const Error404Redirect: RawUTF8=''; CacheControlMaxAge: integer=0);
     /// use this method notify the caller that the resource URI has changed
     // - returns a HTTP_TEMPORARYREDIRECT status with the specified location,
     // or HTTP_MOVEDPERMANENTLY if PermanentChange is TRUE
@@ -6666,9 +6674,10 @@ type
     // or as a JSON object containing an array of values:
     // $ {"result":["One","two"]}
     // - expects Status to be either HTTP_SUCCESS or HTTP_CREATED
-    // - caller can set Handle304NotModified=TRUE for Status=HTTP_SUCCESS
+    // - caller can set Handle304NotModified=TRUE for Status=HTTP_SUCCESS and/or
+    // set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
     procedure Results(const Values: array of const; Status: integer=HTTP_SUCCESS;
-      Handle304NotModified: boolean=false);
+      Handle304NotModified: boolean=false; CacheControlMaxAge: integer=0);
     /// use this method if the caller expect no data, just a status
     // - just wrap the overloaded Returns() method with no result value
     // - if Status is an error code, it will call Error() method
@@ -6678,14 +6687,15 @@ type
     // - expects Status to not be HTTP_SUCCESS neither HTTP_CREATED,
     // and will send back a JSON error message to the caller, with the
     // supplied error text
+    // - set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
     // - if no ErrorMessage is specified, will return a default text
     // corresponding to the Status code
     procedure Error(const ErrorMessage: RawUTF8='';
-      Status: integer=HTTP_BADREQUEST); overload; virtual;
+      Status: integer=HTTP_BADREQUEST; CacheControlMaxAge: integer=0); overload; virtual;
     /// use this method to send back an error to the caller
     // - implementation is just a wrapper over Error(FormatUTF8(Format,Args))
     procedure Error(const Format: RawUTF8; const Args: array of const;
-      Status: integer=HTTP_BADREQUEST); overload;
+      Status: integer=HTTP_BADREQUEST; CacheControlMaxAge: integer=0); overload;
     /// use this method to send back an error to the caller
     // - will serialize the supplied exception, with an optional error message
     procedure Error(E: Exception; const Format: RawUTF8; const Args: array of const;
@@ -14633,8 +14643,8 @@ type
     // types like dynamic array will be returned as Base64-encoded blob value -
     // if you need proper JSON access to those, see RetrieveDocVariantArray()
     function RetrieveListJSON(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
-      const BoundsSQLWhere: array of const;
-      const aCustomFieldsCSV: RawUTF8=''; aForceAJAX: boolean=false): RawJSON; overload;
+      const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8='';
+      aForceAJAX: boolean=false): RawJSON; overload;
     /// get a list of members from a SQL statement as RawJSON
     // - implements REST GET collection
     // - this overloaded version expect the SQLWhere clause to be already
@@ -14702,16 +14712,14 @@ type
     // TSQLRecord layout, so complex types like dynamic array will be returned
     // as a true array of values (in contrast to the RetrieveListJSON method)
     function RetrieveOneFieldDocVariantArray(Table: TSQLRecordClass;
-      const FieldName, FormatSQLWhere: RawUTF8;
-      const BoundsSQLWhere: array of const): variant;
+      const FieldName, FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): variant;
     /// get one member from a SQL statement as a TDocVariant
     // - implements REST GET collection
     // - the data will be converted to a TDocVariant variant following the
     // TSQLRecord layout, so complex types like dynamic array will be returned
     // as a true array of values
-    function RetrieveDocVariant(Table: TSQLRecordClass;
-      const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
-      const CustomFieldsCSV: RawUTF8): variant;
+    function RetrieveDocVariant(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
+      const BoundsSQLWhere: array of const; const CustomFieldsCSV: RawUTF8): variant;
     {$endif NOVARIANTS}
     /// get a list of members from a SQL statement as T*ObjArray
     // - implements REST GET collection
@@ -42325,10 +42333,10 @@ begin
     result := UTF8ToString(StringReplaceAll(URIBlobFieldName,'/',PathDelim));
 end;
 
-procedure TSQLRestServerURIContext.Returns(const Result: RawUTF8;
-  Status: integer; const CustomHeader: RawUTF8;
-  Handle304NotModified,HandleErrorAsRegularResult: boolean);
-var clientHash, serverHash: RawUTF8;
+procedure TSQLRestServerURIContext.Returns(const Result: RawUTF8; Status: integer;
+  const CustomHeader: RawUTF8; Handle304NotModified,HandleErrorAsRegularResult: boolean;
+  CacheControlMaxAge: integer; ServerHash: RawUTF8);
+var clientHash: RawUTF8;
 begin
   if HandleErrorAsRegularResult or StatusCodeIsSuccess(Status) then begin
     Call.OutStatus := Status;
@@ -42337,12 +42345,16 @@ begin
       Call.OutHead := CustomHeader else
       if Call.OutHead='' then
         Call.OutHead := JSON_CONTENT_TYPE_HEADER_VAR;
+    if CacheControlMaxAge>0 then
+      Call.OutHead := Call.OutHead+#13#10'Cache-Control: max-age='+UInt32ToUtf8(CacheControlMaxAge);
     if Handle304NotModified and (Status=HTTP_SUCCESS) and
        (Length(Result)>64) then begin
       clientHash := FindIniNameValue(pointer(Call.InHead),'IF-NONE-MATCH: ');
-      serverHash := '"'+crc32cUTF8ToHex(Result)+'"';
-      if clientHash<>serverHash then
-        Call.OutHead := Call.OutHead+#13#10'ETag: '+serverHash else begin
+      if ServerHash='' then
+        ServerHash := '"'+crc32cUTF8ToHex(Result)+'"';
+      ServerHash := '"'+ServerHash+'"';
+      if clientHash<>ServerHash then
+        Call.OutHead := Call.OutHead+#13#10'ETag: '+ServerHash else begin
         Call.OutBody := ''; // save bandwidth for "304 Not Modified"
         Call.OutStatus := HTTP_NOTMODIFIED;
       end;
@@ -42381,16 +42393,17 @@ begin
 end;
 
 procedure TSQLRestServerURIContext.ReturnBlob(const Blob: RawByteString;
-  Status: integer; Handle304NotModified: boolean; const FileName: TFileName);
+  Status: integer; Handle304NotModified: boolean; const FileName: TFileName;
+  CacheControlMaxAge: integer);
 begin
   if not ExistsIniName(pointer(Call.OutHead),HEADER_CONTENT_TYPE_UPPER) then
     AddToCSV(GetMimeContentTypeHeader(Blob,FileName),Call.OutHead,#13#10);
-  Returns(Blob,Status,Call.OutHead,Handle304NotModified);
+  Returns(Blob,Status,Call.OutHead,Handle304NotModified,false,CacheControlMaxAge);
 end;
 
 procedure TSQLRestServerURIContext.ReturnFile(const FileName: TFileName;
   Handle304NotModified: boolean; const ContentType,AttachmentFileName,
-  Error404Redirect: RawUTF8);
+  Error404Redirect: RawUTF8; CacheControlMaxAge: integer);
 var FileTime: TDateTime;
     clientHash, serverHash: RawUTF8;
 begin
@@ -42408,6 +42421,8 @@ begin
         Call.OutHead := Call.OutHead+HEADER_CONTENT_TYPE+ContentType else
         Call.OutHead := Call.OutHead+GetMimeContentTypeHeader('',FileName);
     end;
+    if CacheControlMaxAge>0 then
+      Call.OutHead := Call.OutHead+#13#10'Cache-Control: max-age='+UInt32ToUtf8(CacheControlMaxAge);
     Call.OutStatus := HTTP_SUCCESS;
     if Handle304NotModified then begin
       clientHash := FindIniNameValue(pointer(Call.InHead),'IF-NONE-MATCH: ');
@@ -42429,7 +42444,7 @@ end;
 
 procedure TSQLRestServerURIContext.ReturnFileFromFolder(const FolderName: TFileName;
   Handle304NotModified: boolean; const DefaultFileName: TFileName;
-  const Error404Redirect: RawUTF8);
+  const Error404Redirect: RawUTF8; CacheControlMaxAge: integer);
 var fileName: TFileName;
 begin
   if URIBlobFieldName='' then
@@ -42439,7 +42454,7 @@ begin
       fileName := UTF8ToString(StringReplaceChars(URIBlobFieldName,'/',PathDelim));
   if fileName<>'' then
     fileName := IncludeTrailingPathDelimiter(FolderName)+fileName;
-  ReturnFile(fileName,Handle304NotModified,'','',Error404Redirect);
+  ReturnFile(fileName,Handle304NotModified,'','',Error404Redirect,CacheControlMaxAge);
 end;
 
 procedure TSQLRestServerURIContext.Redirect(const NewLocation: RawUTF8;
@@ -42460,7 +42475,7 @@ begin
 end;
 
 procedure TSQLRestServerURIContext.Results(const Values: array of const;
-  Status: integer; Handle304NotModified: boolean);
+  Status: integer; Handle304NotModified: boolean; CacheControlMaxAge: integer);
 var i,h: integer;
     result: RawUTF8;
     temp: TTextWriterStackBuffer;
@@ -42490,7 +42505,7 @@ begin
     finally
       Free;
     end;
-  Returns(result,Status,'',Handle304NotModified);
+  Returns(result,Status,'',Handle304NotModified,false,CacheControlMaxAge);
 end;
 
 
@@ -42502,11 +42517,11 @@ begin
 end;
 
 procedure TSQLRestServerURIContext.Error(const Format: RawUTF8;
-  const Args: array of const; Status: integer);
+  const Args: array of const; Status, CacheControlMaxAge: integer);
 var msg: RawUTF8;
 begin
   FormatUTF8(Format,Args,msg);
-  Error(msg,Status);
+  Error(msg,Status,CacheControlMaxAge);
 end;
 
 procedure TSQLRestServerURIContext.Error(E: Exception;
@@ -42523,13 +42538,16 @@ begin
   end;
 end;
 
-procedure TSQLRestServerURIContext.Error(const ErrorMessage: RawUTF8; Status: integer);
+procedure TSQLRestServerURIContext.Error(const ErrorMessage: RawUTF8;
+  Status, CacheControlMaxAge: integer);
 var ErrorMsg: RawUTF8;
     temp: TTextWriterStackBuffer;
 begin
   Call.OutStatus := Status;
   if StatusCodeIsSuccess(Status) then begin // not an error
     Call.OutBody := ErrorMessage;
+    if CacheControlMaxAge<>0 then // Cache-Control is ignored for errors
+      Call.OutHead := 'Cache-Control: max-age='+UInt32ToUtf8(CacheControlMaxAge);
     exit;
   end;
   if ErrorMessage='' then
