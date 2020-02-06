@@ -412,7 +412,7 @@ procedure QueryPerformanceMicroSeconds(out Value: Int64);
 var r : TTimeSpec;
 begin
   clock_gettime(CLOCK_MONOTONIC,@r);
-  value := r.tv_nsec div C_THOUSAND+r.tv_sec*C_MILLION; // as microseconds
+  value := PtrUInt(r.tv_nsec) div C_THOUSAND+r.tv_sec*C_MILLION; // as microseconds
 end;
 
 procedure GetNowUTCSystem(out result: TSystemTime);
