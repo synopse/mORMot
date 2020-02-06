@@ -4063,15 +4063,17 @@ function CharSetToCodePage(CharSet: integer): cardinal;
 function CodePageToCharSet(CodePage: Cardinal): Integer;
 
 /// retrieve the MIME content type from a supplied binary buffer
+// - inspect the first bytes, to guess from standard known headers
 // - return the MIME type, ready to be appended to a 'Content-Type: ' HTTP header
 // - returns DefaultContentType if the binary buffer has an unknown layout
 function GetMimeContentTypeFromBuffer(Content: Pointer; Len: PtrInt;
   const DefaultContentType: RawUTF8): RawUTF8;
 
-/// retrieve the MIME content type from a supplied binary buffer or file name
+/// retrieve the MIME content type from its file name or a supplied binary buffer
+// - will first check for known file extensions, then inspect the binary content
 // - return the MIME type, ready to be appended to a 'Content-Type: ' HTTP header
 // - default is 'application/octet-stream' (BINARY_CONTENT_TYPE) or
-// 'application/extension' if FileName was specified
+// 'application/fileextension' if FileName was specified
 // - see @http://en.wikipedia.org/wiki/Internet_media_type for most common values
 function GetMimeContentType(Content: Pointer; Len: PtrInt;
    const FileName: TFileName=''): RawUTF8;
@@ -38960,7 +38962,7 @@ end;
 
 function GetMimeContentTypeFromBuffer(Content: Pointer; Len: PtrInt;
   const DefaultContentType: RawUTF8): RawUTF8;
-begin
+begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
   result := DefaultContentType;
   if (Content<>nil) and (Len>4) then
     case PCardinal(Content)^ of
@@ -38974,14 +38976,15 @@ begin
     $474E5089: result := 'image/png'; // 89 50 4E 47 0D 0A 1A 0A
     $38464947: result := 'image/gif'; // 47 49 46 38
     $46464F77: result := 'application/font-woff'; // wOFF in BigEndian
+    $A3DF451A: result := 'video/webm'; // 1A 45 DF A3 MKV Matroska stream file
+    $002A4949, $2A004D4D, $2B004D4D:
+      result := 'image/tiff'; // 49 49 2A 00 or 4D 4D 00 2A or 4D 4D 00 2B
     $46464952: if Len>16 then // RIFF
       case PCardinalArray(Content)^[2] of
       $50424557: result := 'image/webp';
       $20495641: if PCardinalArray(Content)^[3]=$5453494C then
         result := 'video/x-msvideo'; // Windows Audio Video Interleave file
       end;
-    $002A4949, $2A004D4D, $2B004D4D:
-      result := 'image/tiff'; // 49 49 2A 00 or 4D 4D 00 2A or 4D 4D 00 2B
     $E011CFD0: // Microsoft Office applications D0 CF 11 E0=DOCFILE
       if Len>600 then
       case PWordArray(Content)^[256] of // at offset 512
@@ -39024,50 +39027,48 @@ end;
 
 function GetMimeContentType(Content: Pointer; Len: PtrInt;
   const FileName: TFileName): RawUTF8;
-begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
-  if Content<>nil then
-    result := GetMimeContentTypeFromBuffer(Content,Len,'') else
-    result := '';
-  if (result='') and (FileName<>'') then begin
+begin
+  if FileName<>'' then begin // file extension is more precise -> check first
     result := LowerCase(StringToAnsi7(ExtractFileExt(FileName)));
     case PosEx(copy(result,2,4),
-        'png,gif,tiff,jpg,jpeg,bmp,doc,htm,html,css,js,ico,wof,txt,svg,'+
-      // 1   5   9    14  18   23  27  31  35   40  44 47  51  55  59
-        'atom,rdf,rss,webp,appc,mani,docx,xml,json,woff,ogg,ogv,mp4,m2v,'+
-      // 63   68  72  76   81   86   91   96  100  105  110 114 118 122
-        'm2p,mp3,h264,text,log,gz') of
-      // 126 130 134  139  144 148
-      1:  result := 'image/png';
-      5:  result := 'image/gif';
-      9:  result := 'image/tiff';
-      14,18: result := JPEG_CONTENT_TYPE;
-      23: result := 'image/bmp';
-      27,91: result := 'application/msword';
-      31,35: result := HTML_CONTENT_TYPE;
-      40: result := 'text/css';
-      44: result := 'application/javascript';
+      'png,gif,tiff,jpg,jpeg,bmp,doc,htm,html,css,js,ico,wof,txt,svg,'+
+     // 1   5   9    14  18   23  27  31  35   40  44 47  51  55  59
+      'atom,rdf,rss,webp,appc,mani,docx,xml,json,woff,ogg,ogv,mp4,m2v,'+
+     // 63  68  72  76   81   86   91   96  100  105  110 114 118 122
+      'm2p,mp3,h264,text,log,gz,webm,mkv,rar,7z') of
+     // 126 130 134 139  144 148 151 156 160 164
+      1:           result := 'image/png';
+      5:           result := 'image/gif';
+      9:           result := 'image/tiff';
+      14,18:       result := JPEG_CONTENT_TYPE;
+      23:          result := 'image/bmp';
+      27,91:       result := 'application/msword';
+      31,35:       result := HTML_CONTENT_TYPE;
+      40:          result := 'text/css';
+      44:          result := 'application/javascript';
       // text/javascript and application/x-javascript are obsolete (RFC 4329)
-      47: result := 'image/x-icon';
-      51,105: result := 'application/font-woff';
-      55,139,144: result := TEXT_CONTENT_TYPE;
-      59: result := 'image/svg+xml';
+      47:          result := 'image/x-icon';
+      51,105:      result := 'application/font-woff';
+      55,139,144:  result := TEXT_CONTENT_TYPE;
+      59:          result := 'image/svg+xml';
       63,68,72,96: result := XML_CONTENT_TYPE;
-      76: result := 'image/webp';
-      81,86: result := 'text/cache-manifest';
-      100: result := JSON_CONTENT_TYPE_VAR;
-      110,114: result := 'video/ogg';  // RFC 5334
-      118: result := 'video/mp4';      // RFC 4337 6381
-      122,126: result := 'video/mp2';
-      130: result := 'audio/mpeg';     // RFC 3003
-      134: result := 'video/H264';     // RFC 6184
-      148: result := 'application/gzip';
+      76:          result := 'image/webp';
+      81,86:       result := 'text/cache-manifest';
+      100:         result := JSON_CONTENT_TYPE_VAR;
+      110,114:     result := 'video/ogg';  // RFC 5334
+      118:         result := 'video/mp4';  // RFC 4337 6381
+      122,126:     result := 'video/mp2';
+      130:         result := 'audio/mpeg'; // RFC 3003
+      134:         result := 'video/H264'; // RFC 6184
+      148:         result := 'application/gzip';
+      151,156:     result := 'video/webm';
+      160:         result := 'application/x-rar-compressed';
+      164:         result := 'application/x-7z-compressed';
       else
-        if result<>'' then
-          result := 'application/'+copy(result,2,10);
+        result := GetMimeContentTypeFromBuffer(Content,Len,'application/'+copy(result,2,20));
     end;
-  end;
-  if result='' then
-    result := BINARY_CONTENT_TYPE;
+  end else
+    result := GetMimeContentTypeFromBuffer(Content,Len,BINARY_CONTENT_TYPE);
 end;
 
 function GetMimeContentTypeHeader(const Content: RawByteString;
