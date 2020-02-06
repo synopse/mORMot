@@ -11773,6 +11773,7 @@ procedure TCurlHTTP.InternalCreateRequest(const aMethod,aURL: SockString);
 const CERT_PEM: SockString = 'PEM';
 begin
   fIn.URL := fRootURL+aURL;
+  curl.easy_setopt(fHandle,coFollowLocation,1); // url redirection (as TWinHTTP)
   //curl.easy_setopt(fHandle,coTCPNoDelay,0); // disable Nagle
   if fLayer=cslUNIX then
     curl.easy_setopt(fHandle,coUnixSocketPath,pointer(fServer));
