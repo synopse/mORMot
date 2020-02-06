@@ -9429,6 +9429,9 @@ type
     function IndexOfName(const Name: RawUTF8): PtrInt;
     /// find a TObject item index in the stored Objects[] list
     function IndexOfObject(aObject: TObject): PtrInt;
+    /// search for any RawUTF8 item containing some text
+    // - uses PosEx() on the stored lines
+    function Contains(const aText: RawUTF8; aFirstIndex: integer=0): PtrInt;
     /// access to the Value of a given 'Name=Value' pair
     function GetValueAt(Index: PtrInt): RawUTF8;
     /// retrieve the all lines, separated by the supplied delimiter
@@ -59437,6 +59440,15 @@ begin
   if (self<>nil) and (fObjects<>nil) then
     result := PtrUIntScanIndex(pointer(fObjects),fCount,PtrUInt(aObject)) else
     result := -1;
+end;
+
+function TRawUTF8List.Contains(const aText: RawUTF8; aFirstIndex: integer): PtrInt;
+begin
+  if self<>nil then
+    for result := aFirstIndex to fCount-1 do
+      if PosEx(aText,fList[result])>0 then
+        exit;
+  result := -1;
 end;
 
 procedure TRawUTF8List.OnChangeHidden(Sender: TObject);
