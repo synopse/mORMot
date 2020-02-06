@@ -291,7 +291,10 @@ const
                  {$ifdef LINUXNOTBSD} 'Linux' {$else} 'Posix' {$endif LINUXNOTBSD}
                {$endif MSWINDOWS};
 
-  /// used by THttpApiServer.Request for http.sys to send a static file
+  /// internal HTTP content-type for efficient static file sending
+  // - detected e.g. by http.sys' THttpApiServer.Request or via the NGINX
+  // X-Accel-Redirect header's THttpServer.Process (see
+  // THttpServer.NginxSendFileFrom) for direct sending with no local bufferring
   // - the OutCustomHeader should contain the proper 'Content-type: ....'
   // corresponding to the file (e.g. by calling GetMimeContentType() function
   // from SynCommons supplyings the file name)
@@ -1154,8 +1157,8 @@ type
     /// output parameter to define the reponse message body content type
     // - if OutContentType is HTTP_RESP_STATICFILE (i.e. '!STATICFILE', defined
     // as STATICFILE_CONTENT_TYPE in mORMot.pas), then OutContent is the UTF-8
-    // file name of a file which must be sent to the client via http.sys (much
-    // faster than manual buffering/sending)
+    // file name of a file which must be sent to the client via http.sys or
+    // NGINX's X-Accel-Redirect header (faster than local buffering/sending)
     // - if OutContentType is HTTP_RESP_NORESPONSE (i.e. '!NORESPONSE', defined
     // as NORESPONSE_CONTENT_TYPE in mORMot.pas), then the actual transmission
     // protocol may not wait for any answer - used e.g. for WebSockets
@@ -1205,9 +1208,9 @@ type
   // - OutCustomHeader will handle Content-Type/Location
   // - if OutContentType is HTTP_RESP_STATICFILE (i.e. '!STATICFILE' aka
   // STATICFILE_CONTENT_TYPE in mORMot.pas), then OutContent is the UTF-8 file
-  // name of a file which must be sent to the client via http.sys (much faster
-  // than manual buffering/sending) and  the OutCustomHeader should
-  // contain the proper 'Content-type: ....'
+  // name of a file which must be sent directly to the client via http.sys or
+  // NGINX's X-Accel-Redirect; the OutCustomHeader should contain the
+  // proper 'Content-type: ....' value
   TOnHttpServerRequest = function(Ctxt: THttpServerRequest): cardinal of object;
 
   /// event handler used by THttpServerGeneric.OnAfterResponse property
@@ -1292,9 +1295,9 @@ type
     // - OutCustomHeader is available to handle Content-Type/Location
     // - if OutContentType is HTTP_RESP_STATICFILE (i.e. '!STATICFILE' or
     // STATICFILE_CONTENT_TYPE defined in mORMot.pas), then OutContent is the
-    // UTF-8 file name of a file which must be sent to the client via http.sys
-    // (much faster than manual buffering/sending) and  the OutCustomHeader should
-    // contain the proper 'Content-type: ....'
+    // UTF-8 file name of a file which must be sent to the client via http.sys or
+    // NGINX's X-Accel-Redirect (much faster than manual buffering/sending);
+    // the OutCustomHeader should contain the proper 'Content-type: ....'
     // - default implementation is to call the OnRequest event (if existing),
     // and will return STATUS_NOTFOUND if OnRequest was not set
     // - warning: this process must be thread-safe (can be called by several
@@ -2191,7 +2194,8 @@ type
     fCompressAcceptHeader: THttpSocketCompressSet;
     fTag: PtrInt;
     class function InternalREST(const url,method,data,header: SockString;
-      aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString=nil): SockString;
+      aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString=nil;
+      outStatus: PInteger=nil): SockString;
     // inherited class should override those abstract methods
     procedure InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD); virtual; abstract;
     procedure InternalCreateRequest(const aMethod,aURL: SockString); virtual; abstract;
@@ -2245,7 +2249,8 @@ type
     // THttpRequest.Get() but either TWinHTTP.Get(), TWinINet.Get() or
     // TCurlHTTP.Get() methods
     class function Get(const aURI: SockString; const aHeader: SockString='';
-      aIgnoreSSLCertificateErrors: boolean=true; outHeaders: PSockString=nil): SockString;
+      aIgnoreSSLCertificateErrors: boolean=true; outHeaders: PSockString=nil;
+      outStatus: PInteger=nil): SockString;
     /// wrapper method to create a resource via an HTTP POST
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
@@ -2256,7 +2261,8 @@ type
     // THttpRequest.Post() but either TWinHTTP.Post(), TWinINet.Post() or
     // TCurlHTTP.Post() methods
     class function Post(const aURI, aData: SockString; const aHeader: SockString='';
-      aIgnoreSSLCertificateErrors: boolean=true; outHeaders: PSockString=nil): SockString;
+      aIgnoreSSLCertificateErrors: boolean=true; outHeaders: PSockString=nil;
+      outStatus: PInteger=nil): SockString;
     /// wrapper method to update a resource via an HTTP PUT
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
@@ -2267,7 +2273,8 @@ type
     // THttpRequest.Put() but either TWinHTTP.Put(), TWinINet.Put() or
     // TCurlHTTP.Put() methods
     class function Put(const aURI, aData: SockString; const aHeader: SockString='';
-      aIgnoreSSLCertificateErrors: boolean=true; outHeaders: PSockString=nil): SockString;
+      aIgnoreSSLCertificateErrors: boolean=true; outHeaders: PSockString=nil;
+      outStatus: PInteger=nil): SockString;
     /// wrapper method to delete a resource via an HTTP DELETE
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
@@ -2276,7 +2283,8 @@ type
     // THttpRequest.Delete() but either TWinHTTP.Delete(), TWinINet.Delete() or
     // TCurlHTTP.Delete() methods
     class function Delete(const aURI: SockString; const aHeader: SockString='';
-      aIgnoreSSLCertificateErrors: boolean=true; outHeaders: PSockString=nil): SockString;
+      aIgnoreSSLCertificateErrors: boolean=true; outHeaders: PSockString=nil;
+      outStatus: PInteger=nil): SockString;
 
     /// will register a compression algorithm
     // - used e.g. to compress on the fly the data, with standard gzip/deflate
@@ -2638,19 +2646,23 @@ function HttpGet(const server, port: SockString; const url: SockString;
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket for plain http URI,
-// or TWinHTTP/TCurlHTTP for any https URI
-function HttpGet(const aURI: SockString; outHeaders: PSockString=nil): SockString; overload;
+// or TWinHTTP/TCurlHTTP for any https URI, or if forceNotSocket is set to true
+function HttpGet(const aURI: SockString; outHeaders: PSockString=nil;
+  forceNotSocket: boolean=false; outStatus: PInteger=nil): SockString; overload;
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket for plain http URI,
 // or TWinHTTP/TCurlHTTP for any https URI
 function HttpGet(const aURI: SockString; const inHeaders: SockString;
-  outHeaders: PSockString=nil): SockString; overload;
+  outHeaders: PSockString=nil; forceNotSocket: boolean=false;
+  outStatus: PInteger=nil): SockString; overload;
 
 /// retrieve the content of a web page, using HTTP/1.1 GET method and a token
 // - this method will use a low-level THttpClientSock socket and its GetAuth method
 // - if AuthToken<>'', will add an header with 'Authorization: Bearer '+AuthToken
-function HttpGetAuth(const aURI, aAuthToken: SockString; outHeaders: PSockString=nil): SockString;
+function HttpGetAuth(const aURI, aAuthToken: SockString;
+  outHeaders: PSockString=nil; forceNotSocket: boolean=false;
+  outStatus: PInteger=nil): SockString;
 
 /// send some data to a remote web server, using the HTTP/1.1 protocol and POST method
 function HttpPost(const server, port: SockString; const url, Data, DataType: SockString;
@@ -5835,21 +5847,23 @@ begin
   end;
 end;
 
-function HttpGet(const aURI: SockString; outHeaders: PSockString): SockString;
+function HttpGet(const aURI: SockString; outHeaders: PSockString; forceNotSocket: boolean;
+  outStatus: PInteger): SockString;
 begin
-  result := HttpGet(aURI,'',outHeaders);
+  result := HttpGet(aURI,'',outHeaders,forceNotSocket,outStatus);
 end;
 
-function HttpGet(const aURI: SockString; const inHeaders: SockString; outHeaders: PSockString): SockString;
+function HttpGet(const aURI: SockString; const inHeaders: SockString;
+  outHeaders: PSockString; forceNotSocket: boolean; outStatus: PInteger): SockString;
 var URI: TURI;
 begin
   if URI.From(aURI) then
-    if URI.Https then
+    if URI.Https or forceNotSocket then
       {$ifdef USEWININET}
-      result := TWinHTTP.Get(aURI,inHeaders,{weakCA=}true,outHeaders) else
+      result := TWinHTTP.Get(aURI,inHeaders,{weakCA=}true,outHeaders,outStatus) else
       {$else}
       {$ifdef USELIBCURL}
-      result := TCurlHTTP.Get(aURI,inHeaders,{weakCA=}true,outHeaders) else
+      result := TCurlHTTP.Get(aURI,inHeaders,{weakCA=}true,outHeaders,outStatus) else
       {$else}
       raise ECrtSocket.CreateFmt('https is not supported by HttpGet(%s)',[aURI]) else
       {$endif}
@@ -5862,19 +5876,15 @@ begin
   {$endif}
 end;
 
-function HttpGetAuth(const aURI, aAuthToken: SockString; outHeaders: PSockString=nil): SockString;
-var url: SockString;
-    http: THttpClientSocket;
+function HttpGetAuth(const aURI, aAuthToken: SockString; outHeaders: PSockString;
+  forceNotSocket: boolean; outStatus: PInteger): SockString;
+var status: integer;
 begin
-  result := '';
-  http := OpenHttp(aURI,@url);
-  if http<>nil then
-    try
-      if http.GetAuth(url,aAuthToken) in [STATUS_SUCCESS..STATUS_PARTIALCONTENT] then
-        result := http.Content;
-    finally
-      http.Free;
-    end;
+  result := HttpGet(aURI,AuthorizationBearer(aAuthToken),outHeaders,forceNotSocket,@status);
+  if outStatus<>nil then
+    outStatus^ := status;
+  if not(status in [STATUS_SUCCESS..STATUS_PARTIALCONTENT]) then
+    result := '';
 end;
 
 function HttpPost(const server, port: SockString; const url, Data, DataType: SockString;
@@ -10827,9 +10837,11 @@ begin
 end;
 
 class function THttpRequest.InternalREST(const url,method,data,header: SockString;
-  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString): SockString;
+  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString;
+  outStatus: PInteger): SockString;
 var URI: TURI;
     oh: SockString;
+    status: integer;
 begin
   result := '';
   with URI do
@@ -10838,7 +10850,9 @@ begin
       with self.Create(Server,Port,Https,'','',0,0,0,Layer) do
       try
         IgnoreSSLCertificateErrors := aIgnoreSSLCertificateErrors;
-        Request(Address,method,0,header,data,'',oh,result);
+        status := Request(Address,method,0,header,data,'',oh,result);
+        if outStatus<>nil then
+          outStatus^ := status;
         if outHeaders<>nil then
           outHeaders^ := oh;
       finally
@@ -10850,27 +10864,27 @@ begin
 end;
 
 class function THttpRequest.Get(const aURI,aHeader: SockString;
-  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString): SockString;
+  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString; outStatus: PInteger): SockString;
 begin
-  result := InternalREST(aURI,'GET','',aHeader,aIgnoreSSLCertificateErrors,outHeaders);
+  result := InternalREST(aURI,'GET','',aHeader,aIgnoreSSLCertificateErrors,outHeaders,outStatus);
 end;
 
 class function THttpRequest.Post(const aURI, aData, aHeader: SockString;
-  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString): SockString;
+  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString; outStatus: PInteger): SockString;
 begin
-  result := InternalREST(aURI,'POST',aData,aHeader,aIgnoreSSLCertificateErrors,outHeaders);
+  result := InternalREST(aURI,'POST',aData,aHeader,aIgnoreSSLCertificateErrors,outHeaders,outStatus);
 end;
 
 class function THttpRequest.Put(const aURI, aData, aHeader: SockString;
-  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString): SockString;
+  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString; outStatus: PInteger): SockString;
 begin
-  result := InternalREST(aURI,'PUT',aData,aHeader,aIgnoreSSLCertificateErrors,outHeaders);
+  result := InternalREST(aURI,'PUT',aData,aHeader,aIgnoreSSLCertificateErrors,outHeaders,outStatus);
 end;
 
 class function THttpRequest.Delete(const aURI, aHeader: SockString;
-  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString): SockString;
+  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString; outStatus: PInteger): SockString;
 begin
-  result := InternalREST(aURI,'DELETE','',aHeader,aIgnoreSSLCertificateErrors,outHeaders);
+  result := InternalREST(aURI,'DELETE','',aHeader,aIgnoreSSLCertificateErrors,outHeaders,outStatus);
 end;
 
 function THttpRequest.Request(const url, method: SockString;

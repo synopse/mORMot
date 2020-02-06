@@ -5795,8 +5795,8 @@ type
   TDynArrayHashed = record
   // pseudo inheritance for most used methods
   private
-    function GetCount: PtrInt;                  inline;
-    procedure SetCount(aCount: PtrInt) ;        inline;
+    function GetCount: PtrInt;                 inline;
+    procedure SetCount(aCount: PtrInt) ;       inline;
     procedure SetCapacity(aCapacity: PtrInt);  inline;
     function GetCapacity: PtrInt;              inline;
   public
@@ -26260,7 +26260,11 @@ end;
 function Split(const Str, SepStr: RawUTF8; StartPos: integer): RawUTF8;
 var i: integer;
 begin
-  i := PosEx(SepStr,Str,StartPos);
+{$ifdef FPC} // to use fast FPC SSE version
+  if (StartPos=1) and (length(SepStr)=1) then
+    i := PosExChar(SepStr[1],Str) else
+{$endif FPC}
+    i := PosEx(SepStr,Str,StartPos);
   if i>0 then
     result := Copy(Str,StartPos,i-StartPos) else
     if StartPos=1 then
@@ -26272,7 +26276,11 @@ procedure Split(const Str, SepStr: RawUTF8; var LeftStr, RightStr: RawUTF8; ToUp
 var i: integer;
     tmp: RawUTF8; // may be called as Split(Str,SepStr,Str,RightStr)
 begin
-  i := PosEx(SepStr,Str);
+  {$ifdef FPC} // to use fast FPC SSE version
+  if length(SepStr)=1 then
+    i := PosExChar(SepStr[1],Str) else
+  {$endif FPC}
+    i := PosEx(SepStr,Str);
   if i=0 then begin
     LeftStr := Str;
     RightStr := '';
@@ -29942,7 +29950,7 @@ begin
   result := true;
   if high(UpperValues)>=0 then
     while (P<>nil) and (P^<>'[') do begin
-      if P^=' ' then repeat inc(P) until P^<>' ';   // trim left ' '
+      if P^=' ' then repeat inc(P) until P^<>' '; // trim left ' '
       PBeg := P;
       if IdemPChar(PBeg,pointer(UpperName)) then begin
         inc(PBeg,length(UpperName));

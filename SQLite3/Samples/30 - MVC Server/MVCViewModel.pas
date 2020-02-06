@@ -174,7 +174,7 @@ begin
   if not RestModel.Retrieve('',info) then begin // retrieve first item
     tmp := StringFromFile('/home/ab/Downloads/2020-01-16-a8003957c2ae6bde5be6ea279c9c9ce4-backup.txt');
     info.Language := 'en';
-  if tmp<>'' then begin
+    if tmp<>'' then begin
       info.Title := 'Synopse Blog';
       info.Description := 'Articles, announcements, news, updates and more '+
         'about our Open Source projects';
@@ -255,17 +255,20 @@ begin
     end;
 end;
 
-function TBlogApplication.GetViewInfo(MethodIndex: integer): variant;
+procedure TBlogApplication.GetViewInfo(MethodIndex: integer; out info: variant);
+var archives: variant; // needed to circumvent memory leak bug on FPC
 begin
-  result := inherited GetViewInfo(MethodIndex);
+  inherited GetViewInfo(MethodIndex,info);
   _ObjAddProps(['blog',fBlogMainInfo,
-    'session',CurrentSession.CheckAndRetrieveInfo(TypeInfo(TCookieData))],result);
-  if not fDefaultData.AddExistingProp('archives',result) then
-    fDefaultData.AddNewProp('archives',RestModel.RetrieveDocVariantArray(
+    'session',CurrentSession.CheckAndRetrieveInfo(TypeInfo(TCookieData))],info);
+  if not fDefaultData.AddExistingProp('archives',info) then begin
+    archives := RestModel.RetrieveDocVariantArray(
       TSQLArticle,'','group by PublishedMonth order by PublishedMonth desc limit 100',[],
-      'distinct(PublishedMonth),max(RowID)+1 as FirstID'),result);
-  if not fDefaultData.AddExistingProp('tags',result) then
-    fDefaultData.AddNewProp('tags',fTagsLookup.GetAsDocVariantArray,result);
+      'distinct(PublishedMonth),max(RowID)+1 as FirstID');
+    fDefaultData.AddNewProp('archives',archives,info);
+  end;
+  if not fDefaultData.AddExistingProp('tags',info) then
+    fDefaultData.AddNewProp('tags',fTagsLookup.GetAsDocVariantArray,info);
 end;
 
 procedure TBlogApplication.FlushAnyCache;
@@ -300,8 +303,7 @@ begin
     whereClause := 'join (select docid,rank(matchinfo(ArticleSearch),1.0,0.7,0.5) as rank '+
       'from ArticleSearch where ArticleSearch match ? '+whereClause+
       'order by rank desc'+ARTICLE_DEFAULT_LIMIT+')as r on (r.docid=Article.id)';
-    articles := RestModel.RetrieveDocVariantArray(
-      TSQLArticle,'',whereClause,[match,rank],
+    articles := RestModel.RetrieveDocVariantArray(TSQLArticle,'',whereClause,[match,rank],
       'id,title,tags,author,authorname,createdat,abstract,contenthtml,rank');
     with _Safe(articles)^ do
       if (Kind=dvArray) and (Count>0) then
@@ -319,15 +321,17 @@ begin
   end;
   SetVariantNull(Scope);
   if (lastID=0) and (tag=0) then begin // use simple cache if no parameters
-    if not fDefaultData.AddExistingProp('Articles',Scope) then
-      fDefaultData.AddNewProp('Articles',RestModel.RetrieveDocVariantArray(
-        TSQLArticle,'',ARTICLE_DEFAULT_ORDER,[],
-        ARTICLE_FIELDS,nil,@fDefaultLastID),Scope);
+    if not fDefaultData.AddExistingProp('Articles',Scope) then begin
+      articles := RestModel.RetrieveDocVariantArray(TSQLArticle,'',
+        ARTICLE_DEFAULT_ORDER,[],ARTICLE_FIELDS,nil,@fDefaultLastID);
+      fDefaultData.AddNewProp('Articles',articles,Scope);
+    end;
     lastID := fDefaultLastID;
-  end else // use more complex request using lastID + tag parameters
-    scope := _ObjFast(['Articles',RestModel.RetrieveDocVariantArray(
-        TSQLArticle,'',whereClause+ARTICLE_DEFAULT_ORDER,[lastID,tag],
-        ARTICLE_FIELDS,nil,@lastID)]);
+  end else begin // use more complex request using lastID + tag parameters
+    articles := RestModel.RetrieveDocVariantArray(TSQLArticle,'',
+      whereClause+ARTICLE_DEFAULT_ORDER,[lastID,tag],ARTICLE_FIELDS,nil,@lastID);
+    scope := _ObjFast(['Articles',articles]);
+  end;
   if lastID>1 then
     _ObjAddProps(['lastID',lastID, 'tag',tag],Scope);
 end;

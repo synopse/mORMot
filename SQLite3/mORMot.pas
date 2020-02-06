@@ -6610,7 +6610,7 @@ type
     // - caller can set Handle304NotModified=TRUE for Status=HTTP_SUCCESS
     procedure Returns(const NameValuePairs: array of const; Status: integer=HTTP_SUCCESS;
       Handle304NotModified: boolean=false; HandleErrorAsRegularResult: boolean=false;
-       const CustomHeader: RawUTF8=''); overload;
+      const CustomHeader: RawUTF8=''); overload;
     /// use this method to send back any object as JSON document to the caller
     // - this method will call ObjectToJson() to compute the returned content
     // - you can customize SQLRecordOptions, to force the returned JSON
@@ -6619,7 +6619,7 @@ type
     procedure Returns(Value: TObject; Status: integer=HTTP_SUCCESS;
       Handle304NotModified: boolean=false;
       SQLRecordOptions: TJSONSerializerSQLRecordOptions=[];
-       const CustomHeader: RawUTF8=''); overload;
+      const CustomHeader: RawUTF8=''); overload;
     /// use this method to send back any variant as JSON to the caller
     // - this method will call VariantSaveJSON() to compute the returned content
     procedure ReturnsJson(const Value: variant; Status: integer=HTTP_SUCCESS;
@@ -14675,6 +14675,8 @@ type
     // - the data will be converted to variants and TDocVariant following the
     // TSQLRecord layout, so complex types like dynamic array will be returned
     // as a true array of values (in contrast to the RetrieveListJSON method)
+    // - warning: under FPC, we observed that assigning the result of this
+    // method to a local variable may circumvent a memory leak FPC bug
     function RetrieveDocVariantArray(Table: TSQLRecordClass;
       const ObjectName, CustomFieldsCSV: RawUTF8; FirstRecordID: PID=nil;
       LastRecordID: PID=nil): variant; overload;
@@ -14696,8 +14698,9 @@ type
     // - the data will be converted to variants and TDocVariant following the
     // TSQLRecord layout, so complex types like dynamic array will be returned
     // as a true array of values (in contrast to the RetrieveListJSON method)
-    function RetrieveDocVariantArray(Table: TSQLRecordClass;
-      const ObjectName: RawUTF8;
+    // - warning: under FPC, we observed that assigning the result of this
+    // method to a local variable may circumvent a memory leak FPC bug
+    function RetrieveDocVariantArray(Table: TSQLRecordClass; const ObjectName: RawUTF8;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const CustomFieldsCSV: RawUTF8; FirstRecordID: PID=nil;
       LastRecordID: PID=nil): variant; overload;
@@ -25946,9 +25949,9 @@ begin
   SetLength(fFieldNames,fFieldCount); // share one TRawUTF8DynArray
   for f := 0 to fFieldCount-1 do begin
     P := Get(0,f);
-    if IsRowID(P) then // normalize RowID field name to ID
+    if IsRowID(P) then // normalize RowID field name to 'ID'
       fFieldNames[f] := 'ID' else
-      fFieldNames[f] := P;
+      FastSetString(fFieldNames[f],P,StrLen(P));
   end;
 end;
 
@@ -26013,22 +26016,17 @@ procedure TSQLTable.ToDocVariant(Row: integer; out doc: variant;
   options: TDocVariantOptions; expandTimeLogAsText,expandEnumsAsText,
   expandHugeIDAsUniqueIdentifier: boolean);
 var f: integer;
-    v: PVariantArray; // low-level trick for write access to read-only properties
-    n: PRawUTF8Array;
-    docv: TDocVariantData absolute doc;
+    v: TVariantDynArray;
 begin
   if (self=nil) or (Row<1) or (Row>fRowCount) then
     exit; // out of range
-  docv.InitFast(fFieldCount,dvObject);
-  docv.SetCount(fFieldCount);
-  v := pointer(docv.Values);
+  SetLength(v,fFieldCount);
   for f := 0 to fFieldCount-1 do
-    GetAsVariant(Row,f,v^[f],expandTimeLogAsText,expandEnumsAsText,expandHugeIDAsUniqueIdentifier,options);
+    GetAsVariant(Row,f,v[f],expandTimeLogAsText,expandEnumsAsText,
+      expandHugeIDAsUniqueIdentifier,options);
   if length(fFieldNames)<>fFieldCount then
     InitFieldNames;
-  n := pointer(docv.Names);
-  for f := 0 to fFieldCount-1 do
-    n^[f] := fFieldNames[f]; // no direct assign to protect fFieldNames[]
+  TDocVariantData(doc).InitObjectFromVariants(fFieldNames,v,JSON_OPTIONS_FAST);
 end;
 
 procedure TSQLTable.ToDocVariant(out docs: TVariantDynArray; readonly: boolean);
@@ -36288,7 +36286,7 @@ begin
     T := MultiFieldValues(Table,CustomFieldsCSV,FormatSQLWhere,BoundsSQLWhere);
     if T<>nil then
     try
-      T.ToDocVariant(res,false); // readonly=false -> TDocVariant dvArray
+      T.ToDocVariant(res,{readonly=}false); // not readonly -> TDocVariant dvArray
       if FirstRecordID<>nil then
         FirstRecordID^ := T.IDColumnHiddenValue(1);
       if LastRecordID<>nil then
@@ -38342,7 +38340,7 @@ begin
      (callback.Factory.MethodIndexCurrentFrameCallback>=0) then begin
     frames := FindIniNameValue(pointer(Ctxt.InHead),'SEC-WEBSOCKET-FRAME: ');
   end;
-  split(interfmethod,'.',interf,method);
+  Split(interfmethod,'.',interf,method);
   methodIndex := callback.Factory.FindMethodIndex(method);
   if methodIndex<0 then
     exit;
@@ -38861,7 +38859,7 @@ begin
   end;
   {$ifdef DOMAINAUTH} // try Windows/GSSAPI authentication with the current logged user
   result := true;
-  if ((trim(aUserName)='') or (PosExChar({$ifdef GSSAPIAUTH}'@'{$else}'\'{$endif},aUserName)>0)) and
+  if (IsVoid(aUserName) or (PosExChar({$ifdef GSSAPIAUTH}'@'{$else}'\'{$endif},aUserName)>0)) and
     TSQLRestServerAuthenticationSSPI.ClientSetUser(self,aUserName,aPassword,passKerberosSPN) then
       exit;
   {$endif DOMAINAUTH}
@@ -42174,10 +42172,11 @@ const
 procedure TSQLRestServerURIContext.RetrieveCookies;
 var n: integer;
     P: PUTF8Char;
-    cn,cv: RawUTF8;
+    cookie,cn,cv: RawUTF8;
 begin
   fInputCookiesRetrieved := true;
-  P := pointer(FindIniNameValue(pointer(Call.InHead),'COOKIE:'));
+  cookie := FindIniNameValue(pointer(Call.InHead),'COOKIE:');
+  P := pointer(cookie);
   n := 0;
   while P<>nil do begin
     GetNextItemTrimed(P,'=',cn);
