@@ -15322,16 +15322,20 @@ type
     // - aName may be '' e.g. if you want to store an array: in this case,
     // dvoCheckForDuplicatedNames option should not be set; if instance's Kind
     // is dvObject, it will raise an EDocVariant exception
+    // - if aValueOwned is true, then the supplied aValue will be assigned to
+    // the internal values - by default, it will use SetVariantByValue()
     // - you can therefore write e.g.:
     // ! TDocVariant.New(aVariant);
     // ! Assert(TDocVariantData(aVariant).Kind=dvUndefined);
     // ! TDocVariantData(aVariant).AddValue('name','John');
     // ! Assert(TDocVariantData(aVariant).Kind=dvObject);
     // - returns the index of the corresponding newly added value
-    function AddValue(const aName: RawUTF8; const aValue: variant): integer; overload;
+    function AddValue(const aName: RawUTF8; const aValue: variant;
+      aValueOwned: boolean=false): integer; overload;
     /// add a value in this document
     // - overloaded function accepting a UTF-8 encoded buffer for the name
-    function AddValue(aName: PUTF8Char; aNameLen: integer; const aValue: variant): integer; overload;
+    function AddValue(aName: PUTF8Char; aNameLen: integer; const aValue: variant;
+      aValueOwned: boolean=false): integer; overload;
     /// add a value in this document, or update an existing entry
     // - if instance's Kind is dvArray, it will raise an EDocVariant exception
     // - any existing Name would be updated with the new Value, unless
@@ -46599,7 +46603,8 @@ begin
   SetLength(VValue,aValue);
 end;
 
-function TDocVariantData.AddValue(const aName: RawUTF8; const aValue: variant): integer;
+function TDocVariantData.AddValue(const aName: RawUTF8;
+  const aValue: variant; aValueOwned: boolean): integer;
 begin
   if dvoCheckForDuplicatedNames in VOptions then begin
     result := GetValueIndex(aName);
@@ -46607,16 +46612,19 @@ begin
       raise EDocVariant.CreateUTF8('AddValue: Duplicated [%] name',[aName]);
   end;
   result := InternalAdd(aName);
-  SetVariantByValue(aValue,VValue[result]);
+  if aValueOwned then
+    VValue[result] := aValue else
+    SetVariantByValue(aValue,VValue[result]);
   if dvoInternValues in VOptions then
     DocVariantType.InternValues.UniqueVariant(VValue[result]);
 end;
 
-function TDocVariantData.AddValue(aName: PUTF8Char; aNameLen: integer; const aValue: variant): integer;
+function TDocVariantData.AddValue(aName: PUTF8Char; aNameLen: integer;
+  const aValue: variant; aValueOwned: boolean): integer;
 var tmp: RawUTF8;
 begin
   FastSetString(tmp,aName,aNameLen);
-  result := AddValue(tmp,aValue);
+  result := AddValue(tmp,aValue,aValueOwned);
 end;
 
 function TDocVariantData.AddValueFromText(const aName,aValue: RawUTF8;
