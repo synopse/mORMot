@@ -5172,8 +5172,8 @@ type
     fIsObjArray: TDynArrayObjArray;
     function GetCount: PtrInt; {$ifdef HASINLINE}inline;{$endif}
     procedure SetCount(aCount: PtrInt);
-    function GetCapacity: integer;
-    procedure SetCapacity(aCapacity: integer);
+    function GetCapacity: PtrInt;
+    procedure SetCapacity(aCapacity: PtrInt);
     procedure SetCompare(const aCompare: TDynArraySortCompare); {$ifdef HASINLINE}inline;{$endif}
     function FindIndex(const Elem; aIndex: PIntegerDynArray;
       aCompare: TDynArraySortCompare): PtrInt;
@@ -5186,7 +5186,7 @@ type
     function ToKnownType(exactType: boolean=false): TDynArrayKind;
     function LoadFromHeader(var Source: PByte; SourceMax: PByte): integer;
     function LoadKnownType(Data,Source,SourceMax: PAnsiChar): boolean;
-    /// faster than System.DynArraySetLength() function + handle T*ObjArray
+    /// faster than RTL + handle T*ObjArray + ensure unique
     procedure InternalSetLength(NewLength: PtrUInt);
   public
     /// initialize the wrapper with a one-dimension dynamic array
@@ -5673,7 +5673,7 @@ type
     // will affect the Count value, i.e. Add() will append after this count
     // - this property will recognize T*ObjArray types, so will free any stored
     // instance if the array is sized down
-    property Capacity: integer read GetCapacity write SetCapacity;
+    property Capacity: PtrInt read GetCapacity write SetCapacity;
     /// the compare function to be used for Sort and Find methods
     // - by default, no comparison function is set
     // - common functions exist for base types: e.g. SortDynArrayByte, SortDynArrayBoolean,
@@ -5797,8 +5797,8 @@ type
   private
     function GetCount: PtrInt;                  inline;
     procedure SetCount(aCount: PtrInt) ;        inline;
-    procedure SetCapacity(aCapacity: Integer);  inline;
-    function GetCapacity: Integer;              inline;
+    procedure SetCapacity(aCapacity: PtrInt);  inline;
+    function GetCapacity: PtrInt;              inline;
   public
     InternalDynArray: TDynArray;
     function Value: PPointer;           inline;
@@ -5825,7 +5825,7 @@ type
     function LoadFromBinary(const Buffer: RawByteString;
       NoCheckHash: boolean=false): boolean; inline;
     property Count: PtrInt read GetCount write SetCount;
-    property Capacity: integer read GetCapacity write SetCapacity;
+    property Capacity: PtrInt read GetCapacity write SetCapacity;
   private
   {$else UNDIRECTDYNARRAY}
   TDynArrayHashed = object(TDynArray)
@@ -31066,8 +31066,11 @@ begin
   if PtrUInt(Index)>=PtrUInt(n) then
     exit; // wrong Index
   dec(n);
-  if n>Index then
+  if n>Index then begin
+    if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
+      Values := copy(Values); // unique
     {$ifdef FPC}Move{$else}MoveFast{$endif}(Values[Index+1],Values[Index],(n-Index)*SizeOf(Word));
+  end;
   SetLength(Values,n);
 end;
 
@@ -31078,8 +31081,11 @@ begin
   if PtrUInt(Index)>=PtrUInt(n) then
     exit; // wrong Index
   dec(n);
-  if n>Index then
+  if n>Index then begin
+    if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
+      Values := copy(Values); // unique
     {$ifdef FPC}Move{$else}MoveFast{$endif}(Values[Index+1],Values[Index],(n-Index)*SizeOf(Integer));
+  end;
   SetLength(Values,n);
 end;
 
@@ -31090,8 +31096,11 @@ begin
   if PtrUInt(Index)>=PtrUInt(n) then
     exit; // wrong Index
   dec(n,Index+1);
-  if n>0 then
+  if n>0 then begin
+    if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
+      Values := copy(Values); // unique
     {$ifdef FPC}Move{$else}MoveFast{$endif}(Values[Index+1],Values[Index],n*SizeOf(Integer));
+  end;
   dec(ValuesCount);
 end;
 
@@ -31102,8 +31111,11 @@ begin
   if PtrUInt(Index)>=PtrUInt(n) then
     exit; // wrong Index
   dec(n);
-  if n>Index then
+  if n>Index then begin
+    if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
+      Values := copy(Values); // unique
     {$ifdef FPC}Move{$else}MoveFast{$endif}(Values[Index+1],Values[Index],(n-Index)*SizeOf(Int64));
+  end;
   SetLength(Values,n);
 end;
 
@@ -31114,8 +31126,11 @@ begin
   if PtrUInt(Index)>=PtrUInt(n) then
     exit; // wrong Index
   dec(n,Index+1);
-  if n>0 then
+  if n>0 then begin
+    if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
+      Values := copy(Values); // unique
     {$ifdef FPC}Move{$else}MoveFast{$endif}(Values[Index+1],Values[Index],n*SizeOf(Int64));
+  end;
   dec(ValuesCount);
 end;
 
@@ -31124,6 +31139,8 @@ var i,v,x,n: PtrInt;
 begin
   if (Values=nil) or (Excluded=nil) then
     exit; // nothing to exclude
+  if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
+    Values := copy(Values); // unique
   v := length(Values);
   n := 0;
   x := Length(Excluded);
@@ -31155,6 +31172,8 @@ begin
     Values := nil;
     exit;
   end;
+  if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
+    Values := copy(Values); // unique
   v := length(Values);
   n := 0;
   x := Length(Included);
@@ -39544,6 +39563,8 @@ begin
   if cardinal(Index)>=cardinal(n) then
     result := false else begin
     dec(n);
+    if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
+      Values := copy(Values); // unique
     Values[Index] := ''; // avoid GPF
     if n>Index then begin
       {$ifdef FPC}Move{$else}MoveFast{$endif}(
@@ -39556,7 +39577,7 @@ begin
 end;
 
 function DeleteRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
-  Index: integer; CoValues: PIntegerDynArray=nil): boolean;
+  Index: integer; CoValues: PIntegerDynArray): boolean;
 var n: integer;
 begin
   n := ValuesCount;
@@ -39564,6 +39585,8 @@ begin
     result := false else begin
     dec(n);
     ValuesCount := n;
+    if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
+      Values := copy(Values); // unique
     Values[Index] := ''; // avoid GPF
     dec(n,Index);
     if n>0 then begin
@@ -47065,8 +47088,13 @@ begin
   if cardinal(Index)>=cardinal(VCount) then
     result := false else begin
     dec(VCount);
-    if VName<>nil then
+    if VName<>nil then begin
+      if PDynArrayRec(PtrUInt(VName)-SizeOf(TDynArrayRec))^.refCnt>1 then
+        VName := copy(VName); // unique
       VName[Index] := '';
+    end;
+    if PDynArrayRec(PtrUInt(VValue)-SizeOf(TDynArrayRec))^.refCnt>1 then
+      VValue := copy(VValue); // unique
     VarClear(VValue[Index]);
     if Index<VCount then begin
       if VName<>nil then begin
@@ -48951,6 +48979,8 @@ begin
   n := GetCount;
   if PtrUInt(aIndex)>=PtrUInt(n) then
     exit; // out of range
+  if PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.refCnt>1 then
+    InternalSetLength(n); // unique
   dec(n);
   P := pointer(PtrUInt(fValue^)+PtrUInt(aIndex)*ElemSize);
   if ElemType<>nil then
@@ -50496,17 +50526,26 @@ var p: PDynArrayRec;
     pp: pointer;
     i: integer;
 begin // this method is faster than default System.DynArraySetLength() function
+  p := fValue^;
   // check that new array length is not just a finalize in disguise
   if NewLength=0 then begin
-    {$ifndef NOVARIANTS} // faster clear of custom variant uniformous array
-    if ArrayType=TypeInfo(TVariantDynArray) then begin
-      VariantDynArrayClear(TVariantDynArray(fValue^));
-      exit;
+    if p<>nil then begin
+      dec(PtrUInt(p),SizeOf(TDynArrayRec));
+      if p^.refCnt>1 then begin
+        InterlockedDecrement(PInteger(@p^.refCnt)^);
+        fValue^ := nil;
+      end else begin
+        {$ifndef NOVARIANTS} // faster clear of custom variant uniformous array
+        if ArrayType=TypeInfo(TVariantDynArray) then begin
+          VariantDynArrayClear(TVariantDynArray(fValue^));
+          exit;
+        end;
+        {$endif}
+        if GetIsObjArray then
+          ObjArrayClear(fValue^);
+        {$ifdef FPC}FPCDynArrayClear{$else}_DynArrayClear{$endif}(fValue^,ArrayType);
+      end;
     end;
-    {$endif}
-    if GetIsObjArray then
-      ObjArrayClear(fValue^);
-    {$ifdef FPC}FPCDynArrayClear{$else}_DynArrayClear{$endif}(fValue^,ArrayType);
     exit;
   end;
   // calculate the needed size of the resulting memory structure on heap
@@ -50517,15 +50556,12 @@ begin // this method is faster than default System.DynArraySetLength() function
       [ArrayTypeShort^,NewLength]);
   {$endif}
   // if not shared (refCnt=1), resize; if shared, create copy (not thread safe)
-  p := fValue^;
   if p=nil then begin
     p := AllocMem(NeededSize); // RTL/OS will return zeroed memory
     OldLength := NewLength;    // no FillcharFast() below
   end else begin
     dec(PtrUInt(p),SizeOf(TDynArrayRec)); // p^ = start of heap object
-    OldLength := p^.length;
-    if OldLength=NewLength then
-      exit; // nothing to resize
+    OldLength := p^.length; // don't check OldLength=NewLength -> ensure unique
     if p^.refCnt=1 then begin
       if NewLength<OldLength then // reduce array in-place
         if ElemType<>nil then // release managed types in trailing items
@@ -50580,12 +50616,12 @@ begin
   fSorted := false;
   if v=0 then
     exit; // avoid GPF if void
+  v := PPtrInt(v)^;
   if c<>0 then begin // handle external capacity with separated Count
     delta := aCount-PInteger(c)^;
     if delta=0 then
       exit;
     PInteger(c)^ := aCount; // store new length
-    v := PPtrInt(v)^;
     if v=0 then begin
       // no capa yet
       if (delta>0) and (aCount<MINIMUM_SIZE) then
@@ -50612,26 +50648,36 @@ begin
         if (capa<=MINIMUM_SIZE) or (capa-aCount<capa shr 3) then
           exit;
     end;
-  end;
+  end else
+    if (v<>0) and (PDynArrayRec(v-SizeOf(TDynArrayRec))^.length=aCount) then
+      exit; // avoid InternalSetLength() to make a private copy
   // no external Count, array size-down or array up-grow -> realloc
   InternalSetLength(aCount);
 end;
 
-function TDynArray.GetCapacity: integer;
+function TDynArray.GetCapacity: PtrInt;
 begin // capacity = length(DynArray)
-  if (fValue<>nil) and (PtrUInt(fValue^)<>0) then
-    result := PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.length else
-    result := 0;
+  result := PtrInt(fValue);
+  if result<>0 then begin
+    result := PPtrInt(result)^;
+    if result<>0 then
+      result := PDynArrayRec(result-SizeOf(TDynArrayRec))^.length;
+  end;
 end;
 
-procedure TDynArray.SetCapacity(aCapacity: integer);
+procedure TDynArray.SetCapacity(aCapacity: PtrInt);
+var P: PtrInt;
 begin
-  if fValue=nil then
-    exit; // avoid GPF if void
-  if fCountP<>nil then
+  if fCountP<>nil then begin
     if fCountP^>aCapacity then
       fCountP^ := aCapacity;
-  InternalSetLength(aCapacity);
+  end;
+  P := PtrInt(fValue);
+  if P=0 then
+    exit;
+  P := PPtrInt(P)^;
+  if (P=0) or (PDynArrayRec(P-SizeOf(TDynArrayRec))^.length<>aCapacity) then
+    InternalSetLength(aCapacity);
 end;
 
 procedure TDynArray.SetCompare(const aCompare: TDynArraySortCompare);
@@ -50846,11 +50892,11 @@ procedure TDynArrayHashed.SetCount(aCount: PtrInt);
 begin
   InternalDynArray.SetCount(aCount);
 end;
-function TDynArrayHashed.GetCapacity: Integer;
+function TDynArrayHashed.GetCapacity: PtrInt;
 begin
   result := InternalDynArray.Capacity;
 end;
-procedure TDynArrayHashed.SetCapacity(aCapacity: Integer);
+procedure TDynArrayHashed.SetCapacity(aCapacity: PtrInt);
 begin
   InternalDynArray.SetCapacity(aCapacity);
 end;
@@ -53142,7 +53188,7 @@ end;
 
 procedure TTextWriter.AddMicroSec(MS: cardinal);
 var W: PWordArray;
-begin // 00.000.000
+begin // in 00.000.000 TSynLog format
   if BEnd-B<=17 then
     FlushToStream;
   B[3] := '.';
@@ -64149,7 +64195,7 @@ begin
     Add('{');
     for i := 0 to Count-1 do
     with List[i] do begin
-      AddFieldName(pointer(Name),length(Name));
+      AddProp(pointer(Name),length(Name));
       Add('"');
       AddJSONEscape(pointer(Value),length(Value));
       Add('"',',');
@@ -64674,11 +64720,11 @@ initialization
   PosEx := @PosExPas;
   {$endif HASINLINE}
   PosExString := @PosExStringPas; // fast pure pascal process
-  {$else}
+  {$else not PUREPASCAL}
   {$ifdef UNICODE}
   PosExString := @PosExStringPas; // fast PWideChar process
   {$else}
-  PosExString := @PosEx; // use optimized PAnsiChar asm
+  PosExString := @PosEx; // use optimized PAnsiChar i386 asm
   {$endif UNICODE}
   {$endif PUREPASCAL}
   crc32c := @crc32cfast; // now to circumvent Internal Error C11715 for Delphi 5
@@ -64733,7 +64779,6 @@ initialization
   Assert(SizeOf(TFileTime)=SizeOf(Int64)); // see e.g. FileTimeToInt64
   {$endif}
   {$endif}
-  PosExstring('','');
 
 finalization
   GarbageCollectorFree;
