@@ -5594,12 +5594,12 @@ const
     'application/zip','image/gif');
 var i: integer;
 begin
-  Check(GetMimeContentType(nil,0,'toto.h264')='video/H264');
+  CheckEqual(GetMimeContentType(nil,0,'toto.h264'),'video/H264');
   for i := 0 to high(MIMES)shr 1 do
-    Check(GetMimeContentType(nil,0,'toto.'+MIMES[i*2])=StringToAnsi7(MIMES[i*2+1]),MIMES[i*2]);
+    CheckEqual(GetMimeContentType(nil,0,'toto.'+MIMES[i*2]),ToUTF8(MIMES[i*2+1]));
   for i := 0 to high(BIN) do begin
-    Check(GetMimeContentType(@BIN[i],34,'')=BIN_MIME[i]);
-    Check(GetMimeContentTypeFromBuffer(@BIN[i],34,'')=BIN_MIME[i]);
+    CheckEqual(GetMimeContentType(@BIN[i],34,''),BIN_MIME[i]);
+    CheckEqual(GetMimeContentTypeFromBuffer(@BIN[i],34,''),BIN_MIME[i]);
   end;
 end;
 
@@ -9644,6 +9644,7 @@ begin
   try
     lTable.UpdateFrom(TEST_DATA_1,lRefreshed,nil);
     ndx := lTable.FieldIndex('RELATION_ID');
+    Check(ndx=3);
     lTable.SortFields(ndx);
     doc.Clear;
     i := lTable.SearchFieldSorted('10',{RELATION_ID}ndx);
@@ -9652,7 +9653,8 @@ begin
     doc.Clear;
     i := lTable.SearchFieldSorted('11',{RELATION_ID}ndx);
     lTable.ToDocVariant(i,variant(doc));
-    check(doc.Value['PHONE']='1234');
+    V := doc.Value['PHONE'];
+    check(V='1234');
   finally
     lTable.Free;
   end;
