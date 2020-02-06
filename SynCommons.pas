@@ -10761,10 +10761,10 @@ type
     Name: PUTF8Char;
     /// a pointer to the actual UTF-8 value text
     Value: PUTF8Char;
-    /// how many UTF-8 bytes are stored in Name
-    NameLen: PtrInt;
+    /// how many UTF-8 bytes are stored in Name (should be integer, not PtrInt)
+    NameLen: integer;
     /// how many UTF-8 bytes are stored in Value
-    ValueLen: PtrInt;
+    ValueLen: integer;
   end;
   /// used e.g. by JSONDecode() overloaded function to returns name/value pairs
   TNameValuePUTF8CharDynArray = array of TNameValuePUTF8Char;
