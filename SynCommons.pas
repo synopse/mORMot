@@ -2294,6 +2294,11 @@ function strspnsse42(s,accept: pointer): integer;
 // - could be used instead of strcspn() when you are confident about your
 // s/reject input buffers, checking if cfSSE42 in CpuFeatures
 function strcspnsse42(s,reject: pointer): integer;
+
+/// SSE 4.2 version of GetBitsCountPtrInt()
+// - defined just for regression tests - call GetBitsCountPtrInt() instead
+function GetBitsCountSSE42(value: PtrInt): PtrInt;
+
 {$endif CPUINTEL}
 {$endif ABSOLUTEPASCAL}
 
@@ -11124,6 +11129,8 @@ const
   POINTERSHR = {$ifdef CPU64}3{$else}2{$endif};
   /// could be used to compute the bitmask of a pointer integer
   POINTERAND = {$ifdef CPU64}7{$else}3{$endif};
+  /// could be used to check all bits on a pointer
+  POINTERBITS = {$ifdef CPU64}64{$else}32{$endif};
 
 
 { ************ some other common types and conversion routines ************** }
@@ -12377,7 +12384,19 @@ procedure UnSetBitPtr(Bits: pointer; aIndex: PtrInt);
 
 /// compute the number of bits set in a bit array
 // - Count is the bit count, not byte size
-function GetBitsCount(const Bits; Count: PtrInt): integer;
+// - will use fast SSE4.2 popcnt instruction if available on the CPU
+function GetBitsCount(const Bits; Count: PtrInt): PtrInt;
+
+/// pure pascal version of GetBitsCountPtrInt()
+// - defined just for regression tests - call GetBitsCountPtrInt() instead
+// - has optimized asm on x86_64 and i386
+function GetBitsCountPas(value: PtrInt): PtrInt;
+
+/// compute how many bits are set in a given pointer-sized integer
+// - the PopCnt() intrinsic under FPC doesn't have any fallback on older CPUs,
+// and default implementation is 5 times slower than our GetBitsCountPas() on x64
+// - this redirected function will use fast SSE4.2 popcnt opcode, if available
+var GetBitsCountPtrInt: function(value: PtrInt): PtrInt;
 
 const
   /// constant array used by GetAllBits() function (when inlined)
@@ -20957,33 +20976,141 @@ begin
   exclude(PBits64(@Bits)^,aIndex);
 end;
 
-function GetBitsCount(const Bits; Count: PtrInt): integer;
-const POPCNTDATA: array[0..15+4] of integer = (0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4,0,1,3,7);
-var P: PByte;
-    v: PtrUInt;
-    tab: {$ifdef CPUX86NOTPIC}TIntegerArray absolute POPCNTDATA{$else}PIntegerArray{$endif};
+function GetBitsCount(const Bits; Count: PtrInt): PtrInt;
+var P: PPtrInt;
+    popcnt: function(value: PtrInt): PtrInt; // fast redirection within loop
 begin
-  {$ifndef CPUX86NOTPIC}
-  tab := @POPCNTDATA;
-  {$endif CPUX86NOTPIC}
   P := @Bits;
   result := 0;
-  while Count>=8 do begin
-    dec(Count,8);
-    v := P^;
-    inc(result,tab[v and $f]);
-    inc(result,tab[v shr 4]);
-    inc(P);
-  end;
-  v := P^;
-  if Count>=4 then begin
-    dec(Count,4);
-    inc(result,tab[v and $f]);
-    v := v shr 4;
-  end;
+  popcnt := @GetBitsCountPtrInt;
+  if Count>=POINTERBITS then
+    repeat
+      dec(Count,POINTERBITS);
+      inc(result,popcnt(P^)); // use SSE4.2 if available
+      inc(P);
+    until Count<POINTERBITS;
   if Count>0 then
-    inc(result,tab[v and tab[Count+16]]); // 0..3 -> bitmap with 0,1,3,7
+    inc(result,popcnt(P^ and ((PtrInt(1) shl Count)-1)));
 end;
+
+{  FPC x86_64 Linux:
+  1000000 pas in 4.67ms i.e. 213,949,507/s, aver. 0us, 1.5 GB/s
+  1000000 asm in 4.14ms i.e. 241,196,333/s, aver. 0us, 1.8 GB/s
+  1000000 sse4.2 in 2.36ms i.e. 423,011,844/s, aver. 0us, 3.1 GB/s
+  1000000 FPC in 21.32ms i.e. 46,886,721/s, aver. 0us, 357.7 MB/s
+   FPC i386 Windows:
+  1000000 pas in 3.40ms i.e. 293,944,738/s, aver. 0us, 1 GB/s
+  1000000 asm in 3.18ms i.e. 313,971,742/s, aver. 0us, 1.1 GB/s
+  1000000 sse4.2 in 2.74ms i.e. 364,166,059/s, aver. 0us, 1.3 GB/s
+  1000000 FPC in 8.18ms i.e. 122,204,570/s, aver. 0us, 466.1 MB/s
+ notes:
+ 1. AVX2 faster than popcnt on big buffers - https://arxiv.org/pdf/1611.07612.pdf
+ 2. our pascal/asm versions below use the efficient Wilkes-Wheeler-Gill algorithm
+    whereas FPC RTL's popcnt() is much slower }
+
+{$ifdef CPUX86}
+function GetBitsCountSSE42(value: PtrInt): PtrInt;
+asm
+        {$ifdef FPC}
+        popcnt  eax, eax
+        {$else} // oldest Delphi don't have this opcode
+        db       $f3,$0f,$B8,$c0
+        {$endif}
+end;
+function GetBitsCountPas(value: PtrInt): PtrInt;
+asm // branchless Wilkes-Wheeler-Gill i386 asm implementation
+        mov     edx, eax
+        shr     eax, 1
+        and     eax, $55555555
+        sub     edx, eax
+        mov     eax, edx
+        shr     edx, 2
+        and     eax, $33333333
+        and     edx, $33333333
+        add     eax, edx
+        mov     edx, eax
+        shr     eax, 4
+        add     eax, edx
+        and     eax, $0f0f0f0f
+        mov     edx, eax
+        shr     edx, 8
+        add     eax, edx
+        mov     edx, eax
+        shr     edx, 16
+        add     eax, edx
+        and     eax, $3f
+end;
+{$else}
+{$ifdef CPUX64}
+function GetBitsCountSSE42(value: PtrInt): PtrInt;
+{$ifdef FPC} assembler; nostackframe;
+asm
+        {$ifdef win64}
+        popcnt  rax, rcx
+        {$else}
+        popcnt  rax, rdi
+        {$endif win64}
+{$else} // Delphi version with no opcode
+asm     .noframe
+        {$ifdef win64}
+        db      $f3,$48,$0f,$B8,$c1
+        {$else}
+        db      $f3,$48,$0f,$B8,$c7
+        {$endif win64}
+{$endif FPC}
+end;
+function GetBitsCountPas(value: PtrInt): PtrInt;
+{$ifdef FPC} assembler; nostackframe;
+asm {$else} asm .noframe {$endif}
+        {$ifdef win64}
+        mov     rax, rcx
+        mov     rdx, rcx
+        {$else}
+        mov     rax, rdi
+        mov     rdx, rdi
+        {$endif win64}
+        shr     rax, 1
+        mov     rcx, $5555555555555555
+        mov     r8,  $3333333333333333
+        mov     r10, $0f0f0f0f0f0f0f0f
+        mov     r11, $0101010101010101
+        and     rax, rcx
+        sub     rdx, rax
+        mov     rax, rdx
+        shr     rdx, 2
+        and     rax, r8
+        and     rdx, r8
+        add     rax, rdx
+        mov     rdx, rax
+        shr     rax, 4
+        add     rax, rdx
+        and     rax, r10
+        imul    rax, r11
+        shr     rax, 56
+end;
+{$else}
+function GetBitsCountPas(value: PtrInt): PtrInt;
+begin // generic branchless Wilkes-Wheeler-Gill pure pascal version
+  result := value;
+  {$ifdef CPU64}
+  result := result-((result shr 1) and $5555555555555555);
+  result := (result and $3333333333333333)+((result shr 2) and $3333333333333333);
+  result := (result+(result shr 4)) and $0f0f0f0f0f0f0f0f;
+  inc(result,result shr 8); // avoid slow multiplication on ARM
+  inc(result,result shr 16);
+  inc(result,result shr 32);
+  result := result and $7f;
+  {$else}
+  result := result-((result shr 1) and $55555555);
+  result := (result and $33333333)+((result shr 2) and $33333333);
+  result := (result+(result shr 4)) and $0f0f0f0f;
+  inc(result,result shr 8);
+  inc(result,result shr 16);
+  result := result and $3f;
+  {$endif CPU64}
+end;
+{$endif CPUX64}
+{$endif CPUX86}
 
 type
 {$ifdef FPC}
@@ -51519,7 +51646,7 @@ begin
       result := -(result+1);
       exit; // not found -> returns void index in fHashs[] as negative
     end;
-    // fHashs[Hash mod fHashsCount].Hash collision -> search next item
+    // hash or slot collision -> search next item
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     inc(fHashFindCollisions);
     {$endif}
@@ -51611,7 +51738,7 @@ begin // should match ReHash + HashFindAndCompare
         end else
         if (Hash=hc) and InternalCompare(Index,P^) then
           break; // ignore any duplicated value
-      // Hash collision -> search next item
+      // Hash or slot collision -> search next item
       {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
       inc(fHashFindCollisions);
       {$endif}
@@ -64727,6 +64854,7 @@ begin
   end;
   UpperCopy255Buf := @UpperCopy255BufPas;
   DefaultHasher := @xxHash32; // faster than crc32cfast for small content
+  GetBitsCountPtrInt := @GetBitsCountPas;
   {$ifndef ABSOLUTEPASCAL}
   {$ifdef CPUINTEL}
   {$ifdef FPC} // done in InitRedirectCode for Delphi
@@ -64767,6 +64895,8 @@ begin
     {$endif FORCE_STRSSE42}
     DefaultHasher := crc32c;
   end;
+  if cfPOPCNT in CpuFeatures then
+    GetBitsCountPtrInt := @GetBitsCountSSE42;
   {$endif CPUINTEL}
   {$endif ABSOLUTEPASCAL}
   InterningHasher := DefaultHasher;

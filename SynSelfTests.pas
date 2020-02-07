@@ -1442,12 +1442,120 @@ begin
   v := UnCamelCase('GoodBBCProgram'); Check(v='Good BBC program');
 end;
 
+function GetBitsCount64(const Bits; Count: PtrInt): PtrInt;
+begin // reference implementation
+  result := 0;
+  while Count>0 do begin
+    dec(Count);
+    if Count in TBits64(Bits) then // bt dword[rdi],edx is slow in such a loop
+      inc(result);                 // ... but correct :)
+  end;
+end;
+
+function GetBitsCountPurePascal(value: PtrInt): PtrInt;
+begin
+  result := value;
+  {$ifdef CPU64}
+  result := result-((result shr 1) and $5555555555555555);
+  result := (result and $3333333333333333)+((result shr 2) and $3333333333333333);
+  result := (result+(result shr 4)) and $0f0f0f0f0f0f0f0f;
+  inc(result,result shr 8); // avoid slow multiplication
+  inc(result,result shr 16);
+  inc(result,result shr 32);
+  result := result and $7f;
+  {$else}
+  result := result-((result shr 1) and $55555555);
+  result := (result and $33333333)+((result shr 2) and $33333333);
+  result := (result+(result shr 4)) and $0f0f0f0f;
+  inc(result,result shr 8);
+  inc(result,result shr 16);
+  result := result and $3f;
+  {$endif CPU64}
+end;
+
 procedure TTestLowLevelCommon.Bits;
+const N = 1000000;
+  procedure TestPopCnt(const ctxt: string);
+  var timer: TPrecisionTimer;
+      i,c: integer;
+      v: QWord;
+  begin
+    CheckEqual(GetBitsCountPtrInt(0),0);
+    CheckEqual(GetBitsCountPtrInt($f),4);
+    CheckEqual(GetBitsCountPtrInt($ff),8);
+    CheckEqual(GetBitsCountPtrInt($fff),12);
+    CheckEqual(GetBitsCountPtrInt($ffff),16);
+    CheckEqual(GetBitsCountPtrInt(-1),POINTERBITS);
+    v := PtrUInt(-1);
+    CheckEqual(GetBitsCount(v,0),0);
+    CheckEqual(GetBitsCount64(v,0),0);
+    for i := 0 to POINTERBITS-1 do begin
+      CheckEqual(GetBitsCountPtrInt(PtrInt(1) shl i),1);
+      if i<POINTERBITS-1 then begin
+        CheckEqual(GetBitsCountPtrInt(PtrInt(3) shl i),2);
+        CheckEqual(GetBitsCountPtrInt((PtrInt(1) shl (i+1))-1),i+1);
+      end;
+      if i<POINTERBITS-2 then
+        CheckEqual(GetBitsCountPtrInt(PtrInt(7) shl i),3);
+      if i<POINTERBITS-3 then
+        CheckEqual(GetBitsCountPtrInt(PtrInt(15) shl i),4);
+      CheckEqual(GetBitsCount64(v,i+1),i+1);
+      CheckEqual(GetBitsCount(v,i+1),i+1);
+    end;
+    for i := 1 to 32 do begin
+      v := ALLBITS_CARDINAL[i];
+      CheckEqual(GetBitsCountPtrInt(v),i);
+      CheckEqual(GetBitsCount(v,POINTERBITS),i);
+      CheckEqual(GetBitsCount(v,i),i);
+    end;
+    for i := 1 to 1000 do begin
+      v := i;
+      c := GetBitsCount64(v,POINTERBITS);
+      CheckEqual(GetBitsCountPtrInt(v),c);
+      CheckEqual(GetBitsCount(v,POINTERBITS),c);
+      {$ifdef FPC}CheckEqual(popcnt(v),c);{$endif}
+      v := v*v*19;
+      c := GetBitsCount64(v,POINTERBITS);
+      CheckEqual(GetBitsCountPtrInt(v),c);
+      {$ifdef FPC}CheckEqual(popcnt(v),c);{$endif}
+      v := random32gsl{$ifdef CPU64}or (PtrUInt(random32gsl) shl 32){$endif};
+      c := GetBitsCount64(v,POINTERBITS);
+      CheckEqual(GetBitsCountPtrInt(v),c);
+      CheckEqual(GetBitsCount(v,POINTERBITS),c);
+      {$ifdef FPC}CheckEqual(popcnt(v),c);{$endif}
+    end;
+    timer.Start;
+    for i := 1 to N do
+      GetBitsCountPtrInt(i);
+    NotifyTestSpeed(ctxt,N,N shl POINTERSHR,@timer);
+  end;
 var Bits: array[byte] of byte;
     Bits64: Int64 absolute Bits;
     Si,i: integer;
     c: cardinal;
+    {$ifdef FPC}
+    u: {$ifdef CPU64}QWord{$else}DWord{$endif};
+    timer: TPrecisionTimer;
+    {$endif FPC}
 begin
+  {$ifdef CPUINTEL}
+  GetBitsCountPtrInt := @GetBitsCountPurePascal;
+  TestPopCnt('pas');
+  GetBitsCountPtrInt := @GetBitsCountPas; // x86/x86_64 assembly
+  TestPopCnt('asm');
+  if cfPOPCNT in CpuFeatures then begin
+    GetBitsCountPtrInt := @GetBitsCountSSE42;
+    TestPopCnt('sse4.2');
+  end;
+  {$else}
+  TestPopCnt('pas');
+  {$endif CPUINTEL}
+  {$ifdef FPC}
+  timer.Start;
+  for u := 1 to N do
+    i := popcnt(u);
+  NotifyTestSpeed('FPC',N,N shl POINTERSHR,@timer);
+  {$endif FPC}
   FillcharFast(Bits,sizeof(Bits),0);
   for i := 0 to high(Bits)*8+7 do
     Check(not GetBit(Bits,i));
