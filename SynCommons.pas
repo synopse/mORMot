@@ -5172,7 +5172,7 @@ type
     fIsObjArray: TDynArrayObjArray;
     function GetCount: PtrInt; {$ifdef HASINLINE}inline;{$endif}
     procedure SetCount(aCount: PtrInt);
-    function GetCapacity: PtrInt;
+    function GetCapacity: PtrInt; {$ifdef HASINLINE}inline;{$endif}
     procedure SetCapacity(aCapacity: PtrInt);
     procedure SetCompare(const aCompare: TDynArraySortCompare); {$ifdef HASINLINE}inline;{$endif}
     function FindIndex(const Elem; aIndex: PIntegerDynArray;
@@ -5858,6 +5858,7 @@ type
     procedure HashInvalidate;
     procedure RaiseFatalCollision(const caller: RawUTF8; aHashCode: cardinal);
     function InternalCompare(Index: cardinal; const Elem): boolean;
+    procedure ReHashFast(n: integer);
   public
     /// initialize the wrapper with a one-dimension dynamic array
     // - this version accepts some hash-dedicated parameters: aHashElement to
@@ -21344,13 +21345,14 @@ begin
 end;
 {$endif FPC}
 
-function DynArrayLength(Value: Pointer): integer;
+function DynArrayLength(Value: Pointer): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  if Value=nil then
-    result := PtrInt(Value) else begin
+  result := PtrInt(Value);
+  if result<>0 then begin
     {$ifdef FPC}
-    result := PDynArrayRec(PtrUInt(Value)-SizeOf(TDynArrayRec))^.high+1;
+    result := PDynArrayRec(result-SizeOf(TDynArrayRec))^.high;
+    inc(result);
     {$else}
     result := PInteger(PtrUInt(Value)-SizeOf(PtrInt))^;
     {$endif}
@@ -48874,10 +48876,11 @@ begin
     result := PInteger(result)^ else begin
     result := PtrUInt(fValue);
     if result<>0 then begin
-      result := PPtrUInt(result)^;
+      result := PPtrInt(result)^;
       if result<>0 then begin
         {$ifdef FPC}
-        result := PDynArrayRec(result-SizeOf(TDynArrayRec))^.high+1;
+        result := PDynArrayRec(result-SizeOf(TDynArrayRec))^.high;
+        inc(result);
         {$else}
         result := PInteger(result-SizeOf(PtrInt))^;
         {$endif}
@@ -50373,7 +50376,7 @@ begin
   if (fValue=nil) or (ArrayType<>Source.ArrayType) then
     exit;
   if (fCountP<>nil) and (Source.fCountP<>nil) then
-    SetCapacity(Source.Capacity);
+    SetCapacity(Source.GetCapacity);
   n := Source.Count;
   SetCount(n);
   if n<>0 then
@@ -50682,8 +50685,14 @@ begin // capacity = length(DynArray)
   result := PtrInt(fValue);
   if result<>0 then begin
     result := PPtrInt(result)^;
-    if result<>0 then
-      result := PDynArrayRec(result-SizeOf(TDynArrayRec))^.length;
+    if result<>0 then begin
+      {$ifdef FPC}
+      result := PDynArrayRec(result-SizeOf(TDynArrayRec))^.high;
+      inc(result);
+      {$else}
+      result := PInteger(result-SizeOf(PtrInt))^;
+      {$endif}
+    end;
   end;
 end;
 
@@ -50916,7 +50925,7 @@ begin
 end;
 function TDynArrayHashed.GetCapacity: PtrInt;
 begin
-  result := InternalDynArray.Capacity;
+  result := InternalDynArray.GetCapacity;
 end;
 procedure TDynArrayHashed.SetCapacity(aCapacity: PtrInt);
 begin
@@ -51046,8 +51055,8 @@ var n,cap: integer;
 begin
   n := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCount;
   SetCount(n+1); // reserve space for a void element in array
-  cap := Capacity;
-  if cap*2-cap shr 3>=fHashsCount then
+  cap := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCapacity;
+  if cap*2-cap shr 3>=fHashsCount then // ReHash makes cap*2S
   {$ifdef UNDIRECTDYNARRAY}with InternalDynArray do{$endif} begin
     // fHashs[] is too small -> recreate
     if fCountP<>nil then
@@ -51580,6 +51589,46 @@ begin
   result := -1;
 end;
 
+procedure TDynArrayHashed.ReHashFast(n: integer);
+var i: integer;
+    hc,ndx,first,last: PtrUInt;
+    P: PAnsiChar;
+begin // should match ReHash + HashFindAndCompare
+  P := Value^;
+  for i := 0 to n-1 do begin
+    hc := fHashElement(P^,fHasher);
+    if hc=HASH_VOID then
+      hc := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
+    last := fHashsCount;
+    ndx := (hc-1) and (last-1); // we know fHashsCount<=HASH_PO2
+    first := ndx;
+    repeat
+      with fHashs[ndx] do
+        if Hash=HASH_VOID then begin // store in void entry
+          Hash := hc;
+          Index := i;
+          break;
+        end else
+        if (Hash=hc) and InternalCompare(Index,P^) then
+          break; // ignore any duplicated value
+      // Hash collision -> search next item
+      {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+      inc(fHashFindCollisions);
+      {$endif}
+      //inc(TDynArrayHashedCollisionCount);
+      inc(ndx);
+      if ndx=last then
+        // reached the end -> search once from fHash[0] to fHash[first-1]
+        if ndx=first then
+          RaiseFatalCollision('ReHashFast',hc) else begin
+          ndx := 0;
+          last := first;
+        end;
+    until false;
+    inc(P,ElemSize);
+  end;
+end;
+
 function TDynArrayHashed.ReHash(forAdd: boolean): boolean;
 var i, n, cap, ndx: integer;
     P: PAnsiChar;
@@ -51594,7 +51643,7 @@ begin
     exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
   if not Assigned(fEventHash) and not Assigned(fHashElement) then
     exit;
-  cap := Capacity*2; // Capacity better than Count; *2 to have void slots
+  cap := GetCapacity*2; // Capacity better than Count; *2 to have void slots
   if cap>HASH_PO2 then // slightly slower lookup, but much less memory use
     fHashsCount := cap else begin
     fHashsCount := 256; // find nearest power of two for fast binary division
@@ -51603,21 +51652,25 @@ begin
   end;
   SetLength(fHashs,fHashsCount); // fill all fHashs[]=HASH_VOID=0
   // fill fHashs[] from all existing items
-  P := Value^;
-  for i := 0 to n-1 do begin
-    if Assigned(fEventHash) then
-      aHashCode := fEventHash(P^) else
-      aHashCode := fHashElement(P^,fHasher);
-    if aHashCode=HASH_VOID then
-      aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
-    ndx := HashFindAndCompare(aHashCode,P^);
-    if ndx<0 then
-      // >=0 means found exact duplicate of P^: shouldn't happen -> ignore
-      with fHashs[-ndx-1] do begin
-        Hash := aHashCode;
-        Index := i;
-      end;
-    inc(P,ElemSize);
+  if not Assigned(fEventHash) and (fHashsCount<=HASH_PO2) and
+     Assigned(fHashElement) then // optimized loop for most common case
+    ReHashFast(n) else begin // generic loop using HashFindAndCompare()
+    P := Value^;
+    for i := 0 to n-1 do begin
+      if Assigned(fEventHash) then
+        aHashCode := fEventHash(P^) else
+        aHashCode := fHashElement(P^,fHasher);
+      if aHashCode=HASH_VOID then
+        aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
+      ndx := HashFindAndCompare(aHashCode,P^);
+      if ndx<0 then
+        // >=0 means found exact duplicate of P^: shouldn't happen -> ignore
+        with fHashs[-ndx-1] do begin
+          Hash := aHashCode;
+          Index := i;
+        end;
+      inc(P,ElemSize);
+    end;
   end;
   result := true;
 end;
@@ -60299,7 +60352,7 @@ end;
 function TSynDictionary.GetCapacity: integer;
 begin
   fSafe.Lock;
-  result := fKeys.Capacity;
+  result := fKeys.GetCapacity;
   fSafe.UnLock;
 end;
 
@@ -60916,7 +60969,7 @@ begin
     result := 0 else begin
     fSafe.Lock;
     try
-      result := fValues.Capacity;
+      result := fValues.GetCapacity;
     finally
       fSafe.UnLock;
     end;
@@ -60959,7 +61012,7 @@ end;
 procedure TSynQueue.InternalGrow;
 var cap: integer;
 begin
-  cap := fValues.Capacity;
+  cap := fValues.GetCapacity;
   if fFirst>cap-fCount then // use leading space if worth it
     fLast := 0 else         // append at the end
     if fCount=cap then      // reallocation needed
