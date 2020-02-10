@@ -599,7 +599,7 @@ begin
     PInteger(@self)^ := 0;
     exit; // invalid ISO-8601 text -> store as null date
   end;
-  Y := (Value shr (6+6+5+5+4)) and 4095;
+  Y := Value shr (6+6+5+5+4);
   Cent := (Y div 100)+100;
   Year := (Y mod 100)+100;
   Month := ((Value32 shr (6+6+5+5)) and 15)+1;
