@@ -2224,7 +2224,7 @@ function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: cardinal): PUTF8Char;
 // - pure pascal StrComp() won't access the memory beyond the string, but this
 // function is defined for compatibility with SSE 4.2 expectations
 function StrCompFast(Str1, Str2: pointer): PtrInt;
-  {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fastest available version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - won't use SSE4.2 instructions on supported CPUs by default, which may read
@@ -25063,10 +25063,46 @@ begin
     result := 0;
 end;
 
+{$ifdef CPUX64}
+function SortDynArrayAnsiString(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler; const _LEN=8; asm {$else} const _LEN=4;
+asm .noframe // rcx=A, rdx=B (Linux: rdi,rsi)
+{$endif FPC}
+{$ifdef win64}
+        mov     rcx, [rcx]
+        mov     rdx, [rdx]
+{$else}
+        mov     rcx, [rdi]
+        mov     rdx, [rsi]
+{$endif win64} // Agner Fog noted no gain with SSE -> simple efficient loop
+        cmp     rcx, rdx // A=B (happens with string refcounting)
+        je      @0
+        test    rcx, rdx // A^ or B^ may be nil i.e. ''
+        jz      @n1
+@s:     mov     al, byte ptr[rcx] // by char comparison
+        cmp     al, byte ptr[rdx]
+        jne     @ne
+        inc     rcx
+        inc     rdx
+        test    al, al
+        jnz     @s
+@0:     xor     eax, eax
+        ret
+@n1:    test    rcx, rcx
+        jz      @less    // A='' -> -1
+        test    rdx, rdx
+        jnz     @s       // B='' -> 1
+@1:     mov     eax, 1
+        ret
+@ne:    jnc     @1
+@less:  or      eax, -1
+end; // note: SSE4.2 read up to 16 bytes after buffer
+{$else}
 function SortDynArrayAnsiString(const A,B): integer;
 begin
-  result := StrComp(pointer(A),pointer(B));
+  result := StrCompFast(pointer(A),pointer(B));
 end;
+{$endif CPUX64}
 
 function SortDynArrayAnsiStringI(const A,B): integer;
 begin
@@ -25089,7 +25125,8 @@ begin // we can't use StrComp() since a RawByteString may contain #0
           l := l2;
         i := 0;
         repeat
-          result := p1[i]-p2[i];
+          result := p1[i];
+          dec(result,p2[i]);
           if result<>0 then
             exit;
           inc(i);
@@ -25103,7 +25140,7 @@ end;
 
 function SortDynArrayPUTF8Char(const A,B): integer;
 begin
-  result := StrComp(pointer(A),pointer(B));
+  result := StrCompFast(pointer(A),pointer(B));
 end;
 
 {$else PUREPASCAL}
@@ -26266,7 +26303,7 @@ asm
 end;
 
 function SortDynArrayAnsiString(const A,B): integer;
-asm // x86 version optimized for AnsiString/RawUTF8 types
+asm // x86 version optimized for AnsiString/RawUTF8/RawByteString types
         mov     eax, [eax]
         mov     edx, [edx]
         cmp     eax, edx
@@ -31824,8 +31861,8 @@ function AnyScanIndex(P,Elem: pointer; Count,ElemSize: PtrInt): PtrInt;
 begin
   case ElemSize of
     // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
-    1: result := ByteScanIndex(P,Count,PByte(Elem)^);
-    2: result := WordScanIndex(P,Count,PWord(Elem)^);
+    1: result := {$ifdef FPC}IndexByte(P^{$else}ByteScanIndex(P{$endif},Count,PByte(Elem)^);
+    2: result := {$ifdef FPC}IndexWord(P^{$else}WordScanIndex(P{$endif},Count,PWord(Elem)^);
     4: result := IntegerScanIndex(P,Count,PInteger(Elem)^);
     8: result := Int64ScanIndex(P,Count,PInt64(Elem)^);
     // small ElemSize version (<SizeOf(PtrInt))
