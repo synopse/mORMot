@@ -2224,7 +2224,7 @@ function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: cardinal): PUTF8Char;
 // - pure pascal StrComp() won't access the memory beyond the string, but this
 // function is defined for compatibility with SSE 4.2 expectations
 function StrCompFast(Str1, Str2: pointer): PtrInt;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// fastest available version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - won't use SSE4.2 instructions on supported CPUs by default, which may read
