@@ -323,6 +323,10 @@ type
     /// test the TDynArrayHashed object and methods (dictionary features)
     // - this test will create an array of 200,000 items to test speed
     procedure _TDynArrayHashed;
+    /// test the TSynDictionary class
+    procedure _TSynDictionary;
+    /// validate the TSynQueue class
+    procedure _TSynQueue;
     /// test TObjectListHashed class
     procedure _TObjectListHashed;
     /// test TObjectListSorted class
@@ -403,10 +407,6 @@ type
     procedure _TSynLogFile;
     /// client side geniune 64 bit identifiers generation
     procedure _TSynUniqueIdentifier;
-    /// test the TSynDictionary class
-    procedure _TSynDictionary;
-    /// validate the TSynQueue class
-    procedure _TSynQueue;
   end;
 
   /// this test case will test most low-level functions, classes and types
@@ -1970,7 +1970,7 @@ var ACities: TDynArrayHashed;
     AmountCollection: TAmountCollection;
     AmountICollection: TAmountICollection;
     AmountDA,AmountIDA1,AmountIDA2: TDynArrayHashed;
-const CITIES_MAX=200000;
+const CITIES_MAX=20000;
 begin
   // default Init() will hash and compare binary content before string, i.e. firmID
   AmountDA.Init(TypeInfo(TAmountCollection), AmountCollection);
@@ -2046,7 +2046,7 @@ begin
   City.Country := 'Argentina';
   City.Latitude := -34.6;
   City.Longitude := -58.45;
-  Check(ACities.FindHashedAndUpdate(City,false)>=0);
+  Check(ACities.FindHashedAndUpdate(City,{addifnotexisting=}false)>=0);
   City.Latitude := 0;
   City.Longitude := 0;
   Check(City.Name='Buenos Aires');
@@ -2069,6 +2069,7 @@ begin
   Check(ACities.Count=3);
   Check(City.Name='Iasi');
   Check(ACities.FindHashed(City)>=0);
+  // add CITIES_MAX items
   for i := 1 to 2000 do begin
     City.Name := IntToString(i);
     City.Latitude := i*3.14;
@@ -2076,21 +2077,40 @@ begin
     Check(ACities.FindHashedAndUpdate(City,true)=i+2,'multiple ReHash');
     Check(ACities.FindHashed(City)=i+2);
   end;
-  ACities.Capacity := CITIES_MAX+3; // make it as fast as possible
+  ACities.Capacity := CITIES_MAX+30; // will trigger HASH_PO2
   for i := 2001 to CITIES_MAX do begin
     City.Name := IntToString(i);
     City.Latitude := i*3.14;
     City.Longitude := i*6.13;
-    Check(ACities.FindHashedAndUpdate(City,true)=i+2,'use Capacity: no ReHash');
+    if i=8703 then
+      City.Latitude := i*3.14;
+    Check(ACities.FindHashedAndUpdate(City,true)=i+2);
     Check(ACities.FindHashed(City.Name)=i+2);
   end;
   for i := 1 to CITIES_MAX do begin
     N := IntToString(i);
+    Check(ACities.FindHashed(N)=i+2);
+  end;
+  for i := 1 to CITIES_MAX do begin
+    N := IntToString(i);
     j := ACities.FindHashed(N);
-    Check(j=i+2,'hashing with string not City.Name');
-    Check(Cities[j].Name=N);
-    CheckSame(Cities[j].Latitude,i*3.14);
-    CheckSame(Cities[j].Longitude,i*6.13);
+    Check(j>=0);
+    if i and 127=0 then begin
+      Check(ACities.FindHashedAndDelete(N)>=0,'delete');
+      j := ACities.FindHashed(N);
+      Check(j<0);
+    end;
+  end;
+  for i := 1 to CITIES_MAX do begin
+    N := IntToString(i);
+    j := ACities.FindHashed(N);
+    if i and 127=0 then
+      Check(j<0,'deteled') else
+      if not CheckFailed(j>=0,N) then begin
+        Check(Cities[j].Name=N);
+        CheckSame(Cities[j].Latitude,i*3.14);
+        CheckSame(Cities[j].Longitude,i*6.13);
+      end;
   end;
 end;
 
@@ -6025,7 +6045,7 @@ var v: tvalue;
     i: integer;
     exists: boolean;
 begin
-  dict := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray), TypeInfo(tvalues));
+  dict := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray),TypeInfo(tvalues));
   try
     for i := 1 to MAX do begin
       UInt32ToUTF8(i,k);
@@ -6038,13 +6058,13 @@ begin
     dict.DeleteAll;
     check(dict.Count=0);
     check(not dict.Exists(k));
-    check(dict.LoadFromJSON(s,false));
+    check(dict.LoadFromJSON(s));
     Test;
     s := dict.SaveToBinary;
   finally
     dict.Free;
   end;
-  dict := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray), TypeInfo(tvalues));
+  dict := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray),TypeInfo(tvalues));
   try
     check(dict.LoadFromBinary(s));
     Test;
@@ -6052,6 +6072,7 @@ begin
     if i and 127=0 then begin
       UInt32ToUTF8(i,k);
       check(dict.Delete(k)=i-1);
+      check(dict.Exists(k)=false);
     end;
     for i := 1 to MAX do begin
       exists := (i and 127)<>0;
@@ -6061,9 +6082,11 @@ begin
         v := 0;
         check(dict.FindAndCopy(k, v));
         check(v=i);
-        k := '';
-        check(dict.FindKeyFromValue(v,k));
-        check(GetInteger(pointer(k))=i);
+        if i<10000 then begin // FindKeyFromValue() brute force is slow
+          k := '';
+          check(dict.FindKeyFromValue(v,k));
+          check(GetInteger(pointer(k))=i);
+        end;
       end;
     end;
   finally
