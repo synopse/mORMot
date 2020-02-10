@@ -49993,24 +49993,11 @@ begin
           L := result+1 else
           n := result-1;
       until L>n;
-    end else begin
-      // array is very small, or not sorted -> use O(n) iterating search
-      if (ElemType=nil) and (@fCompare=@DYNARRAY_SORTFIRSTFIELD[false,fKnownType]) then
-      case fElemSize of // optimized for simple key types (e.g. TSynDictionary)
-      4: begin
-        result := IntegerScanIndex(pointer(P),n+1,Integer(Elem));
-        exit;
-      end;
-      8: begin
-        result := Int64ScanIndex(pointer(P),n+1,Int64(Elem));
-        exit;
-      end;
-      end;
+    end else // array is very small, or not sorted
       for result := 0 to n do
         if fCompare(P^,Elem)=0 then // O(n) search
           exit else
           inc(P,ElemSize);
-    end;
   end;
   result := -1;
 end;
