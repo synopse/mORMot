@@ -5884,10 +5884,10 @@ type
     // FindHashedForAdding / FindHashedAndUpdate / FindHashedAndDelete methods
     function ReHash(forAdd: boolean=false): boolean;
     /// search for an element value inside the dynamic array using hashing
-    // - Elem should be of the same exact type than the dynamic array, or at
-    // least matchs the fields used by both the hash function and Equals method:
-    // e.g. if the searched/hashed field in a record is a string as first field,
-    // you may use a string variable as Elem: other fields will be ignored
+    // - Elem should be of the type expected by both the hash function and
+    // Equals/Compare methods: e.g. if the searched/hashed field in a record is
+    // a string as first field, you can safely use a string variable as Elem
+    // - Elem must refer to a variable: e.g. you can't write FindHashed(i+10)
     // - will call fHashElement(Elem,fHasher) to compute the needed hash
     // - returns -1 if not found, or the index in the dynamic array if found
     function FindHashed(const Elem): integer; overload;
@@ -5899,16 +5899,15 @@ type
     /// search for an element value inside the dynamic array using hashing, and
     // fill Elem with the found content
     // - return the index found (0..Count-1), or -1 if Elem was not found
-    // - warning: Elem must be of the same exact type than the dynamic array,
-    // and must be a reference to a variable (you can't write Find(i+10) e.g.)
+    // - ElemToFill should be of the type expected by the dynamic array, since
+    // all its fields will be set on match
     function FindHashedAndFill(var ElemToFill): integer;
     /// search for an element value inside the dynamic array using hashing, and
     // add a void entry to the array if was not found
     // - this method will use hashing for fast retrieval
-    // - Elem should be of the same exact type than the dynamic array, or at
-    // least matchs the fields used by both the hash function and Equals method:
-    // e.g. if the searched/hashed field in a record is a string as first field,
-    // you may use a string variable as Elem: other fields will be ignored
+    // - Elem should be of the type expected by both the hash function and
+    // Equals/Compare methods: e.g. if the searched/hashed field in a record is
+    // a string as first field, you can safely use a string variable as Elem
     // - returns either the index in the dynamic array if found (and set wasAdded
     // to false), either the newly created index in the dynamic array (and set
     // wasAdded to true)
@@ -5916,8 +5915,8 @@ type
     // - warning: in contrast to the Add() method, if an entry is added to the
     // array (wasAdded=true), the entry is left VOID: you must set the field
     // content to expecting value - in short, Elem is used only for searching,
-    // not copied to the newly created entry in the array  - you may want to
-    // call FindHashedAndUpdate() for a method actually copying Elem
+    // not copied to the newly created entry in the array  - check
+    // FindHashedAndUpdate() for a method actually copying Elem fields
     function FindHashedForAdding(const Elem; out wasAdded: boolean): integer; overload;
     /// search for an element value inside the dynamic array using hashing, and
     // add a void entry to the array if was not found
@@ -5954,24 +5953,28 @@ type
     // or the index newly created/added is the Elem value was not matching -
     // add won't rehash all content - for even faster process (avoid ReHash),
     // please set the Capacity property
-    // - warning: Elem must be of the same exact type than the dynamic array, and
-    // must refer to a variable (you can't write FindHashedAndUpdate(i+10) e.g.)
+    // - Elem should be of the type expected by the dynamic array, since its
+    // content will be copied into the dynamic array, and it must refer to a
+    // variable: e.g. you can't write FindHashedAndUpdate(i+10)
     function FindHashedAndUpdate(const Elem; AddIfNotExisting: boolean): integer;
     /// search for an element value inside the dynamic array using hashing, and
     // delete it if matchs
     // - return the index deleted (0..Count-1), or -1 if Elem was not found
     // - can optionally copy the deleted item to FillDeleted^ before erased
-    // - warning: Elem must be of the same exact type than the dynamic array, and
-    // must refer to a variable (you can't write FindHashedAndDelete(i+10) e.g.)
+    // - Elem should be of the type expected by both the hash function and
+    // Equals/Compare methods, and must refer to a variable: e.g. you can't
+    // write FindHashedAndDelete(i+10)
+    // - it won't call slow ReHash but refresh the hash table as needed
     function FindHashedAndDelete(const Elem; FillDeleted: pointer=nil): integer;
     /// will search for an element value inside the dynamic array without hashing
     // - is used internally when Count < HashCountTrigger
     // - is preferred to Find(), since EventCompare would be used if defined
-    // - Elem should be of the same exact type than the dynamic array, or at
-    // least matchs the fields used by both the hash function and Equals method:
-    // e.g. if the searched/hashed field in a record is a string as first field,
-    // you may use a string variable as Elem: other fields will be ignored
+    // - Elem should be of the type expected by both the hash function and
+    // Equals/Compare methods, and must refer to a variable: e.g. you can't
+    // write Scan(i+10)
     // - returns -1 if not found, or the index in the dynamic array if found
+    // - an internal algorithm can switch to hashing if Scan() is called often,
+    // even if the number of items is lower than HashCountTrigger
     function Scan(const Elem): integer;
     /// retrieve the hash value of a given item, from its index
     property Hash[aIndex: PtrInt]: Cardinal read GetHashFromIndex;
@@ -5988,7 +5991,10 @@ type
     /// after how many items the hashing take place
     // - for smallest arrays, O(n) search if faster than O(1) hashing, since
     // maintaining internal hash table has some CPU and memory costs
-    // - equals 32 by default
+    // - internal search is able to switch to hashing if it founds out that it
+    // may have some benefit, e.g. if Scan() is called 2*HashCountTrigger times
+    // - equals 32 by default, i.e. start hashing when Count reaches 32 or
+    // manual Scan() is called 64 times
     property HashCountTrigger: integer read fHashCountTrigger write fHashCountTrigger;
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     /// access to the internal collision of HashFind()
@@ -7484,8 +7490,9 @@ function SortDynArrayVariantComp(const A,B: TVarData; caseInsensitive: boolean):
 
 
 const
-  // fHashTableSize<=HASH_PO2 is expected to be a power of two (fast binary division)
-  // 1 shl 18=262,144 = 1MB hash table, for Capacity=131,072 items
+  /// defined for inlining bitwise division in TDynArrayHashed.HashTableIndex
+  // - fHashTableSize<=HASH_PO2 is expected to be a power of two (fast binary op);
+  // limit is set to 262,144 hash table slots (=1MB), for Capacity=131,072 items
   HASH_PO2 = 1 shl 18;
 
 /// hash one AnsiString content with the suppplied Hasher() function
@@ -51326,7 +51333,7 @@ begin
     result := -1;
   end else // standard search from RTTI
     result := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}Find(Elem);
-  // enable hashing if Scan() called twice HashCountTrigger
+  // enable hashing if Scan() called 2*HashCountTrigger
   if hasHasher in fHashState then begin
     c := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCountP;
     if (c<>nil) and (c^>4) then begin
@@ -51400,7 +51407,7 @@ begin
     if n<fHashCountTrigger then begin
       result := Scan(Elem); // may trigger ReHash -> canHash
       if result>=0 then
-        exit; // was found
+        exit; // item found
       if not(canHash in fHashState) then begin
         wasadded := true;
         SetCount(n+1); // reserve space for added item, as in HashAdd()
@@ -51410,7 +51417,7 @@ begin
     end;
   end;
   if not(canHash in fHashState) then
-    ReHash({foradd=}true); // hash any previous fHashCountTrigger items
+    ReHash({foradd=}true); // hash any previous HashCountTrigger items
   result := HashFindAndCompare(aHashCode,Elem);
   if result<0 then begin // found no matching item
     wasAdded := true;
@@ -51766,7 +51773,7 @@ begin
     exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
   cap := GetCapacity*2; // Capacity better than Count; *2 to have void slots
   if cap<=HASH_PO2 then begin
-    i := 256; // find nearest power of two for fast binary division
+    i := 256; // find nearest power of two for fast bitwise division
     while i<cap do
       i := i shl 1;
     fHashTableSize := i;
