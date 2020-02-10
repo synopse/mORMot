@@ -3386,11 +3386,11 @@ begin
 end;
 
 procedure TBSONWriter.BSONWriteDateTime(const name: RawUTF8; const value: TDateTime);
-var UnixTime: TUnixMSTime;
+var ms: TUnixMSTime;
 begin
-  UnixTime := DateTimeToUnixMSTime(value);
+  ms := DateTimeToUnixMSTime(value);
   BSONWrite(name,betDateTime);
-  Write8(UnixTime);
+  Write8(ms);
 end;
 
 procedure TBSONWriter.BSONWrite(const name: RawUTF8; Data: pointer; DataLen: integer);
