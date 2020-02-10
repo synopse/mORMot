@@ -12738,8 +12738,8 @@ type
   // - since TTimeLogBits.Value is bit-oriented, you can't just add or substract
   // two TTimeLog values when doing date/time computation: use a TDateTime
   // temporary conversion in such case
-  // - TTimeLogBits.Value has a 38-bit precision, so features exact representation
-  // as JavaScript numbers (stored in a 52-bit mantissa)
+  // - TTimeLogBits.Value needs up to 40-bit precision, so features exact
+  // representation as JavaScript numbers (stored in a 52-bit mantissa)
   {$ifdef FPC_OR_UNICODE}TTimeLogBits = record{$else}TTimeLogBits = object{$endif}
   public
     /// the bit-encoded value itself, which follows an abstract "year" of 16
@@ -12749,7 +12749,7 @@ type
     // - bits 12..16 = Hours   (0..23)
     // - bits 17..21 = Day-1   (0..31)
     // - bits 22..25 = Month-1 (0..11)
-    // - bits 26..38 = Year    (0..4095)
+    // - bits 26..40 = Year    (0..9999)
     Value: Int64;
     /// extract the date and time content in Value into individual values
     procedure Expand(out Date: TSynSystemTime);
@@ -36004,7 +36004,6 @@ procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);
 var h: THash128Rec absolute crc;
     h1,h2: cardinal;
 begin // see https://goo.gl/Pls5wi
-  assert(SizeOf(h)=SizeOf(crc));
   h1 := crc32c(0,buf,len);
   h2 := crc32c(h1,buf,len);
   h.i0 := h1; inc(h1,h2);
@@ -37081,8 +37080,8 @@ begin
 end;
 
 function Iso8601ToTimeLogPUTF8Char(P: PUTF8Char; L: integer; ContainsNoTime: PBoolean): TTimeLog;
-// bits: S=0..5 M=6..11 H=12..16 D=17..21 M=22..25 Y=26..38
-// i.e. S<64 M<64 H<32 D<32 M<16 Y<4096: power of 2 -> use fast shl/shr
+// bits: S=0..5 M=6..11 H=12..16 D=17..21 M=22..25 Y=26..40
+// i.e. S<64 M<64 H<32 D<32 M<16 Y<9999: power of 2 -> use fast shl/shr
 var V,B: PtrUInt;
     tab: {$ifdef CPUX86NOTPIC}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
 begin
@@ -37156,9 +37155,9 @@ end;
 
 { TTimeLogBits }
 
-// bits: S=0..5 M=6..11 H=12..16 D=17..21 M=22..25 Y=26..38
+// bits: S=0..5 M=6..11 H=12..16 D=17..21 M=22..25 Y=26..40
 // size: S=6 M=6  H=5  D=5  M=4  Y=12
-// i.e. S<64 M<64 H<32 D<32 M<16 Y<4096: power of 2 -> use fast shl/shr
+// i.e. S<64 M<64 H<32 D<32 M<16 Y<=9999: power of 2 -> use fast shl/shr
 
 procedure TTimeLogBits.From(Y, M, D, HH, MM, SS: cardinal);
 begin
@@ -37175,7 +37174,7 @@ procedure TTimeLogBits.Expand(out Date: TSynSystemTime);
 var V: PtrUInt;
 begin
   V := PPtrUint(@Value)^;
-  Date.Year := ({$ifdef CPU32}Value{$else}V{$endif} shr (6+6+5+5+4)) and 4095;
+  Date.Year := {$ifdef CPU32}Value{$else}V{$endif} shr (6+6+5+5+4);
   Date.Month := 1+(V shr (6+6+5+5)) and 15;
   Date.DayOfWeek := 0;
   Date.Day := 1+(V shr (6+6+5)) and 31;
@@ -37374,9 +37373,9 @@ var Y, lo: PtrUInt;
 begin
   {$ifdef CPU64}
   lo := Value;
-  Y := (lo shr (6+6+5+5+4)) and 4095;
+  Y := lo shr (6+6+5+5+4);
   {$else}
-  Y := (Value shr (6+6+5+5+4)) and 4095;
+  Y := Value shr (6+6+5+5+4);
   lo := PCardinal(@Value)^;
   {$endif}
   if (Y=0) or not TryEncodeDate(Y,1+(lo shr(6+6+5+5))and 15,1+(lo shr(6+6+5))and 31,result) then
@@ -37389,9 +37388,9 @@ var Y, lo: PtrUInt;
 begin
   {$ifdef CPU64}
   lo := Value;
-  Y := (lo shr (6+6+5+5+4)) and 4095;
+  Y := lo shr (6+6+5+5+4);
   {$else}
-  Y := (Value shr (6+6+5+5+4)) and 4095;
+  Y := Value shr (6+6+5+5+4);
   lo := PCardinal(@Value)^;
   {$endif}
   if (Y=0) or not TryEncodeDate(Y,1+(lo shr(6+6+5+5))and 15,1+(lo shr(6+6+5))and 31,result) then
@@ -37403,7 +37402,7 @@ end;
 
 function TTimeLogBits.Year: Integer;
 begin
-  result := (Value shr (6+6+5+5+4)) and 4095;
+  result := Value shr (6+6+5+5+4);
 end;
 
 function TTimeLogBits.Month: Integer;
@@ -37452,7 +37451,7 @@ begin
   if lo and (1 shl (6+6+5)-1)=0 then begin
     // no Time: just convert date
     DateToIso8601PChar(Dest, Expanded,
-      ({$ifdef CPU64}lo{$else}Value{$endif} shr (6+6+5+5+4)) and 4095,
+      {$ifdef CPU64}lo{$else}Value{$endif} shr (6+6+5+5+4),
       1+(lo shr (6+6+5+5)) and 15, 1+(lo shr (6+6+5)) and 31);
     if Expanded then
       result := 10 else
@@ -37470,7 +37469,7 @@ begin
   end else begin
     // convert time and date
     DateToIso8601PChar(Dest, Expanded,
-      ({$ifdef CPU64}lo{$else}Value{$endif} shr (6+6+5+5+4)) and 4095,
+      {$ifdef CPU64}lo{$else}Value{$endif} shr (6+6+5+5+4),
       1+(lo shr (6+6+5+5)) and 15, 1+(lo shr (6+6+5)) and 31);
     if Expanded then
       inc(Dest,10) else
@@ -49971,7 +49970,7 @@ begin
       end;
       end;
       for result := 0 to n do
-        if fCompare(P^,Elem)=0 then
+        if fCompare(P^,Elem)=0 then // O(n) search
           exit else
           inc(P,ElemSize);
     end;
