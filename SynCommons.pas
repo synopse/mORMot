@@ -5835,7 +5835,8 @@ type
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     fHashFindCollisions: cardinal;
     {$endif}
-    function HashOne(const Elem): cardinal; {$ifdef HASINLINE}inline;{$endif}
+    function HashOne(const Elem): cardinal; 
+      {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 -> C1632 internal error
     procedure HashAdd(const Elem; aHashCode: cardinal; var result: integer);
     procedure HashDelete(aArrayIndex, aHashTableIndex: integer; aHashCode: cardinal);
     /// low-level search of an element from its pre-computed hash
