@@ -289,11 +289,14 @@ type
     procedure TestFailed(const msg: string);
     /// will add to the console a message with a speed estimation
     // - speed is computed from the method start
+    // - returns the number of microsec of the (may be specified) timer
+    // - OnlyLog will compute and append the info to the log, but not on the console
     // - warning: this method is not thread-safe if a local Timer is not specified
-    procedure NotifyTestSpeed(const ItemName: string; ItemCount: integer;
-      SizeInBytes: cardinal=0; Timer: PPrecisionTimer=nil);
+    function NotifyTestSpeed(const ItemName: string; ItemCount: integer;
+      SizeInBytes: cardinal=0; Timer: PPrecisionTimer=nil; OnlyLog: boolean=false): TSynMonitorOneMicroSec;
     /// append some text to the current console
-    procedure AddConsole(const msg: string);
+    // - OnlyLog will compute and append the info to the log, but not on the console
+    procedure AddConsole(const msg: string; OnlyLog: boolean=false);
     /// the test suit which owns this test case
     property Owner: TSynTests read fOwner;
     /// the test name
@@ -880,8 +883,11 @@ begin
   end;   
 end;
 
-procedure TSynTestCase.AddConsole(const msg: string);
+procedure TSynTestCase.AddConsole(const msg: string; OnlyLog: boolean);
 begin
+  TSynLogTestLog.Add.Log(sllMonitoring, '% %', [ClassType, msg]);
+  if OnlyLog then
+    exit;
   fOwner.fSafe.Lock;
   try
     if fRunConsole<>'' then
@@ -892,21 +898,22 @@ begin
   end;
 end;
 
-procedure TSynTestCase.NotifyTestSpeed(const ItemName: string;
-  ItemCount: integer; SizeInBytes: cardinal; Timer: PPrecisionTimer);
+function TSynTestCase.NotifyTestSpeed(const ItemName: string; ItemCount: integer;
+  SizeInBytes: cardinal; Timer: PPrecisionTimer; OnlyLog: boolean): TSynMonitorOneMicroSec;
 var Temp: TPrecisionTimer;
     msg: string;
 begin
   if Timer=nil then
     Temp := Owner.TestTimer else
     Temp := Timer^;
-  if ItemCount <= 1 then
-    FormatString('% in %', [ItemName,Temp.Stop], msg) else
-    FormatString('% % in % i.e. %/s, aver. %', [ItemCount,ItemName,Temp.Stop,
-      IntToThousandString(Temp.PerSec(ItemCount)),Temp.ByCount(ItemCount)], msg);
+  if ItemCount<=1 then
+    FormatString('% in %',[ItemName,Temp.Stop],msg) else
+    FormatString('% % in % i.e. %/s, aver. %',[ItemCount,ItemName,Temp.Stop,
+      IntToThousandString(Temp.PerSec(ItemCount)),Temp.ByCount(ItemCount)],msg);
   if SizeInBytes>0 then
     msg := FormatString('%, %/s',[msg,KB(Temp.PerSec(SizeInBytes))]);
-  AddConsole(msg);
+  AddConsole(msg,OnlyLog);
+  result := Temp.TimeInMicroSec;
 end;
 
 
@@ -1312,5 +1319,6 @@ begin
     {$endif}
   end;
 end;
+
 
 end.
