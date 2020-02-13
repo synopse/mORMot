@@ -340,7 +340,11 @@ type
     procedure _TObjectDynArrayWrapper;
     /// test T*ObjArray types and the ObjArray*() wrappers
     procedure _TObjArray;
-    {$endif}
+    {$endif DELPHI5OROLDER}
+    {$ifdef CPUINTEL}
+    /// validate our optimized MoveFast/FillCharFast functions
+    procedure CustomRTL;
+    {$endif CPUINTEL}
     /// test StrIComp() and AnsiIComp() functions
     procedure FastStringCompare;
     /// test IdemPropName() and IdemPropNameU() functions
@@ -1527,7 +1531,7 @@ const N = 1000000;
     timer.Start;
     for i := 1 to N do
       GetBitsCountPtrInt(i);
-    NotifyTestSpeed(ctxt,N,N shl POINTERSHR,@timer);
+    NotifyTestSpeed(ctxt,N,N shl POINTERSHR,@timer,{onlylog=}true);
   end;
 var Bits: array[byte] of byte;
     Bits64: Int64 absolute Bits;
@@ -1554,7 +1558,7 @@ begin
   timer.Start;
   for u := 1 to N do
     i := popcnt(u);
-  NotifyTestSpeed('FPC',N,N shl POINTERSHR,@timer);
+  NotifyTestSpeed('FPC',N,N shl POINTERSHR,@timer,{onlylog=}true);
   {$endif FPC}
   FillcharFast(Bits,sizeof(Bits),0);
   for i := 0 to high(Bits)*8+7 do
@@ -1970,7 +1974,7 @@ var ACities: TDynArrayHashed;
     AmountCollection: TAmountCollection;
     AmountICollection: TAmountICollection;
     AmountDA,AmountIDA1,AmountIDA2: TDynArrayHashed;
-const CITIES_MAX=20000;
+const CITIES_MAX=200000;
 begin
   // default Init() will hash and compare binary content before string, i.e. firmID
   AmountDA.Init(TypeInfo(TAmountCollection), AmountCollection);
@@ -2892,6 +2896,173 @@ begin
   Check(ACities.Count=count);
   TestCities;
 end;
+
+{$ifdef CPUINTEL}
+function BufEquals(P, n, b: PtrInt): boolean;
+begin // slower than FillChar, faster than for loop, but fast enough for testing
+  result := false;
+  b := b*{$ifdef CPU32}$01010101{$else}$0101010101010101{$endif};
+  inc(n,P-SizeOf(P));
+  if n>=P then
+    repeat
+      if PPtrInt(P)^<>b then
+        exit;
+      inc(PPtrInt(P));
+    until n<P;
+  inc(n,SizeOf(P));
+  if P<n then
+    repeat
+      if PByte(P)^<>byte(b) then
+        exit;
+      inc(P);
+    until P>=n;
+  result := true;
+end;
+
+function BufIncreasing(P: PByteArray; n: PtrInt; b: byte): boolean;
+var i: PtrInt;
+begin
+  result := false;
+  for i := 0 to n-1 do
+    if P[i]<>b then
+      exit else
+      inc(b);
+  result := true;
+end;
+
+procedure TTestLowLevelCommon.CustomRTL;
+// note: FPC uses the RTL for FillCharFast/MoveFast
+var buf: RawByteString;
+   procedure Validate(rtl: boolean=false);
+   var i,len,filled,moved: PtrInt;
+       b1,b2: byte;
+       timer: TPrecisionTimer;
+       P: PByteArray;
+       msg: string;
+       elapsed: Int64;
+   begin
+     // first validate FillCharFast
+     filled := 0;
+     b1 := 0;
+     len := 1;
+     repeat
+       b2 := (b1+1) and 255;
+       buf[len+1] := AnsiChar(b1);
+       if rtl then
+         FillChar(pointer(buf)^,len,b2) else
+         FillCharFast(pointer(buf)^,len,b2);
+       inc(filled,len);
+       Check(BufEquals(PtrInt(buf),len,b2));
+       Check(ord(buf[len+1])=b1);
+       b1 := b2;
+       if len<16384 then
+         inc(len) else
+         inc(len,777+len shr 4);
+     until len>=length(buf);
+     // small len make timer.Resume/Pause unreliable -> single shot measure
+     b1 := 0;
+     len := 1;
+     timer.Start;
+     repeat
+       b2 := (b1+1) and 255;
+       if rtl then
+         FillChar(pointer(buf)^,len,b2) else
+         FillCharFast(pointer(buf)^,len,b2);
+       b1 := b2;
+       if len<16384 then
+         inc(len) else
+         inc(len,777+len shr 4);
+     until len>=length(buf);
+     timer.Stop;
+     if rtl then
+       msg := 'FillChar' else
+       {$ifdef CPUX64}
+       FormatString('FillCharFast [%]',[GetSetName(TypeInfo(TX64CpuFeatures),CPUIDX64)],msg);
+       {$else}
+       msg := 'FillCharFast';
+       {$endif}
+     NotifyTestSpeed(msg,1,filled,@timer);
+     // validates overlapping forward Move/MoveFast
+     {$ifdef CPUX64} if (CPUIDX64=[cpuAvx]) and not rtl then exit; {$endif}
+     if rtl then
+       msg := 'Move' else
+       {$ifdef CPUX64}
+       FormatString('MoveFast [%]',[GetSetName(TypeInfo(TX64CpuFeatures),CPUIDX64)],msg);
+       {$else}
+       msg := 'MoveFast';
+       {$endif}
+     P := pointer(buf);
+     for i := 0 to length(buf)-1 do
+       P[i] := i; // fills with 0,1,2,...
+     Check(BufIncreasing(p,length(buf),0));
+     len := 1;
+     moved := 0;
+     timer.Start;
+     repeat
+       if rtl then
+         Move(P[moved+1],P[moved],len) else
+         MoveFast(p[moved+1],p[moved],len);
+       inc(moved,len);
+       Check(p[moved]=p[moved-1]);
+       inc(len);
+     until moved+len>=length(buf);
+     NotifyTestSpeed(msg,1,moved,@timer);
+     Check(BufIncreasing(p,moved,1));
+     checkEqual(Hash32(buf),2284147540);
+     // forward and backward moves on small and big buffers
+     elapsed := 0;
+     moved := 0;
+     for len := 1 to 48 do begin
+       timer.Start;
+       if rtl then
+         for i := 1 to 10000 do begin
+           Move(P[100],P[i],len);
+           Move(P[i],P[100],len);
+         end else
+         for i := 1 to 10000 do begin
+           MoveFast(P[100],P[i],len);
+           MoveFast(P[i],P[100],len);
+         end;
+       inc(moved,20000*len);
+       inc(elapsed,NotifyTestSpeed(IntToStr(len)+'b '+msg,1,20000*len,
+         @timer,{onlylog=}true));
+     end;
+     timer.FromExternalMicroSeconds(elapsed);
+     NotifyTestSpeed('small '+msg,1,moved,@timer);
+     checkEqual(Hash32(buf),1635609040);
+     len := length(buf)-30;
+     timer.Start;
+     for i := 1 to 10 do
+       if rtl then begin
+         Move(P[31],P[1],len-i);
+         Move(P[1],P[32],len-i);
+       end else begin
+         MoveFast(p[31],p[1],len-i);
+         MoveFast(P[1],P[32],len-i);
+       end;
+     NotifyTestSpeed('big '+msg,1,10*len,@timer);
+     checkEqual(Hash32(buf),2390293111);
+   end;
+{$ifdef CPUX64} var cpu: TX64CpuFeatures; {$endif}
+begin
+  SetLength(buf,16 shl 20); // 16MB
+  Validate({rtl=}true);
+  {$ifdef CPUX64} // activate and validate the available versions
+  cpu := CPUIDX64;
+  CPUIDX64 := [];
+  Validate;
+  {$ifdef FPC} // Delphi doesn't support AVX asm
+  if cpuAvx in cpu then begin
+    CPUIDX64 := [cpuAvx];
+    Validate;
+  end;
+  {$endif FPC}
+  CPUIDX64 := cpu;
+  if (cpu<>[]) and (cpu<>[cpuAvx]) then
+  {$endif CPUX64}
+    Validate;
+end;
+{$endif CPUINTEL}
 
 procedure TTestLowLevelCommon.SystemCopyRecord;
 type TR = record

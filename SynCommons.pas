@@ -5845,7 +5845,7 @@ type
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     fHashFindCollisions: cardinal;
     {$endif}
-    function HashOne(const Elem): cardinal; 
+    function HashOne(Elem: pointer): cardinal;
       {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 -> C1632 internal error
     procedure HashAdd(const Elem; aHashCode: cardinal; var result: integer);
     procedure HashDelete(aArrayIndex, aHashTableIndex: integer; aHashCode: cardinal);
@@ -5902,7 +5902,7 @@ type
     // - will call fHashElement(Elem,fHasher) to compute the needed hash
     // - returns -1 if not found, or the index in the dynamic array if found
     function FindHashed(const Elem): integer; overload;
-    /// search for an element value inside the dynamic array using hashing
+    /// search for an element value inside the dynamic array using its hash
     // - returns -1 if not found, or the index in the dynamic array if found
     // - aHashCode parameter constains an already hashed value of the item,
     // to be used e.g. after a call to HashFind()
@@ -42748,7 +42748,7 @@ asm // eax=source edx=dest ecx=count
       mov     esi, eax
       mov     edi, edx
       cld
-      rep     movsb
+      rep movsb
       pop     edi
       pop     esi
 @none:ret
@@ -42872,35 +42872,35 @@ begin
   FillcharFast := @FillCharX87;
   {$else DELPHI5OROLDER}
   {$ifdef CPU64} // x86_64 redirection
-  {$ifdef HASAESNI}
-  {$ifdef FORCE_STRSSE42}
-  if cfSSE42 in CpuFeatures then begin
-    StrLen := @StrLenSSE42;
-    StrComp := @StrCompSSE42;
-  end else
-  {$endif FORCE_STRSSE42}
-  {$endif HASAESNI}
-    StrLen := @StrLenSSE2;
-  {$else}       // i386 redirection
-  {$ifdef CPUINTEL}
-  if cfSSE2 in CpuFeatures then begin
+    {$ifdef HASAESNI}
     {$ifdef FORCE_STRSSE42}
-    if cfSSE42 in CpuFeatures then
-      StrLen := @StrLenSSE42 else
+    if cfSSE42 in CpuFeatures then begin
+      StrLen := @StrLenSSE42;
+      StrComp := @StrCompSSE42;
+    end else
     {$endif FORCE_STRSSE42}
+    {$endif HASAESNI}
       StrLen := @StrLenSSE2;
-    FillcharFast := @FillCharSSE2;
-  end else begin
-    StrLen := @StrLenX86;
-    FillcharFast := @FillCharX87;
-  end;
-  {$ifdef WITH_ERMS} // disabled by default (much slower for small blocks)
-  if cfERMS in CpuFeatures then begin
-    MoveFast := @MoveERMSB;
-    FillcharFast := @FillCharERMSB;
-  end else {$endif}
-    MoveFast := @MoveX87; // SSE2 is not faster than X87 version on 32-bit CPU
-  {$endif CPUINTEL}
+  {$else}       // i386 redirection
+    {$ifdef CPUINTEL}
+    if cfSSE2 in CpuFeatures then begin
+      {$ifdef FORCE_STRSSE42}
+      if cfSSE42 in CpuFeatures then
+        StrLen := @StrLenSSE42 else
+      {$endif FORCE_STRSSE42}
+        StrLen := @StrLenSSE2;
+      FillcharFast := @FillCharSSE2;
+    end else begin
+      StrLen := @StrLenX86;
+      FillcharFast := @FillCharX87;
+    end;
+    {$ifdef WITH_ERMS} // disabled by default (much slower for small blocks)
+    if cfERMS in CpuFeatures then begin
+      MoveFast := @MoveERMSB;
+      FillcharFast := @FillCharERMSB;
+    end else {$endif}
+      MoveFast := @MoveX87; // SSE2 is not faster than X87 version on 32-bit CPU
+    {$endif CPUINTEL}
   {$endif CPU64}
   {$endif DELPHI5OROLDER}
   // do redirection from RTL to our fastest version
@@ -51348,28 +51348,25 @@ begin
   end;
 end;
 
-function TDynArrayHashed.HashOne(const Elem): cardinal;
+function TDynArrayHashed.HashOne(Elem: pointer): cardinal;
 begin
   if Assigned(fEventHash) then
-    result := fEventHash(Elem) else
+    result := fEventHash(Elem^) else
   if Assigned(fHashElement) then
-    result := fHashElement(Elem,fHasher) else
+    result := fHashElement(Elem^,fHasher) else
     result := 0; // will be ignored afterwards for sure
 end;
 
 function TDynArrayHashed.FindHashed(const Elem): integer;
 begin
-  result := FindHashed(Elem,HashOne(Elem));
+  result := FindHashed(Elem,HashOne(@Elem));
 end;
 
 function TDynArrayHashed.FindHashed(const Elem; aHashCode: cardinal): integer;
 begin
-  if canHash in fHashState then begin
-    result := HashFindAndCompare(aHashCode,Elem);
-    if result<0 then
-      result := -1; // for coherency with most methods
-  end else // Count<fHashCountTrigger, or not hasHasher
-    result := Scan(Elem);
+  result := HashFindAndCompare(aHashCode,Elem); // fallback to Scan() if needed
+  if result<0 then
+    result := -1; // for coherency with most methods
 end;
 
 procedure TDynArrayHashed.HashAdd(const Elem; aHashCode: Cardinal; var result: integer);
@@ -51396,7 +51393,7 @@ end;
 
 function TDynArrayHashed.FindHashedForAdding(const Elem; out wasAdded: boolean): integer;
 begin
-  result := FindHashedForAdding(Elem,wasAdded,HashOne(Elem));
+  result := FindHashedForAdding(Elem,wasAdded,HashOne(@Elem));
 end;
 
 function TDynArrayHashed.FindHashedForAdding(const Elem; out wasAdded: boolean;
@@ -51466,7 +51463,7 @@ end;
 function TDynArrayHashed.FindHashedAndFill(var ElemToFill): integer;
 begin
   if canHash in fHashState then begin
-    result := HashFindAndCompare(HashOne(ElemToFill),ElemToFill);
+    result := HashFindAndCompare(HashOne(@ElemToFill),ElemToFill);
     if result<0 then
       result := -1;
   end else
@@ -51486,7 +51483,7 @@ var hc: cardinal;
 label doh;
 begin
   if canHash in fHashState then begin
-doh:hc := HashOne(Elem);
+doh:hc := HashOne(@Elem);
     result := HashFindAndCompare(hc,Elem);
     if (result<0) and AddIfNotExisting then
       HashAdd(Elem,hc,result); // ReHash only if necessary
@@ -51512,47 +51509,240 @@ begin
     result := aHashCode and (result-1);
 end;
 
-procedure DynArrayHashTableAdjust(P: PInteger; deleted, count: integer);
-begin // brute force O(n) scan, but faster than full ReHash anyway
-  repeat
-    if P^>deleted then
-      dec(P^);
-     inc(P);
-     dec(count);
-  until count=0;
+{$ifdef FPC_X64} // AVX2 asm is not supported by Delphi (even 10.3) :(
+procedure DynArrayHashTableAdjustAVX2(P: PIntegerArray; deleted: integer; count: PtrInt);
+{$ifdef FPC}nostackframe; assembler; asm {$else}
+asm .noframe // rcx=P, edx=deleted, r8=count  (Linux: rdi,esi,rdx)
+{$endif FPC}
+{$ifdef Linux}
+        mov     r8, rdx
+        mov     rcx, rdi
+        mov     rdx, rsi
+{$endif Linux}
+        xor     eax, eax       // reset eax high bits for setg al below
+        vmovq   xmm0, rdx      // xmm0 = 128-bit of quad deleted
+        vpshufd ymm0, ymm0, 0  // shuffle to 128-bit low lane
+        vperm2f128 ymm0, ymm0, ymm0, 0 // copy to 128-bit high lane of ymm0
+        // ensure P is 256-bit aligned (vmovdqa)
+@align: test    cl, 31
+        jz      @s
+        test    cl, 3
+        jnz     @1  // paranoid: a dword dynamic array is always dword-aligned
+        cmp     dword ptr[rcx], edx
+        setg    al                  // P[]>deleted -> al=1, 0 otherwise
+        sub     dword ptr[rcx], eax // branchless dec(P[])
+        add     rcx, 4
+        dec     r8
+        jmp     @align
+        // simd process of 128 bytes per loop iteration
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@s:     sub      r8, 32
+        vmovdqa  ymm1, [rcx]
+        vmovdqa  ymm3, [rcx + 32]
+        vmovdqa  ymm5, [rcx + 64]
+        vmovdqa  ymm7, [rcx + 96]
+        vpcmpgtd ymm2, ymm1, ymm0  // compare P[]>deleted -> -1, 0 otherwise
+        vpcmpgtd ymm4, ymm3, ymm0
+        vpcmpgtd ymm6, ymm5, ymm0
+        vpcmpgtd ymm8, ymm7, ymm0
+        vpaddd   ymm1, ymm1, ymm2  // adjust by adding -1 / 0
+        vpaddd   ymm3, ymm3, ymm4
+        vpaddd   ymm5, ymm5, ymm6
+        vpaddd   ymm7, ymm7, ymm8
+        vmovdqa  [rcx], ymm1
+        vmovdqa  [rcx + 32], ymm3
+        vmovdqa  [rcx + 64], ymm5
+        vmovdqa  [rcx + 96], ymm7
+        add      rcx, 128
+        cmp      r8, 32
+        jae      @s
+// https://software.intel.com/en-us/articles/avoiding-avx-sse-transition-penalties
+        vzeroupper
+        test     r8, r8
+        jnz      @1
+        ret
+        // trailing indexes
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+@1:     dec     r8
+        cmp     dword ptr[rcx + r8 * 4], edx
+        setg    al
+        sub     dword ptr[rcx + r8 * 4], eax
+@2:     test    r8, r8
+        jnz     @1
 end;
+{$endif FPC_X64}
 
+// brute force O(n) indexes fix after deletion (much faster than full ReHash)
+procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
+{$ifdef CPUX64ASM} // SSE2 simd is 25x faster than "if P^>deleted then dec(P^)"
+{$ifdef FPC}nostackframe; assembler; asm {$else}
+asm .noframe // rcx=P, edx=deleted, r8=count  (Linux: rdi,esi,rdx)
+{$endif FPC}
+{$ifdef Linux}
+        mov     r8, rdx
+        mov     rcx, rdi
+        mov     rdx, rsi
+{$endif Linux}
+        xor     eax, eax    // reset eax high bits for setg al below
+        movq    xmm0, rdx   // xmm0 = 128-bit of quad deleted
+        pshufd  xmm0, xmm0, 0
+        // ensure P is 128-bit aligned (movdqa) - but count>=256 = 1KB -> OK
+@align: test    cl, 15
+        jz      @s  // paranoid
+        test    cl, 3
+        jnz     @1  // paranoider: a dword dynamic array is always dword-aligned
+        cmp     dword ptr[rcx], edx
+        setg    al                  // P[]>deleted -> al=1, 0 otherwise
+        sub     dword ptr[rcx], eax // branchless dec(P[])
+        add     rcx, 4
+        dec     r8
+        jmp     @align
+        // simd process of 64 bytes = 4 x 128-bit quad per loop iteration
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@s:     sub     r8, 16
+        movdqa  xmm1, dqword [rcx]  // quad load
+        movdqa  xmm3, dqword [rcx + 16]
+        movdqa  xmm5, dqword [rcx + 32]
+        movdqa  xmm7, dqword [rcx + 48]
+        movdqa  xmm2, xmm1  // keep copy for paddd below
+        movdqa  xmm4, xmm3
+        movdqa  xmm6, xmm5
+        movdqa  xmm8, xmm7
+        pcmpgtd xmm1, xmm0  // quad compare P[]>deleted -> -1, 0 otherwise
+        pcmpgtd xmm3, xmm0
+        pcmpgtd xmm5, xmm0
+        pcmpgtd xmm7, xmm0
+        paddd   xmm1, xmm2  // quad adjust by adding -1 / 0
+        paddd   xmm3, xmm4
+        paddd   xmm5, xmm6
+        paddd   xmm7, xmm8
+        movdqa  dqword [rcx], xmm1  // quad store back
+        movdqa  dqword [rcx + 16], xmm3
+        movdqa  dqword [rcx + 32], xmm5
+        movdqa  dqword [rcx + 48], xmm7
+        add     rcx, 64
+        cmp     r8, 16
+        jae     @s
+        test    r8, r8
+        jnz     @1
+        ret
+        // trailing indexes
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+@1:     dec     r8
+        cmp     dword ptr[rcx + r8 * 4], edx
+        setg    al
+        sub     dword ptr[rcx + r8 * 4], eax
+@2:     test    r8, r8
+        jnz     @1
+end;
+{$else}
+begin
+  repeat
+    dec(count,8);
+    dec(P[0],ord(P[0]>deleted)); // branchless code is 10x faster than if :)
+    dec(P[1],ord(P[1]>deleted));
+    dec(P[2],ord(P[2]>deleted));
+    dec(P[3],ord(P[3]>deleted));
+    dec(P[4],ord(P[4]>deleted));
+    dec(P[5],ord(P[5]>deleted));
+    dec(P[6],ord(P[6]>deleted));
+    dec(P[7],ord(P[7]>deleted));
+    P := @P[8];
+  until count<8;
+  while count>0 do begin
+    dec(count);
+    dec(P[count],ord(P[count]>deleted));
+  end;
+end;
+{$endif CPUX64ASM} // SSE2 asm is invalid prior to Delphi XE7 (to be refined)
+
+// with x86_64/sse2 for 200,000 items: adjust=200.57ms (11.4GB/s) hash=2.46ms
+//  -> TDynArray.Delete move() takes more time than the HashTable update :)
+
+{ some numbers, with CITIES_MAX=200000, deleting 1/128 entries
+  first column (3..23) is the max number of indexes[] chunk to rehash
+1. naive loop
+  for i := 0 to fHashTableSize-1 do
+    if fHashTable[i]>aArrayIndex then
+      dec(fHashTable[i]);
+  3 #257  adjust=7.95ms 191.7MB hash=8us
+  8 #384  adjust=11.93ms 255.8MB hash=10us
+  11 #1019  adjust=32.09ms 332.8MB hash=26us
+  13 #16259  adjust=511.10ms 379.2MB hash=230us
+  13 #32515  adjust=1.01s 383.6MB/s hash=440us
+  14 #33531  adjust=1.04s 382.2MB hash=459us
+  17 #46612  adjust=1.44s 386.3MB hash=639us
+  17 #65027  adjust=1.97s 396.3MB/s hash=916us
+  17 #97539  adjust=2.79s 419.9MB/s hash=1.37ms
+  18 #109858  adjust=3.05s 431.2MB hash=1.51ms
+  18 #130051  adjust=3.44s 454.1MB/s hash=1.75ms
+  18 #162563  adjust=3.93s 496.9MB/s hash=2.14ms
+  23 #172723  adjust=4.05s 511.7MB hash=2.26ms
+  23 #195075  adjust=4.27s 548.6MB/s hash=2.47ms
+2. branchless pure pascal code is about 10x faster!
+  3 #257  adjust=670us 2.2GB hash=8us
+  8 #384  adjust=1ms 2.9GB hash=9us
+  11 #1019  adjust=2.70ms 3.8GB hash=21us
+  13 #16259  adjust=43.65ms 4.3GB hash=210us
+  13 #32515  adjust=87.75ms 4.3GB/s hash=423us
+  14 #33531  adjust=90.44ms 4.3GB hash=441us
+  17 #46612  adjust=127.68ms 4.2GB hash=627us
+  17 #65027  adjust=179.64ms 4.2GB/s hash=908us
+  17 #97539  adjust=267.44ms 4.2GB/s hash=1.35ms
+  18 #109858  adjust=301.27ms 4.2GB hash=1.50ms
+  18 #130051  adjust=355.37ms 4.2GB/s hash=1.74ms
+  18 #162563  adjust=438.79ms 4.3GB/s hash=2.11ms
+  23 #172723  adjust=465.23ms 4.3GB hash=2.23ms
+  23 #195075  adjust=520.85ms 4.3GB/s hash=2.45ms
+3. SSE2 simd assembly makes about 3x improvement
+  3 #257  adjust=290us 5.1GB hash=8us
+  8 #384  adjust=427us 6.9GB hash=10us
+  11 #1019  adjust=1.11ms 9.3GB hash=20us
+  13 #16259  adjust=18.33ms 10.3GB hash=219us
+  13 #32515  adjust=36.32ms 10.5GB/s hash=435us
+  14 #33531  adjust=37.39ms 10.4GB hash=452us
+  17 #46612  adjust=51.70ms 10.5GB hash=622us
+  17 #65027  adjust=72.47ms 10.5GB/s hash=893us
+  17 #97539  adjust=107ms 10.6GB/s hash=1.32ms
+  18 #109858  adjust=120.08ms 10.7GB hash=1.46ms
+  18 #130051  adjust=140.50ms 10.8GB/s hash=1.71ms
+  18 #162563  adjust=171.44ms 11.1GB/s hash=2.10ms
+  23 #172723  adjust=181.02ms 11.1GB hash=2.22ms
+  23 #195075  adjust=201.53ms 11.3GB/s hash=2.44ms
+4. AVX2 simd assembly gives some additional 40% (consistent on my iCore3 cpu)
+  3 #257  adjust=262us 5.6GB hash=8us
+  8 #384  adjust=383us 7.7GB hash=10us
+  11 #1019  adjust=994us 10.4GB hash=21us
+  13 #16259  adjust=16.34ms 11.5GB hash=248us
+  13 #32515  adjust=32.12ms 11.8GB/s hash=464us
+  14 #33531  adjust=33.06ms 11.8GB hash=484us
+  17 #46612  adjust=45.49ms 11.9GB hash=678us
+  17 #65027  adjust=62.36ms 12.2GB/s hash=966us
+  17 #97539  adjust=90.80ms 12.6GB/s hash=1.43ms
+  18 #109858  adjust=101.82ms 12.6GB hash=1.59ms
+  18 #130051  adjust=117.37ms 13GB/s hash=1.83ms
+  18 #162563  adjust=140.08ms 13.6GB/s hash=2.23ms
+  23 #172723  adjust=147.20ms 13.7GB hash=2.34ms
+  23 #195075  adjust=161.73ms 14.1GB/s hash=2.57ms
+}
 procedure TDynArrayHashed.HashDelete(aArrayIndex,aHashTableIndex: integer; aHashCode: cardinal);
 var first,next,last,ndx,i,n: integer;
     P: PAnsiChar;
-    indexes: TIntegerDynArray; // to be rehashed
+    indexes: array[0..511] of cardinal; // to be rehashed
 begin
   // adjust all stored indexes after deletion
-  DynArrayHashTableAdjust(pointer(fHashTable),aArrayIndex,fHashTableSize);
-  // retrieve all hash table entries to be recomputed
-  first := HashTableIndex(aHashCode);
+  {$ifdef FPC_X64}
+  if cfAVX2 in CpuFeatures then
+    DynArrayHashTableAdjustAVX2(pointer(fHashTable),aArrayIndex,fHashTableSize) else
+  {$endif FPC_X64}
+    DynArrayHashTableAdjust(pointer(fHashTable),aArrayIndex,fHashTableSize);
+  // retrieve hash table entries to be recomputed
+  first := aHashTableIndex;
   last := fHashTableSize;
-  repeat // roll up to previous void entry
-    if first=0 then
-      if fHashTable[last-1]=0 then
-        break else
-        first := last else
-      if fHashTable[first-1]=0 then
-        break;
-    dec(first);
-  until false;
   next := first;
   n := 0;
-  repeat // roll down up to next void entry
-    ndx := fHashTable[next]-1;
-    if ndx<0 then
-      break; // void entry
-    if next<>aHashTableIndex then begin
-      if indexes=nil then
-        SetLength(indexes,64); // typical 0..35
-      AddInteger(indexes,n,ndx);
-    end;
-    fHashTable[next] := 0; // reset slot
+  repeat
+    fHashTable[next] := 0; // invalidate slots
     inc(next);
     if next=last then
       if next=first then
@@ -51560,11 +51750,18 @@ begin
         next := 0;
         last := first;
       end;
+    ndx := fHashTable[next]-1; // stored index+1
+    if ndx<0 then
+      break; // stop at void entry
+    if n=high(indexes) then // typical 0..23
+      RaiseFatalCollision('HashDelete indexes overflow',aHashCode);
+    indexes[n] := ndx;
+    inc(n);
   until false;
   // ReHash collided entries
   for i := 0 to n-1 do begin
-    P := PAnsiChar(Value^)+cardinal(indexes[i])*ElemSize;
-    ndx := HashFindAndCompare(HashOne(P^),P^);
+    P := PAnsiChar(Value^)+indexes[i]*ElemSize;
+    ndx := HashFindAndCompare(HashOne(P),P^);
     if ndx<0 then
       fHashTable[-ndx-1] := indexes[i]+1; // ignore ndx>=0 dups (like ReHash)
   end;
@@ -51585,7 +51782,7 @@ begin
       exit;
     end;
   end;
-  hc := HashOne(Elem);
+  hc := HashOne(@Elem);
   result := HashFindAndCompare(hc,Elem,@ht);
   if result<0 then          // not found
     result := -1 else begin // item found
@@ -51660,7 +51857,7 @@ begin
     P := Value^;
     if hasHasher in fHashState then
       for result := 0 to Count-1 do // O(n) linear search via hashing
-        if HashOne(P^)=aHashCode then
+        if HashOne(P)=aHashCode then
           exit else
           inc(P,ElemSize);
     result := -1;
@@ -51675,7 +51872,7 @@ begin
       result := -(result+1); // found void entry
       exit;
     end else
-    if not aForAdd and (HashOne(PAnsiChar(Value^)[PtrUInt(ndx)*ElemSize])=aHashCode) then begin
+    if not aForAdd and (HashOne(PAnsiChar(Value^)+PtrUInt(ndx)*ElemSize)=aHashCode) then begin
       result := ndx;
       exit;
     end;
@@ -51878,10 +52075,13 @@ begin
 end;
 
 function TObjectDynArrayWrapper.Find(Instance: TObject): integer;
+var P: PObjectArray;
 begin
-  for result := 0 to fCount-1 do
-    if TObjectDynArray(fValue^)[result]=Instance then
-      exit;
+  P := fValue^;
+  if P<>nil then
+    for result := 0 to fCount-1 do
+      if P[result]=Instance then
+        exit;
   result := -1;
 end;
 
@@ -51897,24 +52097,28 @@ begin
 end;
 
 procedure TObjectDynArrayWrapper.Delete(Index: integer);
+var P: PObjectArray;
 begin
-  if cardinal(Index)>=cardinal(fCount) then
+  P := fValue^;
+  if (P=nil) or (cardinal(Index)>=cardinal(fCount)) then
     exit; // avoid Out of range
   if fOwnObjects then
-    TObjectDynArray(fValue^)[Index].Free;
+    P[Index].Free;
   dec(fCount);
   if fCount>Index then
     MoveFast(P[Index+1],P[Index],(fCount-Index)*SizeOf(pointer));
 end;
 
 procedure TObjectDynArrayWrapper.Clear;
-var i: integer;
+var i: PtrInt;
+    P: PObjectArray;
 begin
-  if fValue^<>nil then begin
+  P := fValue^;
+  if P<>nil then begin
     if fOwnObjects then
       for i := fCount-1 downto 0 do
       try
-        TObjectDynArray(fValue^)[i].Free;
+        P[i].Free;
       except
         on Exception do;
       end;
@@ -64888,7 +65092,7 @@ initialization
   {$endif PUREPASCAL}
   crc32c := @crc32cfast; // now to circumvent Internal Error C11715 for Delphi 5
   crc32cBy4 := @crc32cBy4fast;
- {$ifndef CPUX64}
+  {$ifndef CPUX64}
   MoveFast := @System.Move;
   {$endif CPUX64}
   {$ifdef FPC}
