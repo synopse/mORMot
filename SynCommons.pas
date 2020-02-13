@@ -16301,7 +16301,7 @@ type
   // want to alllocate a local timer instance on the stack
   {$ifdef FPC_OR_UNICODE}TPrecisionTimer = record private
   {$else}TPrecisionTimer = object protected{$endif}
-    fStart,fStop,fResume,fLast: Int64;
+    fStart,fStop: Int64;
     {$ifndef LINUX} // use QueryPerformanceMicroSeconds() fast API
     fWinFreq: Int64;
     {$endif}
@@ -16312,27 +16312,26 @@ type
     fPauseCount: TSynMonitorCount;
   public
     /// initialize the timer
-    // - not necessary if created on the heap (e.g. as class member)
-    // - will set all fields to 0
-    procedure Init;
+    // - will fill all internal state with 0
+    // - not necessary e.g. if TPrecisionTimer is defined as a TObject field
+    procedure Init; {$ifdef HASINLINE}inline;{$endif}
     /// initialize and start the high resolution timer
+    // - similar to Init + Resume
     procedure Start;
-    /// returns TRUE if fStart is not 0
-    function Started: boolean; {$ifdef HASINLINE}inline;{$endif}
-    /// stop the timer, setting the Time elapsed since last Start
-    procedure ComputeTime; {$ifdef LINUX}{$ifdef HASINLINE}inline;{$endif}{$endif}
     /// stop the timer, returning the total time elapsed as text
-    // - with appened time resolution (us,ms,s) - from MicroSecToString()
-    // - is just a wrapper around ComputeTime + Time
-    function Stop: TShort16;
+    // - with appended time resolution (us,ms,s) - from MicroSecToString()
+    // - is just a wrapper around Pause + Time
+    // - you can call Resume to continue adding time to this timer
+    function Stop: TShort16; {$ifdef HASINLINE}inline;{$endif}
     /// stop the timer, ready to continue its time measurement via Resume
+    // - will also compute the global Time value
+    // - do nothing if no previous Start/Resume call is pending
     procedure Pause;
-    /// resume a paused timer
-    // - if the previous method called was Pause, it will ignore all the
-    // time elapsed since then
-    // - if the previous method called was Start, it will start as if it was
-    // in pause mode
-    procedure Resume;
+    /// resume a paused timer, or start an initialized timer
+    // - do nothing if no timer has been initialized or paused just before
+    // - if the previous method called was Init, will act like Start
+    // - if the previous method called was Pause, it will continue counting
+    procedure Resume; {$ifdef HASINLINE}inline;{$endif}
     /// resume a paused timer until the method ends
     // - will internaly create a TInterfaceObject class to let the compiler
     // generate a try..finally block as expected to call Pause at method ending
@@ -16348,18 +16347,19 @@ type
     // - by default, this timer is not thread safe: you can use this method to
     // set the timing values from manually computed performance counters
     // - the caller should also use a mutex to prevent from race conditions:
-    // see e.g. TSynMonitor.FromExternalQueryPerformanceCounters implementation
-    // - returns the time elapsed, in micro seconds (i.e. LastTime value)
-    // - warning: Start, Stop, Pause and Resume methods are then disallowed
-    function FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
-    /// low-level method to force values settings to allow thread safe timing
-    // - by default, this timer is not thread safe: you can use this method to
-    // set the timing values from manually computed performance counters
-    // - the caller should also use a mutex to prevent from race conditions:
     // see e.g. TSynMonitor.FromExternalMicroSeconds implementation
     // - warning: Start, Stop, Pause and Resume methods are then disallowed
     procedure FromExternalMicroSeconds(const MicroSeconds: QWord);
       {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+    /// low-level method to force values settings to allow thread safe timing
+    // - by default, this timer is not thread safe: you can use this method to
+    // set the timing values from manually computed performance counters
+    // - the caller should also use a mutex to prevent from race conditions:
+    // see e.g. TSynMonitor.FromExternalQueryPerformanceCounters implementation
+    // - returns the time elapsed, in micro seconds (i.e. LastTime value)
+    // - warning: Start, Stop, Pause and Resume methods are then disallowed
+    function FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
+      {$ifdef FPCLINUX}inline;{$endif}
     /// compute the per second count
     function PerSec(const Count: QWord): QWord;
     /// compute the time elapsed by count, with appened time resolution (us,ms,s)
@@ -16397,7 +16397,7 @@ type
     function Stop: TShort16;
     /// stop the timer, ready to continue its time measure
     procedure Pause;
-    /// resume a paused timer
+    /// resume a paused timer, or start it if it hasn't be started
     procedure Resume;
     /// compute the per second count
     function PerSec(Count: cardinal): cardinal;
@@ -16426,7 +16426,7 @@ type
     function Stop: TShort16;
     /// stop the timer, ready to continue its time measure
     procedure Pause;
-    /// resume a paused timer
+    /// resume a paused timer, or start the timer
     procedure Resume;
     /// compute the per second count
     function PerSec(Count: cardinal): cardinal;
@@ -58156,26 +58156,6 @@ end;
 
 { TPrecisionTimer }
 
-function TPrecisionTimer.ByCount(Count: QWord): TShort16;
-begin
-  if Count=0 then
-    result := '0' else // avoid div per 0 exception
-    MicroSecToString(fTime div Count,result);
-end;
-
-function TPrecisionTimer.PerSec(const Count: QWord): QWord;
-begin
-  if fTime<=0 then // avoid negative value in case of incorrect Start/Stop sequence
-    result := 0 else // avoid div per 0 exception
-    result := (Count*1000000) div fTime;
-end;
-
-function TPrecisionTimer.SizePerSec(Size: QWord): shortstring;
-begin
-  FormatShort('% in % i.e. %/s',[KB(Size),Stop,KB(PerSec(Size))],result);
-end;
-
-{$ifdef FPC} {$push} {$endif} {$HINTS OFF} // avoid "loop executed zero times"
 procedure TPrecisionTimer.Init;
 begin
   FillCharFast(self,SizeOf(self),0);
@@ -58185,61 +58165,37 @@ procedure TPrecisionTimer.Start;
 begin
   FillCharFast(self,SizeOf(self),0);
   {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(fStart);
-  fLast := fStart;
-end;
-{$ifdef FPC} {$pop} {$else} {$HINTS ON} {$endif}
-
-function TPrecisionTimer.Started: boolean;
-begin
-  result := fStart <> 0;
 end;
 
-procedure TPrecisionTimer.ComputeTime;
+procedure TPrecisionTimer.Resume;
 begin
-  {$ifdef LINUX}
-  QueryPerformanceMicroSeconds(fStop);
-  fTime := fStop-fStart;
-  fLastTime := fStop-fLast;
-  {$else}
-  QueryPerformanceCounter(fStop);
-  if fWinFreq=0 then begin
-    QueryPerformanceFrequency(fWinFreq);
-    if fWinFreq=0 then begin
-      fTime := 0;
-      fLastTime := 0;
-      exit;
-    end;
-  end;
-  {$ifdef DELPHI5OROLDER} // circumvent C1093 Error
-  fTime := ((fStop-fStart)*1000000) div fWinFreq;
-  if fLast=fStart then
-    fLastTime := fTime else
-    fLastTime := ((fStop-fLast)*1000000) div fWinFreq;
-  {$else}
-  fTime := (QWord(fStop-fStart)*QWord(1000000)) div QWord(fWinFreq);
-  if fLast=fStart then
-    fLastTime := fTime else
-    fLastTime := (QWord(fStop-fLast)*QWord(1000000)) div QWord(fWinFreq);
-  {$endif DELPHI5OROLDER}
-  {$endif LINUX}
+  if fStart=0 then
+    {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(fStart);
+end;
+
+procedure TPrecisionTimer.Pause;
+begin
+  if fStart=0 then
+    exit;
+  {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(fStop);
+  FromExternalQueryPerformanceCounters(fStop-fStart);
+  inc(fPauseCount);
 end;
 
 procedure TPrecisionTimer.FromExternalMicroSeconds(const MicroSeconds: QWord);
 begin
   fLastTime := MicroSeconds;
   inc(fTime,MicroSeconds);
+  fStart := 0; // indicates time has been computed
 end;
 
 function TPrecisionTimer.FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
-begin // mimics ComputeTime from already known elapsed time
+begin // mimics Pause from already known elapsed time
   {$ifdef LINUX}
   FromExternalMicroSeconds(CounterDiff);
   {$else}
-  if fWinFreq=0 then begin
-    fTime := 0;
-    fLastTime := 0;
+  if fWinFreq=0 then
     QueryPerformanceFrequency(fWinFreq);
-  end;
   if fWinFreq<>0 then
     FromExternalMicroSeconds((CounterDiff*1000000)div PQWord(@fWinFreq)^);
   {$endif LINUX}
@@ -58248,33 +58204,47 @@ end;
 
 function TPrecisionTimer.Stop: TShort16;
 begin
-  ComputeTime;
+  if fStart<>0 then
+    Pause;
   MicroSecToString(fTime,result);
-end;
-
-procedure TPrecisionTimer.Pause;
-begin
-  {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(fResume);
-  dec(fResume,fStart);
-  inc(fPauseCount);
-end;
-
-procedure TPrecisionTimer.Resume;
-begin
-  {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(fStart);
-  fLast := fStart;
-  dec(fStart,fResume);
-  fResume := 0;
 end;
 
 function TPrecisionTimer.Time: TShort16;
 begin
+  if fStart<>0 then
+    Pause;
   MicroSecToString(fTime,result);
 end;
 
 function TPrecisionTimer.LastTime: TShort16;
 begin
+  if fStart<>0 then
+    Pause;
   MicroSecToString(fLastTime,result);
+end;
+
+function TPrecisionTimer.ByCount(Count: QWord): TShort16;
+begin
+  if Count=0 then // avoid div per 0 exception
+    result := '0' else begin
+    if fStart<>0 then
+      Pause;
+    MicroSecToString(fTime div Count,result);
+  end;
+end;
+
+function TPrecisionTimer.PerSec(const Count: QWord): QWord;
+begin
+  if fStart<>0 then
+    Pause;
+  if fTime<=0 then // avoid negative value in case of incorrect Start/Stop sequence
+    result := 0 else // avoid div per 0 exception
+    result := (Count*1000000) div fTime;
+end;
+
+function TPrecisionTimer.SizePerSec(Size: QWord): shortstring;
+begin
+  FormatShort('% in % i.e. %/s',[KB(Size),Stop,KB(PerSec(Size))],result);
 end;
 
 
@@ -58303,9 +58273,7 @@ end;
 
 function TPrecisionTimer.ProfileCurrentMethod: IUnknown;
 begin
-  if fStart=0 then
-    Start else
-    Resume;
+  Resume;
   result := TPrecisionTimerProfiler.Create(@self);
 end;
 
@@ -58497,7 +58465,6 @@ begin
   fSafe^.Lock;
   try
     InternalTimer.Pause;
-    InternalTimer.ComputeTime;
     LockedFromProcessTimer;
   finally
     fSafe^.UnLock;

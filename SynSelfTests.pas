@@ -3707,7 +3707,6 @@ begin
   for i := 0 to High(crc) do
     with crc[i] do
       Check(hash(0,pointer(s),length(s))=crc);
-  Timer.ComputeTime;
   fRunConsole := format('%s %s %s/s',[fRunConsole,name,KB(Timer.PerSec(totallen))]);
 end;
 procedure test16(const text: RawUTF8; expected: cardinal);
@@ -11162,11 +11161,11 @@ procedure TTestCompression._TAlgoCompress;
         s := RandomTextParagraph(i*8);
       timer.Start;
       t := algo.Compress(s);
-      timer.ComputeTime;
+      timer.Pause;
       inc(timecomp, timer.LastTimeInMicroSec);
       timer.Start;
       s2 := algo.Decompress(t,aclNoCrcFast);
-      timer.ComputeTime;
+      timer.Pause;
       inc(timedecomp, timer.LastTimeInMicroSec);
       Check(s2=s, algo.ClassName);
       if (log<>'') and (s2<>s) then FileFromString(s2,'bigTest'+algo.ClassName+'.log');
@@ -11357,7 +11356,6 @@ begin
         Timer[noaesni].Resume;
         Check(SynCrypto.AES(Key,ks,SynCrypto.AES(Key,ks,st,true),false)=st);
         Timer[noaesni].Pause;
-        Timer[noaesni].ComputeTime;
         st := st+RandomString(4);
       end;
       PC := Pointer(orig);
@@ -11421,7 +11419,7 @@ begin
     {$else}
     if noaesni then begin
       fRunConsole := format('%s cypher 1..%d bytes with AES-NI: %s, without: %s',
-        [fRunConsole,length(st),Timer[false].Time,Timer[true].Time]);
+        [fRunConsole,length(st),Timer[false].Stop,Timer[true].Stop]);
       Include(CpuFeatures,cfAESNI); // revert Exclude() below from previous loop
     end;
     if A.UsesAESNI then
@@ -12185,8 +12183,8 @@ begin
         end;
         Check((b >= bRC4) or (dig.d0 <> 0) or (dig.d1 <> 0));
       end;
-      //NotifyTestSpeed(format('%s %s',[TXT[b],SIZ[s]]),COUNT,SIZ[s]*COUNT,@timer);
-      timer.ComputeTime;
+      NotifyTestSpeed(FormatString('% %',[TXT[b],SIZ[s]]),COUNT,SIZ[s]*COUNT,@timer,{onlylog=}true);
+      timer.Pause;
       inc(time[b],timer.LastTimeInMicroSec);
       //if b in [bSHA3_512,high(b)] then AddConsole('');
     end;
@@ -12891,7 +12889,7 @@ end;
 
 procedure TTestECCCryptography.ECDHEStreamProtocol;
 const MAX = 10000;
-var timer: TPrecisionTimer;
+var //timer: TPrecisionTimer;
     str: TRawByteStringDynArray;
   function Test(const prot: IProtocol; const name: string): integer;
   var i: integer;
@@ -12900,7 +12898,7 @@ var timer: TPrecisionTimer;
   begin
     ref := prot;
     result := 0;
-    timer.Start;
+    //timer.Start;
     for i := 0 to MAX do begin
       prot.Encrypt(str[i],enc);
       inc(result,length(str[i])+length(enc));
@@ -12908,7 +12906,6 @@ var timer: TPrecisionTimer;
       check(prot.Decrypt(enc,after)=sprSuccess);
       check(after=str[i]);
     end;
-    timer.ComputeTime;
     //fRunConsole := format('%s %s %s',[fRunConsole,name,KB(timer.PerSec(result))]);
   end;
 var key: THash256;
