@@ -36374,77 +36374,80 @@ end;
 const CPUCACHEX64 = 512*1024; // non-temporal movntdq above 512 KB
 {
  -------------- TTestLowLevelCommon.CustomRTL RTL vs SynCommons
- On FPC Linux:
-  FillChar in 25.97ms, 14.9 GB/s   FillCharFast [] in 14.22ms, 27.3 GB/s
-                                   FillCharFast [cpuAVX] in 12.09ms, 32.1 GB/s
-  Move in 1.90ms, 8.1 GB/s         MoveFast [] in 1.88ms, 8.3 GB/s
-  small Move in 8.59ms, 2.5 GB/s   small MoveFast [] in 6.84ms, 3.1 GB/s
-  big Move in 36.67ms, 4.2 GB/s    big MoveFast [] in 43.35ms, 3.6 GB/s
-                                   big MoveFast [cpuERMS] in 197.29ms, 3.1 GB/s
+ On FPC Linux (native):
+   FillChar in 30.33ms, 12.8 GB/s   FillCharFast [] in 14.16ms, 27.4 GB/s
+                                    FillCharFast [cpuAVX] in 11.98ms, 32.4 GB/s
+   Move in 1.92ms, 8.1 GB/s         MoveFast [] in 2.19ms, 7.1 GB/s
+                                    MoveFast [cpuAVX] in 1.60ms, 9.7 GB/s
+   small Move in 8.84ms, 2.4 GB/s   small MoveFast [] in 7.28ms, 3 GB/s
+                                    small MoveFast [cpuAVX] in 7.29ms, 3 GB/s
+   big Move in 39.94ms, 3.9 GB/s    big MoveFast [] in 38.13ms, 4 GB/s
+                                    big MoveFast [cpuAVX] in 36.86ms, 4.2 GB/s
+
  Small backward/forward moves (on FPC Linux):
-  1b Move in 93us, 205 MB/s         1b MoveFast [] in 72us, 264.9 MB/s
-  2b Move in 108us, 353.2 MB/s      2b MoveFast [] in 84us, 454.1 MB/s
-  3b Move in 142us, 402.9 MB/s      3b MoveFast [] in 70us, 817.4 MB/s
-  4b Move in 164us, 465.2 MB/s      4b MoveFast [] in 74us, 1 GB/s
-  5b Move in 172us, 554.4 MB/s      5b MoveFast [] in 73us, 1.2 GB/s
-  6b Move in 181us, 632.2 MB/s      6b MoveFast [] in 85us, 1.3 GB/s
-  7b Move in 156us, 855.8 MB/s      7b MoveFast [] in 143us, 0.9 GB/s
-  8b Move in 175us, 871.9 MB/s      8b MoveFast [] in 73us, 2 GB/s
-  9b Move in 180us, 0.9 GB/s        9b MoveFast [] in 144us, 1.1 GB/s
-  10b Move in 186us, 1 GB/s         10b MoveFast [] in 153us, 1.2 GB/s
-  11b Move in 188us, 1 GB/s         11b MoveFast [] in 146us, 1.4 GB/s
-  12b Move in 159us, 1.4 GB/s       12b MoveFast [] in 148us, 1.5 GB/s
-  13b Move in 159us, 1.5 GB/s       13b MoveFast [] in 146us, 1.6 GB/s
-  14b Move in 161us, 1.6 GB/s       14b MoveFast [] in 146us, 1.7 GB/s
-  15b Move in 154us, 1.8 GB/s       15b MoveFast [] in 143us, 1.9 GB/s
-  16b Move in 160us, 1.8 GB/s       16b MoveFast [] in 73us, 4 GB/s
-  17b Move in 173us, 1.8 GB/s       17b MoveFast [] in 153us, 2 GB/s
-  18b Move in 190us, 1.7 GB/s       18b MoveFast [] in 153us, 2.1 GB/s
-  19b Move in 185us, 1.9 GB/s       19b MoveFast [] in 157us, 2.2 GB/s
-  20b Move in 160us, 2.3 GB/s       20b MoveFast [] in 154us, 2.4 GB/s
-  21b Move in 159us, 2.4 GB/s       21b MoveFast [] in 153us, 2.5 GB/s
-  22b Move in 163us, 2.5 GB/s       22b MoveFast [] in 153us, 2.6 GB/s
-  23b Move in 176us, 2.4 GB/s       23b MoveFast [] in 153us, 2.8 GB/s
-  24b Move in 189us, 2.3 GB/s       24b MoveFast [] in 73us, 6.1 GB/s
-  25b Move in 187us, 2.4 GB/s       25b MoveFast [] in 163us, 2.8 GB/s
-  26b Move in 198us, 2.4 GB/s       26b MoveFast [] in 168us, 2.8 GB/s
-  27b Move in 203us, 2.4 GB/s       27b MoveFast [] in 178us, 2.8 GB/s
-  28b Move in 171us, 3 GB/s         28b MoveFast [] in 171us, 3 GB/s
-  29b Move in 178us, 3 GB/s         29b MoveFast [] in 163us, 3.3 GB/s
-  30b Move in 185us, 3 GB/s         30b MoveFast [] in 163us, 3.4 GB/s
-  31b Move in 188us, 3 GB/s         31b MoveFast [] in 162us, 3.5 GB/s
-  32b Move in 203us, 2.9 GB/s       32b MoveFast [] in 72us, 8.2 GB/s
-  40b Move in 2.09ms, 3.5 GB/s      40b MoveFast [] in 1.61ms, 4.6 GB/s
-  44b Move in 1.82ms, 4.4 GB/s      44b MoveFast [] in 1.61ms, 5 GB/s
-  48b Move in 2.05ms, 4.3 GB/s      48b MoveFast [] in 1.67ms, 5.3 GB/s
-  65b Move in 2.43ms, 4.9 GB/s      65b MoveFast [] in 1.79ms, 6.7 GB/s
-  80b Move in 2.29ms, 6.4 GB/s      80b MoveFast [] in 1.85ms, 8 GB/s
-  86b Move in 2.29ms, 6.9 GB/s      86b MoveFast [] in 1.85ms, 8.6 GB/s
-  99b Move in 2.96ms, 6.2 GB/s      99b MoveFast [] in 1.91ms, 9.6 GB/s
-  110b Move in 2.47ms, 8.2 GB/s     110b MoveFast [] in 2ms, 10.2 GB/s
-  126b Move in 3.69ms, 6.3 GB/s     126b MoveFast [] in 2.15ms, 10.8 GB/s
-  145b Move in 3.25ms, 8.2 GB/s     145b MoveFast [] in 2.22ms, 12.1 GB/s
-  161b Move in 3.73ms, 8 GB/s       161b MoveFast [] in 2.39ms, 12.5 GB/s
-  179b Move in 3.35ms, 9.9 GB/s     179b MoveFast [] in 2.63ms, 12.6 GB/s
-  207b Move in 3.13ms, 12.2 GB/s    207b MoveFast [] in 2.96ms, 13 GB/s
-  224b Move in 3.81ms, 10.9 GB/s    224b MoveFast [] in 3.16ms, 13.1 GB/s
-  255b Move in 3.78ms, 12.5 GB/s    255b MoveFast [] in 3.47ms, 13.6 GB/s
-  256b Move in 3.85ms, 12.3 GB/s    256b MoveFast [] in 3.51ms, 13.5 GB/s
+   1b Move in 89us, 214.3 MB/s     1b MoveFast [] in 77us, 247.7 MB/s
+   2b Move in 95us, 401.5 MB/s     2b MoveFast [] in 72us, 529.8 MB/s
+   3b Move in 107us, 534.7 MB/s    3b MoveFast [] in 76us, 752.9 MB/s
+   4b Move in 129us, 591.4 MB/s    4b MoveFast [] in 92us, 829.2 MB/s
+   5b Move in 163us, 585 MB/s      5b MoveFast [] in 78us, 1.1 GB/s
+   6b Move in 143us, 800.2 MB/s    6b MoveFast [] in 77us, 1.4 GB/s
+   7b Move in 143us, 0.9 GB/s      7b MoveFast [] in 146us, 914.4 MB/s
+   8b Move in 159us, 0.9 GB/s      8b MoveFast [] in 73us, 2 GB/s
+   9b Move in 166us, 1 GB/s        9b MoveFast [] in 144us, 1.1 GB/s
+   10b Move in 170us, 1 GB/s       10b MoveFast [] in 144us, 1.2 GB/s
+   11b Move in 181us, 1.1 GB/s     11b MoveFast [] in 144us, 1.4 GB/s
+   12b Move in 153us, 1.4 GB/s     12b MoveFast [] in 143us, 1.5 GB/s
+   13b Move in 154us, 1.5 GB/s     13b MoveFast [] in 144us, 1.6 GB/s
+   14b Move in 150us, 1.7 GB/s     14b MoveFast [] in 143us, 1.8 GB/s
+   15b Move in 151us, 1.8 GB/s     15b MoveFast [] in 147us, 1.9 GB/s
+   16b Move in 159us, 1.8 GB/s     16b MoveFast [] in 73us, 4 GB/s
+   17b Move in 161us, 1.9 GB/s     17b MoveFast [] in 153us, 2 GB/s
+   18b Move in 167us, 2 GB/s       18b MoveFast [] in 153us, 2.1 GB/s
+   19b Move in 180us, 1.9 GB/s     19b MoveFast [] in 161us, 2.1 GB/s
+   20b Move in 155us, 2.4 GB/s     20b MoveFast [] in 153us, 2.4 GB/s
+   21b Move in 150us, 2.6 GB/s     21b MoveFast [] in 153us, 2.5 GB/s
+   22b Move in 155us, 2.6 GB/s     22b MoveFast [] in 163us, 2.5 GB/s
+   23b Move in 157us, 2.7 GB/s     23b MoveFast [] in 154us, 2.7 GB/s
+   24b Move in 166us, 2.6 GB/s     24b MoveFast [] in 91us, 4.9 GB/s
+   25b Move in 175us, 2.6 GB/s     25b MoveFast [] in 163us, 2.8 GB/s
+   26b Move in 183us, 2.6 GB/s     26b MoveFast [] in 170us, 2.8 GB/s
+   27b Move in 193us, 2.6 GB/s     27b MoveFast [] in 162us, 3.1 GB/s
+   28b Move in 166us, 3.1 GB/s     28b MoveFast [] in 163us, 3.2 GB/s
+   29b Move in 183us, 2.9 GB/s     29b MoveFast [] in 169us, 3.1 GB/s
+   30b Move in 170us, 3.2 GB/s     30b MoveFast [] in 176us, 3.1 GB/s
+   31b Move in 175us, 3.3 GB/s     31b MoveFast [] in 176us, 3.2 GB/s
+   32b Move in 185us, 3.2 GB/s     32b MoveFast [] in 146us, 4 GB/s
+   33b Move in 193us, 3.1 GB/s     33b MoveFast [] in 197us, 3.1 GB/s
+   34b Move in 198us, 3.1 GB/s     34b MoveFast [] in 157us, 4 GB/s
+   35b Move in 218us, 2.9 GB/s     35b MoveFast [] in 155us, 4.2 GB/s
+   36b Move in 196us, 3.4 GB/s     36b MoveFast [] in 155us, 4.3 GB/s
+   37b Move in 184us, 3.7 GB/s     37b MoveFast [] in 160us, 4.3 GB/s
+   38b Move in 209us, 3.3 GB/s     38b MoveFast [] in 160us, 4.4 GB/s
+   39b Move in 201us, 3.6 GB/s     39b MoveFast [] in 161us, 4.5 GB/s
+   40b Move in 218us, 3.4 GB/s     40b MoveFast [] in 161us, 4.6 GB/s
+   41b Move in 226us, 3.3 GB/s     41b MoveFast [] in 161us, 4.7 GB/s
+   42b Move in 236us, 3.3 GB/s     42b MoveFast [] in 162us, 4.8 GB/s
+   43b Move in 250us, 3.2 GB/s     43b MoveFast [] in 161us, 4.9 GB/s
+   44b Move in 180us, 4.5 GB/s     44b MoveFast [] in 215us, 3.8 GB/s
+   45b Move in 199us, 4.2 GB/s     45b MoveFast [] in 230us, 3.6 GB/s
+   46b Move in 195us, 4.3 GB/s     46b MoveFast [] in 164us, 5.2 GB/s
+   47b Move in 198us, 4.4 GB/s     47b MoveFast [] in 173us, 5 GB/s
+   48b Move in 231us, 3.8 GB/s     48b MoveFast [] in 163us, 5.4 GB/s
 
-  On Delphi XE4 Win64:
+  On Delphi XE4 Win64 (VM):
     FillChar in 34.42ms, 11.2 GB/s   FillCharFast [] in 15.03ms, 25.8 GB/s
-    Move in 3.76ms, 4.1 GB/s         MoveFast [] in 2.17ms, 7.1 GB/s
-    small Move in 7.51ms, 2.9 GB/s   small MoveFast [] in 6.87ms, 3.1 GB/s
-    big Move in 67.06ms, 2.3 GB/s    big MoveFast [] in 47.64ms, 3.2 GB/s
-  On Delphi 10.3 Win64 (on my ERMS CPU):
-    FillChar in 28.82ms, 13.4 GB/s   FillCharFast [] in 15.18ms, 25.5 GB/s
+    Move in 3.76ms, 4.1 GB/s         MoveFast [] in 2.16ms, 7.2 GB/s
+    small Move in 7.51ms, 2.9 GB/s   small MoveFast [] in 6.77ms, 3.2 GB/s
+    big Move in 67.06ms, 2.3 GB/s    big MoveFast [] in 41ms, 3.8 GB/s
+  On Delphi 10.3 Win64 (VM):
+    FillChar in 28.82ms, 13.4 GB/s   FillCharFast [] in 14.89ms, 26 GB/s
     Move in 3.68ms, 4.2 GB/s         MoveFast [] in 2.13ms, 7.3 GB/s
-    small Move in 7.01ms, 3.1 GB/s   small MoveFast [] in 6.73ms, 3.2 GB/s
-    big Move in 50.90ms, 3 GB/s      big MoveFast [] in 47.96ms, 3.2 GB/s
+    small Move in 7.34ms, 2.9 GB/s   small MoveFast [] in 6.73ms, 3.2 GB/s
+    big Move in 50.90ms, 3 GB/s      big MoveFast [] in 40.74ms, 3.8 GB/s
 
-  -> FillCharFast/MoveFast are faster - only FPC RTL seems better for big Moves
-  -> no AVX MoveFast has been made yet (not sure it is worth it)
-  -> Delphi doesn't support AVX assembly yet
+  -> numbers above are with 10% variation; please get your numbers!
+  -> FillCharFast/MoveFast are faster, especially for small lengths (strings)
+  -> Delphi RTL is lower than FPC's, and it doesn't support AVX assembly yet
   -> cpuERMS - of little benefit - is disabled, unless WITH_ERMS is defined
 }
 
@@ -36523,7 +36526,13 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         ret
 @nofwe: {$endif WITH_ERMS}
         mov     r9, dst
-        movdqu  xmm2, oword ptr[src]  // first 16
+        {$ifdef FPC} // no AVX asm on Delphi :(
+        cmp     rax, 256  // vzeroupper penaly for cnt>255
+        jb      @fsse2
+        test    byte ptr[rip+CPUIDX64], 1 shl cpuAVX
+        jnz      @fwdavx
+        {$endif FPC}
+@fsse2: movdqu  xmm2, oword ptr[src]  // first 16
         lea     src, [src + rax - 16]
         lea     rax, [rax + dst - 16]
         movdqu  xmm1, oword ptr[src]  // last 16
@@ -36545,8 +36554,35 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
 @fwdnv: movdqu  xmm0, oword ptr[src + rax]  // non-temporal loop
         movntdq [r10 + rax], xmm0
         add     rax, 16
-        jl      @fwd
+        jl      @fwdnv
         jmp     @fwdend
+{$ifdef FPC}
+@fwdavx:vmovups ymm2, oword ptr[src]  // first 32
+        lea     src, [src + rax - 32]
+        lea     rax, [rax + dst - 32]
+        vmovups ymm1, oword ptr[src]  // last 32
+        mov     r10, rax
+        neg     rax
+        and     dst,  -32  // 32-byte aligned writes
+        lea     rax, [rax + dst + 32]
+        cmp     r8, CPUCACHEX64
+        ja      @favxn  // bypass cache for cnt>512KB
+        align 16
+@favxr: vmovups ymm0, oword ptr[src + rax]  // regular loop
+        vmovaps [r10 + rax], ymm0
+        add     rax, 32
+        jl      @favxr
+@favxe: vmovups [r10], ymm1 // last 32
+        vmovups [r9], ymm2  // first 32
+        vzeroupper
+        ret
+        align 16
+@favxn: vmovups ymm0, oword ptr[src + rax]  // non-temporal loop
+        vmovntps [r10 + rax], ymm0
+        add     rax, 32
+        jl      @favxn
+        jmp     @favxe
+{$endif FPC}
 @lrgbwd:{$ifdef WITH_ERMS}  // backward move
         test    byte ptr[rip+CPUIDX64], 1 shl cpuERMS
         jz      @nobwe
@@ -36557,7 +36593,13 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         lea     dst, [dst + rax - 1]
         jmp     @repmov
 @nobwe: {$endif WITH_ERMS}
-        sub     rax, 16
+        {$ifdef FPC}
+        cmp     rax, 256
+        jb      @bsse2
+        test    byte ptr[rip+CPUIDX64], 1 shl cpuAVX
+        jnz      @bwdavx
+        {$endif FPC}
+@bsse2: sub     rax, 16
         mov     r9, rax
         movdqu  xmm2, oword ptr[src + rax]  // last 16
         movdqu  xmm1, oword ptr[src]        // first 16
@@ -36583,6 +36625,32 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         sub     rax, 16
         jg      @bwdnv
         jmp     @bwdend
+{$ifdef FPC}
+@bwdavx:sub     rax, 32
+        mov     r9, rax
+        vmovups ymm2, oword ptr[src + rax]  // last 32
+        vmovups ymm1, oword ptr[src]        // first 32
+        add     rax, dst
+        and     rax, -32  // 32-byte aligned writes
+        sub     rax, dst
+        cmp     r8, CPUCACHEX64
+        ja      @bavxn    // bypass cache for cnt>512KB
+        align 16
+@bavxr: vmovups ymm0, oword ptr[src + rax]  // regular loop
+        vmovaps oword ptr[dst + rax], ymm0
+        sub     rax, 32
+        jg      @bavxr
+@bavxe: vmovups oword ptr[dst], ymm1       // first 32
+        vmovups oword ptr[dst + r9], ymm2  // last 32
+        vzeroupper
+        ret
+        align 16
+@bavxn: vmovups ymm0, oword ptr[src + rax]  // non-temporal loop
+        vmovntps oword ptr[dst + rax], ymm0
+        sub     rax, 32
+        jg      @bavxn
+        jmp     @bavxe
+{$endif FPC}
 @03:    movzx   eax, word ptr[src]
         mov     cl, byte ptr[src + 2]
         mov     word ptr[dst], ax
@@ -36648,7 +36716,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         mov     r10, rdx       // save rdx=cnt
         {$ifdef FPC} // Delphi doesn't support avx, and erms is slower
         cmp     rdx, 256
-        jae     @abv256  // try erms or avx if cnt>256
+        jae     @abv256  // try erms or avx if cnt>255 (vzeroupper penaly)
         {$endif FPC}
 @sse2:  movq    qword ptr[dst], xmm0  // first unaligned 16 bytes
         movq    qword ptr[dst+8], xmm0
@@ -36696,11 +36764,10 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
 {$else} test    byte ptr[rip+CPUIDX64], 1 shl cpuAVX
         {$endif WITH_ERMS}
         jz      @sse2
-        // AVX version (Delphi isn't able to compile it yet) - cnt>256
         movups  oword ptr[dst], xmm0 // first unaligned 1..16 bytes
         add     dst, 16
         and     dst, -16
-        movaps  oword ptr[dst], xmm0 // unaligned 17..32 bytes
+        movups  oword ptr[dst], xmm0 // unaligned 17..32 bytes
         vinsertf128 ymm0,ymm0,xmm0,1
         add     dst, 16
         and     dst, -32 // dst is 32-bytes aligned
@@ -36713,9 +36780,8 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
 @avxreg:vmovaps ymmword ptr[rdx+dst], ymm0  // regular loop
         add     dst, 32
         jnz     @avxreg
-@avxok: vzeroupper
-        movups  oword ptr[r8-32], xmm0  // last unaligned 32 bytes
-        movups  oword ptr[r8-16], xmm0
+@avxok: vmovups oword ptr[r8-32], ymm0  // last unaligned 32 bytes
+        vzeroupper
         ret
         align 16
 @avxnv: vmovntps oword ptr [rdx+dst], ymm0 // non-temporal loop

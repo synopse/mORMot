@@ -2959,7 +2959,7 @@ var buf: RawByteString;
          inc(len) else
          inc(len,777+len shr 4);
      until len>=length(buf);
-     // small len make timer.Resume/Pause unreliable -> single shot measure
+     // small len makes timer.Resume/Pause unreliable -> single shot measure
      b1 := 0;
      len := 1;
      timer.Start;
@@ -2983,7 +2983,6 @@ var buf: RawByteString;
        {$endif}
      NotifyTestSpeed(msg,1,filled,@timer);
      // validates overlapping forward Move/MoveFast
-     {$ifdef CPUX64} if (CPUIDX64=[cpuAvx]) and not rtl then exit; {$endif}
      if rtl then
        msg := 'Move' else
        {$ifdef CPUX64}
@@ -3009,7 +3008,7 @@ var buf: RawByteString;
      NotifyTestSpeed(msg,1,moved,@timer);
      Check(BufIncreasing(p,moved,1));
      checkEqual(Hash32(buf),2284147540);
-     // forward and backward moves on small and big buffers
+     // forward and backward overlapped moves on small and big buffers
      elapsed := 0;
      moved := 0;
      for len := 1 to 48 do begin
@@ -3030,18 +3029,18 @@ var buf: RawByteString;
      timer.FromExternalMicroSeconds(elapsed);
      NotifyTestSpeed('small '+msg,1,moved,@timer);
      checkEqual(Hash32(buf),1635609040);
-     len := length(buf)-30;
+     len := length(buf)-3200;
      timer.Start;
      for i := 1 to 10 do
        if rtl then begin
-         Move(P[31],P[1],len-i);
-         Move(P[1],P[32],len-i);
+         Move(P[3100],P[1],len-i);
+         Move(P[1],P[3200],len-i);
        end else begin
-         MoveFast(p[31],p[1],len-i);
-         MoveFast(P[1],P[32],len-i);
+         MoveFast(p[3100],p[1],len-i);
+         MoveFast(P[1],P[3200],len-i);
        end;
      NotifyTestSpeed('big '+msg,1,10*len,@timer);
-     checkEqual(Hash32(buf),2390293111);
+     checkEqual(Hash32(buf),3470496583);
    end;
 {$ifdef CPUX64} var cpu: TX64CpuFeatures; {$endif}
 begin
