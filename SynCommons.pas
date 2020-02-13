@@ -2326,10 +2326,14 @@ var StrLen: function(S: pointer): PtrInt = StrLenPas;
 var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte);
 
 /// our fast version of move()
-// - on Intel i386/x86_64, will use fast SSE2 instructions (if available),
+// - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available),
 // or optimized X87 assembly implementation for older CPUs
 // - on non-Intel CPUs, it will fallback to the default RTL Move()
+{$ifdef CPUX64}
+procedure MoveFast(const src; var dst; cnt: PtrInt);
+{$else}
 var MoveFast: procedure(const Source; var Dest; Count: PtrInt);
+{$endif CPUX64}
 
 /// an alternative Move() function tuned for small unaligned counts
 // - warning: expects Count>0 and Source/Dest not nil
@@ -12313,6 +12317,15 @@ var
   /// the available CPU features, as recognized at program startup
   CpuFeatures: TIntelCpuFeatures;
 
+{$ifdef CPUX64}
+type
+  /// cpuERMS is slightly slower than cpuAVX so is not available by default
+  TX64CpuFeatures = set of(cpuAVX {$ifdef WITH_ERMS}, cpuERMS{$endif});
+var
+  /// internal flags used by FillCharFast - easier from asm that CpuFeatures
+  CPUIDX64: TX64CpuFeatures;
+{$endif CPUX64}
+
 /// compute CRC32C checksum on the supplied buffer using SSE 4.2
 // - use Intel Streaming SIMD Extensions 4.2 hardware accelerated instruction
 // - SSE 4.2 shall be available on the processor (i.e. cfSSE42 in CpuFeatures)
@@ -17540,7 +17553,7 @@ begin
       buf := @tmp else
       GetMem(buf,len+16); // +16 for trailing #0 and for PInteger() parsing
     if Source<>nil then begin
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(Source^,buf^,len);
+      MoveFast(Source^,buf^,len);
       PPtrInt(PAnsiChar(buf)+len)^ := 0; // init last 4/8 bytes (makes valgrid happy)
     end;
   end;
@@ -17970,7 +17983,7 @@ begin
     result := UTF8BufferToAnsi(tmp,pointer(s),result)-tmp;
     if result>=DestSize then
       result := DestSize-1;
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(tmp,Dest^,result);
+    MoveFast(tmp,Dest^,result);
   end;
   Dest[result] := #0;
 end;
@@ -18384,7 +18397,7 @@ end;
 function TSynAnsiUTF8.AnsiBufferToUTF8(Dest: PUTF8Char; Source: PAnsiChar;
   SourceChars: Cardinal; NoTrailingZero: boolean): PUTF8Char;
 begin
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Source^,Dest^,SourceChars);
+  MoveFast(Source^,Dest^,SourceChars);
   if not NoTrailingZero then
     Dest[SourceChars] := #0;
   result := Dest+SourceChars;
@@ -18438,7 +18451,7 @@ end;
 function TSynAnsiUTF8.UTF8BufferToAnsi(Dest: PAnsiChar; Source: PUTF8Char;
   SourceChars: Cardinal): PAnsiChar;
 begin
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Source^,Dest^,SourceChars);
+  MoveFast(Source^,Dest^,SourceChars);
   result := Dest+SourceChars;
 end;
 
@@ -18475,7 +18488,7 @@ end;
 function TSynAnsiUTF16.AnsiBufferToUnicode(Dest: PWideChar;
   Source: PAnsiChar; SourceChars: Cardinal; NoTrailingZero: boolean): PWideChar;
 begin
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Source^,Dest^,SourceChars);
+  MoveFast(Source^,Dest^,SourceChars);
   result := Pointer(PtrUInt(Dest)+SourceChars);
   if not NoTrailingZero then
     result^ := #0;
@@ -18509,7 +18522,7 @@ function TSynAnsiUTF16.UnicodeBufferToAnsi(Dest: PAnsiChar;
   Source: PWideChar; SourceChars: Cardinal): PAnsiChar;
 begin
   SourceChars := SourceChars shl 1; // from WideChar count to byte count
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Source^,Dest^,SourceChars);
+  MoveFast(Source^,Dest^,SourceChars);
   result := Dest+SourceChars;
 end;
 
@@ -21387,7 +21400,7 @@ begin
     PWord(PAnsiChar(sr)+len)^ := 0; // ensure ends with two #0
     r := pointer(sr);
     if p<>nil then
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(p^,sr^,len);
+      MoveFast(p^,sr^,len);
   end;
   {$ifdef FPC}Finalize(RawByteString(s)){$else}RawByteString(s) := ''{$endif};
   pointer(s) := r;
@@ -21409,7 +21422,7 @@ begin
     PCardinal(PAnsiChar(sr)+len)^ := 0; // ensure ends with four #0
     r := pointer(sr);
     if p<>nil then
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(p^,sr^,len);
+      MoveFast(p^,sr^,len);
   end;
   {$ifdef FPC}Finalize(s){$else}s := ''{$endif};
   pointer(s) := r;
@@ -21432,7 +21445,7 @@ begin
   aligned := pointer(s);
   inc(PByte(aligned),PtrUInt(aligned) and 15);
   if p<>nil then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(p^,aligned^,len);
+    MoveFast(p^,aligned^,len);
 end;
 
 function ToText(k: TTypeKind): PShortString;
@@ -23352,7 +23365,7 @@ begin
     exit;
   L := length(Text);
   SetLength(Text,L+BufferLen);
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Buffer^,pointer(PtrInt(Text)+L)^,BufferLen);
+  MoveFast(Buffer^,pointer(PtrInt(Text)+L)^,BufferLen);
 end;
 
 procedure AppendBuffersToRawUTF8(var Text: RawUTF8; const Buffers: array of PUTF8Char);
@@ -23373,7 +23386,7 @@ begin
   inc(P,TextLen);
   for i := 0 to high(Buffers) do
     if Buffers[i]<>nil then begin
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(Buffers[i]^,P^,lens[i]);
+      MoveFast(Buffers[i]^,P^,lens[i]);
       inc(P,lens[i]);
     end;
 end;
@@ -23444,10 +23457,10 @@ begin
   R^ := Quote;
   inc(R);
   if nquote=0 then begin
-    Move(P^,R^,L);
+    MoveFast(P^,R^,L);
     R[L] := Quote;
   end else begin
-    Move(P^,R^,quote1);
+    MoveFast(P^,R^,quote1);
     inc(R,quote1);
     inc(quote1,PtrInt(P)); // trick for reusing a register on FPC
     repeat
@@ -23513,7 +23526,7 @@ begin
       inc(D,Lp);
     end;
     D^ := '"';
-    Move(P^,D[1],PLen);
+    MoveFast(P^,D[1],PLen);
     inc(D,PLen);
     D[1] := '"';
     if Ls>0 then
@@ -23860,7 +23873,7 @@ begin
         '9': begin
           S[prec] := '0';
           if ((prec=2) and (S[1]='-')) or (prec=1) then begin
-            {$ifdef FPC}Move{$else}MoveFast{$endif}(S[prec],S[prec+1],result);
+            MoveFast(S[prec],S[prec+1],result);
             S[prec] := '1';
             break;
           end;
@@ -24283,7 +24296,7 @@ Txt:  len := F-FDeb;
     L := {$ifdef FPC}_LStrLen(tmp[i]){$else}PInteger(PtrInt(tmp[i])-SizeOf(integer))^{$endif};
     {$ifdef HASINLINE}if L<MOVESMALL_MAX then
       MoveSmall(pointer(tmp[i]),F,L) else{$endif}
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(tmp[i])^,F^,L);
+      MoveFast(pointer(tmp[i])^,F^,L);
     inc(F,L);
     if byte(i) in inlin then begin
       PWord(F)^ := ord(')')+ord(':')shl 8;
@@ -24393,7 +24406,7 @@ begin
   P := pointer(Result);
   for i := 0 to high(Values) do begin
     L := length(Values[i]);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(Values[i])^,P^,L);
+    MoveFast(pointer(Values[i])^,P^,L);
     inc(P,L);
   end;
 end;
@@ -24404,7 +24417,7 @@ begin
   L := Length(buf);
   if L<>0 then begin
     SetLength(bytes,L);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(buf)^,pointer(bytes)^,L);
+    MoveFast(pointer(buf)^,pointer(bytes)^,L);
   end;
 end;
 
@@ -26522,7 +26535,7 @@ begin
   dst := pointer(result);
   for i := 0 to posCount-1 do begin
     sharedlen := pos[i]-last;
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(src^,dst^,sharedlen);
+    MoveFast(src^,dst^,sharedlen);
     inc(src,sharedlen+oldlen);
     inc(dst,sharedlen);
     if newlen>0 then begin
@@ -26531,7 +26544,7 @@ begin
     end;
     last := pos[i]+oldlen;
   end;
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(src^,dst^,length(S)-last+1);
+  MoveFast(src^,dst^,length(S)-last+1);
 end;
 
 function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
@@ -30373,7 +30386,7 @@ begin
         if Read<=0 then
           break;
         SetLength(result,Size+Read); // in-place resize
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(tmp,PByteArray(result)^[Size],Read);
+        MoveFast(tmp,PByteArray(result)^[Size],Read);
         inc(Size,Read);
       until false;
     end else begin
@@ -31187,7 +31200,7 @@ begin
   a := length(Another);
   if a>0 then begin
     SetLength(Values,v+a);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Another[0],Values[v],a*SizeOf(Integer));
+    MoveFast(Another[0],Values[v],a*SizeOf(Integer));
   end;
   result := v+a;
 end;
@@ -31224,7 +31237,7 @@ begin
   a := length(Another);
   if a>0 then begin
     SetLength(Values,v+a);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Another[0],Values[v],a*SizeOf(Int64));
+    MoveFast(Another[0],Values[v],a*SizeOf(Int64));
   end;
   result := v+a;
 end;
@@ -31258,7 +31271,7 @@ begin
   if n>Index then begin
     if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
       Values := copy(Values); // unique
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Values[Index+1],Values[Index],(n-Index)*SizeOf(Word));
+    MoveFast(Values[Index+1],Values[Index],(n-Index)*SizeOf(Word));
   end;
   SetLength(Values,n);
 end;
@@ -31273,7 +31286,7 @@ begin
   if n>Index then begin
     if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
       Values := copy(Values); // unique
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Values[Index+1],Values[Index],(n-Index)*SizeOf(Integer));
+    MoveFast(Values[Index+1],Values[Index],(n-Index)*SizeOf(Integer));
   end;
   SetLength(Values,n);
 end;
@@ -31288,7 +31301,7 @@ begin
   if n>0 then begin
     if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
       Values := copy(Values); // unique
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Values[Index+1],Values[Index],n*SizeOf(Integer));
+    MoveFast(Values[Index+1],Values[Index],n*SizeOf(Integer));
   end;
   dec(ValuesCount);
 end;
@@ -31303,7 +31316,7 @@ begin
   if n>Index then begin
     if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
       Values := copy(Values); // unique
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Values[Index+1],Values[Index],(n-Index)*SizeOf(Int64));
+    MoveFast(Values[Index+1],Values[Index],(n-Index)*SizeOf(Int64));
   end;
   SetLength(Values,n);
 end;
@@ -31318,7 +31331,7 @@ begin
   if n>0 then begin
     if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
       Values := copy(Values); // unique
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Values[Index+1],Values[Index],n*SizeOf(Int64));
+    MoveFast(Values[Index+1],Values[Index],n*SizeOf(Int64));
   end;
   dec(ValuesCount);
 end;
@@ -31538,7 +31551,7 @@ var n: integer;
 begin
   n := length(Source);
   SetLength(Dest,n);
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Source[0],Dest[0],n*SizeOf(Integer));
+  MoveFast(Source[0],Dest[0],n*SizeOf(Integer));
 end;
 
 procedure CopyInt64(const Source: TInt64DynArray; out Dest: TInt64DynArray);
@@ -31546,7 +31559,7 @@ var n: integer;
 begin
   n := length(Source);
   SetLength(Dest,n);
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Source[0],Dest[0],n*SizeOf(Int64));
+  MoveFast(Source[0],Dest[0],n*SizeOf(Int64));
 end;
 
 function MaxInteger(const Values: TIntegerDynArray; ValuesCount, MaxStart: integer): Integer;
@@ -32155,7 +32168,7 @@ procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
 begin
   if ValuesCount>length(Dest) then
     SetLength(Dest,ValuesCount);
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Values^[0],Dest[0],ValuesCount*SizeOf(Integer));
+  MoveFast(Values^[0],Dest[0],ValuesCount*SizeOf(Integer));
   QuickSortInteger(pointer(Dest),0,ValuesCount-1);
 end;
 
@@ -32164,7 +32177,7 @@ procedure CopyAndSortInt64(Values: PInt64Array; ValuesCount: integer;
 begin
   if ValuesCount>length(Dest) then
     SetLength(Dest,ValuesCount);
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Values^[0],Dest[0],ValuesCount*SizeOf(Int64));
+  MoveFast(Values^[0],Dest[0],ValuesCount*SizeOf(Int64));
   QuickSortInt64(pointer(Dest),0,ValuesCount-1);
 end;
 
@@ -32331,9 +32344,9 @@ begin
   n := ValuesCount;
   if PtrUInt(result)<PtrUInt(n) then begin
     n := (n-result)*SizeOf(Integer);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Values[result],Values[result+1],n);
+    MoveFast(Values[result],Values[result+1],n);
     if CoValues<>nil then
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(CoValues^[result],CoValues^[result+1],n);
+      MoveFast(CoValues^[result],CoValues^[result+1],n);
   end else
     result := n;
   Values[result] := Value;
@@ -34367,7 +34380,7 @@ begin
   repeat
     L := length(Values[i]);
     if L>0 then begin
-      Move(pointer(Values[i])^,P^,L);
+      MoveFast(pointer(Values[i])^,P^,L);
       inc(P,L);
     end;
     if i=high(Values) then
@@ -36352,150 +36365,239 @@ end;
 {$endif CPUX64}
 
 {$ifdef CPUX64}
-{ Some notes about MOVNTI opcode use below for x86_64 asm:
-  - Delphi inline assembler is not able to compile the instruction -> so we
-    had to write some manual DB $... values instead (FPC has no problem with it) :(
-  - The I in MOVNTI means "non-temporal hint". It is implemented by using a
-    write combining (WC) memory type protocol when writing the data to memory.
-    The processor does not write the data into the cache hierarchy, nor does
-    it fetch the corresponding cache line from memory into the cache hierarchy.
-    By-passing the cache should enhance speed of memory blocks >8KB. }
-procedure FillCharx64; {$ifdef FPC}nostackframe; assembler;
-asm {$else} asm .noframe {$endif} // rcx/rdi=Dest rdx/rsi=Count r8/rdx=Value
-        {$ifndef WIN64} // Linux 64-bit ABI
-        mov     rax, rdx
-        movzx   r8, dl
-        mov     rdx, rsi
-        mov     rcx, rdi
-        cmp     rsi, 32
-        {$else}
-        mov     rax, r8
-        and     r8, 0FFH
-        cmp     rdx, 32
-        {$endif}
-        jle     @_32 // small blocks (< 32 bytes) redirection
-        mov     r9, $0101010101010101
-        imul    r8, r9
-        // align rcx destination to QWord
-        test    cl, 7
-        jz      @27C5
-        test    cl, 1
-        jz      @27A4
-        mov     byte ptr[rcx], al
-        add     rcx, 1
-        sub     rdx, 1
-@27A4:  test    cl, 2
-        jz      @27B5
-        mov     word ptr[rcx], r8w
-        add     rcx, 2
-        sub     rdx, 2
-@27B5:  test    cl, 4
-        jz      @27C5
-        mov     dword ptr[rcx], r8d
-        add     rcx, 4
-        sub     rdx, 4
-@27C5:  mov     rax, rdx
-        and     rdx, $3F
-        shr     rax, 6
-        jnz     @_64
-        // handle less than 64 bytes
-@remain:mov     rax, rdx
-        and     rdx, 7
-        shr     rax, 3
-        jz      @27EC
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
-@27E0:  mov     qword ptr[rcx], r8
-        add     rcx, 8
-        dec     rax
-        jnz     @27E0
-@27EC:  test    rdx, rdx
-        jle     @27FC
-@27F1:  mov     byte ptr[rcx], r8b
-        inc     rcx
-        dec     rdx
-        jnz     @27F1
-@27FC:  ret
-@_64:   cmp     rax, 8192 // movnti is worth it only > 8KB of data (cache size)
-        jnc     @_8192
-        // 64-bytes loop through cache (regular mov)
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
-@_64s:  add     rcx, 64
-        mov     qword ptr[rcx - $40], r8
-        mov     qword ptr[rcx - $38], r8
-        mov     qword ptr[rcx - $30], r8
-        mov     qword ptr[rcx - $28], r8
-        mov     qword ptr[rcx - $20], r8
-        mov     qword ptr[rcx - $18], r8
-        mov     qword ptr[rcx - $10], r8
-        mov     qword ptr[rcx - $08], r8
-        dec     rax
-        jnz     @_64s
-        jmp     @remain
-        // 64-bytes loop bypassing cache (movnti)
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
-@_8192: add     rcx, 64
-        db      $4C, $0F, $C3, $41, $C0 // movnti  qword ptr [rcx-$40],r8
-        db      $4C, $0F, $C3, $41, $C8 // movnti  qword ptr [rcx-$38],r8
-        db      $4C, $0F, $C3, $41, $D0 // movnti  qword ptr [rcx-$30],r8
-        db      $4C, $0F, $C3, $41, $D8 // movnti  qword ptr [rcx-$28],r8
-        db      $4C, $0F, $C3, $41, $E0 // movnti  qword ptr [rcx-$20],r8
-        db      $4C, $0F, $C3, $41, $E8 // movnti  qword ptr [rcx-$18],r8
-        db      $4C, $0F, $C3, $41, $F0 // movnti  qword ptr [rcx-$10],r8
-        db      $4C, $0F, $C3, $41, $F8 // movnti  qword ptr [rcx-$08],r8
-        dec     rax
-        jnz     @_8192
-        mfence
-        jmp     @remain
-        // handle small blocks up to 32 bytes
-@_32:   test    rdx, rdx
-        jle     @done
-        mov     ah, al
-        mov     [rcx + rdx - 1], al
-        lea     r8, [rip + @table]
-        and     rdx, - 2
-        neg     rdx
-        lea     rdx, [r8 + rdx * 2 + 64]
-        jmp     rdx
-{$ifdef FPC} align 4 {$else} .align 4 {$endif}
-@table: mov     [rcx + 30], ax
-        mov     [rcx + 28], ax
-        mov     [rcx + 26], ax
-        mov     [rcx + 24], ax
-        mov     [rcx + 22], ax
-        mov     [rcx + 20], ax
-        mov     [rcx + 18], ax
-        mov     [rcx + 16], ax
-        mov     [rcx + 14], ax
-        mov     [rcx + 12], ax
-        mov     [rcx + 10], ax
-        mov     [rcx +  8], ax
-        mov     [rcx +  6], ax
-        mov     [rcx +  4], ax
-        mov     [rcx +  2], ax
-        mov     [rcx     ], ax
-@done:  ret // for 4-bytes @table alignment of last 'mov [rcx],ax'
-end;
-procedure Fillcharx64ERMS; {$ifdef FPC}nostackframe; assembler;
-asm {$else} asm .noframe {$endif} // rcx/rdi=Dest rdx/rsi=Count r8/rdx=Value
-        // use 'rep stosb' ERMS magic if > 2KB (from Intel's Manual)
+const CPUCACHEX64 = 512*1024; // non-temporal movntdq above 512 KB
+{
+ -------------- TTestLowLevelCommon.CustomRTL RTL vs SynCommons
+ On FPC Linux:
+  FillChar in 25.97ms, 14.9 GB/s   FillCharFast [] in 14.22ms, 27.3 GB/s
+                                   FillCharFast [cpuAVX] in 12.09ms, 32.1 GB/s
+  Move in 1.90ms, 8.1 GB/s         MoveFast [] in 1.88ms, 8.3 GB/s
+  small Move in 8.59ms, 2.5 GB/s   small MoveFast [] in 6.84ms, 3.1 GB/s
+  big Move in 36.67ms, 4.2 GB/s    big MoveFast [] in 43.35ms, 3.6 GB/s
+                                   big MoveFast [cpuERMS] in 197.29ms, 3.1 GB/s
+ Small backward/forward moves (on FPC Linux):
+  1b Move in 93us, 205 MB/s         1b MoveFast [] in 72us, 264.9 MB/s
+  2b Move in 108us, 353.2 MB/s      2b MoveFast [] in 84us, 454.1 MB/s
+  3b Move in 142us, 402.9 MB/s      3b MoveFast [] in 70us, 817.4 MB/s
+  4b Move in 164us, 465.2 MB/s      4b MoveFast [] in 74us, 1 GB/s
+  5b Move in 172us, 554.4 MB/s      5b MoveFast [] in 73us, 1.2 GB/s
+  6b Move in 181us, 632.2 MB/s      6b MoveFast [] in 85us, 1.3 GB/s
+  7b Move in 156us, 855.8 MB/s      7b MoveFast [] in 143us, 0.9 GB/s
+  8b Move in 175us, 871.9 MB/s      8b MoveFast [] in 73us, 2 GB/s
+  9b Move in 180us, 0.9 GB/s        9b MoveFast [] in 144us, 1.1 GB/s
+  10b Move in 186us, 1 GB/s         10b MoveFast [] in 153us, 1.2 GB/s
+  11b Move in 188us, 1 GB/s         11b MoveFast [] in 146us, 1.4 GB/s
+  12b Move in 159us, 1.4 GB/s       12b MoveFast [] in 148us, 1.5 GB/s
+  13b Move in 159us, 1.5 GB/s       13b MoveFast [] in 146us, 1.6 GB/s
+  14b Move in 161us, 1.6 GB/s       14b MoveFast [] in 146us, 1.7 GB/s
+  15b Move in 154us, 1.8 GB/s       15b MoveFast [] in 143us, 1.9 GB/s
+  16b Move in 160us, 1.8 GB/s       16b MoveFast [] in 73us, 4 GB/s
+  17b Move in 173us, 1.8 GB/s       17b MoveFast [] in 153us, 2 GB/s
+  18b Move in 190us, 1.7 GB/s       18b MoveFast [] in 153us, 2.1 GB/s
+  19b Move in 185us, 1.9 GB/s       19b MoveFast [] in 157us, 2.2 GB/s
+  20b Move in 160us, 2.3 GB/s       20b MoveFast [] in 154us, 2.4 GB/s
+  21b Move in 159us, 2.4 GB/s       21b MoveFast [] in 153us, 2.5 GB/s
+  22b Move in 163us, 2.5 GB/s       22b MoveFast [] in 153us, 2.6 GB/s
+  23b Move in 176us, 2.4 GB/s       23b MoveFast [] in 153us, 2.8 GB/s
+  24b Move in 189us, 2.3 GB/s       24b MoveFast [] in 73us, 6.1 GB/s
+  25b Move in 187us, 2.4 GB/s       25b MoveFast [] in 163us, 2.8 GB/s
+  26b Move in 198us, 2.4 GB/s       26b MoveFast [] in 168us, 2.8 GB/s
+  27b Move in 203us, 2.4 GB/s       27b MoveFast [] in 178us, 2.8 GB/s
+  28b Move in 171us, 3 GB/s         28b MoveFast [] in 171us, 3 GB/s
+  29b Move in 178us, 3 GB/s         29b MoveFast [] in 163us, 3.3 GB/s
+  30b Move in 185us, 3 GB/s         30b MoveFast [] in 163us, 3.4 GB/s
+  31b Move in 188us, 3 GB/s         31b MoveFast [] in 162us, 3.5 GB/s
+  32b Move in 203us, 2.9 GB/s       32b MoveFast [] in 72us, 8.2 GB/s
+  40b Move in 2.09ms, 3.5 GB/s      40b MoveFast [] in 1.61ms, 4.6 GB/s
+  44b Move in 1.82ms, 4.4 GB/s      44b MoveFast [] in 1.61ms, 5 GB/s
+  48b Move in 2.05ms, 4.3 GB/s      48b MoveFast [] in 1.67ms, 5.3 GB/s
+  65b Move in 2.43ms, 4.9 GB/s      65b MoveFast [] in 1.79ms, 6.7 GB/s
+  80b Move in 2.29ms, 6.4 GB/s      80b MoveFast [] in 1.85ms, 8 GB/s
+  86b Move in 2.29ms, 6.9 GB/s      86b MoveFast [] in 1.85ms, 8.6 GB/s
+  99b Move in 2.96ms, 6.2 GB/s      99b MoveFast [] in 1.91ms, 9.6 GB/s
+  110b Move in 2.47ms, 8.2 GB/s     110b MoveFast [] in 2ms, 10.2 GB/s
+  126b Move in 3.69ms, 6.3 GB/s     126b MoveFast [] in 2.15ms, 10.8 GB/s
+  145b Move in 3.25ms, 8.2 GB/s     145b MoveFast [] in 2.22ms, 12.1 GB/s
+  161b Move in 3.73ms, 8 GB/s       161b MoveFast [] in 2.39ms, 12.5 GB/s
+  179b Move in 3.35ms, 9.9 GB/s     179b MoveFast [] in 2.63ms, 12.6 GB/s
+  207b Move in 3.13ms, 12.2 GB/s    207b MoveFast [] in 2.96ms, 13 GB/s
+  224b Move in 3.81ms, 10.9 GB/s    224b MoveFast [] in 3.16ms, 13.1 GB/s
+  255b Move in 3.78ms, 12.5 GB/s    255b MoveFast [] in 3.47ms, 13.6 GB/s
+  256b Move in 3.85ms, 12.3 GB/s    256b MoveFast [] in 3.51ms, 13.5 GB/s
+
+  On Delphi XE4 Win64:
+    FillChar in 34.42ms, 11.2 GB/s   FillCharFast [] in 15.03ms, 25.8 GB/s
+    Move in 3.76ms, 4.1 GB/s         MoveFast [] in 2.17ms, 7.1 GB/s
+    small Move in 7.51ms, 2.9 GB/s   small MoveFast [] in 6.87ms, 3.1 GB/s
+    big Move in 67.06ms, 2.3 GB/s    big MoveFast [] in 47.64ms, 3.2 GB/s
+  On Delphi 10.3 Win64 (on my ERMS CPU):
+    FillChar in 28.82ms, 13.4 GB/s   FillCharFast [] in 15.18ms, 25.5 GB/s
+    Move in 3.68ms, 4.2 GB/s         MoveFast [] in 2.13ms, 7.3 GB/s
+    small Move in 7.01ms, 3.1 GB/s   small MoveFast [] in 6.73ms, 3.2 GB/s
+    big Move in 50.90ms, 3 GB/s      big MoveFast [] in 47.96ms, 3.2 GB/s
+
+  -> FillCharFast/MoveFast are faster - only FPC RTL seems better for big Moves
+  -> no AVX MoveFast has been made yet (not sure it is worth it)
+  -> Delphi doesn't support AVX assembly yet
+  -> cpuERMS - of little benefit - is disabled, unless WITH_ERMS is defined
+}
+
+// these stand-alone functions will use CPUIDX64 to adjust the algorithm
+procedure MoveFast(const src; var dst; cnt: PtrInt);
+{$ifdef FPC}nostackframe; assembler;
+asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         {$ifdef WIN64}
-        cmp     rdx, 2048
-        jb      FillCharx64
-        cld
-        push    rdi // preserve non volatile registers
         mov     rax, r8
-        mov     rdi, rcx
-        mov     rcx, rdx
-        rep     stosb
-        pop     rdi
         {$else}
-        cmp     rsi, 2048
-        jb      FillCharx64
-        cld
-        mov     rax, rdx
-        mov     rcx, rsi
-        rep     stosb
+        mov     rax, rdx // rax=r8=cnt
+        mov     r8, rdx
         {$endif}
+        lea     r10, [rip+@jmptab]
+        cmp     src, dst
+        je      @equal
+        cmp     cnt, 32
+        ja      @lrg  // >32
+        sub     rax, 8
+        jg      @sml  // 9..32
+        jmp     qword ptr[r10 + 64 + rax * 8]  // 0..7
+@equal: ret
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+@jmptab:dq      @exit, @01, @02, @03, @04, @05, @06, @07, @08
+@sml:   mov     r8, qword ptr[src + rax] // last 8
+        mov     r9, qword ptr[src]       // first 8
+        cmp     al, 8
+        jle     @sml16
+        mov     r10, qword ptr[src + 8]  // second 8
+        cmp     al, 16
+        jle     @sml24
+        mov     r11, qword ptr[src + 16] // third 8
+        mov     qword ptr[dst + 16], r11 // third 8
+@sml24: mov     qword ptr[dst + 8], r10  // second 8
+@sml16: mov     qword ptr[dst], r9       // first 8
+        mov     qword ptr[dst + rax], r8 // last 8 (may be overlapping)
+        ret
+@02:    movzx   eax, word ptr[src] // use small size moves as code alignment
+        mov     word ptr[dst], ax
+        ret
+@04:    mov     eax, [src]
+        mov     dword ptr[dst], eax
+        ret
+@08:    mov     rax, [src]
+        mov     [dst], rax
+@exit:  ret
+@lrg:   jng     @exit   // cnt < 0
+        cmp     src, dst
+        ja      @lrgfwd
+        sub     dst, rax
+        cmp     src, dst
+        lea     dst, [dst + rax]
+        ja     @lrgbwd
+@lrgfwd:{$ifdef WITH_ERMS}
+        test    byte ptr[rip+CPUIDX64], 1 shl cpuERMS
+        jz      @nofwe
+        cmp     rax, 2048
+        jb      @nofwe
+        cld
+@repmov:{$ifdef WIN64}
+        push    rsi
+        push    rdi
+        mov     rsi, src
+        mov     rdi, dst
+        mov     rcx, r8
+        rep movsb
+        pop     rdi
+        pop     rsi
+        {$else}
+        mov     rax, dst // dst=rsi and src=rdi -> rax to swap
+        mov     rsi, src
+        mov     rdi, rax
+        mov     rcx, r8
+        rep movsb
+        {$endif}
+        ret
+@nofwe: {$endif WITH_ERMS}
+        mov     r9, dst
+        movdqu  xmm2, oword ptr[src]  // first 16
+        lea     src, [src + rax - 16]
+        lea     rax, [rax + dst - 16]
+        movdqu  xmm1, oword ptr[src]  // last 16
+        mov     r10, rax
+        neg     rax
+        and     dst,  -16  // 16-byte aligned writes
+        lea     rax, [rax + dst + 16]
+        cmp     r8, CPUCACHEX64
+        ja      @fwdnv  // bypass cache for cnt>512KB
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@fwd:   movdqu  xmm0, oword ptr[src + rax]  // regular loop
+        movdqa  [r10 + rax], xmm0
+        add     rax, 16
+        jl      @fwd
+@fwdend:movdqu  [r10], xmm1 // last 16
+        movdqu  [r9], xmm2  // first 16
+        ret
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@fwdnv: movdqu  xmm0, oword ptr[src + rax]  // non-temporal loop
+        movntdq [r10 + rax], xmm0
+        add     rax, 16
+        jl      @fwd
+        jmp     @fwdend
+@lrgbwd:{$ifdef WITH_ERMS}  // backward move
+        test    byte ptr[rip+CPUIDX64], 1 shl cpuERMS
+        jz      @nobwe
+        cmp     rax, 2048
+        jb      @nobwe
+        std
+        lea     src, [src + rax - 1]
+        lea     dst, [dst + rax - 1]
+        jmp     @repmov
+@nobwe: {$endif WITH_ERMS}
+        sub     rax, 16
+        mov     r9, rax
+        movdqu  xmm2, oword ptr[src + rax]  // last 16
+        movdqu  xmm1, oword ptr[src]        // first 16
+        add     rax, dst
+        and     rax, -16  // 16-byte aligned writes
+        sub     rax, dst
+        cmp     r8, CPUCACHEX64
+        ja      @bwdnv    // bypass cache for cnt>512KB
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@bwd:   movdqu  xmm0, oword ptr[src + rax]  // regular loop
+        movdqa  oword ptr[dst + rax], xmm0
+        sub     rax, 16
+        jg      @bwd
+@bwdend:movdqu  oword ptr[dst], xmm1       // first 16
+        movdqu  oword ptr[dst + r9], xmm2  // last 16
+        ret
+@01:    mov     al, byte ptr[src]
+        mov     byte ptr[dst], al
+        ret
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@bwdnv: movdqu  xmm0, oword ptr[src + rax]  // non-temporal loop
+        movntdq oword ptr[dst + rax], xmm0
+        sub     rax, 16
+        jg      @bwdnv
+        jmp     @bwdend
+@03:    movzx   eax, word ptr[src]
+        mov     cl, byte ptr[src + 2]
+        mov     word ptr[dst], ax
+        mov     byte ptr[dst + 2], cl
+        ret
+@05:    mov     eax, dword ptr[src]
+        mov     cl, byte ptr[src + 4]
+        mov     dword ptr[dst], eax
+        mov     byte ptr[dst + 4], cl
+        ret
+@06:    mov     eax, dword ptr[src]
+        mov     cx, word ptr[src + 4]
+        mov     dword ptr[dst], eax
+        mov     word ptr[dst + 4], cx
+        ret
+@07:    mov     eax, dword ptr[src]
+        mov     ecx, dword ptr[src + 3]
+        mov     dword ptr[dst], eax
+        mov     dword ptr[dst + 3], ecx
+end;
+
 end;
 {$endif CPUX64}
 
@@ -38480,7 +38582,7 @@ asm .noframe {$endif FPC} {$else}
 {$ifdef FPC}nostackframe; assembler;{$endif} asm
 {$endif}
   // rdrand eax: same opcodes for x86 and x64
-  db $0f,$c7,$f0
+  db $0f, $c7, $f0
   // returns in eax, ignore carry flag (eax=0 won't hurt)
 end;
 {$endif CPUINTEL}
@@ -39668,11 +39770,11 @@ begin
   n := ValuesCount;
   if result<n then begin
     n := (n-result)*SizeOf(pointer);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Pointer(Values[result]),Pointer(Values[result+1]),n);
+    MoveFast(Pointer(Values[result]),Pointer(Values[result+1]),n);
     PtrInt(Values[result]) := 0; // avoid GPF
     if CoValues<>nil then begin
       {$ifdef CPU64}n := n shr 1;{$endif} // 64-bit pointer size is twice an integer
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(CoValues^[result],CoValues^[result+1],n);
+      MoveFast(CoValues^[result],CoValues^[result+1],n);
     end;
   end else
     result := n;
@@ -39755,8 +39857,7 @@ begin
       Values := copy(Values); // unique
     Values[Index] := ''; // avoid GPF
     if n>Index then begin
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(
-        pointer(Values[Index+1]),pointer(Values[Index]),(n-Index)*SizeOf(pointer));
+      MoveFast(pointer(Values[Index+1]),pointer(Values[Index]),(n-Index)*SizeOf(pointer));
       PtrUInt(Values[n]) := 0; // avoid GPF
     end;
     SetLength(Values,n);
@@ -39779,10 +39880,8 @@ begin
     dec(n,Index);
     if n>0 then begin
       if CoValues<>nil then
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(
-          CoValues^[Index+1],CoValues^[Index],n*SizeOf(Integer));
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(
-        pointer(Values[Index+1]),pointer(Values[Index]),n*SizeOf(pointer));
+        MoveFast(CoValues^[Index+1],CoValues^[Index],n*SizeOf(Integer));
+      MoveFast(pointer(Values[Index+1]),pointer(Values[Index]),n*SizeOf(pointer));
       PtrUInt(Values[ValuesCount]) := 0; // avoid GPF
     end;
     result := true;
@@ -40458,8 +40557,7 @@ begin
   if Count=length(Values) then
     SetLength(Values,Count+100);
   if result<Count then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      Values[result],Values[result+1],(Count-result)*2) else
+    MoveFast(Values[result],Values[result+1],(Count-result)*2) else
     result := Count;
   Values[result] := aValue;
   inc(Count);
@@ -41101,7 +41199,7 @@ begin
   Len := Length(Value);
   Dest := ToVarUInt32(Len,Dest);
   if Len>0 then begin
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(Value)^,Dest^,Len);
+    MoveFast(pointer(Value)^,Dest^,Len);
     result := pointer(PAnsiChar(Dest)+Len);
   end else
     result := Dest;
@@ -41502,7 +41600,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
       result := pointer(ToVarUInt32(itemsize,pointer(dest)));
       {$ifdef HASINLINE}if itemsize<MOVESMALL_MAX then
         MoveSmall(pointer(P^),result,itemsize) else{$endif}
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(P^)^,result^,itemsize);
+        MoveFast(pointer(P^)^,result^,itemsize);
       inc(result,itemsize);
     end;
     len := SizeOf(PtrUInt); // size of tkLString/tkUString in record
@@ -41510,7 +41608,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   tkWString: begin
     itemsize := length(PWideString(P)^)*2; // PStrRec doesn't match on FPC
     result := pointer(ToVarUInt32(itemsize,pointer(dest)));
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(P^)^,result^,itemsize);
+    MoveFast(pointer(P^)^,result^,itemsize);
     inc(result,itemsize);
     len := SizeOf(PtrUInt);
   end;
@@ -42337,219 +42435,7 @@ asm
   {$endif}
 end;
 
-{$ifdef CPU64}
-
-procedure Movex64;
-asm .noframe // rcx=Source, rdx=Dest, r8=Count
-        mov     rax, r8
-        sub     rcx, rdx
-        je      @11
-        jnc     @03
-        add     rax, rcx
-        jc      @17
-@03:    cmp     r8, 8
-        jl      @09
-        test    dl, 07H
-        jz      @06
-        test    dl, 01H
-        jz      @04
-        mov     al, byte ptr[rcx + rdx]
-        dec     r8
-        mov     byte ptr[rdx], al
-        add     rdx, 1
-@04:    test    dl, 02H
-        jz      @05
-        mov     ax, word ptr[rcx + rdx]
-        sub     r8, 2
-        mov     word ptr[rdx], ax
-        add     rdx, 2
-@05:    test    dl, 04H
-        jz      @06
-        mov     eax, dword ptr[rcx + rdx]
-        sub     r8, 4
-        mov     dword ptr[rdx], eax
-        add     rdx, 4
-@06:    mov     r9, r8
-        shr     r9, 5
-        jnz     @12
-@07:    mov     r9, r8
-        shr     r9, 3
-        jz      @09
-        nop
-@08:    mov     rax, qword ptr[rcx + rdx]
-        mov     qword ptr[rdx], rax
-        add     rdx, 8
-        dec     r9
-        jnz     @08
-        and     r8, 07H
-@09:    test    r8, r8
-        jle     @11
-@10:    mov     al, byte ptr[rcx + rdx]
-        mov     byte ptr[rdx], al
-        add     rdx, 1
-        dec     r8
-        jnz     @10
-@11:    ret
-@12:    cmp     r9, 8192
-        jc      @13
-        cmp     rcx, 4096
-        jnc     @14
-@13:    add     rdx, 32
-        mov     rax, qword ptr[rcx + rdx - 20H]
-        mov     r10, qword ptr[rcx + rdx - 18H]
-        mov     qword ptr[rdx - 20H], rax
-        mov     qword ptr[rdx - 18H], r10
-        mov     rax, qword ptr[rcx + rdx - 10H]
-        mov     r10, qword ptr[rcx + rdx - 8H]
-        mov     qword ptr[rdx - 10H], rax
-        mov     qword ptr[rdx - 8H], r10
-        dec     r9
-        jnz     @13
-        and     r8, 1FH
-        jmp     @07
-@14:    mov     eax, 32
-@15:    prefetchnta [rcx + rdx]
-        prefetchnta [rcx + rdx + 40H]
-        add     rdx, 128
-        dec     eax
-        jnz     @15
-        sub     rdx, 4096
-        mov     eax, 64
-@16:    add     rdx, 64
-        mov     r9, qword ptr[rcx + rdx - 40H]
-        mov     r10, qword ptr[rcx + rdx - 38H]
-        db      $4C, $0F, $C3, $4A, $C0 // movnti qword ptr [rdx-40H],r9
-        db      $4C, $0F, $C3, $52, $C8 // movnti qword ptr [rdx-38H],r10
-        mov     r9, qword ptr[rcx + rdx - 30H]
-        mov     r10, qword ptr[rcx + rdx - 28H]
-        db      $4C, $0F, $C3, $4A, $D0 // movnti qword ptr [rdx-30H],r9
-        db      $4C, $0F, $C3, $52, $D8 // movnti qword ptr [rdx-28H],r10
-        dec     eax
-        mov     r9, qword ptr[rcx + rdx - 20H]
-        mov     r10, qword ptr[rcx + rdx - 18H]
-        db      $4C, $0F, $C3, $4A, $E0 // movnti qword ptr [rdx-20H],r9
-        db      $4C, $0F, $C3, $52, $E8 // movnti qword ptr [rdx-18H],r10
-        mov     r9, qword ptr[rcx + rdx - 10H]
-        mov     r10, qword ptr[rcx + rdx - 8H]
-        db      $4C, $0F, $C3, $4A, $F0 // movnti qword ptr [rdx-10H],r9
-        db      $4C, $0F, $C3, $52, $F8 // movnti qword ptr [rdx-8H],r10
-        jnz     @16
-        sub     r8, 4096
-        cmp     r8, 4096
-        jnc     @14
-        mfence
-        jmp     @06
-@17:    add     rdx, r8
-        cmp     r8, 8
-        jl      @23
-        test    dl, 07H
-        jz      @20
-        test    dl, 01H
-        jz      @18
-        dec     rdx
-        mov     al, byte ptr[rcx + rdx]
-        dec     r8
-        mov     byte ptr[rdx], al
-@18:    test    dl, 02H
-        jz      @19
-        sub     rdx, 2
-        mov     ax, word ptr[rcx + rdx]
-        sub     r8, 2
-        mov     word ptr[rdx], ax
-@19:    test    dl, 04H
-        jz      @20
-        sub     rdx, 4
-        mov     eax, dword ptr[rcx + rdx]
-        sub     r8, 4
-        mov     dword ptr[rdx], eax
-@20:    mov     r9, r8
-        shr     r9, 5
-        jnz     @26
-@21:    mov     r9, r8
-        shr     r9, 3
-        jz      @23
-@22:    sub     rdx, 8
-        mov     rax, qword ptr[rcx + rdx]
-        dec     r9
-        mov     qword ptr[rdx], rax
-        jnz     @22
-        and     r8, 07H
-@23:    test    r8, r8
-        jle     @25
-@24:    dec     rdx
-        mov     al, byte ptr[rcx + rdx]
-        dec     r8
-        mov     byte ptr[rdx], al
-        jnz     @24
-@25:    ret
-@26:    cmp     r9, 8192
-        jc      @27
-        cmp     rcx,  - 4096
-        jc      @28
-@27:    sub     rdx, 32
-        mov     rax, qword ptr[rcx + rdx + 18H]
-        mov     r10, qword ptr[rcx + rdx + 10H]
-        mov     qword ptr[rdx + 18H], rax
-        mov     qword ptr[rdx + 10H], r10
-        dec     r9
-        mov     rax, qword ptr[rcx + rdx + 8H]
-        mov     r10, qword ptr[rcx + rdx]
-        mov     qword ptr[rdx + 8H], rax
-        mov     qword ptr[rdx], r10
-        jnz     @27
-        and     r8, 1FH
-        jmp     @21
-@28:    mov     eax, 32
-@29:    sub     rdx, 128
-        prefetchnta [rcx + rdx]
-        prefetchnta [rcx + rdx + 40H]
-        dec     eax
-        jnz     @29
-        add     rdx, 4096
-        mov     eax, 64
-@30:    sub     rdx, 64
-        sub     r8, 4096
-        mov     r9, qword ptr[rcx + rdx + 38H]
-        mov     r10, qword ptr[rcx + rdx + 30H]
-        db      $4C, $0F, $C3, $4A, $38 // movnti qword ptr [rdx+38H],r9
-        db      $4C, $0F, $C3, $52, $30 // movnti qword ptr [rdx+30H],r10
-        mov     r9, qword ptr[rcx + rdx + 28H]
-        mov     r10, qword ptr[rcx + rdx + 20H]
-        db      $4C, $0F, $C3, $4A, $28 // movnti qword ptr [rdx+28H],r9
-        db      $4C, $0F, $C3, $52, $20 // movnti qword ptr [rdx+20H],r10
-        dec     eax
-        mov     r9, qword ptr[rcx + rdx + 18H]
-        mov     r10, qword ptr[rcx + rdx + 10H]
-        db      $4C, $0F, $C3, $4A, $18 // movnti qword ptr [rdx+18H],r9
-        db      $4C, $0F, $C3, $52, $10 // movnti qword ptr [rdx+10H],r10
-        mov     r9, qword ptr[rcx + rdx + 8H]
-        mov     r10, qword ptr[rcx + rdx]
-        db      $4C, $0F, $C3, $4A, $08 // movnti qword ptr [rdx+8H],r9
-        db      $4C, $0F, $C3, $12 // movnti qword ptr [rdx],r10
-        jnz     @30
-        cmp     r8, 4096
-        jnc     @28
-        mfence
-        jmp     @20
-end;
-
-{$ifdef WITH_ERMS} // x64 version only for Windows ABI
-procedure FillCharERMSB; // Ivy Bridge+ Enhanced REP MOVSB/STOSB CPUs
-asm .noframe // rcx=Dest, rdx=Count, r8b=Value
-        test    rdx, rdx
-        jle     @none
-        cld
-        push    rdi
-        mov     rdi, rcx
-        mov     rax, r8
-        mov     rcx, rdx
-        rep     stosb
-        pop     rdi
-@none:
-end;
-{$endif WITH_ERMS}
-
-{$else CPU64}
+{$ifndef CPU64}
 
 {$ifndef PUREPASCAL}
 
@@ -42711,6 +42597,7 @@ asm // eax=source edx=dest ecx=count
         mov     [edx + 4], eax
 end;
 
+{$ifdef WITH_ERMS}
 procedure FillCharERMSB; // Ivy Bridge+ Enhanced REP MOVSB/STOSB CPUs
 asm // eax=Dest edx=Count cl=Value
       test    edx, edx
@@ -42729,13 +42616,13 @@ procedure MoveERMSB; // Ivy Bridge+ Enhanced REP MOVSB/STOSB CPUs
 asm // eax=source edx=dest ecx=count
       test    ecx, ecx
       jle     @none
-      cld
       push    esi
       push    edi
       cmp     edx, eax
       ja      @down
       mov     esi, eax
       mov     edi, edx
+      cld
       rep     movsb
       pop     edi
       pop     esi
@@ -42748,6 +42635,7 @@ asm // eax=source edx=dest ecx=count
       pop     esi
       cld
 end;
+{$endif WITH_ERMS}
 
 function StrLenX86(S: pointer): PtrInt;
 // pure x86 function (if SSE2 not available) - faster than SysUtils' version
@@ -42858,7 +42746,7 @@ begin
   MoveFast := @MoveX87;
   FillcharFast := @FillCharX87;
   {$else DELPHI5OROLDER}
-  {$ifdef CPU64}
+  {$ifdef CPU64} // x86_64 redirection
   {$ifdef HASAESNI}
   {$ifdef FORCE_STRSSE42}
   if cfSSE42 in CpuFeatures then begin
@@ -42868,17 +42756,7 @@ begin
   {$endif FORCE_STRSSE42}
   {$endif HASAESNI}
     StrLen := @StrLenSSE2;
-  {$ifdef WITH_ERMS}{$ifdef MSWINDOWS} // disabled (slower for small blocks)
-  if cfERMS in CpuFeatures then begin
-    MoveFast := @MoveERMSB;
-    FillcharFast := @FillCharERMSB;
-  end else {$endif}{$endif} begin
-    MoveFast := @Movex64;
-    if cfERMS in CpuFeatures then
-      FillCharFast := @Fillcharx64ERMS else
-      FillCharFast := @Fillcharx64;
-  end;
-  {$else CPU64}
+  {$else}       // i386 redirection
   {$ifdef CPUINTEL}
   if cfSSE2 in CpuFeatures then begin
     {$ifdef FORCE_STRSSE42}
@@ -45153,7 +45031,7 @@ begin
       if LenBytes>0 then begin // direct raw copy
         {$ifdef HASINLINE}if LenBytes<MOVESMALL_MAX then
           MoveSmall(VAny,Dest,LenBytes) else{$endif}
-          {$ifdef FPC}Move{$else}MoveFast{$endif}(PPtrUInt(VAny)^,Dest^,LenBytes);
+          MoveFast(PPtrUInt(VAny)^,Dest^,LenBytes);
         inc(Dest,LenBytes);
       end;
     end;
@@ -47290,12 +47168,10 @@ begin
     VarClear(VValue[Index]);
     if Index<VCount then begin
       if VName<>nil then begin
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(
-          VName[Index+1],VName[Index],(VCount-Index)*SizeOf(pointer));
+        MoveFast(VName[Index+1],VName[Index],(VCount-Index)*SizeOf(pointer));
         PtrUInt(VName[VCount]) := 0; // avoid GPF
       end;
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(
-        VValue[Index+1],VValue[Index],(VCount-Index)*SizeOf(variant));
+      MoveFast(VValue[Index+1],VValue[Index],(VCount-Index)*SizeOf(variant));
       TVarData(VValue[VCount]).VType := varEmpty; // avoid GPF
     end;
     result := true;
@@ -49130,7 +49006,7 @@ begin
   SetCount(n+1);
   if PtrUInt(Index)<PtrUInt(n) then begin
     P := pointer(PtrUInt(fValue^)+PtrUInt(Index)*ElemSize);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(P[0],P[ElemSize],PtrUInt(n-Index)*ElemSize);
+    MoveFast(P[0],P[ElemSize],PtrUInt(n-Index)*ElemSize);
     if ElemType<>nil then // avoid GPF in ElemCopy() below
       FillCharFast(P^,ElemSize,0);
   end else
@@ -49182,7 +49058,7 @@ begin
       FreeAndNil(PObject(P)^);
   if n>aIndex then begin
     len := PtrUInt(n-aIndex)*ElemSize;
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(P[ElemSize],P[0],len);
+    MoveFast(P[ElemSize],P[0],len);
     FillCharFast(P[len],ElemSize,0);
   end else
     FillCharFast(P^,ElemSize,0);
@@ -49390,7 +49266,7 @@ begin
       raise ESynException.CreateUTF8('TDynArray.SaveTo(%) is a T*ObjArray',
         [ArrayTypeShort^]) else begin
       n := n*integer(ElemSize); // binary types: store as one
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,Dest^,n);
+      MoveFast(P^,Dest^,n);
       inc(Dest,n);
     end else
     if PTypeKind(ElemType)^ in tkRecordTypes then
@@ -49877,7 +49753,7 @@ begin
       // binary type was stored directly
       n := n*integer(ElemSize);
       if (SourceMax<>nil) and (Source+n>SourceMax) then exit;
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(Source^,P^,n);
+      MoveFast(Source^,P^,n);
       inc(Source,n);
     end else
     if PTypeKind(ElemType)^ in tkRecordTypes then
@@ -50538,7 +50414,7 @@ begin
     if ElemType=nil then
       if not ObjArrayByRef and GetIsObjArray then
         LoadFromJSON(pointer(Source.SaveToJSON)) else
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(Source.fValue^^,fValue^^,n*ElemSize) else
+        MoveFast(Source.fValue^^,fValue^^,n*ElemSize) else
       CopyArray(fValue^,Source.fValue^,ElemType,n);
 end;
 
@@ -50765,7 +50641,7 @@ begin // this method is faster than default System.DynArraySetLength() function
         FillCharFast(pp^,minLength*elemSize,0);
         CopyArray(pp,fValue^,ElemType,minLength);
       end else
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(fValue^^,pp^,minLength*elemSize);
+        MoveFast(fValue^^,pp^,minLength*elemSize);
     end;
   end;
   // set refCnt=1 and new length to the heap memory structure
@@ -50891,7 +50767,7 @@ begin
   if aCount>0 then begin
     P := PAnsiChar(fValue^)+aFirstIndex*ElemSize;
     if ElemType=nil then
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,D^^,aCount*ElemSize) else
+      MoveFast(P^,D^^,aCount*ElemSize) else
       CopyArray(D^,P,ElemType,aCount);
   end;
 end;
@@ -50916,7 +50792,7 @@ begin
   PS := pointer(PtrUInt(DynArrayVar)+cardinal(aStartIndex)*ElemSize);
   PD := pointer(PtrUInt(fValue^)+cardinal(n)*ElemSize);
   if ElemType=nil then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(PS^,PD^,cardinal(aCount)*ElemSize) else
+    MoveFast(PS^,PD^,cardinal(aCount)*ElemSize) else
     CopyArray(PD,PS,ElemType,aCount);
 end;
 
@@ -51903,9 +51779,7 @@ begin
     TObjectDynArray(fValue^)[Index].Free;
   dec(fCount);
   if fCount>Index then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      TObjectDynArray(fValue^)[Index+1],TObjectDynArray(fValue^)[Index],
-      (fCount-Index)*SizeOf(pointer));
+    MoveFast(P[Index+1],P[Index],(fCount-Index)*SizeOf(pointer));
 end;
 
 procedure TObjectDynArrayWrapper.Clear;
@@ -51986,8 +51860,7 @@ begin
     exit; // out of range
   dec(n);
   if n>aIndex then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      a[aIndex+1],a[aIndex],(n-aIndex)*SizeOf(pointer));
+    MoveFast(a[aIndex+1],a[aIndex],(n-aIndex)*SizeOf(pointer));
   if aCount=nil then
     SetLength(a,n) else
     aCount^ := n;
@@ -52005,8 +51878,7 @@ begin
     exit;
   dec(n);
   if n>result then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      a[result+1],a[result],(n-result)*SizeOf(pointer));
+    MoveFast(a[result+1],a[result],(n-result)*SizeOf(pointer));
   if aCount=nil then
     SetLength(a,n) else
     aCount^ := n;
@@ -52036,7 +51908,7 @@ begin
   result := length(d);
   n := length(s);
   SetLength(d,result+n);
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(s[0],d[result],n*SizeOf(pointer));
+  MoveFast(s[0],d[result],n*SizeOf(pointer));
   inc(result,n);
 end;
 
@@ -52130,8 +52002,7 @@ begin
     a[aItemIndex].Free;
   dec(n);
   if n>aItemIndex then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      a[aItemIndex+1],a[aItemIndex],(n-aItemIndex)*SizeOf(TObject));
+    MoveFast(a[aItemIndex+1],a[aItemIndex],(n-aItemIndex)*SizeOf(TObject));
   if aCount=nil then
     SetLength(a,n) else
     aCount^ := n;
@@ -52285,8 +52156,7 @@ begin
   a[aItemIndex] := nil;
   dec(n);
   if n>aItemIndex then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      a[aItemIndex+1],a[aItemIndex],(n-aItemIndex)*SizeOf(IInterface));
+    MoveFast(a[aItemIndex+1],a[aItemIndex],(n-aItemIndex)*SizeOf(IInterface));
   TPointerDynArray(aInterfaceArray)[n] := nil; // avoid GPF in SetLength()
   SetLength(a,n);
 end;
@@ -52912,8 +52782,7 @@ begin
   if fCount=length(fObjArray) then
     SetLength(fObjArray,NextGrow(fCount));
   if cardinal(Index)<cardinal(fCount) then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      fObjArray[Index],fObjArray[Index+1],(fCount-Index)*SizeOf(TObject)) else
+    MoveFast(fObjArray[Index],fObjArray[Index+1],(fCount-Index)*SizeOf(TObject)) else
     Index := fCount;
   fObjArray[Index] := Item;
   inc(fCount);
@@ -52929,8 +52798,7 @@ begin
       fObjArray[i].Free;
       dec(fCount);
       if fCount>i then
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(
-          fObjArray[i+1],fObjArray[i],(fCount-i)*SizeOf(TObject));
+        MoveFast(fObjArray[i+1],fObjArray[i],(fCount-i)*SizeOf(TObject));
       result := true;
     end;
   finally
@@ -54949,7 +54817,7 @@ begin
       if i>0 then begin
         {$ifdef HASINLINE}if i<MOVESMALL_MAX then
           MoveSmall(P,B,i) else{$endif}
-          {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,B^,i);
+          MoveFast(P^,B^,i);
         inc(B,i);
       end;
       if i=Len then
@@ -55285,7 +55153,7 @@ noesc:c := i;
         AddNoJSONEscape(P,i) else begin
         {$ifdef HASINLINE}if i<MOVESMALL_MAX then
           MoveSmall(P,B+1,i) else{$endif}
-          {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,B[1],i);
+          MoveFast(P^,B[1],i);
         inc(B,i);
       end;
       if i>=Len then
@@ -55716,7 +55584,7 @@ begin
   if L<fTempBufSize then begin
     if BEnd-B<=L then
       FlushToStream;
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(Text)^,B[1],L);
+    MoveFast(pointer(Text)^,B[1],L);
     inc(B,L);
   end else
     AddNoJSONEscape(pointer(Text),L);
@@ -56063,7 +55931,7 @@ begin
     dec(L);
   LI := length(fEchoBuf); // fast append to fEchoBuf
   SetLength(fEchoBuf,LI+L);
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,PByteArray(fEchoBuf)[LI],L);
+  MoveFast(P^,PByteArray(fEchoBuf)[LI],L);
 end;
 
 procedure TTextWriterWithEcho.EchoReset;
@@ -59370,12 +59238,10 @@ begin
   // swap the string/object arrays
   dec(fCount);
   if Index<fCount then begin
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      fList[Index+1],fList[Index],(fCount-Index)*SizeOf(fList[0]));
+    MoveFast(fList[Index+1],fList[Index],(fCount-Index)*SizeOf(fList[0]));
     PPointer(@fList[fCount])^ := nil; // avoid GPF
     if fObjects<>nil then begin
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(
-        fObjects[Index+1],fObjects[Index],(fCount-Index)*SizeOf(fObjects[0]));
+      MoveFast(fObjects[Index+1],fObjects[Index],(fCount-Index)*SizeOf(fObjects[0]));
       fObjects[fCount] := nil; // avoid GPF if fObjectsOwned is set
     end;
   end;
@@ -60356,8 +60222,7 @@ procedure TRawUTF8MethodList.Delete(Index: PtrInt);
 begin
   inherited Delete(Index);
   if Index<length(fEvents) then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      fEvents[Index+1],fEvents[Index],(length(fEvents)-Index)*SizeOf(TMethod));
+    MoveFast(fEvents[Index+1],fEvents[Index],(length(fEvents)-Index)*SizeOf(TMethod));
 end;
 
 function TRawUTF8MethodList.GetEvent(aIndex: PtrInt;
@@ -61524,7 +61389,7 @@ begin
   end;
   {$ifdef HASINLINE}if DataLen<MOVESMALL_MAX then
     MoveSmall(Data,@fBuffer^[fPos],DataLen) else{$endif}
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Data^,fBuffer^[fPos],DataLen);
+    MoveFast(Data^,fBuffer^[fPos],DataLen);
   inc(fPos,DataLen);
 end;
 
@@ -61974,7 +61839,7 @@ begin
         n := (fBufLen-fPos)shr 2;
         if ValuesCount<n then
           n := ValuesCount;
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(Values^,P^,n*4);
+        MoveFast(Values^,P^,n*4);
         inc(P,n*4);
       end;
       wkVarInt32, wkVarUInt32, wkOffsetU, wkOffsetI: begin
@@ -62184,7 +62049,7 @@ begin
       if len>DataLen then
         len := DataLen;
       if Data<>nil then
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(fMap.fBuf[fCurrentPos],Data^,len);
+        MoveFast(fMap.fBuf[fCurrentPos],Data^,len);
       inc(fCurrentPos,len);
       result := len;
     end else
@@ -63251,7 +63116,7 @@ begin
     D := PAnsiChar(result.Memory)+resultSize;
     inc(resultSize,Head.UnCompressedSize);
     if stored then
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(S^,D^,Head.CompressedSize) else
+      MoveFast(S^,D^,Head.CompressedSize) else
     if SynLZDecompress1(S,Head.CompressedSize,D)<>Head.UnCompressedSize then
       FreeAndNil(result) else
     if Hash32(pointer(D),Head.UnCompressedSize)<>Head.HashUncompressed then
@@ -63389,7 +63254,7 @@ begin
     PCardinal(R)^ := crc;
     R[4] := COMPRESS_STORED;
     PCardinal(R+5)^ := crc;
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Plain^,R[9],PlainLen);
+    MoveFast(Plain^,R[9],PlainLen);
   end else begin
     len := CompressDestLen(PlainLen)+BufferOffset;
     if len>SizeOf(tmp) then begin
@@ -63403,7 +63268,7 @@ begin
     if len+64>=PlainLen then begin // store if compression was not worth it
       R[4] := COMPRESS_STORED;
       PCardinal(R+5)^ := crc;
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(Plain^,R[9],PlainLen);
+      MoveFast(Plain^,R[9],PlainLen);
       len := PlainLen;
     end else begin
       R[4] := AnsiChar(AlgoID);
@@ -63438,7 +63303,7 @@ begin
   end;
   Comp[4] := COMPRESS_STORED;
   PCardinal(Comp+5)^ := PCardinal(Comp)^;
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Plain^,Comp[9],PlainLen);
+  MoveFast(Plain^,Comp[9],PlainLen);
   result := PlainLen+9;
 end;
 
@@ -63465,7 +63330,7 @@ begin
     PCardinal(R)^ := crc;
     R[4] := COMPRESS_STORED;
     PCardinal(R+5)^ := crc;
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Plain^,R[9],PlainLen);
+    MoveFast(Plain^,R[9],PlainLen);
   end else begin
     SetLength(result,CompressDestLen(PlainLen));
     R := pointer(result);
@@ -63474,7 +63339,7 @@ begin
     if len>=PlainLen then begin // store if compression not worth it
       R[4] := COMPRESS_STORED;
       PCardinal(R+5)^ := crc;
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(Plain^,R[9],PlainLen);
+      MoveFast(Plain^,R[9],PlainLen);
       len := PlainLen;
     end else begin
       R[4] := AnsiChar(AlgoID);
@@ -63571,7 +63436,7 @@ begin
   if PartialLen>BodyLen then
     PartialLen := BodyLen;
   if Comp[4]=COMPRESS_STORED then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Comp[9],Partial[0],PartialLen) else
+    MoveFast(Comp[9],Partial[0],PartialLen) else
     if AlgoDecompressPartial(Comp+9,CompLen-9,Partial,PartialLen,PartialLenMax)<PartialLen then
       exit;
   result := PartialLen;
@@ -63599,7 +63464,7 @@ begin
   if (self=nil) or (PlainLen<=0) then
     exit;
   if Comp[4]=COMPRESS_STORED then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Comp[9],Plain[0],PlainLen) else
+    MoveFast(Comp[9],Plain[0],PlainLen) else
   if Comp[4]=AnsiChar(AlgoID) then
     case Load of
     aclNormal:
@@ -64040,7 +63905,7 @@ begin
     Result := Length(fDataString)-fPosition;
     if Result>Count then
       Result := Count;
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(PByteArray(fDataString)[fPosition],Buffer,Result);
+    MoveFast(PByteArray(fDataString)[fPosition],Buffer,Result);
     inc(fPosition, Result);
   end;
 end;
@@ -64072,7 +63937,7 @@ begin
     Result := 0 else begin
     Result := Count;
     SetLength(fDataString,fPosition+Result);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Buffer,PByteArray(fDataString)[fPosition],Result);
+    MoveFast(Buffer,PByteArray(fDataString)[fPosition],Result);
     inc(FPosition,Result);
   end;
 end;
@@ -64555,8 +64420,7 @@ begin
   max := length(Events);
   if cardinal(index)<cardinal(max) then begin
     dec(max);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      Events[index+1],Events[index],(max-index)*SizeOf(Events[index]));
+    MoveFast(Events[index+1],Events[index],(max-index)*SizeOf(Events[index]));
     SetLength(Events,max);
   end;
 end;
@@ -64571,7 +64435,7 @@ begin
   if n=0 then
     exit;
   SetLength(Dest,d+n);
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(New[0],Dest[d],n*SizeOf(TMethod));
+  MoveFast(New[0],Dest[d],n*SizeOf(TMethod));
 end;
 
 function EventEquals(const eventA,eventB): boolean;
@@ -64647,6 +64511,14 @@ begin
   Exclude(CpuFeatures, cfSSE42);
   Exclude(CpuFeatures, cfAESNI);
   {$endif}
+  {$ifdef CPUX64}
+  {$ifdef WITH_ERMS}
+  if cfERMS in CpuFeatures then // actually slower than our AVX code -> disabled
+    include(CPUIDX64,cpuERMS);
+  {$endif WITH_ERMS}
+  if cfAVX in CpuFeatures then
+    include(CPUIDX64,cpuAVX);
+  {$endif CPUX64}
   // validate accuracy of most used HW opcodes
   if cfRAND in CpuFeatures then
     try
@@ -64891,23 +64763,23 @@ initialization
   {$endif PUREPASCAL}
   crc32c := @crc32cfast; // now to circumvent Internal Error C11715 for Delphi 5
   crc32cBy4 := @crc32cBy4fast;
+ {$ifndef CPUX64}
   MoveFast := @System.Move;
+  {$endif CPUX64}
   {$ifdef FPC}
-  {$ifdef CPUX64} // we have our own x64 asm version, faster for small blocks
-  if cfERMS in CpuFeatures then
-    FillCharFast := @Fillcharx64ERMS else
-    FillCharFast := @Fillcharx64;
-  {$else}
+  {$ifndef CPUX64}
   FillCharFast := @System.FillChar; // fallback to FPC cross-platform RTL
   {$endif CPUX64}
   {$ifdef Linux}
   stdoutIsTTY := IsATTY(StdOutputHandle)=1;
   {$endif Linux}
-  {$else}
+  {$else Dephi: }
   {$ifdef CPUARM}
   FillCharFast := @System.FillChar;
   {$else}
+  {$ifndef CPUX64}
   Pointer(@FillCharFast) := SystemFillCharAddress;
+  {$endif CPUX64}
   {$ifndef USEPACKAGES}
   InitRedirectCode;
   {$endif USEPACKAGES}

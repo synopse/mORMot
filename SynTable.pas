@@ -4782,7 +4782,7 @@ begin
   with TSynTableFieldProperties(fField.List[F]) do
     if F in AvailableFields then begin
       Len := Lens[F];
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,Dest^,Len);
+      MoveFast(P^,Dest^,Len);
       inc(P,Len);
       inc(Dest,Len);
     end else begin
@@ -5426,8 +5426,8 @@ begin
     Len := {$ifdef FPC}length(Value){$else}PInteger(PtrUInt(Value)-SizeOf(integer))^{$endif};
     Head := PAnsiChar(ToVarUInt32(Len,@tmp))-tmp;
     SetLength(Result,Len+Head);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(tmp,PByteArray(Result)[0],Head);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(Value)^,PByteArray(Result)[Head],Len);
+    MoveFast(tmp,PByteArray(Result)[0],Head);
+    MoveFast(pointer(Value)^,PByteArray(Result)[Head],Len);
   end;
 end;
 
@@ -5453,8 +5453,8 @@ begin
     result := #0 else begin // inlined ToSBFStr() code
     Head := PAnsiChar(ToVarUInt32(ValueLen,@tmp))-tmp;
     SetString(Result,nil,ValueLen+Head);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(tmp,PByteArray(Result)[0],Head);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Value^,PByteArray(Result)[Head],ValueLen);
+    MoveFast(tmp,PByteArray(Result)[0],Head);
+    MoveFast(Value^,PByteArray(Result)[Head],ValueLen);
   end;
 end;
 
@@ -5933,7 +5933,7 @@ begin
           Cmp := high(tmp) else
           Cmp := L;
         tmp[Cmp] := #0; // TSynSoundEx expect the buffer to be #0 terminated
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(SBF^,tmp,Cmp);
+        MoveFast(SBF^,tmp,Cmp);
         case FieldType of
         tftWinAnsi:
           if PSynSoundEx(Value)^.Ansi(tmp) then
@@ -6541,7 +6541,7 @@ begin
   CheckVTableInitialized;
   if (aField.FieldSize>0) and (VValue<>'') then begin
     // fixed size content: fast in-place update
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(Value)^,VValue[aField.Offset+1],aField.FieldSize)
+    MoveFast(pointer(Value)^,VValue[aField.Offset+1],aField.FieldSize)
     // VValue[F.Offset+1] above will call UniqueString(VValue), even under FPC
   end else begin
     // variable-length update
@@ -8563,7 +8563,7 @@ begin
     Len := FromVarUInt32(P);
     if D+Len>DEnd then
       break;
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,D^,Len);
+    MoveFast(P^,D^,Len);
     crc := crc32c(crc,D,Len);
     inc(P,Len);
     inc(D,Len);
@@ -8835,7 +8835,7 @@ begin
   until false;
   // 5. write remaining bytes
   if NewBufSize>0 then begin
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(NewBuf^,pOut^,NewBufSize);
+    MoveFast(NewBuf^,pOut^,NewBufSize);
     inc(pOut,NewBufSize);
     inc(newBuf,NewBufSize);
   end;
@@ -8847,7 +8847,7 @@ begin
   PInteger(OutBuf+3)^ := h;
   OutBuf[6] := AnsiChar(curofssize);
   // 7. copy commands
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(WorkBuf^,pOut^,h);
+  MoveFast(WorkBuf^,pOut^,h);
   result := pOut+h;
 end;
 
@@ -8880,7 +8880,7 @@ begin
     // copy leading bytes
     leading := FromVarUInt32(PByte(P));
     if leading<>0 then begin
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(buf^,upd^,leading);
+      MoveFast(buf^,upd^,leading);
       inc(buf,leading);
       inc(upd,leading);
     end;
@@ -8888,7 +8888,7 @@ begin
     if srclen<>0 then begin
       if PtrUInt(upd-src)<srclen then
         movechars(src,upd,srclen) else
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(src^,upd^,srclen);
+        MoveFast(src^,upd^,srclen);
       inc(upd,srclen);
     end;
   end;
@@ -8933,7 +8933,7 @@ var HTab, HList: PHTab;
     WriteByte(d,FLAG_COPIED); // block copied flag
     db := ToVarUInt32(NewSizeSave,db);
     WriteInt(d,crc32c(0,New,NewSizeSave));
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(New^,d^,NewSizeSave);
+    MoveFast(New^,d^,NewSizeSave);
     inc(d,NewSizeSave);
     result := d-Delta;
   end;
@@ -9004,7 +9004,7 @@ begin
         if BufRead=0 then
           break;
         WriteInt(d,crc32c(0,New,BufRead));
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(New^,d^,BufRead);
+        MoveFast(New^,d^,BufRead);
         inc(New,BufRead);
         inc(d,BufRead);
       end else begin
@@ -9070,7 +9070,7 @@ begin
         exit;
       end;
       inc(Delta,4);
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(Delta^,New^,BufRead);
+      MoveFast(Delta^,New^,BufRead);
       if BufRead>=Len then
         exit; // if Old=nil -> only copy new
       inc(Delta,BufRead);
@@ -9093,13 +9093,13 @@ begin
         exit;
       end;
       inc(Delta,4);
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(Old^,New^,OldRead);
+      MoveFast(Old^,New^,OldRead);
       inc(New,OldRead);
     end;
     FLAG_END: begin // block idem end flag
       if crc32c(0,Old,OldRead)<>PCardinal(Delta)^ then
         Result := dsCrcEnd;
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(Old^,New^,OldRead);
+      MoveFast(Old^,New^,OldRead);
       inc(New,OldRead);
       break;
     end;
@@ -9251,7 +9251,7 @@ procedure TFastReader.Copy(out Dest; DataLen: PtrInt);
 begin
   if P+DataLen>Last then
     ErrorOverflow;
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,Dest,DataLen);
+  MoveFast(P^,Dest,DataLen);
   inc(P,DataLen);
 end;
 
@@ -9259,7 +9259,7 @@ function TFastReader.CopySafe(out Dest; DataLen: PtrInt): boolean;
 begin
   if P+DataLen>Last then
     result := false else begin
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,Dest,DataLen);
+    MoveFast(P^,Dest,DataLen);
     inc(P,DataLen);
     result := true;
   end;
@@ -9856,8 +9856,7 @@ begin
   SetLength(aDest,d+Position);
   v := pointer(Values);
   for i := 1 to Count do begin
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      pointer(v^.Value)^,PByteArray(aDest)[d+v^.Position],length(v^.Value));
+    MoveFast(pointer(v^.Value)^,PByteArray(aDest)[d+v^.Position],length(v^.Value));
     inc(v);
   end;
   Clear;
@@ -9882,8 +9881,7 @@ begin
     SetString(tmp,nil,Position);
     v := pointer(Values);
     for i := 1 to Count do begin
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(
-        pointer(v^.Value)^,PByteArray(tmp)[v^.Position],length(v^.Value));
+      MoveFast(pointer(v^.Value)^,PByteArray(tmp)[v^.Position],length(v^.Value));
       {$ifdef FPC}Finalize(v^.Value){$else}v^.Value := ''{$endif}; // free chunks
       inc(v);
     end;
@@ -9904,8 +9902,7 @@ begin
   SetLength(result,Position);
   for i := 0 to Count-1 do
   with Values[i] do
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      pointer(Value)^,PByteArray(result)[Position],length(Value));
+    MoveFast(pointer(Value)^,PByteArray(result)[Position],length(Value));
 end;
 
 procedure TRawByteStringGroup.Write(W: TTextWriter; Escape: TTextWriterKind);
@@ -10047,7 +10044,7 @@ var P: pointer;
 begin
   P := Find(aPosition,aLength);
   if P<>nil then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,aDest^,aLength);
+    MoveFast(P^,aDest^,aLength);
 end;
 
 
@@ -11111,7 +11108,7 @@ begin
   if P=nil then exit; // unexpected end
   // trim first row data
   if P^<>#0 then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,PBegin^,PEnd-P); // erase content
+    MoveFast(P^,PBegin^,PEnd-P); // erase content
   fStream.Seek(PBegin-P,soCurrent); // adjust current stream position
 end;
 
