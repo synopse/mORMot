@@ -2323,7 +2323,13 @@ var StrLen: function(S: pointer): PtrInt = StrLenPas;
 // - on Intel i386/x86_64, will use fast SSE2/ERMS instructions (if available),
 // or optimized X87 assembly implementation for older CPUs
 // - on non-Intel CPUs, it will fallback to the default RTL FillChar()
+// - note: Delphi x86_64 is far from efficient: even ERMS was wrongly
+// introduced in latest updates
+{$ifdef CPUX64}
+procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
+{$else}
 var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte);
+{$endif CPUX64}
 
 /// our fast version of move()
 // - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available),
@@ -36598,6 +36604,125 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         mov     dword ptr[dst + 3], ecx
 end;
 
+procedure FillCharFast(var dst; cnt: PtrInt; value: byte);
+{$ifdef FPC}nostackframe; assembler;
+asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
+        mov     r9, $0101010101010101
+        lea     r10, [rip+@jmptab]
+        {$ifdef WIN64}
+        movzx   eax, r8b
+        {$else}
+        movzx   eax, dl
+        mov     rdx, rsi // rdx=cnt
+        {$endif}
+        imul    rax, r9  // broadcast value into all bytes of rax (in 1 cycle)
+        cmp     cnt, 32
+        ja      @abv32  // >32
+        sub     rdx, 8
+        jg      @sml    // 9..32
+        jmp     qword ptr[r10 + 64 + rdx*8] // small blocks
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+@jmptab:dq @00, @01, @02, @03, @04, @05, @06, @07, @08
+@sml:   cmp     dl, 8  // 9..32 bytes
+        jle     @sml16
+        cmp     dl, 16
+        jle     @sml24
+        mov     qword ptr[dst+16], rax
+@sml24: mov     qword ptr[dst+8], rax
+@sml16: mov     qword ptr[dst+rdx], rax // last 8 (may be overlapping)
+@08:    mov     qword ptr[dst], rax
+@00:    ret
+@07:    mov     dword ptr[dst+3], eax
+@03:    mov     word ptr[dst+1], ax
+@01:    mov     byte ptr[dst], al
+        ret
+@06:    mov     dword ptr[dst+2], eax
+@02:    mov     word ptr[dst], ax
+        ret
+@05:    mov     byte ptr[dst+4], al
+@04:    mov     dword ptr[dst], eax
+        ret
+@abv32: movd    xmm0, eax
+        lea     r8, [dst+cnt]  // r8 point to end
+        pshufd  xmm0, xmm0, 0  // broadcast value into all bytes of xmm0
+        mov     r10, rdx       // save rdx=cnt
+        {$ifdef FPC} // Delphi doesn't support avx, and erms is slower
+        cmp     rdx, 256
+        jae     @abv256  // try erms or avx if cnt>256
+        {$endif FPC}
+@sse2:  movq    qword ptr[dst], xmm0  // first unaligned 16 bytes
+        movq    qword ptr[dst+8], xmm0
+        lea     rdx, [dst+rdx-1]
+        and     rdx, -16
+        add     dst, 16
+        and     dst, -16 // dst is 16-bytes aligned
+        sub     dst, rdx
+        jnb     @last
+        cmp     r10, CPUCACHEX64
+        ja      @nv  // bypass cache for cnt>512KB
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@reg:   movdqa  oword ptr[rdx+dst], xmm0  // regular loop
+        add     dst, 16
+        jnz     @reg
+@last:  movq    qword ptr[r8-16], xmm0 // last unaligned 16 bytes
+        movq    qword ptr[r8-8], xmm0
+        ret
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@nv:    movntdq [rdx+dst], xmm0 // non-temporal loop
+        add     dst, 16
+        jnz     @nv
+        sfence
+        jmp     @last
+{$ifdef FPC}
+@abv256:{$ifdef WITH_ERMS}
+        mov     r9b, byte ptr[rip+CPUIDX64]
+        test    r9b, 1 shl cpuERMS
+        jz      @noerms
+        cmp     rdx, 2048  // ERMS is worth it for cnt>2KB
+        jb      @noerms
+        cmp     rdx, CPUCACHEX64  // non-temporal moves are still faster
+        jae     @noerms
+        cld
+{$ifdef WIN64}
+        mov     r8, rdi
+        mov     rdi, dst
+        mov     rcx, cnt
+        rep     stosb
+        mov     rdi, r8
+{$else} mov     rcx, cnt
+        rep stosb
+{$endif}ret
+@noerms:test    r9b, 1 shl cpuAVX
+{$else} test    byte ptr[rip+CPUIDX64], 1 shl cpuAVX
+        {$endif WITH_ERMS}
+        jz      @sse2
+        // AVX version (Delphi isn't able to compile it yet) - cnt>256
+        movups  oword ptr[dst], xmm0 // first unaligned 1..16 bytes
+        add     dst, 16
+        and     dst, -16
+        movaps  oword ptr[dst], xmm0 // unaligned 17..32 bytes
+        vinsertf128 ymm0,ymm0,xmm0,1
+        add     dst, 16
+        and     dst, -32 // dst is 32-bytes aligned
+        mov     rdx, r8
+        and     rdx, -32
+        sub     dst, rdx
+        cmp     r10, CPUCACHEX64
+        ja      @avxnv
+        align 16
+@avxreg:vmovaps ymmword ptr[rdx+dst], ymm0  // regular loop
+        add     dst, 32
+        jnz     @avxreg
+@avxok: vzeroupper
+        movups  oword ptr[r8-32], xmm0  // last unaligned 32 bytes
+        movups  oword ptr[r8-16], xmm0
+        ret
+        align 16
+@avxnv: vmovntps oword ptr [rdx+dst], ymm0 // non-temporal loop
+        add      dst, 32
+        jnz      @avxnv
+        jmp      @avxok
+{$endif FPC}
 end;
 {$endif CPUX64}
 
