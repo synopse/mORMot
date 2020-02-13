@@ -36574,6 +36574,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         jl      @favxr
 @favxe: vmovups [r10], ymm1 // last 32
         vmovups [r9], ymm2  // first 32
+// https://software.intel.com/en-us/articles/avoiding-avx-sse-transition-penalties
         vzeroupper
         ret
         align 16
@@ -36767,7 +36768,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         movups  oword ptr[dst], xmm0 // first unaligned 1..16 bytes
         add     dst, 16
         and     dst, -16
-        movups  oword ptr[dst], xmm0 // unaligned 17..32 bytes
+        movaps  oword ptr[dst], xmm0 // aligned 17..32 bytes
         vinsertf128 ymm0,ymm0,xmm0,1
         add     dst, 16
         and     dst, -32 // dst is 32-bytes aligned
@@ -51600,7 +51601,7 @@ asm .noframe // rcx=P, edx=deleted, r8=count  (Linux: rdi,esi,rdx)
         add     rcx, 4
         dec     r8
         jmp     @align
-        // simd process of 128 bytes per loop iteration
+        // avx process of 128 bytes (32 indexes) per loop iteration
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @s:     sub      r8, 32
         vmovdqa  ymm1, [rcx]
@@ -51622,11 +51623,8 @@ asm .noframe // rcx=P, edx=deleted, r8=count  (Linux: rdi,esi,rdx)
         add      rcx, 128
         cmp      r8, 32
         jae      @s
-// https://software.intel.com/en-us/articles/avoiding-avx-sse-transition-penalties
         vzeroupper
-        test     r8, r8
-        jnz      @1
-        ret
+        jmp      @2
         // trailing indexes
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @1:     dec     r8
@@ -51663,7 +51661,7 @@ asm .noframe // rcx=P, edx=deleted, r8=count  (Linux: rdi,esi,rdx)
         add     rcx, 4
         dec     r8
         jmp     @align
-        // simd process of 64 bytes = 4 x 128-bit quad per loop iteration
+        // SSE2 process of 64 bytes (16 indexes) per loop iteration
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @s:     sub     r8, 16
         movdqa  xmm1, dqword [rcx]  // quad load
@@ -51689,9 +51687,7 @@ asm .noframe // rcx=P, edx=deleted, r8=count  (Linux: rdi,esi,rdx)
         add     rcx, 64
         cmp     r8, 16
         jae     @s
-        test    r8, r8
-        jnz     @1
-        ret
+        jmp     @2
         // trailing indexes
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @1:     dec     r8
