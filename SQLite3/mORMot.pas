@@ -47328,8 +47328,7 @@ end;
 
 function TSQLRestStorageInMemory.SearchField(const FieldName, FieldValue: RawUTF8;
   out ResultID: TIDDynArray): boolean;
-var n, WhereField: integer;
-    {$ifndef CPU64}i: integer;{$endif}
+var n, WhereField,i: integer;
     Where: TList;
 begin
   result := false;
@@ -47353,13 +47352,8 @@ begin
     if n=0 then
       exit;
     SetLength(ResultID,n);
-    {$ifdef CPU64} // on x64 TList[]=Pointer does map an TID/Int64
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Where.List[0],ResultID[0],n*SizeOf(TID));
-    {$else}
-    with Where do
-      for i := 0 to Count-1 do
-        ResultID[i] := PPtrIntArray(List)^[i];
-    {$endif}
+    for i := 0 to n-1 do
+      ResultID[i] := TSQLRecord(fValue.List[PtrUInt(Where.List[i])]).IDValue;
   finally
     Where.Free;
   end;
