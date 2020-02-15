@@ -33683,7 +33683,7 @@ function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
         movdqa  xmm0, [rip + @for10]
         movdqa  xmm1, [rip + @for13]
         and     rdi, -16 // check first aligned 16 bytes
-        and     ecx, 15  // lower 4 bits indicate misalignment
+        and     ecx, 15  // lower cl 4 bits indicate misalignment
         movdqa  xmm2, [rdi]
         movdqa  xmm3, xmm2
         pcmpeqb xmm2, xmm0
@@ -35564,7 +35564,7 @@ asm .noframe // rcx=dest, rdx=source, r8=len (Linux: rdi,rsi,rdx)
        shr     rdx, 4
        sub     r9, rcx
        add     rdx, 1
-       {$ifdef FPC}align 8{$endif}
+{$ifdef FPC} align 16 {$else} .align 16{$endif}
 @s:    movdqu  xmm2, [r9 + rcx]
        {$ifdef HASAESNI}
        pcmpistrm xmm1, xmm2, CMP_RANGES
@@ -35597,7 +35597,6 @@ asm .noframe // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
         jz      @0
         test    dl, 7
         jz      @8 // align to 8 bytes boundary
-        {$ifdef FPC}align 8{$endif}
 @7:     crc32   eax, byte ptr[rdx]
         inc     rdx
         dec     r8
@@ -35607,7 +35606,7 @@ asm .noframe // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
 @8:     mov     rcx, r8
         shr     r8, 3
         jz      @2
-        {$ifdef FPC}align 8{$endif}
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @1:     {$ifdef FPC}
         crc32   rax, qword [rdx] // hash 8 bytes per loop
         {$else}
@@ -35661,7 +35660,7 @@ asm .noframe // rcx=S (Linux: rdi)
         bsf     edx, edx             // find first 1-bit
         jnz     @L2                  // found
         // Main loop, search 16 bytes at a time
-        {$ifdef FPC}align 8{$endif}
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @L1:    add     rax, 10H             // increment pointer by 16
         movdqa  xmm1, [rax]          // read 16 bytes aligned
         pcmpeqb xmm1, xmm0           // compare 16 bytes with zero
@@ -35705,7 +35704,7 @@ asm .noframe // rcx=S (Linux: rdi)
         jnz     @L
         mov     eax, ecx
 @null:  ret
-        {$ifdef FPC}align 8{$endif}
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @L:     add     rax, 16   // add before comparison flag
         pcmpistri xmm0, [rdx + rax], EQUAL_EACH // result in ecx
         jnz     @L
@@ -35733,7 +35732,7 @@ asm .noframe // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
       jc        @2
       xor       rax, rax
       ret
-      {$ifdef FPC}align 8{$endif}
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @1:   add       rdx, 16
       movdqu    xmm0, dqword [rdx]
       pcmpistri xmm0, dqword [rdx + rax], EQUAL_EACH + NEGATIVE_POLARITY
@@ -35799,7 +35798,7 @@ begin
           mov     r9d, dword ptr [rdx + 4]
           mov     r10d, dword ptr [rdx + 8]
           mov     r11d, dword ptr [rdx + 12]
-          align 8
+          align 16
 @s:       crc32   r8d, dword ptr [rax]
           crc32   r9d, dword ptr [rax + 4]
           crc32   r10d, dword ptr [rax + 8]
