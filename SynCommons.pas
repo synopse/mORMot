@@ -2260,8 +2260,8 @@ var strspn: function (s,accept: pointer): integer = strspnpas;
 // files - call explicitely strcspnsse42() if you are confident on your input
 var strcspn: function (s,reject: pointer): integer = strcspnpas;
 
-{$ifndef ABSOLUTEPASCAL}
 {$ifdef CPUINTEL}
+{$ifndef ABSOLUTEPASCAL}
 {$ifdef HASAESNI}
 /// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
@@ -2294,13 +2294,12 @@ function strspnsse42(s,accept: pointer): integer;
 // - could be used instead of strcspn() when you are confident about your
 // s/reject input buffers, checking if cfSSE42 in CpuFeatures
 function strcspnsse42(s,reject: pointer): integer;
+{$endif ABSOLUTEPASCAL}
 
 /// SSE 4.2 version of GetBitsCountPtrInt()
 // - defined just for regression tests - call GetBitsCountPtrInt() instead
 function GetBitsCountSSE42(value: PtrInt): PtrInt;
-
 {$endif CPUINTEL}
-{$endif ABSOLUTEPASCAL}
 
 /// use our fast version of StrIComp(), to be used with PUTF8Char/PAnsiChar
 function StrIComp(Str1, Str2: pointer): PtrInt;
@@ -9258,7 +9257,6 @@ type
     procedure Delete(aIndex: integer); overload;
     /// delete an object from the list
     // - will invalide the whole hash table
-    // - won't invalidate the whole hash table, but refresh it
     procedure Delete(aObject: TObject); overload; virtual;
     /// direct access to the items list array
     property List: TObjectDynArray read fList;
