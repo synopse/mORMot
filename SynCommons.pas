@@ -5781,12 +5781,6 @@ type
   // - this function must use the supplied hasher on the Elem data
   TDynArrayHashOne = function(const Elem; Hasher: THasher): cardinal;
 
-  {$ifdef FPC}
-  /// function prototype used internally for fast hashing
-  // - Delphi isn't able to generate such optimization
-  TDynArrayHashedFastMod = function(aHashCode: cardinal): cardinal;
-  {$endif FPC}
-
   /// event handler to be used for hashing of a dynamic array element
   // - can be set as an alternative to TDynArrayHashOne
   TEventDynArrayHashOne = function(const Elem): cardinal of object;
@@ -5807,9 +5801,6 @@ type
     HashTable: TIntegerDynArray; // store 0 for void entry, or Index+1
     HashTableSize: integer;
     ScanCounter: integer; // Scan()>=0 up to CountTrigger*2
-    {$ifdef FPC}
-    FastMod: TDynArrayHashedFastMod;
-    {$endif FPC}
     State: set of (hasHasher, canHash);
     function HashTableIndex(aHashCode: cardinal): cardinal; {$ifdef HASINLINE}inline;{$endif}
     procedure HashAdd(aHashCode: cardinal; var result: integer);
@@ -6059,12 +6050,8 @@ type
     // - equals 32 by default, i.e. start hashing when Count reaches 32 or
     // manual Scan() is called 64 times
     property HashCountTrigger: integer read fHash.CountTrigger write fHash.CountTrigger;
-    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-    /// access to the internal collision of HashFind()
-    // - it won't depend only on the HashElement(), but also on the internal
-    // hash bucket size (which is much lower than 2^32 items)
-    property HashFindCollisions: cardinal read fHash.FindCollisions write fHash.FindCollisions;
-    {$endif}
+    /// access to the internal hash table
+    property Hasher: TDynArrayHasher read fHash;
   end;
 
 
@@ -7552,15 +7539,17 @@ function SortDynArrayVariantComp(const A,B: TVarData; caseInsensitive: boolean):
 {$endif NOVARIANTS}
 
 
+{$ifdef CPU32DELPHI}
 const
-  /// defined for inlining bitwise division in TDynArrayHashed.HashTableIndex
-  // - fHashTableSize<=HASH_PO2 is expected to be a power of two (fast binary op);
+  /// defined for inlining bitwise division in TDynArrayHasher.HashTableIndex
+  // - HashTableSize<=HASH_PO2 is expected to be a power of two (fast binary op);
   // limit is set to 262,144 hash table slots (=1MB), for Capacity=131,072 items
   // - above this limit, a set of increasing primes is used; using a prime as
-  // hashtable modulo enhances its distribution, especially for a weak hash
-  // function: computing this modulo is slightly slower, but memory is optimized
-  // - FPC can efficiently compule the prime modulo, so its limit is 65,536 only
-  HASH_PO2 = {$ifdef FPC} 1 shl 16 {$else} 1 shl 18 {$endif FPC};
+  // hashtable modulo enhances its distribution, especially for a weak hash function
+  // - 64-bit CPU and FPC can efficiently compule a prime reduction using Lemire
+  // algorithm, so no power of two is defined on those targets
+  HASH_PO2 = 1 shl 18;
+{$endif CPU32DELPHI}
 
 /// hash one AnsiString content with the suppplied Hasher() function
 function HashAnsiString(const Elem; Hasher: THasher): cardinal;
@@ -14304,7 +14293,7 @@ var
   /// a slightly faster alternative to Variants.Null function
   Null: variant absolute NullVarData;
 
-{$endif}
+{$endif LVCL}
 
 /// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
 // - we also discovered some issues with FPC's Variants unit, so this function
@@ -43604,7 +43593,8 @@ var tmp: TSynTempBuffer;
 begin
   tmp.Init(JSON); // make private copy before in-place decoding
   try
-    result := RecordLoadJSON(Rec,tmp.buf,TypeInfo,nil,CustomVariantOptions)<>nil;
+    result := RecordLoadJSON(Rec,tmp.buf,TypeInfo,nil
+      {$ifndef NOVARIANTS},CustomVariantOptions{$endif})<>nil;
   finally
     tmp.Done;
   end;
@@ -45089,7 +45079,7 @@ function VarStringOrNull(const v: RawUTF8): variant;
 begin
   if v='' then
     SetVariantNull(result) else
-    RawUTF8ToVariant(v,result);
+    {$ifdef NOVARIANTS} result := v {$else} RawUTF8ToVariant(v,result) {$endif};
 end;
 
 {$ifndef NOVARIANTS}
@@ -51393,7 +51383,6 @@ begin
   HashTable := nil;
   HashTableSize := 0;
   ScanCounter := 0;
-  {$ifdef FPC} FastMod := nil; {$endif FPC}
   if Assigned(HashElement) or Assigned(EventHash) then
     State := [hasHasher] else
     byte(State) := 0;
@@ -51408,52 +51397,26 @@ begin
     result := 0; // will be ignored afterwards for sure
 end;
 
-const // some increasing primes following HASH_PO2=2^16/18=65536/262144
-  _PRIMES: array[0..38{$ifdef FPC}+6{$endif}] of integer = (
-    {$ifdef FPC} 81649, 102877, 129607, 163307, 205759, 259229, {$endif}
+const // some increasing primes (may be following HASH_PO2=2^18=262144)
+  _PRIMES: array[0..38{$ifdef CPU32DELPHI}+13{$endif}] of integer = (
+    {$ifdef CPU32DELPHI} 251, 499, 797, 1259, 2011, 3203, 5087, 8089,
+    12853, 20399, 81649, 129607, 205759, {$endif}
     326617, 411527, 518509, 653267, 823117, 1037059, 1306601, 1646237,
     2074129, 2613229, 3292489, 4148279, 5226491, 6584983, 8296553, 10453007,
     13169977, 16593127, 20906033, 26339969, 33186281, 41812097, 52679969,
     66372617, 83624237, 105359939, 132745199, 167248483, 210719881, 265490441,
     334496971, 421439783, 530980861, 668993977, 842879579, 1061961721,
     1337987929, 1685759167, 2123923447);
-{$ifdef FPC} // FPC generates very fast constant division using reciprocal :)
-function __81649(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 81649; end;
-function __102877(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 102877; end;
-function __129607(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 129607; end;
-function __163307(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 163307; end;
-function __205759(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 205759; end;
-function __259229(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 259229; end;
-function __326617(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 326617; end;
-function __411527(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 411527; end;
-function __518509(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 518509; end;
-function __653267(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 653267; end;
-function __823117(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 823117; end;
-function __1037059(aHashCode: cardinal): cardinal; begin result := aHashCode mod 1037059; end;
-function __1306601(aHashCode: cardinal): cardinal; begin result := aHashCode mod 1306601; end;
-function __1646237(aHashCode: cardinal): cardinal; begin result := aHashCode mod 1646237; end;
-function __2074129(aHashCode: cardinal): cardinal; begin result := aHashCode mod 2074129; end;
-function __2613229(aHashCode: cardinal): cardinal; begin result := aHashCode mod 2613229; end;
-function __3292489(aHashCode: cardinal): cardinal; begin result := aHashCode mod 3292489; end;
-function __4148279(aHashCode: cardinal): cardinal; begin result := aHashCode mod 4148279; end;
-const
-  _PRIMEFUNC: array[0..17] of TDynArrayHashedFastMod =
-    (__81649, __102877, __129607, __163307, __205759, __259229,
-     __326617,__411527,__518509,__653267,__823117,__1037059,__1306601,__1646237,
-     __2074129,__2613229,__3292489,__4148279);
-{$endif FPC}
 
-function NextPrime(v: integer{$ifdef FPC}; out func: TDynArrayHashedFastMod{$endif}): integer;
+function NextPrime(v: integer): integer; {$ifdef HASINLINE}inline;{$endif}
 var i: PtrInt;
     P: PIntegerArray;
 begin
   P := @_PRIMES;
   for i := 0 to high(_PRIMES) do begin
     result := P^[i];
-    if result>v then begin
-      {$ifdef FPC} if i<=high(_PRIMEFUNC) then func := _PRIMEFUNC[i]; {$endif}
+    if result>v then
       exit;
-    end;
   end;
   result := maxInt; // would never happen
 end;
@@ -51461,11 +51424,14 @@ end;
 function TDynArrayHasher.HashTableIndex(aHashCode: cardinal): cardinal;
 begin
   result := HashTableSize;
-  if result>HASH_PO2 then {$ifdef FPC}
-    if Assigned(FastMod) then
-      result := FastMod(aHashCode) else {$endif FPC}
-      result := aHashCode mod result else
+  {$ifdef CPU32DELPHI} // Delphi X86 is not efficient at compiling 64-bit mul
+  if result>HASH_PO2 then
+    result := aHashCode mod result else
     result := aHashCode and (result-1);
+  {$else} // FPC or CPU64 would compile the next line as very optimized asm
+  result := (QWord(aHashCode)*result)shr 32;
+  // see https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/
+  {$endif CPU32DELPHI}
 end;
 
 function TDynArrayHasher.Find(aHashCode: cardinal; aForAdd: boolean): integer;
@@ -51919,16 +51885,18 @@ begin
   if not forced and ((n=0) or (n<CountTrigger)) then
     exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
   if forceGrow and (siz>0) then // next power of two or next grown size
+    {$ifdef CPU32DELPHI}
     if siz<HASH_PO2 then
-      siz := siz shl 1 else
-      siz := NextPrime(siz{$ifdef FPC},FastMod{$endif}) else begin
+      siz := siz shl 1 else {$endif}
+      siz := NextPrime(siz) else begin
     cap := DynArray^.Capacity*2; // Capacity better than Count - *2 for void slots
+    {$ifdef CPU32DELPHI}
     if cap<=HASH_PO2 then begin
       siz := 256; // find nearest power of two for fast bitwise division
       while siz<cap do
         siz := siz shl 1;
-    end else // use primes to reduce memory usage
-      siz := NextPrime(cap{$ifdef FPC},FastMod{$endif});
+    end else {$endif} // use primes to reduce memory usage
+      siz := NextPrime(cap);
   end;
   HashTableSize := siz;
   SetLength(HashTable,siz); // fill with 0 (void slot)
@@ -52060,15 +52028,15 @@ end;
 
 procedure TDynArrayHashed.InitSpecific(aTypeInfo: pointer; var aValue;
   aKind: TDynArrayKind; aCountPointer: PInteger; aCaseInsensitive: boolean);
-var Comp: TDynArraySortCompare;
-    Hasher: TDynArrayHashOne;
+var cmp: TDynArraySortCompare;
+    hsh: TDynArrayHashOne;
 begin
-  Comp := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,aKind];
-  Hasher := DYNARRAY_HASHFIRSTFIELD[aCaseInsensitive,aKind];
-  if (@Hasher=nil) or (@Comp=nil) then
+  cmp := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,aKind];
+  hsh := DYNARRAY_HASHFIRSTFIELD[aCaseInsensitive,aKind];
+  if (@hsh=nil) or (@cmp=nil) then
     raise ESynException.CreateUTF8('TDynArrayHashed.InitSpecific unsupported %',
       [ToText(aKind)^]);
-  Init(aTypeInfo,aValue,Hasher,Comp,nil,aCountPointer,aCaseInsensitive);
+  Init(aTypeInfo,aValue,hsh,cmp,nil,aCountPointer,aCaseInsensitive);
   {$ifdef UNDIRECTDYNARRAY}with InternalDynArray do{$endif} begin
     fKnownType := aKind;
     fKnownSize := KNOWNTYPE_SIZE[aKind];

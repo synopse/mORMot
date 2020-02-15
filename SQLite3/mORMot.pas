@@ -59310,13 +59310,15 @@ end;
 
 {$ifdef CPUX86}
 
-{$ifdef DARWIN}
-  {$define REQUIREX86ALIGNEDSTACK16} // always require aligned stack on OSX
-{$else}
-  {$if defined(FPC_STACKALIGNMENT) and (FPC_STACKALIGNMENT=16)}
-  {$define REQUIREX86ALIGNEDSTACK16} // e.g. on i386-linux since SVN 43005-43014
-  {$ifend} // https://www.mail-archive.com/fpc-devel@lists.freepascal.org/msg38885.html
-{$endif DARWIN}
+{$ifdef FPC}
+  {$ifdef DARWIN}
+    {$define REQUIREX86ALIGNEDSTACK16} // always require aligned stack on OSX
+  {$else}
+    {$if defined(FPC_STACKALIGNMENT) and (FPC_STACKALIGNMENT=16)}
+    {$define REQUIREX86ALIGNEDSTACK16} // e.g. on i386-linux since SVN 43005-43014
+    {$ifend} // https://www.mail-archive.com/fpc-devel@lists.freepascal.org/msg38885.html
+  {$endif DARWIN}
+{$endif FPC}
 
 procedure CallMethod(var Args: TCallMethodArgs); {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
