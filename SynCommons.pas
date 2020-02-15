@@ -5200,8 +5200,6 @@ type
     function GetIsObjArray: boolean; {$ifdef HASINLINE}inline;{$endif}
     function ComputeIsObjArray: boolean;
     procedure SetIsObjArray(aValue: boolean); {$ifdef HASINLINE}inline;{$endif}
-    /// will set fKnownType and fKnownOffset/fKnownSize fields
-    function ToKnownType(exactType: boolean=false): TDynArrayKind;
     function LoadFromHeader(var Source: PByte; SourceMax: PByte): integer;
     function LoadKnownType(Data,Source,SourceMax: PAnsiChar): boolean;
     /// faster than RTL + handle T*ObjArray + ensure unique
@@ -5250,6 +5248,9 @@ type
     // the current value
     procedure UseExternalCount(var aCountPointer: Integer);
       {$ifdef HASINLINE}inline;{$endif}
+    /// low-level computation of KnownType and KnownSize fields from RTTI
+    // - do nothing if has already been set at initialization, or already computed
+    function GuessKnownType(exactType: boolean=false): TDynArrayKind;
     /// check this dynamic array from the GlobalJSONCustomParsers list
     // - returns TRUE if this array has a custom JSON parser
     function HasCustomJSONParser: boolean;
@@ -5302,7 +5303,7 @@ type
     /// delete one item inside the dynamic array
     // - the deleted element is finalized if necessary
     // - this method will recognize T*ObjArray types and free all instances
-    procedure Delete(aIndex: PtrInt);
+    function Delete(aIndex: PtrInt): boolean;
     /// search for an element value inside the dynamic array
     // - return the index found (0..Count-1), or -1 if Elem was not found
     // - will search for all properties content of the eLement: TList.IndexOf()
@@ -5710,8 +5711,11 @@ type
     property Sorted: boolean read fSorted write fSorted;
     /// low-level direct access to the storage variable
     property Value: PPointer read fValue;
-    /// the known type, possibly retrieved from dynamic array RTTI
+    /// the first field recognized type
+    // - could have been set at initialization, or after a GuessKnownType call
     property KnownType: TDynArrayKind read fKnownType;
+    /// the raw storage size of the first field KnownType
+    property KnownSize: integer read fKnownSize;
     /// the known RTTI information of the whole array
     property ArrayType: pointer read fTypeInfo;
     /// the known type name of the whole array, as RawUTF8
@@ -5778,9 +5782,16 @@ type
   // - this function must use the supplied hasher on the Elem data
   TDynArrayHashOne = function(const Elem; Hasher: THasher): cardinal;
 
+  {$ifdef FPC}
+  /// function prototype used internally for fast hashing
+  // - Delphi isn't able to generate such optimization
+  TDynArrayHashedFastMod = function(aHashCode: cardinal): cardinal;
+  {$endif FPC}
+
   /// event handler to be used for hashing of a dynamic array element
   // - can be set as an alternative to TDynArrayHashOne
   TEventDynArrayHashOne = function(const Elem): cardinal of object;
+
 
   {.$define DYNARRAYHASHCOLLISIONCOUNT}
 
@@ -5844,23 +5855,21 @@ type
     fHashTableSize: integer;
     fHashCountTrigger: integer;
     fScanCounter: integer; // Scan()>=0 up to fHashCountTrigger*2
+    {$ifdef FPC} // Delphi doesn't generate fast modulo per a constant code
+    fHashFastMod: TDynArrayHashedFastMod;
+    {$endif FPC}
     fHashState: set of (hasHasher, canHash);
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     fHashFindCollisions: cardinal;
     {$endif}
     function HashOne(Elem: pointer): cardinal;
       {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 -> C1632 internal error
-    procedure HashAdd(const Elem; aHashCode: cardinal; var result: integer);
+    procedure HashAdd(aHashCode: cardinal; var result: integer);
     procedure HashDelete(aArrayIndex, aHashTableIndex: integer; aHashCode: cardinal);
-    /// low-level search of an element from its pre-computed hash
-    // - if not found and aForAdd=true, returns -(HashTableIndex+1)
-    // - this method will return the first matching item: use the
-    // HashFindAndCompare(...; const Elem) method to avoid any collision issue
-    // - you should NOT use this method, but rather high-level FindHashed*()
     function HashFind(aHashCode: cardinal; aForAdd: boolean): integer;
     function HashFindAndCompare(aHashCode: cardinal; const Elem;
       aHashTableIndex: PInteger=nil): integer;
-    function HashTableIndex(aHashCode: cardinal): integer; {$ifdef HASINLINE}inline;{$endif}
+    function HashTableIndex(aHashCode: cardinal): cardinal; {$ifdef HASINLINE}inline;{$endif}
     procedure HashInvalidate;
     procedure RaiseFatalCollision(const caller: RawUTF8; aHashCode: cardinal);
     function GetHashFromIndex(aIndex: PtrInt): Cardinal;
@@ -5896,7 +5905,7 @@ type
     // the dynamic array content (e.g. in case of element deletion or update,
     // or after calling LoadFrom/Clear method) - this is not necessary after
     // FindHashedForAdding / FindHashedAndUpdate / FindHashedAndDelete methods
-    function ReHash(forAdd: boolean=false): boolean;
+    function ReHash(forAdd: boolean=false; forceGrow: boolean=false): boolean;
     /// search for an element value inside the dynamic array using hashing
     // - Elem should be of the type expected by both the hash function and
     // Equals/Compare methods: e.g. if the searched/hashed field in a record is
@@ -5917,7 +5926,7 @@ type
     // all its fields will be set on match
     function FindHashedAndFill(var ElemToFill): integer;
     /// search for an element value inside the dynamic array using hashing, and
-    // add a void entry to the array if was not found
+    // add a void entry to the array if was not found (unless noAddEntry is set)
     // - this method will use hashing for fast retrieval
     // - Elem should be of the type expected by both the hash function and
     // Equals/Compare methods: e.g. if the searched/hashed field in a record is
@@ -5931,13 +5940,14 @@ type
     // content to expecting value - in short, Elem is used only for searching,
     // not copied to the newly created entry in the array  - check
     // FindHashedAndUpdate() for a method actually copying Elem fields
-    function FindHashedForAdding(const Elem; out wasAdded: boolean): integer; overload;
+    function FindHashedForAdding(const Elem; out wasAdded: boolean;
+      noAddEntry: boolean=false): integer; overload;
     /// search for an element value inside the dynamic array using hashing, and
-    // add a void entry to the array if was not found
+    // add a void entry to the array if was not found (unless noAddEntry is set)
     // - overloaded method acepting an already hashed value of the item, to be used
     // e.g. after a call to HashFind()
     function FindHashedForAdding(const Elem; out wasAdded: boolean;
-      aHashCode: cardinal): integer; overload;
+      aHashCode: cardinal; noAddEntry: boolean=false): integer; overload;
     /// ensure a given element name is unique, then add it to the array
     // - expected element layout is to have a RawUTF8 field at first position
     // - the aName is searched (using hashing) to be unique, and if not the case,
@@ -5979,7 +5989,8 @@ type
     // Equals/Compare methods, and must refer to a variable: e.g. you can't
     // write FindHashedAndDelete(i+10)
     // - it won't call slow ReHash but refresh the hash table as needed
-    function FindHashedAndDelete(const Elem; FillDeleted: pointer=nil): integer;
+    function FindHashedAndDelete(const Elem; FillDeleted: pointer=nil;
+      noDeleteEntry: boolean=false): integer;
     /// will search for an element value inside the dynamic array without hashing
     // - is used internally when Count < HashCountTrigger
     // - is preferred to Find(), since EventCompare would be used if defined
@@ -7507,7 +7518,11 @@ const
   /// defined for inlining bitwise division in TDynArrayHashed.HashTableIndex
   // - fHashTableSize<=HASH_PO2 is expected to be a power of two (fast binary op);
   // limit is set to 262,144 hash table slots (=1MB), for Capacity=131,072 items
-  HASH_PO2 = 1 shl 18;
+  // - above this limit, a set of increasing primes is used; using a prime as
+  // hashtable modulo enhances its distribution, especially for a weak hash
+  // function: computing this modulo is slightly slower, but memory is optimized
+  // - FPC can efficiently compule the prime modulo, so its limit is 65,536 only
+  HASH_PO2 = {$ifdef FPC} 1 shl 16 {$else} 1 shl 18 {$endif FPC};
 
 /// hash one AnsiString content with the suppplied Hasher() function
 function HashAnsiString(const Elem; Hasher: THasher): cardinal;
@@ -48872,7 +48887,7 @@ begin
     ElemTypeInfo^ := DynArray.ElemType;
   if DynArray.ElemType<>nil then
     TypeInfoToName(ElemTypeInfo,result) else
-    result := KNOWNTYPE_ITEMNAME[DynArray.ToKnownType(ExactType)];
+    result := KNOWNTYPE_ITEMNAME[DynArray.GuessKnownType(ExactType)];
 end;
 
 function SortDynArrayBoolean(const A,B): integer;
@@ -49249,10 +49264,11 @@ begin
     result := o<>oaFalse;
 end;
 
-procedure TDynArray.Delete(aIndex: PtrInt);
+function TDynArray.Delete(aIndex: PtrInt): boolean;
 var n, len: PtrInt;
     P: PAnsiChar;
 begin
+  result := false;
   if fValue=nil then
     exit; // avoid GPF if void
   n := GetCount;
@@ -49273,6 +49289,7 @@ begin
   end else
     FillCharFast(P^,ElemSize,0);
   SetCount(n);
+  result := true;
 end;
 
 function TDynArray.ElemPtr(index: PtrInt): pointer;
@@ -49593,7 +49610,7 @@ begin // not inlined since PTypeInfo is private to implementation section
     result := PShortString(@PTypeInfo(fTypeInfo).NameLen);
 end;
 
-function TDynArray.ToKnownType(exactType: boolean): TDynArrayKind;
+function TDynArray.GuessKnownType(exactType: boolean): TDynArrayKind;
 const
   RTTI: array[TJSONCustomParserRTTIType] of TDynArrayKind = (
     djNone, djBoolean, djByte, djCardinal, djCurrency, djDouble, djNone, djInt64,
@@ -49711,7 +49728,7 @@ end;
 function TDynArray.ElemCopyFirstField(Source,Dest: Pointer): boolean;
 begin
   if fKnownType=djNone then
-    ToKnownType(false);
+    GuessKnownType(false);
   case fKnownType of
   djBoolean..djDateTimeMS,djHash128..djHash512: // no managed field
     MoveSmall(Source,Dest,fKnownSize);
@@ -49736,7 +49753,7 @@ function TDynArray.LoadKnownType(Data,Source,SourceMax: PAnsiChar): boolean;
 var info: PTypeInfo;
 begin
   if fKnownType=djNone then
-    ToKnownType({exacttype=}false); // set fKnownType and fKnownSize
+    GuessKnownType({exacttype=}false); // set fKnownType and fKnownSize
   if fKnownType in [djBoolean..djDateTimeMS,djHash128..djHash512] then
     if (SourceMax<>nil) and (Source+fKnownSize>SourceMax) then
       result := false else begin
@@ -49795,7 +49812,7 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
     CustomReader := nil;
   if Assigned(CustomReader) then
     T := djCustom else
-    T := ToKnownType({exacttype=}true);
+    T := GuessKnownType({exacttype=}true);
   if (T=djNone) and (P^='[') and (PTypeKind(ElemType)^=tkDynArray) then begin
     Count := n; // fast allocation of the whole dynamic array memory at once
     for i := 0 to n-1 do begin
@@ -50514,6 +50531,7 @@ begin
         2: result := word(A)=word(B);
         4: result := cardinal(A)=cardinal(B);
         8: result := Int64(A)=Int64(B);
+        16: result := IsEqual(THash128(A),THash128(B));
       else result := CompareMemFixed(@A,@B,ElemSize); // binary comparison
       end else
       if PTypeKind(ElemType)^ in tkRecordTypes then // most likely
@@ -51407,16 +51425,18 @@ end;
 function TDynArrayHashed.Scan(const Elem): integer;
 var P: PAnsiChar;
     c: PInteger;
-    n: integer;
+    i,n: integer;
 begin
   if Assigned(fEventCompare) then begin // custom comparison
+    result := -1;
     P := Value^;
     n := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCount;
-    for result := 0 to n-1 do
-      if fEventCompare(P^,Elem)=0 then
-        exit else
+    for i := 0 to n-1 do
+      if fEventCompare(P^,Elem)=0 then begin
+        result := i;
+        break;
+      end else
         inc(P,ElemSize);
-    result := -1;
   end else // standard search from RTTI
     result := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}Find(Elem);
   // enable hashing if Scan() called 2*HashCountTrigger
@@ -51453,35 +51473,30 @@ begin
     result := -1; // for coherency with most methods
 end;
 
-procedure TDynArrayHashed.HashAdd(const Elem; aHashCode: Cardinal; var result: integer);
-var n,cap: integer;
-begin
+procedure TDynArrayHashed.HashAdd(aHashCode: Cardinal; var result: integer);
+var n: integer;
+begin // on input: fHashTable[result] slot is already computed
   n := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCount;
-  SetCount(n+1); // reserve space for a void element in array
-  cap := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCapacity;
-  if cap*2-cap shr 2>fHashTableSize then // need ReHash?
-  {$ifdef UNDIRECTDYNARRAY}with InternalDynArray do{$endif} begin
-    // fHashTable[] is too small -> recreate
-    if fCountP<>nil then
-      dec(fCountP^); // ignore latest entry (which is not filled yet)
-    ReHash;
-    if fCountP<>nil then
-      inc(fCountP^);
-    result := HashFind(aHashCode,{foradd=}true); // fHashTable[] did change
+  if fHashTableSize<n then
+    RaiseFatalCollision('HashAdd HashTableSize',aHashCode);
+  if fHashTableSize-n<n shr 2 then begin // grow hash table when 25% void
+    ReHash({foradd=}true,{forcegrow=}true);
+    result := HashFind(aHashCode,{foradd=}true); // recompute position
     if result>=0 then
       RaiseFatalCollision('HashAdd',aHashCode);
   end;
   fHashTable[-result-1] := n+1; // store Index+1 (0 means void slot)
   result := n;
-end;
+end; // on output: result holds the position in fValue[]
 
-function TDynArrayHashed.FindHashedForAdding(const Elem; out wasAdded: boolean): integer;
+function TDynArrayHashed.FindHashedForAdding(const Elem; out wasAdded: boolean;
+  noAddEntry: boolean): integer;
 begin
-  result := FindHashedForAdding(Elem,wasAdded,HashOne(@Elem));
+  result := FindHashedForAdding(Elem,wasAdded,HashOne(@Elem),noAddEntry);
 end;
 
 function TDynArrayHashed.FindHashedForAdding(const Elem; out wasAdded: boolean;
-  aHashCode: cardinal): integer;
+  aHashCode: cardinal; noAddEntry: boolean): integer;
 var n: integer;
 begin
   wasAdded := false;
@@ -51493,7 +51508,8 @@ begin
         exit; // item found
       if not(canHash in fHashState) then begin
         wasadded := true;
-        SetCount(n+1); // reserve space for added item, as in HashAdd()
+        if not noAddEntry then
+          SetCount(n+1); // reserve space for added item, as below
         result := n;
         exit;
       end;
@@ -51504,7 +51520,9 @@ begin
   result := HashFindAndCompare(aHashCode,Elem);
   if result<0 then begin // found no matching item
     wasAdded := true;
-    HashAdd(Elem,aHashCode,result); // create a void element
+    HashAdd(aHashCode,result);
+    if not noAddEntry then
+      SetCount(result+1); // reserve space for a void element in array
   end;
 end;
 
@@ -51569,8 +51587,10 @@ begin
   if canHash in fHashState then begin
 doh:hc := HashOne(@Elem);
     result := HashFindAndCompare(hc,Elem);
-    if (result<0) and AddIfNotExisting then
-      HashAdd(Elem,hc,result); // ReHash only if necessary
+    if (result<0) and AddIfNotExisting then begin
+      HashAdd(hc,result); // ReHash only if necessary
+      SetCount(result+1); // add new item
+    end;
   end else begin
     result := Scan(Elem);
     if result<0 then begin
@@ -51578,18 +51598,69 @@ doh:hc := HashOne(@Elem);
         if canHash in fHashState then // Scan triggered ReHash
           goto doh else
           result := Add(Elem);
-      exit;
     end;
   end;
   if result>=0 then
     ElemCopy(Elem,PAnsiChar(Value^)[cardinal(result)*ElemSize]); // update
 end;
 
-function TDynArrayHashed.HashTableIndex(aHashCode: cardinal): integer;
+const // some increasing primes following HASH_PO2=2^18=262144
+  _PRIMES: array[0..38{$ifdef FPC}+6{$endif}] of integer = (
+    {$ifdef FPC} 81649, 102877, 129607, 163307, 205759, 259229, {$endif}
+    326617, 411527, 518509, 653267, 823117, 1037059, 1306601, 1646237,
+    2074129, 2613229, 3292489, 4148279, 5226491, 6584983, 8296553, 10453007,
+    13169977, 16593127, 20906033, 26339969, 33186281, 41812097, 52679969,
+    66372617, 83624237, 105359939, 132745199, 167248483, 210719881, 265490441,
+    334496971, 421439783, 530980861, 668993977, 842879579, 1061961721,
+    1337987929, 1685759167, 2123923447);
+{$ifdef FPC} // FPC generates very fast constant division using reciprocal :)
+function __81649(aHashCode: cardinal): cardinal;   begin  result := aHashCode mod 81649;  end;
+function __102877(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 102877; end;
+function __129607(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 129607; end;
+function __163307(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 163307; end;
+function __205759(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 205759; end;
+function __259229(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 259229; end;
+function __326617(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 326617; end;
+function __411527(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 411527; end;
+function __518509(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 518509; end;
+function __653267(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 653267; end;
+function __823117(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 823117; end;
+function __1037059(aHashCode: cardinal): cardinal; begin result := aHashCode mod 1037059; end;
+function __1306601(aHashCode: cardinal): cardinal; begin result := aHashCode mod 1306601; end;
+function __1646237(aHashCode: cardinal): cardinal; begin result := aHashCode mod 1646237; end;
+function __2074129(aHashCode: cardinal): cardinal; begin result := aHashCode mod 2074129; end;
+function __2613229(aHashCode: cardinal): cardinal; begin result := aHashCode mod 2613229; end;
+function __3292489(aHashCode: cardinal): cardinal; begin result := aHashCode mod 3292489; end;
+function __4148279(aHashCode: cardinal): cardinal; begin result := aHashCode mod 4148279; end;
+const
+  _PRIMEFUNC: array[0..17] of TDynArrayHashedFastMod =
+    (__81649, __102877, __129607, __163307, __205759, __259229,
+     __326617,__411527,__518509,__653267,__823117,__1037059,__1306601,__1646237,
+     __2074129,__2613229,__3292489,__4148279);
+{$endif FPC}
+
+function NextPrime(v: integer{$ifdef FPC}; out func: TDynArrayHashedFastMod{$endif}): integer;
+var i: PtrInt;
+    P: PIntegerArray;
+begin
+  P := @_PRIMES;
+  for i := 0 to high(_PRIMES) do begin
+    result := P^[i];
+    if result>v then begin
+      {$ifdef FPC} if i<=high(_PRIMEFUNC) then func := _PRIMEFUNC[i]; {$endif}
+      exit;
+    end;
+  end;
+  result := maxInt; // would never happen
+end;
+
+function TDynArrayHashed.HashTableIndex(aHashCode: cardinal): cardinal;
 begin
   result := fHashTableSize;
-  if result>HASH_PO2 then
-    result := aHashCode mod cardinal(result) else
+  if result>HASH_PO2 then {$ifdef FPC}
+    if Assigned(fHashFastMod) then
+      result := fHashFastMod(aHashCode) else {$endif FPC}
+      result := aHashCode mod result else
     result := aHashCode and (result-1);
 end;
 
@@ -51862,7 +51933,7 @@ begin
     fHasher := aHasher;
   if (@aHashElement=nil) or (@aCompare=nil) then begin
     // it's faster to retrieve now the hashing/compare function once here
-    k := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}ToKnownType;
+    k := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GuessKnownType;
     if @aHashElement=nil then
       aHashElement := DYNARRAY_HASHFIRSTFIELD[aCaseInsensitive,k];
     if @aCompare=nil then
@@ -51884,6 +51955,7 @@ begin
   if Assigned(fHashElement) or Assigned(fEventHash) then
     fHashState := [hasHasher] else
     byte(fHashState) := 0;
+  {$ifdef FPC} fHashFastMod := nil; {$endif FPC}
 end;
 
 //var TDynArrayHashedCollisionCount: cardinal;
@@ -51998,27 +52070,33 @@ begin
   end;
 end;
 
-function TDynArrayHashed.ReHash(forAdd: boolean): boolean;
-var i, n, cap, ndx: integer;
+function TDynArrayHashed.ReHash(forAdd: boolean; forceGrow: boolean): boolean;
+var i, n, cap, siz, ndx: integer;
     P: PAnsiChar;
     hc: cardinal;
 begin
   result := false;
+  siz := fHashTableSize;
   HashInvalidate;
   if not(hasHasher in fHashState) then
     exit;
   n := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCount;
   if not forAdd and ((n=0) or (n<fHashCountTrigger)) then
     exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
-  cap := GetCapacity*2; // Capacity better than Count; *2 to have void slots
-  if cap<=HASH_PO2 then begin
-    i := 256; // find nearest power of two for fast bitwise division
-    while i<cap do
-      i := i shl 1;
-    fHashTableSize := i;
-  end else
-    fHashTableSize := cap; // will use slower mod/div but consume less memory
-  SetLength(fHashTable,fHashTableSize); // fill with 0 (void slot)
+  if forceGrow and (siz>0) then // next power of two or next grown size
+    if siz<HASH_PO2 then
+      siz := siz shl 1 else
+      siz := NextPrime(siz{$ifdef FPC},fHashFastMod{$endif}) else begin
+    cap := GetCapacity*2; // Capacity better than Count - *2 for void slots
+    if cap<=HASH_PO2 then begin
+      siz := 256; // find nearest power of two for fast bitwise division
+      while siz<cap do
+        siz := siz shl 1;
+    end else // use primes to reduce memory usage
+      siz := NextPrime(cap{$ifdef FPC},fHashFastMod{$endif});
+  end;
+  fHashTableSize := siz;
+  SetLength(fHashTable,siz); // fill with 0 (void slot)
   // fill fHashTable[] from all existing items
   include(fHashState,canHash); // needed before HashFindAndCompare() below
   P := Value^;
@@ -54364,7 +54442,7 @@ begin // code below must match TDynArray.LoadFromJSON
     end;
   if Assigned(customWriter) then
     T := djCustom else
-    T := aDynArray.ToKnownType({exacttype=}true);
+    T := aDynArray.GuessKnownType({exacttype=}true);
   P := aDynArray.fValue^;
   Add('[');
   case T of
@@ -60072,7 +60150,6 @@ end;
 constructor TObjectListHashedAbstract.Create(aFreeItems: boolean);
 begin
   inherited Create;
-  fFreeItems := aFreeItems;
   fHash.Init(TypeInfo(TObjectDynArray),fList,@HashPtrUInt,@SortDynArrayPointer,nil,@fCount);
   fHash.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}SetIsObjArray(aFreeItems);
 end;
@@ -60087,7 +60164,7 @@ procedure TObjectListHashedAbstract.Delete(aIndex: integer);
 begin
   if (self<>nil) and
      fHash.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}Delete(aIndex) then
-  fHash.HashInvalidate;
+    fHash.HashInvalidate;
 end;
 
 procedure TObjectListHashedAbstract.Delete(aObject: TObject);
