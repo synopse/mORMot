@@ -12329,7 +12329,7 @@ var
 {$ifdef CPUX64}
 type
   /// cpuERMS is slightly slower than cpuAVX so is not available by default
-  TX64CpuFeatures = set of(cpuAVX {$ifdef WITH_ERMS}, cpuERMS{$endif});
+  TX64CpuFeatures = set of(cpuAVX, cpuAVX2 {$ifdef WITH_ERMS}, cpuERMS{$endif});
 var
   /// internal flags used by FillCharFast - easier from asm that CpuFeatures
   CPUIDX64: TX64CpuFeatures;
@@ -51586,8 +51586,9 @@ begin
     result := aHashCode and (result-1);
 end;
 
-{$ifdef FPC_X64} // AVX2 asm is not supported by Delphi (even 10.3) :(
-procedure DynArrayHashTableAdjustAVX2(P: PIntegerArray; deleted: integer; count: PtrInt);
+// brute force O(n) indexes fix after deletion (much faster than full ReHash)
+procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
+{$ifdef CPUX64ASM} // SSE2 simd is 25x faster than "if P^>deleted then dec(P^)"
 {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm .noframe // rcx=P, edx=deleted, r8=count  (Linux: rdi,esi,rdx)
 {$endif FPC}
@@ -51596,25 +51597,29 @@ asm .noframe // rcx=P, edx=deleted, r8=count  (Linux: rdi,esi,rdx)
         mov     rcx, rdi
         mov     rdx, rsi
 {$endif Linux}
-        xor     eax, eax       // reset eax high bits for setg al below
-        vmovq   xmm0, rdx      // xmm0 = 128-bit of quad deleted
-        vpshufd ymm0, ymm0, 0  // shuffle to 128-bit low lane
-        vperm2f128 ymm0, ymm0, ymm0, 0 // copy to 128-bit high lane of ymm0
-        // ensure P is 256-bit aligned (vmovdqa)
-@align: test    cl, 31
-        jz      @s
+        xor     eax, eax    // reset eax high bits for setg al below
+        movq    xmm0, rdx   // xmm0 = 128-bit of quad deleted
+        pshufd  xmm0, xmm0, 0
         test    cl, 3
         jnz     @1  // paranoid: a dword dynamic array is always dword-aligned
+        // ensure P is 256-bit aligned (for avx2)
+@align: test    cl, 31
+        jz      @ok
         cmp     dword ptr[rcx], edx
         setg    al                  // P[]>deleted -> al=1, 0 otherwise
         sub     dword ptr[rcx], eax // branchless dec(P[])
         add     rcx, 4
         dec     r8
         jmp     @align
+@ok:    {$ifdef FPC} // AVX2 asm is not supported by Delphi (even 10.3) :(
+        test    byte ptr[rip+CPUIDX64], 1 shl cpuAVX2
+        jz      @sse2
+        vpshufd ymm0, ymm0, 0  // shuffle to 128-bit low lane
+        vperm2f128 ymm0, ymm0, ymm0, 0 // copy to 128-bit high lane of ymm0
         // avx process of 128 bytes (32 indexes) per loop iteration
-{$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@s:     sub      r8, 32
-        vmovdqa  ymm1, [rcx]
+        align 16
+@avx2:  sub      r8, 32
+        vmovdqa  ymm1, [rcx]       // 4 x 256-bit process
         vmovdqa  ymm3, [rcx + 32]
         vmovdqa  ymm5, [rcx + 64]
         vmovdqa  ymm7, [rcx + 96]
@@ -51632,49 +51637,14 @@ asm .noframe // rcx=P, edx=deleted, r8=count  (Linux: rdi,esi,rdx)
         vmovdqa  [rcx + 96], ymm7
         add      rcx, 128
         cmp      r8, 32
-        jae      @s
+        jae      @avx2
         vzeroupper
         jmp      @2
-        // trailing indexes
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
-@1:     dec     r8
-        cmp     dword ptr[rcx + r8 * 4], edx
-        setg    al
-        sub     dword ptr[rcx + r8 * 4], eax
-@2:     test    r8, r8
-        jnz     @1
-end;
-{$endif FPC_X64}
-
-// brute force O(n) indexes fix after deletion (much faster than full ReHash)
-procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
-{$ifdef CPUX64ASM} // SSE2 simd is 25x faster than "if P^>deleted then dec(P^)"
-{$ifdef FPC}nostackframe; assembler; asm {$else}
-asm .noframe // rcx=P, edx=deleted, r8=count  (Linux: rdi,esi,rdx)
-{$endif FPC}
-{$ifdef Linux}
-        mov     r8, rdx
-        mov     rcx, rdi
-        mov     rdx, rsi
-{$endif Linux}
-        xor     eax, eax    // reset eax high bits for setg al below
-        movq    xmm0, rdx   // xmm0 = 128-bit of quad deleted
-        pshufd  xmm0, xmm0, 0
-        // ensure P is 128-bit aligned (movdqa) - but count>=256 = 1KB -> OK
-@align: test    cl, 15
-        jz      @s  // paranoid
-        test    cl, 3
-        jnz     @1  // paranoider: a dword dynamic array is always dword-aligned
-        cmp     dword ptr[rcx], edx
-        setg    al                  // P[]>deleted -> al=1, 0 otherwise
-        sub     dword ptr[rcx], eax // branchless dec(P[])
-        add     rcx, 4
-        dec     r8
-        jmp     @align
+        {$endif FPC}
         // SSE2 process of 64 bytes (16 indexes) per loop iteration
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@s:     sub     r8, 16
-        movdqa  xmm1, dqword [rcx]  // quad load
+@sse2:  sub     r8, 16
+        movdqa  xmm1, dqword [rcx]  // 4 x 128-bit process
         movdqa  xmm3, dqword [rcx + 16]
         movdqa  xmm5, dqword [rcx + 32]
         movdqa  xmm7, dqword [rcx + 48]
@@ -51696,10 +51666,9 @@ asm .noframe // rcx=P, edx=deleted, r8=count  (Linux: rdi,esi,rdx)
         movdqa  dqword [rcx + 48], xmm7
         add     rcx, 64
         cmp     r8, 16
-        jae     @s
+        jae     @sse2
         jmp     @2
         // trailing indexes
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @1:     dec     r8
         cmp     dword ptr[rcx + r8 * 4], edx
         setg    al
@@ -51709,9 +51678,9 @@ asm .noframe // rcx=P, edx=deleted, r8=count  (Linux: rdi,esi,rdx)
 end;
 {$else}
 begin
-  repeat
+  repeat // this branchless code is 10x faster than if :)
     dec(count,8);
-    dec(P[0],ord(P[0]>deleted)); // branchless code is 10x faster than if :)
+    dec(P[0],ord(P[0]>deleted));
     dec(P[1],ord(P[1]>deleted));
     dec(P[2],ord(P[2]>deleted));
     dec(P[3],ord(P[3]>deleted));
@@ -51797,17 +51766,12 @@ end;
   23 #172723  adjust=147.20ms 13.7GB hash=2.34ms
   23 #195075  adjust=161.73ms 14.1GB/s hash=2.57ms
 }
-procedure TDynArrayHashed.HashDelete(aArrayIndex,aHashTableIndex: integer; aHashCode: cardinal);
+procedure TDynArrayHashed.HashDelete(aArrayIndex,aHashTableIndex: integer;
+  aHashCode: cardinal);
 var first,next,last,ndx,i,n: integer;
     P: PAnsiChar;
     indexes: array[0..511] of cardinal; // to be rehashed
 begin
-  // adjust all stored indexes after deletion
-  {$ifdef FPC_X64}
-  if cfAVX2 in CpuFeatures then
-    DynArrayHashTableAdjustAVX2(pointer(fHashTable),aArrayIndex,fHashTableSize) else
-  {$endif FPC_X64}
-    DynArrayHashTableAdjust(pointer(fHashTable),aArrayIndex,fHashTableSize);
   // retrieve hash table entries to be recomputed
   first := aHashTableIndex;
   last := fHashTableSize;
@@ -51830,38 +51794,35 @@ begin
     indexes[n] := ndx;
     inc(n);
   until false;
-  // ReHash collided entries
+  // ReHash collided entries - note: item is not yet deleted in Value^[]
   for i := 0 to n-1 do begin
     P := PAnsiChar(Value^)+indexes[i]*ElemSize;
     ndx := HashFindAndCompare(HashOne(P),P^);
     if ndx<0 then
       fHashTable[-ndx-1] := indexes[i]+1; // ignore ndx>=0 dups (like ReHash)
   end;
+  // adjust all stored indexes after deletion
+  DynArrayHashTableAdjust(pointer(fHashTable),aArrayIndex,fHashTableSize);
 end;
 
-function TDynArrayHashed.FindHashedAndDelete(const Elem; FillDeleted: pointer): integer;
+function TDynArrayHashed.FindHashedAndDelete(const Elem; FillDeleted: pointer;
+  noDeleteEntry: boolean): integer;
 var hc: cardinal;
     ht: integer;
 begin
-  if not(canHash in fHashState) then begin
+  if canHash in fHashState then begin
+    hc := HashOne(@Elem);
+    result := HashFindAndCompare(hc,Elem,@ht);
+    if result<0 then
+      result := -1 else
+      HashDelete(result,ht,hc);
+  end else
     result := Scan(Elem);
-    if not(canHash in fHashState) then begin
-      if result>=0 then begin
-        if FillDeleted<>nil then
-          ElemCopyAt(result,FillDeleted^);
-        Delete(result);
-      end;
-      exit;
-    end;
-  end;
-  hc := HashOne(@Elem);
-  result := HashFindAndCompare(hc,Elem,@ht);
-  if result<0 then          // not found
-    result := -1 else begin // item found
+  if result>=0 then begin
     if FillDeleted<>nil then
       ElemCopyAt(result,FillDeleted^);
-    Delete(result);
-    HashDelete(result,ht,hc);
+    if not noDeleteEntry then
+      Delete(result);
   end;
 end;
 
@@ -64919,6 +64880,8 @@ begin
   {$endif WITH_ERMS}
   if cfAVX in CpuFeatures then
     include(CPUIDX64,cpuAVX);
+  if cfAVX2 in CpuFeatures then
+    include(CPUIDX64,cpuAVX2);
   {$endif CPUX64}
   // validate accuracy of most used HW opcodes
   if cfRAND in CpuFeatures then
