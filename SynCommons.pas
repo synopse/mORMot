@@ -5792,8 +5792,71 @@ type
   // - can be set as an alternative to TDynArrayHashOne
   TEventDynArrayHashOne = function(const Elem): cardinal of object;
 
-
   {.$define DYNARRAYHASHCOLLISIONCOUNT}
+
+  /// allow O(1) lookup to any dynamic array content
+  // - this won't handle the storage process (like add/update), just efficiently
+  // maintain a hash table over an existing dynamic array: several TDynArrayHasher
+  // could be applied to a single TDynArray wrapper
+  // - TDynArrayHashed will use a TDynArrayHasher for its own store
+  {$ifdef FPC_OR_UNICODE}TDynArrayHasher = record private
+  {$else}TDynArrayHasher = object protected{$endif}
+    DynArray: PDynArray;
+    HashElement: TDynArrayHashOne;
+    EventHash: TEventDynArrayHashOne;
+    Hasher: THasher;
+    HashTable: TIntegerDynArray; // store 0 for void entry, or Index+1
+    HashTableSize: integer;
+    ScanCounter: integer; // Scan()>=0 up to CountTrigger*2
+    {$ifdef FPC}
+    FastMod: TDynArrayHashedFastMod;
+    {$endif FPC}
+    State: set of (hasHasher, canHash);
+    function HashTableIndex(aHashCode: cardinal): cardinal; {$ifdef HASINLINE}inline;{$endif}
+    procedure HashAdd(aHashCode: cardinal; var result: integer);
+    procedure HashDelete(aArrayIndex, aHashTableIndex: integer; aHashCode: cardinal);
+    procedure RaiseFatalCollision(const caller: RawUTF8; aHashCode: cardinal);
+  public
+    /// associated item comparison - may differ from DynArray^.Compare
+    Compare: TDynArraySortCompare;
+    /// custom method-based comparison function
+    EventCompare: TEventDynArraySortCompare;
+    /// after how many FindBeforeAdd() or Scan() the hashing starts - default 32
+    CountTrigger: integer;
+    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+    /// low-level access to an hash collisions counter
+    FindCollisions: cardinal;
+    {$endif}
+    /// initialize the hash table for a given dynamic array storage
+    procedure Init(aDynArray: PDynArray; aHashElement: TDynArrayHashOne;
+      aCompare: TDynArraySortCompare; aHasher: THasher; aCaseInsensitive: boolean); overload;
+    /// allow custom hashing via a method event
+    procedure SetEventHash(const event: TEventDynArrayHashOne);
+    /// search for an element value inside the dynamic array without hashing
+    // - trigger hashing if ScanCounter reaches CountTrigger*2
+    function Scan(Elem: pointer): integer;
+    /// search for an element value inside the dynamic array with hashing
+    function Find(Elem: pointer): integer; overload;
+    /// search for a hashed element value inside the dynamic array with hashing
+    function Find(Elem: pointer; aHashCode: cardinal): integer; overload;
+    /// search for a hash position inside the dynamic array with hashing
+    function Find(aHashCode: cardinal; aForAdd: boolean): integer; overload;
+    /// returns position in array, or next void index in HashTable[] as -(index+1)
+    function FindOrNew(aHashCode: cardinal; Elem: pointer; aHashTableIndex: PInteger=nil): integer;
+    /// search an hashed element value for adding, updating the internal hash table
+    // - trigger hashing if Count reaches CountTrigger
+    function FindBeforeAdd(Elem: pointer; out wasAdded: boolean; aHashCode: cardinal): integer;
+    /// search and delete an element value, updating the internal hash table
+    function FindBeforeDelete(Elem: pointer): integer;
+    /// reset the hash table - no rehash yet
+    procedure Clear;
+    /// full computation of the internal hash table
+    function ReHash(forced, forceGrow: boolean): boolean;
+    /// compute the hash of a given item
+    function HashOne(Elem: pointer): cardinal; {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 -> C1632
+    /// retrieve the low-level hash of a given item
+    function GetHashFromIndex(aIndex: PtrInt): cardinal;
+  end;
 
   /// used to access any dynamic arrray elements using fast hash
   // - by default, binary sort could be used for searching items for TDynArray:
@@ -5847,33 +5910,9 @@ type
   TDynArrayHashed = object(TDynArray)
   protected
   {$endif UNDIRECTDYNARRAY}
-    fEventCompare: TEventDynArraySortCompare;
-    fHashElement: TDynArrayHashOne;
-    fEventHash: TEventDynArrayHashOne;
-    fHasher: THasher;
-    fHashTable: TIntegerDynArray; // store 0 for void entry, or Index+1
-    fHashTableSize: integer;
-    fHashCountTrigger: integer;
-    fScanCounter: integer; // Scan()>=0 up to fHashCountTrigger*2
-    {$ifdef FPC} // Delphi doesn't generate fast modulo per a constant code
-    fHashFastMod: TDynArrayHashedFastMod;
-    {$endif FPC}
-    fHashState: set of (hasHasher, canHash);
-    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-    fHashFindCollisions: cardinal;
-    {$endif}
-    function HashOne(Elem: pointer): cardinal;
-      {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 -> C1632 internal error
-    procedure HashAdd(aHashCode: cardinal; var result: integer);
-    procedure HashDelete(aArrayIndex, aHashTableIndex: integer; aHashCode: cardinal);
-    function HashFind(aHashCode: cardinal; aForAdd: boolean): integer;
-    function HashFindAndCompare(aHashCode: cardinal; const Elem;
-      aHashTableIndex: PInteger=nil): integer;
-    function HashTableIndex(aHashCode: cardinal): cardinal; {$ifdef HASINLINE}inline;{$endif}
-    procedure HashInvalidate;
-    procedure RaiseFatalCollision(const caller: RawUTF8; aHashCode: cardinal);
-    function GetHashFromIndex(aIndex: PtrInt): Cardinal;
-    procedure SetEventHash(const event: TEventDynArrayHashOne);
+    fHash: TDynArrayHasher;
+    procedure SetEventHash(const event: TEventDynArrayHashOne); {$ifdef HASINLINE}inline;{$endif}
+    function GetHashFromIndex(aIndex: PtrInt): Cardinal; {$ifdef HASINLINE}inline;{$endif}
   public
     /// initialize the wrapper with a one-dimension dynamic array
     // - this version accepts some hash-dedicated parameters: aHashElement to
@@ -5905,7 +5944,7 @@ type
     // the dynamic array content (e.g. in case of element deletion or update,
     // or after calling LoadFrom/Clear method) - this is not necessary after
     // FindHashedForAdding / FindHashedAndUpdate / FindHashedAndDelete methods
-    function ReHash(forAdd: boolean=false; forceGrow: boolean=false): boolean;
+    function ReHash(forAdd: boolean=false; forceGrow: boolean=false): boolean; {$ifdef HASINLINE}inline;{$endif}
     /// search for an element value inside the dynamic array using hashing
     // - Elem should be of the type expected by both the hash function and
     // Equals/Compare methods: e.g. if the searched/hashed field in a record is
@@ -6005,14 +6044,14 @@ type
     property Hash[aIndex: PtrInt]: Cardinal read GetHashFromIndex;
     /// alternative event-oriented Compare function to be used for Sort and Find
     // - will be used instead of Compare, to allow object-oriented callbacks
-    property EventCompare: TEventDynArraySortCompare read fEventCompare write fEventCompare;
+    property EventCompare: TEventDynArraySortCompare read fHash.EventCompare write fHash.EventCompare;
     /// custom hash function to be used for hashing of a dynamic array element
-    property HashElement: TDynArrayHashOne read fHashElement;
+    property HashElement: TDynArrayHashOne read fHash.HashElement;
     /// alternative event-oriented Hash function for ReHash
     // - this object-oriented callback will be used instead of HashElement
     // on each dynamic array entries - HashElement will still be used on
     // const Elem values, since they may be just a sub part of the stored entry
-    property EventHash: TEventDynArrayHashOne read fEventHash write SetEventHash;
+    property EventHash: TEventDynArrayHashOne read fHash.EventHash write SetEventHash;
     /// after how many items the hashing take place
     // - for smallest arrays, O(n) search if faster than O(1) hashing, since
     // maintaining internal hash table has some CPU and memory costs
@@ -6020,12 +6059,12 @@ type
     // may have some benefit, e.g. if Scan() is called 2*HashCountTrigger times
     // - equals 32 by default, i.e. start hashing when Count reaches 32 or
     // manual Scan() is called 64 times
-    property HashCountTrigger: integer read fHashCountTrigger write fHashCountTrigger;
+    property HashCountTrigger: integer read fHash.CountTrigger write fHash.CountTrigger;
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     /// access to the internal collision of HashFind()
     // - it won't depend only on the HashElement(), but also on the internal
     // hash bucket size (which is much lower than 2^32 items)
-    property HashFindCollisions: cardinal read fHashFindCollisions write fHashFindCollisions;
+    property HashFindCollisions: cardinal read fHash.FindCollisions write fHash.FindCollisions;
     {$endif}
   end;
 
@@ -20477,8 +20516,7 @@ begin
   Safe.LockedInt64[0] := 0;
   {$endif}
   Values.Init(TypeInfo(TRawUTF8DynArray),Value,HashAnsiString,
-    SortDynArrayAnsiString,crc32c,@Safe.Padding[0].VInteger,false);
-  Values.fHasher := InterningHasher; // consistent with TRawUTF8Interning
+    SortDynArrayAnsiString,InterningHasher,@Safe.Padding[0].VInteger,false);
 end;
 
 procedure TRawUTF8InterningSlot.Done;
@@ -51163,7 +51201,7 @@ begin
 end;
 
 
-{ TDynArrayHashed }
+{ TDynArrayHasher }
 
 function HashAnsiString(const Elem; Hasher: THasher): cardinal;
 begin
@@ -51278,7 +51316,6 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
-
 function VariantHash(const value: variant; CaseInsensitive: boolean;
   Hasher: THasher): cardinal;
 var Up: array[byte] of AnsiChar; // avoid heap allocation
@@ -51327,8 +51364,594 @@ function HashVariantI(const Elem; Hasher: THasher): cardinal;
 begin
   result := VariantHash(variant(Elem),true,Hasher);
 end;
-
 {$endif NOVARIANTS}
+
+procedure TDynArrayHasher.Init(aDynArray: PDynArray; aHashElement: TDynArrayHashOne;
+  aCompare: TDynArraySortCompare; aHasher: THasher; aCaseInsensitive: boolean);
+var k: TDynArrayKind;
+begin
+  DynArray := aDynArray;
+  if @aHasher=nil then
+    Hasher := DefaultHasher else
+    Hasher := aHasher;
+  if (@aHashElement=nil) or (@aCompare=nil) then begin
+    // it's faster to retrieve now the hashing/compare functions
+    k := DynArray^.GuessKnownType;
+    if @aHashElement=nil then
+      aHashElement := DYNARRAY_HASHFIRSTFIELD[aCaseInsensitive,k];
+    if @aCompare=nil then
+      aCompare := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,k];
+  end;
+  HashElement := aHashElement;
+  EventHash := nil;
+  Compare := aCompare;
+  EventCompare := nil;
+  CountTrigger := 32;
+  Clear;
+end;
+
+procedure TDynArrayHasher.Clear;
+begin
+  HashTable := nil;
+  HashTableSize := 0;
+  ScanCounter := 0;
+  {$ifdef FPC} FastMod := nil; {$endif FPC}
+  if Assigned(HashElement) or Assigned(EventHash) then
+    State := [hasHasher] else
+    byte(State) := 0;
+end;
+
+function TDynArrayHasher.HashOne(Elem: pointer): cardinal;
+begin
+  if Assigned(EventHash) then
+    result := EventHash(Elem^) else
+  if Assigned(HashElement) then
+    result := HashElement(Elem^,Hasher) else
+    result := 0; // will be ignored afterwards for sure
+end;
+
+const // some increasing primes following HASH_PO2=2^16/18=65536/262144
+  _PRIMES: array[0..38{$ifdef FPC}+6{$endif}] of integer = (
+    {$ifdef FPC} 81649, 102877, 129607, 163307, 205759, 259229, {$endif}
+    326617, 411527, 518509, 653267, 823117, 1037059, 1306601, 1646237,
+    2074129, 2613229, 3292489, 4148279, 5226491, 6584983, 8296553, 10453007,
+    13169977, 16593127, 20906033, 26339969, 33186281, 41812097, 52679969,
+    66372617, 83624237, 105359939, 132745199, 167248483, 210719881, 265490441,
+    334496971, 421439783, 530980861, 668993977, 842879579, 1061961721,
+    1337987929, 1685759167, 2123923447);
+{$ifdef FPC} // FPC generates very fast constant division using reciprocal :)
+function __81649(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 81649; end;
+function __102877(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 102877; end;
+function __129607(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 129607; end;
+function __163307(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 163307; end;
+function __205759(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 205759; end;
+function __259229(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 259229; end;
+function __326617(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 326617; end;
+function __411527(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 411527; end;
+function __518509(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 518509; end;
+function __653267(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 653267; end;
+function __823117(aHashCode: cardinal): cardinal; begin  result := aHashCode mod 823117; end;
+function __1037059(aHashCode: cardinal): cardinal; begin result := aHashCode mod 1037059; end;
+function __1306601(aHashCode: cardinal): cardinal; begin result := aHashCode mod 1306601; end;
+function __1646237(aHashCode: cardinal): cardinal; begin result := aHashCode mod 1646237; end;
+function __2074129(aHashCode: cardinal): cardinal; begin result := aHashCode mod 2074129; end;
+function __2613229(aHashCode: cardinal): cardinal; begin result := aHashCode mod 2613229; end;
+function __3292489(aHashCode: cardinal): cardinal; begin result := aHashCode mod 3292489; end;
+function __4148279(aHashCode: cardinal): cardinal; begin result := aHashCode mod 4148279; end;
+const
+  _PRIMEFUNC: array[0..17] of TDynArrayHashedFastMod =
+    (__81649, __102877, __129607, __163307, __205759, __259229,
+     __326617,__411527,__518509,__653267,__823117,__1037059,__1306601,__1646237,
+     __2074129,__2613229,__3292489,__4148279);
+{$endif FPC}
+
+function NextPrime(v: integer{$ifdef FPC}; out func: TDynArrayHashedFastMod{$endif}): integer;
+var i: PtrInt;
+    P: PIntegerArray;
+begin
+  P := @_PRIMES;
+  for i := 0 to high(_PRIMES) do begin
+    result := P^[i];
+    if result>v then begin
+      {$ifdef FPC} if i<=high(_PRIMEFUNC) then func := _PRIMEFUNC[i]; {$endif}
+      exit;
+    end;
+  end;
+  result := maxInt; // would never happen
+end;
+
+function TDynArrayHasher.HashTableIndex(aHashCode: cardinal): cardinal;
+begin
+  result := HashTableSize;
+  if result>HASH_PO2 then {$ifdef FPC}
+    if Assigned(FastMod) then
+      result := FastMod(aHashCode) else {$endif FPC}
+      result := aHashCode mod result else
+    result := aHashCode and (result-1);
+end;
+
+function TDynArrayHasher.Find(aHashCode: cardinal; aForAdd: boolean): integer;
+var first,last: integer;
+    ndx,siz: PtrInt;
+    P: PAnsiChar;
+begin
+  P := DynArray^.Value^;
+  siz := DynArray^.ElemSize;
+  if not(canHash in State) then begin // Count=0 or Count<CountTrigger
+    if hasHasher in State then
+      for result := 0 to DynArray^.Count-1 do // O(n) linear search via hashing
+        if HashOne(P)=aHashCode then
+          exit else
+          inc(P,siz);
+    result := -1;
+    exit;
+  end;
+  result := HashTableIndex(aHashCode);
+  first := result;
+  last := HashTableSize;
+  repeat
+    ndx := HashTable[result]-1; // index+1 was stored
+    if ndx<0 then begin
+      result := -(result+1); // found void entry
+      exit;
+    end else
+    if not aForAdd and (HashOne(P+ndx*siz)=aHashCode) then begin
+      result := ndx;
+      exit;
+    end;
+    inc(result); // try next entry on hash collision
+    if result=last then
+      // reached the end -> search once from HashTable[0] to HashTable[first-1]
+      if result=first then
+        break else begin
+        result := 0;
+        last := first;
+      end;
+  until false;
+  RaiseFatalCollision('Find hash',aHashCode);
+end;
+
+function TDynArrayHasher.FindOrNew(aHashCode: cardinal; Elem: pointer;
+  aHashTableIndex: PInteger): integer;
+var first,last,ndx: integer;
+    found: boolean;
+    P: PAnsiChar;
+begin
+  if not(canHash in State) then begin // e.g. Count<CountTrigger
+    result := Scan(Elem);
+    exit;
+  end;
+  result := HashTableIndex(aHashCode);
+  first := result;
+  last := HashTableSize;
+  repeat
+    ndx := HashTable[result]-1;  // index+1 was stored
+    if ndx<0 then begin
+      result := -(result+1);
+      exit; // returns void index in HashTable[]
+    end;
+    with DynArray^ do
+      P := PAnsiChar(Value^)+cardinal(ndx)*ElemSize;
+    if Assigned(EventCompare) then
+      found := EventCompare(P^,Elem^)=0 else
+    if Assigned(Compare) then
+      found := Compare(P^,Elem^)=0 else
+      found := false;
+    if found then begin // faster than hash e.g. for strings
+      if aHashTableIndex<>nil then
+        aHashTableIndex^ := result;
+      result := ndx;
+      exit;
+    end;
+    // hash or slot collision -> search next item
+    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+    inc(FindCollisions);
+    {$endif}
+    //inc(TDynArrayHashedCollisionCount);
+    inc(result);
+    if result=last then
+      // reached the end -> search once from HashTable[0] to HashTable[first-1]
+      if result=first then
+        break else begin
+        result := 0;
+        last := first;
+      end;
+  until false;
+  RaiseFatalCollision('Find compared',aHashCode);
+end;
+
+procedure TDynArrayHasher.HashAdd(aHashCode: cardinal; var result: integer);
+var n: integer;
+begin // on input: HashTable[result] slot is already computed
+  n := DynArray^.Count;
+  if HashTableSize<n then
+    RaiseFatalCollision('HashAdd HashTableSize',aHashCode);
+  if HashTableSize-n<n shr 2 then begin // grow hash table when 25% void
+    ReHash({foradd=}true,{grow=}true);
+    result := Find(aHashCode,{foradd=}true); // recompute position
+    if result>=0 then
+      RaiseFatalCollision('HashAdd',aHashCode);
+  end;
+  HashTable[-result-1] := n+1; // store Index+1 (0 means void slot)
+  result := n;
+end; // on output: result holds the position in fValue[]
+
+
+// brute force O(n) indexes fix after deletion (much faster than full ReHash)
+procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
+{$ifdef CPUX64ASM} // SSE2 simd is 25x faster than "if P^>deleted then dec(P^)"
+{$ifdef FPC}nostackframe; assembler; asm {$else}
+asm .noframe // rcx=P, edx=deleted, r8=count  (Linux: rdi,esi,rdx)
+{$endif FPC}
+{$ifdef Linux}
+        mov     r8, rdx
+        mov     rcx, rdi
+        mov     rdx, rsi
+{$endif Linux}
+        xor     eax, eax    // reset eax high bits for setg al below
+        movq    xmm0, rdx   // xmm0 = 128-bit of quad deleted
+        pshufd  xmm0, xmm0, 0
+        test    cl, 3
+        jnz     @1  // paranoid: a dword dynamic array is always dword-aligned
+        // ensure P is 256-bit aligned (for avx2)
+@align: test    cl, 31
+        jz      @ok
+        cmp     dword ptr[rcx], edx
+        setg    al                  // P[]>deleted -> al=1, 0 otherwise
+        sub     dword ptr[rcx], eax // branchless dec(P[])
+        add     rcx, 4
+        dec     r8
+        jmp     @align
+@ok:    {$ifdef FPC} // AVX2 asm is not supported by Delphi (even 10.3) :(
+        test    byte ptr[rip+CPUIDX64], 1 shl cpuAVX2
+        jz      @sse2
+        vpshufd ymm0, ymm0, 0  // shuffle to 128-bit low lane
+        vperm2f128 ymm0, ymm0, ymm0, 0 // copy to 128-bit high lane of ymm0
+        // avx process of 128 bytes (32 indexes) per loop iteration
+        align 16
+@avx2:  sub      r8, 32
+        vmovdqa  ymm1, [rcx]       // 4 x 256-bit process
+        vmovdqa  ymm3, [rcx + 32]
+        vmovdqa  ymm5, [rcx + 64]
+        vmovdqa  ymm7, [rcx + 96]
+        vpcmpgtd ymm2, ymm1, ymm0  // compare P[]>deleted -> -1, 0 otherwise
+        vpcmpgtd ymm4, ymm3, ymm0
+        vpcmpgtd ymm6, ymm5, ymm0
+        vpcmpgtd ymm8, ymm7, ymm0
+        vpaddd   ymm1, ymm1, ymm2  // adjust by adding -1 / 0
+        vpaddd   ymm3, ymm3, ymm4
+        vpaddd   ymm5, ymm5, ymm6
+        vpaddd   ymm7, ymm7, ymm8
+        vmovdqa  [rcx], ymm1
+        vmovdqa  [rcx + 32], ymm3
+        vmovdqa  [rcx + 64], ymm5
+        vmovdqa  [rcx + 96], ymm7
+        add      rcx, 128
+        cmp      r8, 32
+        jae      @avx2
+        vzeroupper
+        jmp      @2
+        {$endif FPC}
+        // SSE2 process of 64 bytes (16 indexes) per loop iteration
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@sse2:  sub     r8, 16
+        movdqa  xmm1, dqword [rcx]  // 4 x 128-bit process
+        movdqa  xmm3, dqword [rcx + 16]
+        movdqa  xmm5, dqword [rcx + 32]
+        movdqa  xmm7, dqword [rcx + 48]
+        movdqa  xmm2, xmm1  // keep copy for paddd below
+        movdqa  xmm4, xmm3
+        movdqa  xmm6, xmm5
+        movdqa  xmm8, xmm7
+        pcmpgtd xmm1, xmm0  // quad compare P[]>deleted -> -1, 0 otherwise
+        pcmpgtd xmm3, xmm0
+        pcmpgtd xmm5, xmm0
+        pcmpgtd xmm7, xmm0
+        paddd   xmm1, xmm2  // quad adjust by adding -1 / 0
+        paddd   xmm3, xmm4
+        paddd   xmm5, xmm6
+        paddd   xmm7, xmm8
+        movdqa  dqword [rcx], xmm1  // quad store back
+        movdqa  dqword [rcx + 16], xmm3
+        movdqa  dqword [rcx + 32], xmm5
+        movdqa  dqword [rcx + 48], xmm7
+        add     rcx, 64
+        cmp     r8, 16
+        jae     @sse2
+        jmp     @2
+        // trailing indexes
+@1:     dec     r8
+        cmp     dword ptr[rcx + r8 * 4], edx
+        setg    al
+        sub     dword ptr[rcx + r8 * 4], eax
+@2:     test    r8, r8
+        jnz     @1
+end;
+{$else}
+begin
+  repeat
+    dec(count,8);
+    dec(P[0],ord(P[0]>deleted)); // branchless code is 10x faster than if :)
+    dec(P[1],ord(P[1]>deleted));
+    dec(P[2],ord(P[2]>deleted));
+    dec(P[3],ord(P[3]>deleted));
+    dec(P[4],ord(P[4]>deleted));
+    dec(P[5],ord(P[5]>deleted));
+    dec(P[6],ord(P[6]>deleted));
+    dec(P[7],ord(P[7]>deleted));
+    P := @P[8];
+  until count<8;
+  while count>0 do begin
+    dec(count);
+    dec(P[count],ord(P[count]>deleted));
+  end;
+end;
+{$endif CPUX64ASM} // SSE2 asm is invalid prior to Delphi XE7 (to be refined)
+
+// with x86_64/sse2 for 200,000 items: adjust=200.57ms (11.4GB/s) hash=2.46ms
+//  -> TDynArray.Delete move() takes more time than the HashTable update :)
+
+{ some numbers, with CITIES_MAX=200000, deleting 1/128 entries
+  first column (3..23) is the max number of indexes[] chunk to rehash
+1. naive loop
+  for i := 0 to HashTableSize-1 do
+    if HashTable[i]>aArrayIndex then
+      dec(HashTable[i]);
+  3 #257  adjust=7.95ms 191.7MB hash=8us
+  8 #384  adjust=11.93ms 255.8MB hash=10us
+  11 #1019  adjust=32.09ms 332.8MB hash=26us
+  13 #16259  adjust=511.10ms 379.2MB hash=230us
+  13 #32515  adjust=1.01s 383.6MB/s hash=440us
+  14 #33531  adjust=1.04s 382.2MB hash=459us
+  17 #46612  adjust=1.44s 386.3MB hash=639us
+  17 #65027  adjust=1.97s 396.3MB/s hash=916us
+  17 #97539  adjust=2.79s 419.9MB/s hash=1.37ms
+  18 #109858  adjust=3.05s 431.2MB hash=1.51ms
+  18 #130051  adjust=3.44s 454.1MB/s hash=1.75ms
+  18 #162563  adjust=3.93s 496.9MB/s hash=2.14ms
+  23 #172723  adjust=4.05s 511.7MB hash=2.26ms
+  23 #195075  adjust=4.27s 548.6MB/s hash=2.47ms
+2. branchless pure pascal code is about 10x faster!
+  3 #257  adjust=670us 2.2GB hash=8us
+  8 #384  adjust=1ms 2.9GB hash=9us
+  11 #1019  adjust=2.70ms 3.8GB hash=21us
+  13 #16259  adjust=43.65ms 4.3GB hash=210us
+  13 #32515  adjust=87.75ms 4.3GB/s hash=423us
+  14 #33531  adjust=90.44ms 4.3GB hash=441us
+  17 #46612  adjust=127.68ms 4.2GB hash=627us
+  17 #65027  adjust=179.64ms 4.2GB/s hash=908us
+  17 #97539  adjust=267.44ms 4.2GB/s hash=1.35ms
+  18 #109858  adjust=301.27ms 4.2GB hash=1.50ms
+  18 #130051  adjust=355.37ms 4.2GB/s hash=1.74ms
+  18 #162563  adjust=438.79ms 4.3GB/s hash=2.11ms
+  23 #172723  adjust=465.23ms 4.3GB hash=2.23ms
+  23 #195075  adjust=520.85ms 4.3GB/s hash=2.45ms
+3. SSE2 simd assembly makes about 3x improvement
+  3 #257  adjust=290us 5.1GB hash=8us
+  8 #384  adjust=427us 6.9GB hash=10us
+  11 #1019  adjust=1.11ms 9.3GB hash=20us
+  13 #16259  adjust=18.33ms 10.3GB hash=219us
+  13 #32515  adjust=36.32ms 10.5GB/s hash=435us
+  14 #33531  adjust=37.39ms 10.4GB hash=452us
+  17 #46612  adjust=51.70ms 10.5GB hash=622us
+  17 #65027  adjust=72.47ms 10.5GB/s hash=893us
+  17 #97539  adjust=107ms 10.6GB/s hash=1.32ms
+  18 #109858  adjust=120.08ms 10.7GB hash=1.46ms
+  18 #130051  adjust=140.50ms 10.8GB/s hash=1.71ms
+  18 #162563  adjust=171.44ms 11.1GB/s hash=2.10ms
+  23 #172723  adjust=181.02ms 11.1GB hash=2.22ms
+  23 #195075  adjust=201.53ms 11.3GB/s hash=2.44ms
+4. AVX2 simd assembly gives some additional 40% (consistent on my iCore3 cpu)
+  3 #257  adjust=262us 5.6GB hash=8us
+  8 #384  adjust=383us 7.7GB hash=10us
+  11 #1019  adjust=994us 10.4GB hash=21us
+  13 #16259  adjust=16.34ms 11.5GB hash=248us
+  13 #32515  adjust=32.12ms 11.8GB/s hash=464us
+  14 #33531  adjust=33.06ms 11.8GB hash=484us
+  17 #46612  adjust=45.49ms 11.9GB hash=678us
+  17 #65027  adjust=62.36ms 12.2GB/s hash=966us
+  17 #97539  adjust=90.80ms 12.6GB/s hash=1.43ms
+  18 #109858  adjust=101.82ms 12.6GB hash=1.59ms
+  18 #130051  adjust=117.37ms 13GB/s hash=1.83ms
+  18 #162563  adjust=140.08ms 13.6GB/s hash=2.23ms
+  23 #172723  adjust=147.20ms 13.7GB hash=2.34ms
+  23 #195075  adjust=161.73ms 14.1GB/s hash=2.57ms
+}
+procedure TDynArrayHasher.HashDelete(aArrayIndex,aHashTableIndex: integer; aHashCode: cardinal);
+var first,next,last,ndx,i,n: integer;
+    P: PAnsiChar;
+    indexes: array[0..511] of cardinal; // to be rehashed
+begin
+  // retrieve hash table entries to be recomputed
+  first := aHashTableIndex;
+  last := HashTableSize;
+  next := first;
+  n := 0;
+  repeat
+    HashTable[next] := 0; // Clear slots
+    inc(next);
+    if next=last then
+      if next=first then
+        RaiseFatalCollision('HashDelete down',aHashCode) else begin
+        next := 0;
+        last := first;
+      end;
+    ndx := HashTable[next]-1; // stored index+1
+    if ndx<0 then
+      break; // stop at void entry
+    if n=high(indexes) then // typical 0..23
+      RaiseFatalCollision('HashDelete indexes overflow',aHashCode);
+    indexes[n] := ndx;
+    inc(n);
+  until false;
+  // ReHash collided entries - note: item is not yet deleted in Value^[]
+  for i := 0 to n-1 do begin
+    P := PAnsiChar(DynArray^.Value^)+indexes[i]*DynArray^.ElemSize;
+    ndx := FindOrNew(HashOne(P),P,nil);
+    if ndx<0 then
+      HashTable[-ndx-1] := indexes[i]+1; // ignore ndx>=0 dups (like ReHash)
+  end;
+  // adjust all stored indexes
+  DynArrayHashTableAdjust(pointer(HashTable),aArrayIndex,HashTableSize);
+end;
+
+function TDynArrayHasher.FindBeforeAdd(Elem: pointer;
+  out wasAdded: boolean; aHashCode: cardinal): integer;
+var n: integer;
+begin
+  wasAdded := false;
+  if not(canHash in State) then begin
+    n := DynArray^.Count;
+    if n<CountTrigger then begin
+      result := Scan(Elem); // may trigger ReHash -> canHash
+      if result>=0 then
+        exit; // item found
+      if not(canHash in State) then begin
+        wasadded := true;
+        result := n;
+        exit;
+      end;
+    end;
+  end;
+  if not(canHash in State) then
+    ReHash({forced=}true,{grow=}false); // hash previous CountTrigger items
+  result := FindOrNew(aHashCode,Elem,nil);
+  if result<0 then begin // found no matching item
+    wasAdded := true;
+    HashAdd(aHashCode,result);
+  end;
+end;
+
+function TDynArrayHasher.FindBeforeDelete(Elem: pointer): integer;
+var hc: cardinal;
+    ht: integer;
+begin
+  if canHash in State then begin
+    hc := HashOne(Elem);
+    result := FindOrNew(hc,Elem,@ht);
+    if result<0 then
+      result := -1 else
+      HashDelete(result,ht,hc);
+  end else
+    result := Scan(Elem);
+end;
+
+procedure TDynArrayHasher.RaiseFatalCollision(const caller: RawUTF8;
+  aHashCode: cardinal);
+begin
+  raise ESynException.CreateUTF8('TDynArrayHasher.% fatal collision: '+
+    'aHashCode=% HashTableSize=% Count=% Capacity=% ArrayType=% KnownType=%',
+    [caller,CardinalToHexShort(aHashCode),HashTableSize,DynArray^.Count,
+     DynArray^.Capacity,DynArray^.ArrayTypeShort^,ToText(DynArray^.KnownType)^]);
+end;
+
+function TDynArrayHasher.GetHashFromIndex(aIndex: PtrInt): cardinal;
+var P: pointer;
+begin
+  P := DynArray^.ElemPtr(aIndex);
+  if P<>nil then
+    result := HashOne(P) else
+    result := 0;
+end;
+
+procedure TDynArrayHasher.SetEventHash(const event: TEventDynArrayHashOne);
+begin
+  EventHash := event;
+  Clear;
+end;
+
+function TDynArrayHasher.Scan(Elem: pointer): integer;
+var P: PAnsiChar;
+    i,max: integer;
+    siz: PtrInt;
+begin
+  result := -1;
+  max := DynArray^.Count-1;
+  P := DynArray^.Value^;
+  siz := DynArray^.ElemSize;
+  if Assigned(EventCompare) then begin // custom comparison
+    for i := 0 to max do
+      if EventCompare(P^,Elem^)=0 then begin
+        result := i;
+        break;
+      end else
+        inc(P,siz);
+  end else
+  if Assigned(Compare) then
+    for i := 0 to max do
+      if Compare(P^,Elem^)=0 then begin
+        result := i;
+        break;
+      end else
+        inc(P,siz);
+  // enable hashing if Scan() called 2*CountTrigger
+  if (hasHasher in State) and (max>7) then begin
+    inc(ScanCounter);
+    if ScanCounter>=CountTrigger*2 then begin
+      CountTrigger := 2; // rather use hashing from now on
+      ReHash(false,false);   // set HashTable[] and canHash
+    end;
+  end;
+end;
+
+function TDynArrayHasher.Find(Elem: pointer): integer;
+begin
+  result := Find(Elem,HashOne(Elem));
+end;
+
+function TDynArrayHasher.Find(Elem: pointer; aHashCode: cardinal): integer;
+begin
+  result := FindOrNew(aHashCode,Elem,nil); // fallback to Scan() if needed
+  if result<0 then
+    result := -1; // for coherency with most search methods
+end;
+
+function TDynArrayHasher.ReHash(forced, forceGrow: boolean): boolean;
+var i, n, cap, siz, ndx: integer;
+    P: PAnsiChar;
+    hc: cardinal;
+begin
+  result := false;
+  // initialize a new void HashTable[]=0
+  siz := HashTableSize;
+  Clear;
+  if not(hasHasher in State) then
+    exit;
+  n := DynArray^.Count;
+  if not forced and ((n=0) or (n<CountTrigger)) then
+    exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
+  if forceGrow and (siz>0) then // next power of two or next grown size
+    if siz<HASH_PO2 then
+      siz := siz shl 1 else
+      siz := NextPrime(siz{$ifdef FPC},FastMod{$endif}) else begin
+    cap := DynArray^.Capacity*2; // Capacity better than Count - *2 for void slots
+    if cap<=HASH_PO2 then begin
+      siz := 256; // find nearest power of two for fast bitwise division
+      while siz<cap do
+        siz := siz shl 1;
+    end else // use primes to reduce memory usage
+      siz := NextPrime(cap{$ifdef FPC},FastMod{$endif});
+  end;
+  HashTableSize := siz;
+  SetLength(HashTable,siz); // fill with 0 (void slot)
+  // fill HashTable[]=index+1 from all existing items
+  include(State,canHash); // needed before Find() below
+  P := DynArray^.Value^;
+  for i := 1 to n do begin
+    if Assigned(EventHash) then
+      hc := EventHash(P^) else
+      hc := HashElement(P^,Hasher);
+    ndx := FindOrNew(hc,P,nil);
+    if ndx<0 then
+      // >=0 means found exact duplicate of P^: shouldn't happen -> ignore
+      HashTable[-ndx-1] := i; // store index+1 (0 means void entry)
+    inc(P,DynArray^.ElemSize);
+  end;
+  result := true;
+end;
+
+
+{ TDynArrayHashed }
 
 {$ifdef UNDIRECTDYNARRAY} // some Delphi 2009+ wrapper definitions
 
@@ -51427,108 +52050,64 @@ end;
 
 {$endif UNDIRECTDYNARRAY}
 
-function TDynArrayHashed.Scan(const Elem): integer;
-var P: PAnsiChar;
-    c: PInteger;
-    i,n: integer;
+procedure TDynArrayHashed.Init(aTypeInfo: pointer; var aValue;
+  aHashElement: TDynArrayHashOne; aCompare: TDynArraySortCompare;
+  aHasher: THasher; aCountPointer: PInteger; aCaseInsensitive: boolean);
 begin
-  if Assigned(fEventCompare) then begin // custom comparison
-    result := -1;
-    P := Value^;
-    n := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCount;
-    for i := 0 to n-1 do
-      if fEventCompare(P^,Elem)=0 then begin
-        result := i;
-        break;
-      end else
-        inc(P,ElemSize);
-  end else // standard search from RTTI
-    result := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}Find(Elem);
-  // enable hashing if Scan() called 2*HashCountTrigger
-  if hasHasher in fHashState then begin
-    c := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCountP;
-    if (c<>nil) and (c^>4) then begin
-      inc(fScanCounter);
-      if fScanCounter>=fHashCountTrigger*2 then begin
-        fHashCountTrigger := 1; // rather use hashing from now
-        ReHash; // set fHashTable[] and canHash
-      end;
-    end;
+  {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$else}inherited{$endif}
+    Init(aTypeInfo,aValue,aCountPointer);
+  fHash.Init(@self,aHashElement,aCompare,aHasher,aCaseInsensitive);
+  {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}SetCompare(fHash.Compare);
+end;
+
+procedure TDynArrayHashed.InitSpecific(aTypeInfo: pointer; var aValue;
+  aKind: TDynArrayKind; aCountPointer: PInteger; aCaseInsensitive: boolean);
+var Comp: TDynArraySortCompare;
+    Hasher: TDynArrayHashOne;
+begin
+  Comp := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,aKind];
+  Hasher := DYNARRAY_HASHFIRSTFIELD[aCaseInsensitive,aKind];
+  if (@Hasher=nil) or (@Comp=nil) then
+    raise ESynException.CreateUTF8('TDynArrayHashed.InitSpecific unsupported %',
+      [ToText(aKind)^]);
+  Init(aTypeInfo,aValue,Hasher,Comp,nil,aCountPointer,aCaseInsensitive);
+  {$ifdef UNDIRECTDYNARRAY}with InternalDynArray do{$endif} begin
+    fKnownType := aKind;
+    fKnownSize := KNOWNTYPE_SIZE[aKind];
   end;
 end;
 
-function TDynArrayHashed.HashOne(Elem: pointer): cardinal;
+function TDynArrayHashed.Scan(const Elem): integer;
 begin
-  if Assigned(fEventHash) then
-    result := fEventHash(Elem^) else
-  if Assigned(fHashElement) then
-    result := fHashElement(Elem^,fHasher) else
-    result := 0; // will be ignored afterwards for sure
+  result := fHash.Scan(@Elem);
 end;
 
 function TDynArrayHashed.FindHashed(const Elem): integer;
 begin
-  result := FindHashed(Elem,HashOne(@Elem));
-end;
-
-function TDynArrayHashed.FindHashed(const Elem; aHashCode: cardinal): integer;
-begin
-  result := HashFindAndCompare(aHashCode,Elem); // fallback to Scan() if needed
+  result := fHash.FindOrNew(fHash.HashOne(@Elem),@Elem);
   if result<0 then
     result := -1; // for coherency with most methods
 end;
 
-procedure TDynArrayHashed.HashAdd(aHashCode: Cardinal; var result: integer);
-var n: integer;
-begin // on input: fHashTable[result] slot is already computed
-  n := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCount;
-  if fHashTableSize<n then
-    RaiseFatalCollision('HashAdd HashTableSize',aHashCode);
-  if fHashTableSize-n<n shr 2 then begin // grow hash table when 25% void
-    ReHash({foradd=}true,{forcegrow=}true);
-    result := HashFind(aHashCode,{foradd=}true); // recompute position
-    if result>=0 then
-      RaiseFatalCollision('HashAdd',aHashCode);
-  end;
-  fHashTable[-result-1] := n+1; // store Index+1 (0 means void slot)
-  result := n;
-end; // on output: result holds the position in fValue[]
+function TDynArrayHashed.FindHashed(const Elem; aHashCode: cardinal): integer;
+begin
+  result := fHash.FindOrNew(aHashCode,@Elem); // fallback to Scan() if needed
+  if result<0 then
+    result := -1; // for coherency with most methods
+end;
 
 function TDynArrayHashed.FindHashedForAdding(const Elem; out wasAdded: boolean;
   noAddEntry: boolean): integer;
 begin
-  result := FindHashedForAdding(Elem,wasAdded,HashOne(@Elem),noAddEntry);
+  result := FindHashedForAdding(Elem,wasAdded,fHash.HashOne(@Elem),noAddEntry);
 end;
 
 function TDynArrayHashed.FindHashedForAdding(const Elem; out wasAdded: boolean;
   aHashCode: cardinal; noAddEntry: boolean): integer;
-var n: integer;
 begin
-  wasAdded := false;
-  if not(canHash in fHashState) then begin
-    n := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCount;
-    if n<fHashCountTrigger then begin
-      result := Scan(Elem); // may trigger ReHash -> canHash
-      if result>=0 then
-        exit; // item found
-      if not(canHash in fHashState) then begin
-        wasadded := true;
-        if not noAddEntry then
-          SetCount(n+1); // reserve space for added item, as below
-        result := n;
-        exit;
-      end;
-    end;
-  end;
-  if not(canHash in fHashState) then
-    ReHash({foradd=}true); // hash any previous HashCountTrigger items
-  result := HashFindAndCompare(aHashCode,Elem);
-  if result<0 then begin // found no matching item
-    wasAdded := true;
-    HashAdd(aHashCode,result);
-    if not noAddEntry then
-      SetCount(result+1); // reserve space for a void element in array
-  end;
+  result := fHash.FindBeforeAdd(@Elem,wasAdded,aHashCode);
+  if wasAdded then
+    SetCount(result+1); // reserve space for a void element in array
 end;
 
 function TDynArrayHashed.AddAndMakeUniqueName(aName: RawUTF8): pointer;
@@ -51569,338 +52148,47 @@ end;
 
 function TDynArrayHashed.FindHashedAndFill(var ElemToFill): integer;
 begin
-  if canHash in fHashState then begin
-    result := HashFindAndCompare(HashOne(@ElemToFill),ElemToFill);
-    if result<0 then
-      result := -1;
-  end else
-    result := Scan(ElemToFill);
-  if result>=0 then
+  result := fHash.FindOrNew(fHash.HashOne(@ElemtoFill),@ElemToFill);
+  if result<0 then
+    result := -1 else
     ElemCopy(PAnsiChar(Value^)[cardinal(result)*ElemSize],ElemToFill);
 end;
 
 procedure TDynArrayHashed.SetEventHash(const event: TEventDynArrayHashOne);
 begin
-  fEventHash := event;
-  HashInvalidate;
+  fHash.SetEventHash(event);
 end;
 
 function TDynArrayHashed.FindHashedAndUpdate(const Elem; AddIfNotExisting: boolean): integer;
 var hc: cardinal;
 label doh;
 begin
-  if canHash in fHashState then begin
-doh:hc := HashOne(@Elem);
-    result := HashFindAndCompare(hc,Elem);
+  if canHash in fHash.State then begin
+doh:hc := fHash.HashOne(@Elem);
+    result := fHash.FindOrNew(hc,@Elem);
     if (result<0) and AddIfNotExisting then begin
-      HashAdd(hc,result); // ReHash only if necessary
+      fHash.HashAdd(hc,result); // ReHash only if necessary
       SetCount(result+1); // add new item
     end;
   end else begin
-    result := Scan(Elem);
+    result := fHash.Scan(@Elem);
     if result<0 then begin
       if AddIfNotExisting then
-        if canHash in fHashState then // Scan triggered ReHash
-          goto doh else
-          result := Add(Elem);
+        if canHash in fHash.State then // Scan triggered ReHash
+          goto doh else begin
+          result := Add(Elem); // regular Add
+          exit;
+        end;
     end;
   end;
   if result>=0 then
     ElemCopy(Elem,PAnsiChar(Value^)[cardinal(result)*ElemSize]); // update
 end;
 
-const // some increasing primes following HASH_PO2=2^18=262144
-  _PRIMES: array[0..38{$ifdef FPC}+6{$endif}] of integer = (
-    {$ifdef FPC} 81649, 102877, 129607, 163307, 205759, 259229, {$endif}
-    326617, 411527, 518509, 653267, 823117, 1037059, 1306601, 1646237,
-    2074129, 2613229, 3292489, 4148279, 5226491, 6584983, 8296553, 10453007,
-    13169977, 16593127, 20906033, 26339969, 33186281, 41812097, 52679969,
-    66372617, 83624237, 105359939, 132745199, 167248483, 210719881, 265490441,
-    334496971, 421439783, 530980861, 668993977, 842879579, 1061961721,
-    1337987929, 1685759167, 2123923447);
-{$ifdef FPC} // FPC generates very fast constant division using reciprocal :)
-function __81649(aHashCode: cardinal): cardinal;   begin  result := aHashCode mod 81649;  end;
-function __102877(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 102877; end;
-function __129607(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 129607; end;
-function __163307(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 163307; end;
-function __205759(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 205759; end;
-function __259229(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 259229; end;
-function __326617(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 326617; end;
-function __411527(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 411527; end;
-function __518509(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 518509; end;
-function __653267(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 653267; end;
-function __823117(aHashCode: cardinal): cardinal;  begin  result := aHashCode mod 823117; end;
-function __1037059(aHashCode: cardinal): cardinal; begin result := aHashCode mod 1037059; end;
-function __1306601(aHashCode: cardinal): cardinal; begin result := aHashCode mod 1306601; end;
-function __1646237(aHashCode: cardinal): cardinal; begin result := aHashCode mod 1646237; end;
-function __2074129(aHashCode: cardinal): cardinal; begin result := aHashCode mod 2074129; end;
-function __2613229(aHashCode: cardinal): cardinal; begin result := aHashCode mod 2613229; end;
-function __3292489(aHashCode: cardinal): cardinal; begin result := aHashCode mod 3292489; end;
-function __4148279(aHashCode: cardinal): cardinal; begin result := aHashCode mod 4148279; end;
-const
-  _PRIMEFUNC: array[0..17] of TDynArrayHashedFastMod =
-    (__81649, __102877, __129607, __163307, __205759, __259229,
-     __326617,__411527,__518509,__653267,__823117,__1037059,__1306601,__1646237,
-     __2074129,__2613229,__3292489,__4148279);
-{$endif FPC}
-
-function NextPrime(v: integer{$ifdef FPC}; out func: TDynArrayHashedFastMod{$endif}): integer;
-var i: PtrInt;
-    P: PIntegerArray;
-begin
-  P := @_PRIMES;
-  for i := 0 to high(_PRIMES) do begin
-    result := P^[i];
-    if result>v then begin
-      {$ifdef FPC} if i<=high(_PRIMEFUNC) then func := _PRIMEFUNC[i]; {$endif}
-      exit;
-    end;
-  end;
-  result := maxInt; // would never happen
-end;
-
-function TDynArrayHashed.HashTableIndex(aHashCode: cardinal): cardinal;
-begin
-  result := fHashTableSize;
-  if result>HASH_PO2 then {$ifdef FPC}
-    if Assigned(fHashFastMod) then
-      result := fHashFastMod(aHashCode) else {$endif FPC}
-      result := aHashCode mod result else
-    result := aHashCode and (result-1);
-end;
-
-// brute force O(n) indexes fix after deletion (much faster than full ReHash)
-procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
-{$ifdef CPUX64ASM} // SSE2 simd is 25x faster than "if P^>deleted then dec(P^)"
-{$ifdef FPC}nostackframe; assembler; asm {$else}
-asm .noframe // rcx=P, edx=deleted, r8=count  (Linux: rdi,esi,rdx)
-{$endif FPC}
-{$ifdef Linux}
-        mov     r8, rdx
-        mov     rcx, rdi
-        mov     rdx, rsi
-{$endif Linux}
-        xor     eax, eax    // reset eax high bits for setg al below
-        movq    xmm0, rdx   // xmm0 = 128-bit of quad deleted
-        pshufd  xmm0, xmm0, 0
-        test    cl, 3
-        jnz     @1  // paranoid: a dword dynamic array is always dword-aligned
-        // ensure P is 256-bit aligned (for avx2)
-@align: test    cl, 31
-        jz      @ok
-        cmp     dword ptr[rcx], edx
-        setg    al                  // P[]>deleted -> al=1, 0 otherwise
-        sub     dword ptr[rcx], eax // branchless dec(P[])
-        add     rcx, 4
-        dec     r8
-        jmp     @align
-@ok:    {$ifdef FPC} // AVX2 asm is not supported by Delphi (even 10.3) :(
-        test    byte ptr[rip+CPUIDX64], 1 shl cpuAVX2
-        jz      @sse2
-        vpshufd ymm0, ymm0, 0  // shuffle to 128-bit low lane
-        vperm2f128 ymm0, ymm0, ymm0, 0 // copy to 128-bit high lane of ymm0
-        // avx process of 128 bytes (32 indexes) per loop iteration
-        align 16
-@avx2:  sub      r8, 32
-        vmovdqa  ymm1, [rcx]       // 4 x 256-bit process
-        vmovdqa  ymm3, [rcx + 32]
-        vmovdqa  ymm5, [rcx + 64]
-        vmovdqa  ymm7, [rcx + 96]
-        vpcmpgtd ymm2, ymm1, ymm0  // compare P[]>deleted -> -1, 0 otherwise
-        vpcmpgtd ymm4, ymm3, ymm0
-        vpcmpgtd ymm6, ymm5, ymm0
-        vpcmpgtd ymm8, ymm7, ymm0
-        vpaddd   ymm1, ymm1, ymm2  // adjust by adding -1 / 0
-        vpaddd   ymm3, ymm3, ymm4
-        vpaddd   ymm5, ymm5, ymm6
-        vpaddd   ymm7, ymm7, ymm8
-        vmovdqa  [rcx], ymm1
-        vmovdqa  [rcx + 32], ymm3
-        vmovdqa  [rcx + 64], ymm5
-        vmovdqa  [rcx + 96], ymm7
-        add      rcx, 128
-        cmp      r8, 32
-        jae      @avx2
-        vzeroupper
-        jmp      @2
-        {$endif FPC}
-        // SSE2 process of 64 bytes (16 indexes) per loop iteration
-{$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@sse2:  sub     r8, 16
-        movdqa  xmm1, dqword [rcx]  // 4 x 128-bit process
-        movdqa  xmm3, dqword [rcx + 16]
-        movdqa  xmm5, dqword [rcx + 32]
-        movdqa  xmm7, dqword [rcx + 48]
-        movdqa  xmm2, xmm1  // keep copy for paddd below
-        movdqa  xmm4, xmm3
-        movdqa  xmm6, xmm5
-        movdqa  xmm8, xmm7
-        pcmpgtd xmm1, xmm0  // quad compare P[]>deleted -> -1, 0 otherwise
-        pcmpgtd xmm3, xmm0
-        pcmpgtd xmm5, xmm0
-        pcmpgtd xmm7, xmm0
-        paddd   xmm1, xmm2  // quad adjust by adding -1 / 0
-        paddd   xmm3, xmm4
-        paddd   xmm5, xmm6
-        paddd   xmm7, xmm8
-        movdqa  dqword [rcx], xmm1  // quad store back
-        movdqa  dqword [rcx + 16], xmm3
-        movdqa  dqword [rcx + 32], xmm5
-        movdqa  dqword [rcx + 48], xmm7
-        add     rcx, 64
-        cmp     r8, 16
-        jae     @sse2
-        jmp     @2
-        // trailing indexes
-@1:     dec     r8
-        cmp     dword ptr[rcx + r8 * 4], edx
-        setg    al
-        sub     dword ptr[rcx + r8 * 4], eax
-@2:     test    r8, r8
-        jnz     @1
-end;
-{$else}
-begin
-  repeat // this branchless code is 10x faster than if :)
-    dec(count,8);
-    dec(P[0],ord(P[0]>deleted));
-    dec(P[1],ord(P[1]>deleted));
-    dec(P[2],ord(P[2]>deleted));
-    dec(P[3],ord(P[3]>deleted));
-    dec(P[4],ord(P[4]>deleted));
-    dec(P[5],ord(P[5]>deleted));
-    dec(P[6],ord(P[6]>deleted));
-    dec(P[7],ord(P[7]>deleted));
-    P := @P[8];
-  until count<8;
-  while count>0 do begin
-    dec(count);
-    dec(P[count],ord(P[count]>deleted));
-  end;
-end;
-{$endif CPUX64ASM} // SSE2 asm is invalid prior to Delphi XE7 (to be refined)
-
-// with x86_64/sse2 for 200,000 items: adjust=200.57ms (11.4GB/s) hash=2.46ms
-//  -> TDynArray.Delete move() takes more time than the HashTable update :)
-
-{ some numbers, with CITIES_MAX=200000, deleting 1/128 entries
-  first column (3..23) is the max number of indexes[] chunk to rehash
-1. naive loop
-  for i := 0 to fHashTableSize-1 do
-    if fHashTable[i]>aArrayIndex then
-      dec(fHashTable[i]);
-  3 #257  adjust=7.95ms 191.7MB hash=8us
-  8 #384  adjust=11.93ms 255.8MB hash=10us
-  11 #1019  adjust=32.09ms 332.8MB hash=26us
-  13 #16259  adjust=511.10ms 379.2MB hash=230us
-  13 #32515  adjust=1.01s 383.6MB/s hash=440us
-  14 #33531  adjust=1.04s 382.2MB hash=459us
-  17 #46612  adjust=1.44s 386.3MB hash=639us
-  17 #65027  adjust=1.97s 396.3MB/s hash=916us
-  17 #97539  adjust=2.79s 419.9MB/s hash=1.37ms
-  18 #109858  adjust=3.05s 431.2MB hash=1.51ms
-  18 #130051  adjust=3.44s 454.1MB/s hash=1.75ms
-  18 #162563  adjust=3.93s 496.9MB/s hash=2.14ms
-  23 #172723  adjust=4.05s 511.7MB hash=2.26ms
-  23 #195075  adjust=4.27s 548.6MB/s hash=2.47ms
-2. branchless pure pascal code is about 10x faster!
-  3 #257  adjust=670us 2.2GB hash=8us
-  8 #384  adjust=1ms 2.9GB hash=9us
-  11 #1019  adjust=2.70ms 3.8GB hash=21us
-  13 #16259  adjust=43.65ms 4.3GB hash=210us
-  13 #32515  adjust=87.75ms 4.3GB/s hash=423us
-  14 #33531  adjust=90.44ms 4.3GB hash=441us
-  17 #46612  adjust=127.68ms 4.2GB hash=627us
-  17 #65027  adjust=179.64ms 4.2GB/s hash=908us
-  17 #97539  adjust=267.44ms 4.2GB/s hash=1.35ms
-  18 #109858  adjust=301.27ms 4.2GB hash=1.50ms
-  18 #130051  adjust=355.37ms 4.2GB/s hash=1.74ms
-  18 #162563  adjust=438.79ms 4.3GB/s hash=2.11ms
-  23 #172723  adjust=465.23ms 4.3GB hash=2.23ms
-  23 #195075  adjust=520.85ms 4.3GB/s hash=2.45ms
-3. SSE2 simd assembly makes about 3x improvement
-  3 #257  adjust=290us 5.1GB hash=8us
-  8 #384  adjust=427us 6.9GB hash=10us
-  11 #1019  adjust=1.11ms 9.3GB hash=20us
-  13 #16259  adjust=18.33ms 10.3GB hash=219us
-  13 #32515  adjust=36.32ms 10.5GB/s hash=435us
-  14 #33531  adjust=37.39ms 10.4GB hash=452us
-  17 #46612  adjust=51.70ms 10.5GB hash=622us
-  17 #65027  adjust=72.47ms 10.5GB/s hash=893us
-  17 #97539  adjust=107ms 10.6GB/s hash=1.32ms
-  18 #109858  adjust=120.08ms 10.7GB hash=1.46ms
-  18 #130051  adjust=140.50ms 10.8GB/s hash=1.71ms
-  18 #162563  adjust=171.44ms 11.1GB/s hash=2.10ms
-  23 #172723  adjust=181.02ms 11.1GB hash=2.22ms
-  23 #195075  adjust=201.53ms 11.3GB/s hash=2.44ms
-4. AVX2 simd assembly gives some additional 40% (consistent on my iCore3 cpu)
-  3 #257  adjust=262us 5.6GB hash=8us
-  8 #384  adjust=383us 7.7GB hash=10us
-  11 #1019  adjust=994us 10.4GB hash=21us
-  13 #16259  adjust=16.34ms 11.5GB hash=248us
-  13 #32515  adjust=32.12ms 11.8GB/s hash=464us
-  14 #33531  adjust=33.06ms 11.8GB hash=484us
-  17 #46612  adjust=45.49ms 11.9GB hash=678us
-  17 #65027  adjust=62.36ms 12.2GB/s hash=966us
-  17 #97539  adjust=90.80ms 12.6GB/s hash=1.43ms
-  18 #109858  adjust=101.82ms 12.6GB hash=1.59ms
-  18 #130051  adjust=117.37ms 13GB/s hash=1.83ms
-  18 #162563  adjust=140.08ms 13.6GB/s hash=2.23ms
-  23 #172723  adjust=147.20ms 13.7GB hash=2.34ms
-  23 #195075  adjust=161.73ms 14.1GB/s hash=2.57ms
-}
-procedure TDynArrayHashed.HashDelete(aArrayIndex,aHashTableIndex: integer;
-  aHashCode: cardinal);
-var first,next,last,ndx,i,n: integer;
-    P: PAnsiChar;
-    indexes: array[0..511] of cardinal; // to be rehashed
-begin
-  // retrieve hash table entries to be recomputed
-  first := aHashTableIndex;
-  last := fHashTableSize;
-  next := first;
-  n := 0;
-  repeat
-    fHashTable[next] := 0; // invalidate slots
-    inc(next);
-    if next=last then
-      if next=first then
-        RaiseFatalCollision('HashDelete down',aHashCode) else begin
-        next := 0;
-        last := first;
-      end;
-    ndx := fHashTable[next]-1; // stored index+1
-    if ndx<0 then
-      break; // stop at void entry
-    if n=high(indexes) then // typical 0..23
-      RaiseFatalCollision('HashDelete indexes overflow',aHashCode);
-    indexes[n] := ndx;
-    inc(n);
-  until false;
-  // ReHash collided entries - note: item is not yet deleted in Value^[]
-  for i := 0 to n-1 do begin
-    P := PAnsiChar(Value^)+indexes[i]*ElemSize;
-    ndx := HashFindAndCompare(HashOne(P),P^);
-    if ndx<0 then
-      fHashTable[-ndx-1] := indexes[i]+1; // ignore ndx>=0 dups (like ReHash)
-  end;
-  // adjust all stored indexes after deletion
-  DynArrayHashTableAdjust(pointer(fHashTable),aArrayIndex,fHashTableSize);
-end;
-
 function TDynArrayHashed.FindHashedAndDelete(const Elem; FillDeleted: pointer;
   noDeleteEntry: boolean): integer;
-var hc: cardinal;
-    ht: integer;
 begin
-  if canHash in fHashState then begin
-    hc := HashOne(@Elem);
-    result := HashFindAndCompare(hc,Elem,@ht);
-    if result<0 then
-      result := -1 else
-      HashDelete(result,ht,hc);
-  end else
-    result := Scan(Elem);
+  result := fHash.FindBeforeDelete(@Elem);
   if result>=0 then begin
     if FillDeleted<>nil then
       ElemCopyAt(result,FillDeleted^);
@@ -51909,213 +52197,14 @@ begin
   end;
 end;
 
-procedure TDynArrayHashed.InitSpecific(aTypeInfo: pointer; var aValue;
-  aKind: TDynArrayKind; aCountPointer: PInteger; aCaseInsensitive: boolean);
-var Comp: TDynArraySortCompare;
-    Hasher: TDynArrayHashOne;
-begin
-  Comp := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,aKind];
-  Hasher := DYNARRAY_HASHFIRSTFIELD[aCaseInsensitive,aKind];
-  if (@Hasher=nil) or (@Comp=nil) then
-    raise ESynException.CreateUTF8('TDynArrayHashed.InitSpecific unsupported %',
-      [ToText(aKind)^]);
-  Init(aTypeInfo,aValue,Hasher,Comp,nil,aCountPointer,aCaseInsensitive);
-  {$ifdef UNDIRECTDYNARRAY}with InternalDynArray do{$endif} begin
-    fKnownType := aKind;
-    fKnownSize := KNOWNTYPE_SIZE[aKind];
-  end;
-end;
-
-procedure TDynArrayHashed.Init(aTypeInfo: pointer; var aValue;
-  aHashElement: TDynArrayHashOne; aCompare: TDynArraySortCompare;
-  aHasher: THasher; aCountPointer: PInteger; aCaseInsensitive: boolean);
-var k: TDynArrayKind;
-begin
-  {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$else}inherited{$endif}
-    Init(aTypeInfo,aValue,aCountPointer);
-  if @aHasher=nil then
-    fHasher := DefaultHasher else
-    fHasher := aHasher;
-  if (@aHashElement=nil) or (@aCompare=nil) then begin
-    // it's faster to retrieve now the hashing/compare function once here
-    k := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GuessKnownType;
-    if @aHashElement=nil then
-      aHashElement := DYNARRAY_HASHFIRSTFIELD[aCaseInsensitive,k];
-    if @aCompare=nil then
-      aCompare := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,k];
-  end;
-  fHashElement := aHashElement;
-  fEventHash := nil;
-  {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := aCompare;
-  fEventCompare := nil;
-  fHashCountTrigger := 32;
-  HashInvalidate;
-end;
-
-procedure TDynArrayHashed.HashInvalidate;
-begin
-  fHashTable := nil;
-  fHashTableSize := 0;
-  fScanCounter := 0;
-  if Assigned(fHashElement) or Assigned(fEventHash) then
-    fHashState := [hasHasher] else
-    byte(fHashState) := 0;
-  {$ifdef FPC} fHashFastMod := nil; {$endif FPC}
-end;
-
-//var TDynArrayHashedCollisionCount: cardinal;
-
-function TDynArrayHashed.HashFind(aHashCode: cardinal; aForAdd: boolean): integer;
-var first,last: integer;
-    ndx: PtrInt;
-    P: PAnsiChar;
-begin
-  if not(canHash in fHashState) then begin // Count=0 or Count<fHashCountTrigger
-    P := Value^;
-    if hasHasher in fHashState then
-      for result := 0 to Count-1 do // O(n) linear search via hashing
-        if HashOne(P)=aHashCode then
-          exit else
-          inc(P,ElemSize);
-    result := -1;
-    exit;
-  end;
-  result := HashTableIndex(aHashCode);
-  first := result;
-  last := fHashTableSize;
-  repeat
-    ndx := fHashTable[result]-1; // index+1 was stored
-    if ndx<0 then begin
-      result := -(result+1); // found void entry
-      exit;
-    end else
-    if not aForAdd and (HashOne(PAnsiChar(Value^)+PtrUInt(ndx)*ElemSize)=aHashCode) then begin
-      result := ndx;
-      exit;
-    end;
-    inc(result); // try next entry on hash collision
-    if result=last then
-      // reached the end -> search once from fHash[0] to fHash[first-1]
-      if result=first then
-        break else begin
-        result := 0;
-        last := first;
-      end;
-  until false;
-  RaiseFatalCollision('HashFind',aHashCode);
-end;
-
-function TDynArrayHashed.HashFindAndCompare(aHashCode: cardinal; const Elem;
-  aHashTableIndex: PInteger): integer;
-var first,last,ndx: integer;
-    found: boolean;
-    P: PAnsiChar;
-begin
-  if not(canHash in fHashState) then begin // e.g. Count<fHashCountTrigger
-    result := Scan(Elem);
-    exit;
-  end;
-  result := HashTableIndex(aHashCode);
-  first := result;
-  last := fHashTableSize;
-  repeat
-    ndx := fHashTable[result]-1;  // index+1 was stored
-    if ndx<0 then begin
-      result := -(result+1);
-      exit; // returns void index in fHashedInde[] as negative
-    end;
-    P := PAnsiChar(Value^)+cardinal(ndx)*ElemSize;
-    if Assigned(fEventCompare) then
-      found := fEventCompare(P^,Elem)=0 else
-      found := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}ElemEquals(P^,Elem);
-    if found then begin // faster than hash e.g. for strings
-      if aHashTableIndex<>nil then
-        aHashTableIndex^ := result;
-      result := ndx;
-      exit;
-    end;
-    // hash or slot collision -> search next item
-    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-    inc(fHashFindCollisions);
-    {$endif}
-    //inc(TDynArrayHashedCollisionCount);
-    inc(result);
-    if result=last then
-      // reached the end -> search once from fHash[0] to fHash[first-1]
-      if result=first then
-        break else begin
-        result := 0;
-        last := first;
-      end;
-  until false;
-  RaiseFatalCollision('HashFindAndCompare',aHashCode);
-end;
-
-procedure TDynArrayHashed.RaiseFatalCollision(const caller: RawUTF8;
-  aHashCode: cardinal);
-begin
-  {$ifdef UNDIRECTDYNARRAY}with InternalDynArray do{$endif}
-  raise ESynException.CreateUTF8('TDynArrayHashed.% fatal collision: '+
-    'aHashCode=% fHashTableSize=% Count=% Capacity=% ArrayType=% fKnownType=%',
-    [caller,CardinalToHexShort(aHashCode),fHashTableSize,GetCount,GetCapacity,
-     ArrayTypeShort^,ToText(fKnownType)^]);
-end;
-
 function TDynArrayHashed.GetHashFromIndex(aIndex: PtrInt): Cardinal;
-var P: pointer;
 begin
-  if (cardinal(aIndex)>=cardinal(GetCount)) or
-    (not Assigned(fHashElement) and not Assigned(fEventHash)) then
-    result := 0 else begin
-    // faster/safer to rehash than to loop in fHashTable[]
-    P := PAnsiChar(Value^)+PtrUInt(aIndex)*ElemSize;
-    if Assigned(fEventHash) then
-      result := fEventHash(P^) else
-      result := fHashElement(P^,fHasher);
-  end;
+  result := fHash.GetHashFromIndex(aIndex);
 end;
 
 function TDynArrayHashed.ReHash(forAdd: boolean; forceGrow: boolean): boolean;
-var i, n, cap, siz, ndx: integer;
-    P: PAnsiChar;
-    hc: cardinal;
 begin
-  result := false;
-  siz := fHashTableSize;
-  HashInvalidate;
-  if not(hasHasher in fHashState) then
-    exit;
-  n := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCount;
-  if not forAdd and ((n=0) or (n<fHashCountTrigger)) then
-    exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
-  if forceGrow and (siz>0) then // next power of two or next grown size
-    if siz<HASH_PO2 then
-      siz := siz shl 1 else
-      siz := NextPrime(siz{$ifdef FPC},fHashFastMod{$endif}) else begin
-    cap := GetCapacity*2; // Capacity better than Count - *2 for void slots
-    if cap<=HASH_PO2 then begin
-      siz := 256; // find nearest power of two for fast bitwise division
-      while siz<cap do
-        siz := siz shl 1;
-    end else // use primes to reduce memory usage
-      siz := NextPrime(cap{$ifdef FPC},fHashFastMod{$endif});
-  end;
-  fHashTableSize := siz;
-  SetLength(fHashTable,siz); // fill with 0 (void slot)
-  // fill fHashTable[] from all existing items
-  include(fHashState,canHash); // needed before HashFindAndCompare() below
-  P := Value^;
-  for i := 1 to n do begin
-    if Assigned(fEventHash) then
-      hc := fEventHash(P^) else
-      hc := fHashElement(P^,fHasher);
-    ndx := HashFindAndCompare(hc,P^);
-    if ndx<0 then
-      // >=0 means found exact duplicate of P^: shouldn't happen -> ignore
-      fHashTable[-ndx-1] := i; // store index+1 (0 means void entry)
-    inc(P,ElemSize);
-  end;
-  result := true;
+  result := fHash.ReHash(forAdd,forceGrow);
 end;
 
 
@@ -60169,7 +60258,7 @@ procedure TObjectListHashedAbstract.Delete(aIndex: integer);
 begin
   if (self<>nil) and
      fHash.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}Delete(aIndex) then
-    fHash.HashInvalidate;
+    fHash.fHash.Clear;
 end;
 
 procedure TObjectListHashedAbstract.Delete(aObject: TObject);
@@ -60214,9 +60303,9 @@ begin
   inherited Create(aFreeItems);
   fSubPropAccess := aSubPropAccess;
   if Assigned(aHashElement) then
-    fHash.fHashElement := aHashElement;
+    fHash.fHash.HashElement := aHashElement;
   if Assigned(aCompare) then
-    fHash.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := aCompare;
+    fHash.fHash.Compare := aCompare;
   fHash.EventCompare := IntComp;
   fHash.EventHash := IntHash;
 end;
@@ -60225,7 +60314,7 @@ function TObjectListPropertyHashed.IntHash(const Elem): cardinal;
 var O: TObject;
 begin
   O := fSubPropAccess(TObject(Elem));
-  result := fHash.fHashElement(O,fHash.fHasher);
+  result := fHash.fHash.HashElement(O,fHash.fHash.Hasher);
 end;
 
 function TObjectListPropertyHashed.IntComp(const A,B): integer;
@@ -60240,7 +60329,7 @@ begin
   wasAdded := false;
   if self<>nil then begin
     result := fHash.FindHashedForAdding(aObject,wasAdded,
-      fHash.fHashElement(aObject,fHash.fHasher));
+      fHash.fHash.HashElement(aObject,fHash.fHash.Hasher));
     if wasAdded then
       fList[result] := aObject;
   end else
@@ -60250,7 +60339,7 @@ end;
 function TObjectListPropertyHashed.IndexOf(aObject: TObject): integer;
 begin
   if fCount>0 then begin
-    result := fHash.FindHashed(aObject,fHash.fHashElement(aObject,fHash.fHasher));
+    result := fHash.FindHashed(aObject,fHash.fHash.HashElement(aObject,fHash.fHash.Hasher));
     if result>=0 then
       exit else // found
       result := -1; // for consistency
@@ -60453,9 +60542,9 @@ begin
   if fCaseSensitive=Value then
     exit;
   inherited;
-  fHash.fHashElement := DYNARRAY_HASHFIRSTFIELD[not Value,djRawUTF8];
-  fHash.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare :=
-    DYNARRAY_SORTFIRSTFIELDHASHONLY[Value];
+  fHash.fHash.HashElement := DYNARRAY_HASHFIRSTFIELD[not Value,djRawUTF8];
+  fHash.fHash.Compare :=  DYNARRAY_SORTFIRSTFIELDHASHONLY[Value];
+  fHash.fHash.Clear;
   if not fChanged then
     fChanged := Count>0; // force re-hash next IndexOf() call
 end;
@@ -60509,7 +60598,7 @@ end;
 
 function TRawUTF8ListHashed.HashFind(aHashCode: cardinal): integer;
 begin
-  result := fHash.HashFind(aHashCode,false);
+  result := fHash.fHash.Find(aHashCode,{foradd=}false);
 end;
 
 function TRawUTF8ListHashed.ReHash(aForceRehash: boolean): boolean;
@@ -60711,7 +60800,7 @@ const
 
 function TSynDictionary.KeyFullHash(const Elem): cardinal;
 begin
-  result := fKeys.fHasher(0,@Elem,fKeys.ElemSize);
+  result := fKeys.fHash.Hasher(0,@Elem,fKeys.ElemSize);
 end;
 
 function TSynDictionary.KeyFullCompare(const A,B): integer;
@@ -60740,7 +60829,7 @@ begin
   fSafe.PaddingUsedCount := DIC_TIMETIX+1;
   fKeys.Init(aKeyTypeInfo,fSafe.Padding[DIC_KEY].VAny,nil,nil,nil,
     @fSafe.Padding[DIC_KEYCOUNT].VInteger,aKeyCaseInsensitive);
-  if not Assigned(fKeys.fHashElement) then
+  if not Assigned(fKeys.HashElement) then
     fKeys.EventHash := KeyFullHash;
   if not Assigned(fKeys.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare) then
     fKeys.EventCompare := KeyFullCompare;
@@ -64507,7 +64596,7 @@ procedure TSynNameValue.Init(aCaseSensitive: boolean);
 begin
   // release dynamic arrays memory before FillcharFast()
   List := nil;
-  DynArray.HashInvalidate;
+  DynArray.fHash.Clear;
   // initialize hashed storage
   FillCharFast(self,SizeOf(self),0);
   DynArray.InitSpecific(TypeInfo(TSynNameValueItemDynArray),List,

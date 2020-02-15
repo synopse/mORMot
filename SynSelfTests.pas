@@ -18113,6 +18113,7 @@ begin
   fClient.Server.Services.ExpectMangledURI := true;
   Check(fClient.Server.Services[S.InterfaceMangledURI]=S);
   fClient.Server.Services.ExpectMangledURI := false;
+  Check(fClient.Server.Services['Calculator']=S);
   Check(fClient.Server.Services['CALCULAtor']=S);
   Check(fClient.Server.Services['CALCULAtors']=nil);
   if CheckFailed(length(S.InterfaceFactory.Methods)=13) then exit;
