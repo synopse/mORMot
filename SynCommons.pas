@@ -792,7 +792,7 @@ type
   // - all Init() methods will allocate 16 more bytes, for a trailing #0 and
   // to ensure our fast JSON parsing won't trigger any GPF (since it may read
   // up to 4 bytes ahead via its PInteger() trick) or any SSE4.2 function
-  {$ifdef FPC_OR_UNICODE}TSynTempBuffer = record{$else}TSynTempBuffer = object{$endif}
+  TSynTempBuffer = object
   public
     /// the text/binary length, in bytes, excluding the trailing #0
     len: PtrInt;
@@ -827,15 +827,13 @@ type
     /// finalize the temporary storage, and create a RawUTF8 string from it
     procedure Done(EndBuf: pointer; var Dest: RawUTF8); overload;
   private
-    // default 4KB buffer allocated on stack
+    // default 4KB buffer allocated on stack - after the len/buf main fields
     tmp: array[0..4095] of AnsiChar;
   end;
 
   /// implements a stack-based writable storage of binary content
   // - memory allocation is performed via a TSynTempBuffer
-  {$ifdef FPC_OR_UNICODE}TSynTempWriter = record private
-  {$else}TSynTempWriter = object protected{$endif}
-    tmp: TSynTempBuffer;
+  TSynTempWriter = object
   public
     /// the current writable position in tmp.buf
     pos: PAnsiChar;
@@ -871,6 +869,8 @@ type
     function AsBinary: RawByteString;
     /// returns the buffer as a RawUTF8 instance
     procedure AsUTF8(var result: RawUTF8);
+  protected
+    tmp: TSynTempBuffer;
   end;
 
   /// function prototype to be used for hashing of an element
@@ -3468,7 +3468,9 @@ procedure AddRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
 
 type
   /// simple stack-allocated type for handling a type names list
-  {$ifdef FPC_OR_UNICODE}TPropNameList = record{$else}TPropNameList = object{$endif}
+  // - Delphi "object" is buggy on stack -> also defined as record with methods
+  {$ifdef FPC_OR_UNICODE}TPropNameList = record
+  {$else}TPropNameList = object{$endif}
   public
     Values: TRawUTF8DynArray;
     Count: Integer;
@@ -3743,7 +3745,9 @@ function TemporaryFileName: TFileName;
 type
   {$A-}
   /// file found result item, as returned by FindFiles()
-  {$ifdef FPC_OR_UNICODE}TFindFiles = record{$else}TFindFiles = object{$endif}
+  // - Delphi "object" is buggy on stack -> also defined as record with methods
+  {$ifdef FPC_OR_UNICODE}TFindFiles = record
+  {$else}TFindFiles = object{$endif}
   public
     /// the matching file name, including its folder name
     Name: TFileName;
@@ -3863,8 +3867,8 @@ type
   //  in a huge text buffer
   // - this version also handles french and spanish pronunciations on request,
   //  which differs from default Soundex, i.e. English
-  {$ifdef FPC_OR_UNICODE}TSynSoundEx = record private
-  {$else}TSynSoundEx = object protected{$endif}
+  TSynSoundEx = object
+  protected
     Search, FirstChar: cardinal;
     fValues: PSoundExValues;
   public
@@ -4637,10 +4641,9 @@ function FromU64(const Values: array of QWord): TQWordDynArray;
 
 type
   /// used to store and retrieve Words in a sorted array
-  // - is defined either as an object either as a record, due to a bug
-  // in Delphi 2009/2010 compiler (at least): this structure is not initialized
-  // if defined as an object on the stack, but will be as a record :(
-  {$ifdef FPC_OR_UNICODE}TSortedWordArray = record{$else}TSortedWordArray = object{$endif}
+  // - Delphi "object" is buggy on stack -> also defined as record with methods
+  {$ifdef FPC_OR_UNICODE}TSortedWordArray = record
+  {$else}TSortedWordArray = object{$endif}
   public
     Values: TWordDynArray;
     Count: integer;
@@ -5169,7 +5172,7 @@ type
   // methods can modify the content of the associated variable but the TDynArray
   // doesn't contain any data by itself. It is therefore aimed to initialize
   // a TDynArray wrapper on need, to access any existing dynamic array.
-  // - is defined either as an object either as a record, due to a bug
+  // - is defined as an object or as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
   {$ifdef UNDIRECTDYNARRAY}TDynArray = record private
@@ -5728,8 +5731,8 @@ type
   /// allows to iterate over a TDynArray.SaveTo binary buffer
   // - may be used as alternative to TDynArray.LoadFrom, if you don't want
   // to allocate all items at once, but retrieve items one by one
-  {$ifdef FPC_OR_UNICODE}TDynArrayLoadFrom = record private
-  {$else}TDynArrayLoadFrom = object protected{$endif}
+  TDynArrayLoadFrom = object
+  protected
     DynArray: TDynArray; // used to access RTTI
     Hash: PCardinalArray;
     PositionEnd: PAnsiChar;
@@ -6249,8 +6252,8 @@ type
   // from concurrent access with a mutex
   // - for object-level locking, see TSynPersistentLock which owns one such
   // instance, or call low-level NewSynLocker function then DoneAndFreemem
-  {$ifdef FPC_OR_UNICODE}TSynLocker = record private
-  {$else}TSynLocker = object protected{$endif}
+  TSynLocker = object
+  protected
     fSection: TRTLCriticalSection;
     fSectionPadding: PtrInt; // paranoid to avoid FUTEX_WAKE_PRIVATE=EAGAIN
     fLocked, fInitialized: boolean;
@@ -6461,7 +6464,9 @@ type
 
 
   /// used to store one list of hashed RawUTF8 in TRawUTF8Interning pool
-  {$ifdef FPC_OR_UNICODE}TRawUTF8InterningSlot = record{$else}TRawUTF8InterningSlot = object{$endif}
+  // - Delphi "object" is buggy on stack -> also defined as record with methods
+  {$ifdef FPC_OR_UNICODE}TRawUTF8InterningSlot = record
+  {$else}TRawUTF8InterningSlot = object{$endif}
   public
     /// actual RawUTF8 storage
     Value: TRawUTF8DynArray;
@@ -6585,9 +6590,7 @@ type
   // - is therefore faster than TRawUTF8List
   // - is defined as an object, not as a class: you can use this in any
   // class, without the need to destroy the content
-  // - is defined either as an object either as a record, due to a bug
-  // in Delphi 2009/2010 compiler (at least): this structure is not initialized
-  // if defined as an object on the stack, but will be as a record :(
+  // - Delphi "object" is buggy on stack -> also defined as record with methods
   {$ifdef FPC_OR_UNICODE}TSynNameValue = record private
   {$else}TSynNameValue = object protected{$endif}
     fOnAdd: TSynNameValueNotify;
@@ -7058,7 +7061,7 @@ type
   // - is not thread-safe by itself, but cross-compiler and cross-platform, still
   // very fast with a much better distribution than Delphi system's Random() function
   // - Random32gsl/Random32 will use a threadvar to have thread safety
-  {$ifdef FPC_OR_UNICODE}TLecuyer = record{$else}TLecuyer = object{$endif}
+  TLecuyer = object
   public
     rs1, rs2, rs3, seedcount: cardinal;
     /// force an immediate seed of the generator from current system state
@@ -10189,8 +10192,8 @@ var
 
 type
   /// handle memory mapping of a file content
-  {$ifdef FPC_OR_UNICODE}TMemoryMap = record private
-  {$else}TMemoryMap = object protected{$endif}
+  TMemoryMap = object
+  protected
     fBuf: PAnsiChar;
     fBufSize: PtrUInt;
     fFile: THandle;
@@ -10571,11 +10574,11 @@ type
   // file reading)
   // - can handle sophisticated storage layout of TFileBufferWriter for
   // dynamic arrays of Integer/Int64/RawUTF8
-  // - is defined either as an object either as a record, due to a bug
+  // - is defined as an object or as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
-  {$ifdef FPC_OR_UNICODE}TFileBufferReader = record private
-  {$else}TFileBufferReader = object protected{$endif}
+  TFileBufferReader = object
+  protected
     fCurrentPos: PtrUInt;
     fMap: TMemoryMap;
     /// get Isize + buffer from current memory map or fBufTemp into (P,PEnd)
@@ -10752,7 +10755,7 @@ procedure JSONEncodeNameSQLValue(const Name,SQLValue: RawUTF8; var result: RawUT
 type
   /// points to one value of raw UTF-8 content, decoded from a JSON buffer
   // - used e.g. by JSONDecode() overloaded function to returns names/values
-  {$ifdef FPC_OR_UNICODE}TValuePUTF8Char = record{$else}TValuePUTF8Char = object{$endif}
+  TValuePUTF8Char = object
   public
     /// a pointer to the actual UTF-8 text
     Value: PUTF8Char;
@@ -12618,7 +12621,7 @@ type
   // is safe to be used
   // - DayOfWeek field is not handled by its methods by default, but could be
   // filled on demand via ComputeDayOfWeek - making this record 64-bit long
-  {$ifdef FPC_OR_UNICODE}TSynDate = record{$else}TSynDate = object{$endif}
+  TSynDate = object
     Year, Month, DayOfWeek, Day: word;
     /// set all fields to 0
     procedure Clear; {$ifdef HASINLINE}inline;{$endif}
@@ -12662,7 +12665,7 @@ type
   // for fast conversion from TDateTime to its ready-to-display members
   // - DayOfWeek field is not handled by most methods by default, but could be
   // filled on demand via ComputeDayOfWeek
-  {$ifdef FPC_OR_UNICODE}TSynSystemTime = record{$else}TSynSystemTime = object{$endif}
+  TSynSystemTime = object
   public
     Year, Month, DayOfWeek, Day,
     Hour, Minute, Second, MilliSecond: word;
@@ -12764,7 +12767,7 @@ type
   // temporary conversion in such case
   // - TTimeLogBits.Value needs up to 40-bit precision, so features exact
   // representation as JavaScript numbers (stored in a 52-bit mantissa)
-  {$ifdef FPC_OR_UNICODE}TTimeLogBits = record{$else}TTimeLogBits = object{$endif}
+  TTimeLogBits = object
   public
     /// the bit-encoded value itself, which follows an abstract "year" of 16
     // months of 32 days of 32 hours of 64 minutes of 64 seconds
@@ -13257,7 +13260,9 @@ type
   TTimeZoneID = type RawUTF8;
 
   /// used to store Time Zone information for a single area in TSynTimeZone
-  {$ifdef FPC_OR_UNICODE}TTimeZoneData = record{$else}TTimeZoneData = object{$endif}
+  // - Delphi "object" is buggy on stack -> also defined as record with methods
+  {$ifdef FPC_OR_UNICODE}TTimeZoneData = record
+  {$else}TTimeZoneData = object{$endif}
   public
     id: TTimeZoneID;
     display: RawUTF8;
@@ -14875,6 +14880,7 @@ type
   // be a good idea to use DocVariantData(aVariant)^ or _Safe(aVariant)^ instead
   // of TDocVariantData(aVariant), if you are not sure how aVariant was allocated
   // (may be not _Obj/_Json, but retrieved as varByRef e.g. from late binding)
+  // - Delphi "object" is buggy on stack -> also defined as record with methods
   {$ifdef FPC_OR_UNICODE}TDocVariantData = record private
   {$else}TDocVariantData = object protected{$endif}
     VType: TVarType;
@@ -16318,8 +16324,8 @@ type
   // - WARNING: under Windows, this record MUST be aligned to 32-bit, otherwise
   // iFreq=0 - so you can use TLocalPrecisionTimer/ILocalPrecisionTimer if you
   // want to alllocate a local timer instance on the stack
-  {$ifdef FPC_OR_UNICODE}TPrecisionTimer = record private
-  {$else}TPrecisionTimer = object protected{$endif}
+  TPrecisionTimer = object
+  protected
     fStart,fStop: Int64;
     {$ifndef LINUX} // use QueryPerformanceMicroSeconds() fast API
     fWinFreq: Int64;
@@ -24019,8 +24025,7 @@ end;
 
 type
   // only supported token is %, with any const arguments
-  {$ifdef FPC_OR_UNICODE}TFormatUTF8 = record{$else}TFormatUTF8 = object{$endif}
-  public
+  TFormatUTF8 = object
     b: PTempUTF8;
     L,argN: integer;
     blocks: array[0..63] of TTempUTF8; // to avoid most heap allocations
@@ -39977,8 +39982,7 @@ end;
 
 type
   /// used internaly for faster quick sort
-  {$ifdef FPC_OR_UNICODE}TQuickSortRawUTF8 = record{$else}TQuickSortRawUTF8 = object{$endif}
-  public
+  TQuickSortRawUTF8 = object
     Values: PPointerArray;
     Compare: TUTF8Compare;
     CoValues: PIntegerArray;
@@ -50157,8 +50161,7 @@ end;
 
 type
   // internal structure used to make QuickSort faster & with less stack usage
-  {$ifdef FPC_OR_UNICODE}TDynArrayQuickSort = record{$else}TDynArrayQuickSort = object{$endif}
-  public
+  TDynArrayQuickSort = object
     Compare: TDynArraySortCompare;
     CompareEvent: TEventDynArraySortCompare;
     Pivot: pointer;
