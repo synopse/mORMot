@@ -36375,7 +36375,10 @@ end;
 {$endif CPUX64}
 
 {$ifdef CPUX64}
-const CPUCACHEX64 = 512*1024; // non-temporal movntdq above 512 KB
+const
+  // non-temporal writes should bypass the cache when the size is bigger than
+  // half the size of the largest level cache - we assume low 1MB cache here
+  CPUCACHEX64 = 512*1024;
 {
  -------------- TTestLowLevelCommon.CustomRTL RTL vs SynCommons
  On FPC Linux (native):
@@ -36559,6 +36562,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         movntdq [r10 + rax], xmm0
         add     rax, 16
         jl      @fwdnv
+        sfence
         jmp     @fwdend
 {$ifdef FPC}
 @fwdavx:vmovups ymm2, oword ptr[src]  // first 32
@@ -36586,6 +36590,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         vmovntps [r10 + rax], ymm0
         add     rax, 32
         jl      @favxn
+        sfence
         jmp     @favxe
 {$endif FPC}
 @lrgbwd:{$ifdef WITH_ERMS}  // backward move
@@ -36629,6 +36634,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         movntdq oword ptr[dst + rax], xmm0
         sub     rax, 16
         jg      @bwdnv
+        sfence
         jmp     @bwdend
 {$ifdef FPC}
 @bwdavx:sub     rax, 32
@@ -36654,6 +36660,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         vmovntps oword ptr[dst + rax], ymm0
         sub     rax, 32
         jg      @bavxn
+        sfence
         jmp     @bavxe
 {$endif FPC}
 @03:    movzx   eax, word ptr[src]
@@ -36792,6 +36799,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
 @avxnv: vmovntps oword ptr [rdx+dst], ymm0 // non-temporal loop
         add      dst, 32
         jnz      @avxnv
+        sfence
         jmp      @avxok
 {$endif FPC}
 end;
