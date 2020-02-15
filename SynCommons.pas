@@ -9184,7 +9184,6 @@ type
     fList: TObjectDynArray;
     fCount: integer;
     fHash: TDynArrayHashed;
-    fFreeItems: boolean;
   public
     /// initialize the class instance
     // - if aFreeItems is TRUE (default), will behave like a TObjectList
@@ -9199,9 +9198,14 @@ type
     // - returns -1 if not found
     function IndexOf(aObject: TObject): integer; virtual; abstract;
     /// delete an object from the list
+    // - the internal hash table is not recreated, just invalidated
+    // (i.e. this method calls HashInvalidate not FindHashedAndDelete)
+    // - will invalide the whole hash table
     procedure Delete(aIndex: integer); overload;
     /// delete an object from the list
-    procedure Delete(aObject: TObject); overload;
+    // - will invalide the whole hash table
+    // - won't invalidate the whole hash table, but refresh it
+    procedure Delete(aObject: TObject); overload; virtual;
     /// direct access to the items list array
     property List: TObjectDynArray read fList;
     /// returns the count of stored objects
@@ -9221,6 +9225,9 @@ type
     /// retrieve an object index within the list, using a fast hash table
     // - returns -1 if not found
     function IndexOf(aObject: TObject): integer; override;
+    /// delete an object from the list
+    // - overriden method won't invalidate the whole hash table, but refresh it
+    procedure Delete(aObject: TObject); override;
   end;
 
   /// function prototype used to retrieve a pointer to the hashed property
@@ -9848,7 +9855,7 @@ type
       Partial: pointer; PartialLen, PartialLenMax: integer): integer; override;
   end;
 
-
+  // internal flag, used only by TSynDictionary.InArray protected method
   TSynDictionaryInArray = (
     iaFind, iaFindAndDelete, iaFindAndUpdate, iaFindAndAddIfNotExisting, iaAdd);
 
@@ -60067,24 +60074,19 @@ begin
   inherited Create;
   fFreeItems := aFreeItems;
   fHash.Init(TypeInfo(TObjectDynArray),fList,@HashPtrUInt,@SortDynArrayPointer,nil,@fCount);
+  fHash.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}SetIsObjArray(aFreeItems);
 end;
 
 destructor TObjectListHashedAbstract.Destroy;
-var i: integer;
 begin
-  if fFreeItems then
-    for i := 0 to fCount-1 do
-      List[i].Free;
+  fHash.Clear; // will free items if needed
   inherited;
 end;
 
 procedure TObjectListHashedAbstract.Delete(aIndex: integer);
 begin
-  if (self=nil) or (cardinal(aIndex)>=cardinal(fCount)) then
-    exit;
-  if fFreeItems then
-    FreeAndNil(List[aIndex]);
-  fHash.Delete(aIndex);
+  if (self<>nil) and
+     fHash.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}Delete(aIndex) then
   fHash.HashInvalidate;
 end;
 
@@ -60115,6 +60117,10 @@ begin
     result := -1;
 end;
 
+procedure TObjectListHashed.Delete(aObject: TObject);
+begin
+  fHash.FindHashedAndDelete(aObject);
+end;
 
 { TObjectListPropertyHashed }
 
