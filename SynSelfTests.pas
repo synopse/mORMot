@@ -3008,7 +3008,7 @@ var buf: RawByteString;
      NotifyTestSpeed(msg,1,moved,@timer);
      Check(BufIncreasing(p,moved,1));
      checkEqual(Hash32(buf),2284147540);
-     // forward and backward overlapped moves on small and big buffers
+     // forward and backward overlapped moves on small buffers
      elapsed := 0;
      moved := 0;
      for len := 1 to 48 do begin
@@ -3029,35 +3029,47 @@ var buf: RawByteString;
      timer.FromExternalMicroSeconds(elapsed);
      NotifyTestSpeed('small '+msg,1,moved,@timer);
      checkEqual(Hash32(buf),1635609040);
-     len := length(buf)-3200;
+     // forward and backward non-overlapped moves on big buffers
+     len := (length(buf)-3200) shr 1;
      timer.Start;
-     for i := 1 to 10 do
+     for i := 1 to 25 do
        if rtl then begin
-         Move(P[3100],P[1],len-i);
-         Move(P[1],P[3200],len-i);
+         Move(P[len],P[i],len-i*10);
+         Move(P[i],P[len],len-i*10);
        end else begin
-         MoveFast(p[3100],p[1],len-i);
-         MoveFast(P[1],P[3200],len-i);
+         MoveFast(p[len],p[i],len-i*10);
+         MoveFast(P[i],P[len],len-i*10);
        end;
-     NotifyTestSpeed('big '+msg,1,10*len,@timer);
-     checkEqual(Hash32(buf),3470496583);
+     NotifyTestSpeed('big '+msg,1,50*len,@timer);
+     checkEqual(Hash32(buf),818419281);
+     // forward and backward overlapped moves on big buffers
+     len := length(buf)-3200;
+     for i := 1 to 3 do
+       if rtl then begin
+         Move(P[3100],P[i],len-i);
+         Move(P[i],P[3200],len-i);
+       end else begin
+         MoveFast(p[3100],p[i],len-i);
+         MoveFast(P[i],P[3200],len-i);
+       end;
+     checkEqual(Hash32(buf),1646145792);
    end;
 {$ifdef CPUX64} var cpu: TX64CpuFeatures; {$endif}
 begin
   SetLength(buf,16 shl 20); // 16MB
   Validate({rtl=}true);
-  {$ifdef CPUX64} // activate and validate the available versions
+  {$ifdef CPUX64} // activate and validate the available SSE2 + AVX branches
   cpu := CPUIDX64;
-  CPUIDX64 := [];
+  CPUIDX64 := []; // default SSE2 128-bit process
   Validate;
   {$ifdef FPC} // Delphi doesn't support AVX asm
   if cpuAvx in cpu then begin
-    CPUIDX64 := [cpuAvx];
+    CPUIDX64 := [cpuAvx]; // AVX 256-bit process
     Validate;
   end;
   {$endif FPC}
-  CPUIDX64 := cpu;
-  if (cpu<>[]) and (cpu<>[cpuAvx]) then
+  CPUIDX64 := cpu; // there is no AVX2 move/fillchar (still 256-bit wide)
+  if (cpu<>[]) and (cpu<>[cpuAvx]) and (cpu<>[cpuAvx,cpuAvx2]) then
   {$endif CPUX64}
     Validate;
 end;
@@ -6083,10 +6095,20 @@ begin
   try
     //obj.Hash.Capacity := MAX; // we will test hash size growing abilities
     Check(obj.Count=0);
-    for i := 1 to MAX do
-      obj.Add(pointer(Random(MaxInt)),added);
+    for i := 0 to MAX do begin
+      obj.Add(pointer(i),added);
+      check(added);
+    end;
     for i := 0 to obj.Count-1 do
       Check(obj.IndexOf(obj.List[i])=i);
+    for i := obj.Count-1 downto 0 do
+      if i and 255=0 then
+        obj.Delete(i); // will invalidate hash, but won't rehash now
+     CheckEqual(obj.IndexOf(TObject(255)),254);
+     CheckEqual(obj.IndexOf(TObject(256)),-1);
+     CheckEqual(obj.IndexOf(TObject(512)),-1);
+    for i := 0 to obj.Count-1 do
+      Check(obj.IndexOf(obj.List[i])=i); // will rehash after trigger=32
   finally
     obj.Free;
   end;

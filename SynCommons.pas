@@ -36408,11 +36408,14 @@ const
                                     FillCharFast [cpuAVX] in 11.98ms, 32.4 GB/s
    Move in 1.92ms, 8.1 GB/s         MoveFast [] in 2.19ms, 7.1 GB/s
                                     MoveFast [cpuAVX] in 1.60ms, 9.7 GB/s
-   small Move in 8.84ms, 2.4 GB/s   small MoveFast [] in 7.28ms, 3 GB/s
-                                    small MoveFast [cpuAVX] in 7.29ms, 3 GB/s
+   small Move in 8.84ms, 2.4 GB/s   small MoveFast [] in 6.66ms, 3.2 GB/s
+                                    small MoveFast [cpuAVX] in 6.63ms, 3.3 GB/s
+   overlapping:
    big Move in 39.94ms, 3.9 GB/s    big MoveFast [] in 38.13ms, 4 GB/s
                                     big MoveFast [cpuAVX] in 36.86ms, 4.2 GB/s
-
+   non overlapping:
+   big Move in 54.55ms, 7.1 GB/s    big MoveFast [] in 40.45ms, 9.6 GB/s
+                                    big MoveFast [cpuAVX] in 39.57ms, 9.8 GB/s
  Small backward/forward moves (on FPC Linux):
    1b Move in 89us, 214.3 MB/s     1b MoveFast [] in 77us, 247.7 MB/s
    2b Move in 95us, 401.5 MB/s     2b MoveFast [] in 72us, 529.8 MB/s
@@ -36700,10 +36703,12 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         mov     dword ptr[dst], eax
         mov     word ptr[dst + 4], cx
         ret
-@07:    mov     eax, dword ptr[src]
-        mov     ecx, dword ptr[src + 3]
-        mov     dword ptr[dst], eax
-        mov     dword ptr[dst + 3], ecx
+@07:    mov     r8d, dword ptr[src]    // faster with no overlapping
+        mov     ax, word ptr[src + 4]
+        mov     cl, byte ptr[src + 6]
+        mov     dword ptr[dst], r8d
+        mov     word ptr[dst + 4], ax
+        mov     byte ptr[dst + 6], cl
 end;
 
 procedure FillCharFast(var dst; cnt: PtrInt; value: byte);
