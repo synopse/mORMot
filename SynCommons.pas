@@ -7546,7 +7546,7 @@ const
   // limit is set to 262,144 hash table slots (=1MB), for Capacity=131,072 items
   // - above this limit, a set of increasing primes is used; using a prime as
   // hashtable modulo enhances its distribution, especially for a weak hash function
-  // - 64-bit CPU and FPC can efficiently compule a prime reduction using Lemire
+  // - 64-bit CPU and FPC can efficiently compute a prime reduction using Lemire
   // algorithm, so no power of two is defined on those targets
   HASH_PO2 = 1 shl 18;
 {$endif CPU32DELPHI}
@@ -51397,10 +51397,11 @@ begin
     result := 0; // will be ignored afterwards for sure
 end;
 
-const // some increasing primes (may be following HASH_PO2=2^18=262144)
-  _PRIMES: array[0..38{$ifdef CPU32DELPHI}+13{$endif}] of integer = (
-    {$ifdef CPU32DELPHI} 251, 499, 797, 1259, 2011, 3203, 5087, 8089,
+const // primes reduce memory consumption and enhance distribution
+  _PRIMES: array[0..38{$ifndef CPU32DELPHI}+13{$endif}] of integer = (
+    {$ifndef CPU32DELPHI} 251, 499, 797, 1259, 2011, 3203, 5087, 8089,
     12853, 20399, 81649, 129607, 205759, {$endif}
+    // following HASH_PO2=2^18=262144 for Delphi Win32
     326617, 411527, 518509, 653267, 823117, 1037059, 1306601, 1646237,
     2074129, 2613229, 3292489, 4148279, 5226491, 6584983, 8296553, 10453007,
     13169977, 16593127, 20906033, 26339969, 33186281, 41812097, 52679969,
@@ -51424,13 +51425,13 @@ end;
 function TDynArrayHasher.HashTableIndex(aHashCode: cardinal): cardinal;
 begin
   result := HashTableSize;
-  {$ifdef CPU32DELPHI} // Delphi X86 is not efficient at compiling 64-bit mul
+  {$ifdef CPU32DELPHI} // Delphi Win32 is not efficient with 64-bit multiplication
   if result>HASH_PO2 then
     result := aHashCode mod result else
     result := aHashCode and (result-1);
-  {$else} // FPC or CPU64 would compile the next line as very optimized asm
+  {$else} // FPC or dcc64 compile next line as very optimized asm
   result := (QWord(aHashCode)*result)shr 32;
-  // see https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/
+  // see https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction
   {$endif CPU32DELPHI}
 end;
 
@@ -51884,7 +51885,7 @@ begin
   n := DynArray^.Count;
   if not forced and ((n=0) or (n<CountTrigger)) then
     exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
-  if forceGrow and (siz>0) then // next power of two or next grown size
+  if forceGrow and (siz>0) then // next power of two or next prime
     {$ifdef CPU32DELPHI}
     if siz<HASH_PO2 then
       siz := siz shl 1 else {$endif}
@@ -51895,7 +51896,7 @@ begin
       siz := 256; // find nearest power of two for fast bitwise division
       while siz<cap do
         siz := siz shl 1;
-    end else {$endif} // use primes to reduce memory usage
+    end else {$endif}
       siz := NextPrime(cap);
   end;
   HashTableSize := siz;
