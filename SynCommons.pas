@@ -16403,6 +16403,10 @@ type
     // - is just a wrapper around Pause + Time
     // - you can call Resume to continue adding time to this timer
     function Stop: TShort16; {$ifdef HASINLINE}inline;{$endif}
+    /// stop the timer, returning the total time elapsed as microseconds
+    // - is just a wrapper around Pause + Time
+    // - you can call Resume to continue adding time to this timer
+    function StopInMicroSec: TSynMonitorTotalMicroSec; {$ifdef HASINLINE}inline;{$endif}
     /// stop the timer, ready to continue its time measurement via Resume
     // - will also compute the global Time value
     // - do nothing if no previous Start/Resume call is pending
@@ -16451,15 +16455,17 @@ type
     // - not to be used in normal code (which could rather call the Stop method),
     // but e.g. for custom performance analysis
     function Time: TShort16;
-    /// time elapsed in micro seconds after counter stopped
-    // - not to be used in normal code, but e.g. for custom performance analysis
-    property TimeInMicroSec: TSynMonitorTotalMicroSec read fTime write fTime;
     /// textual representation of last process timing after counter stopped
     // - Time returns a total elapsed time, whereas this method only returns
     // the latest resumed time
     // - with appened time resolution (us,ms,s) - from MicroSecToString()
     // - not to be used in normal code, but e.g. for custom performance analysis
     function LastTime: TShort16;
+    /// check if Start/Resume were called at least once
+    function Started: boolean;
+    /// time elapsed in micro seconds after counter stopped
+    // - not to be used in normal code, but e.g. for custom performance analysis
+    property TimeInMicroSec: TSynMonitorTotalMicroSec read fTime write fTime;
     /// timing in micro seconds of the last process
     // - not to be used in normal code, but e.g. for custom performance analysis
     property LastTimeInMicroSec: TSynMonitorOneMicroSec read fLastTime write fLastTime;
@@ -58562,6 +58568,11 @@ begin
   {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(fStart);
 end;
 
+function TPrecisionTimer.Started: boolean;
+begin
+  result := (fStart<>0) or (fTime<>0);
+end;
+
 procedure TPrecisionTimer.Resume;
 begin
   if fStart=0 then
@@ -58602,6 +58613,13 @@ begin
   if fStart<>0 then
     Pause;
   MicroSecToString(fTime,result);
+end;
+
+function TPrecisionTimer.StopInMicroSec: TSynMonitorTotalMicroSec;
+begin
+  if fStart<>0 then
+    Pause;
+  result := fTime;
 end;
 
 function TPrecisionTimer.Time: TShort16;
