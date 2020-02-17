@@ -2537,8 +2537,15 @@ function UrlEncode(const NameValuePairs: array of const): RawUTF8; overload;
 
 /// encode a JSON object UTF-8 buffer into URI parameters
 // - you can specify property names to ignore during the object decoding
+// - warning: the ParametersJSON input buffer will be modified in-place
 function UrlEncodeJsonObject(const URIName: RawUTF8; ParametersJSON: PUTF8Char;
-  const PropNamesToIgnore: array of RawUTF8): RawUTF8;
+  const PropNamesToIgnore: array of RawUTF8): RawUTF8; overload;
+
+/// encode a JSON object UTF-8 buffer into URI parameters
+// - you can specify property names to ignore during the object decoding
+// - overloaded function which will make a copy of the input JSON before parsing
+function UrlEncodeJsonObject(const URIName, ParametersJSON: RawUTF8;
+  const PropNamesToIgnore: array of RawUTF8): RawUTF8; overload;
 
 /// decode a string compatible with URI encoding into its original value
 // - you can specify the decoding range (as in copy(s,i,len) function)
@@ -34691,6 +34698,18 @@ begin
     end;
 end;
 
+function UrlEncodeJsonObject(const URIName, ParametersJSON: RawUTF8;
+  const PropNamesToIgnore: array of RawUTF8): RawUTF8;
+var temp: TSynTempBuffer;
+begin
+  temp.Init(ParametersJSON);
+  try
+    result := UrlEncodeJsonObject(URIName,temp.buf,PropNamesToIgnore);
+  finally
+    temp.Done;
+  end;
+end;
+
 function UrlDecode(const s: RawUTF8; i,len: PtrInt): RawUTF8;
 var L: PtrInt;
     P: PUTF8Char;
@@ -48130,7 +48149,7 @@ begin
 end;
 
 function TDocVariantData.ToUrlEncode(const UriRoot: RawUTF8): RawUTF8;
-var json: RawUTF8;
+var json: RawUTF8; // temporary in-place modified buffer
 begin
   VariantSaveJSON(variant(self),twJSONEscape,json);
   result := UrlEncodeJsonObject(UriRoot,Pointer(json),[]);

@@ -577,8 +577,6 @@ type
   published
     /// RTSP over HTTP, as implemented in SynProtoRTSPHTTP unit
     procedure RTSPOverHTTP;
-    /// secure Relay of TCP/HTTP connections
-    procedure SynRelay;
   end;
 
 {$ifdef MSWINDOWS}
@@ -5867,6 +5865,7 @@ begin
     Check(UrlDecodeInteger(U,'WHERE=',V,@U));
     Check(U=nil);
   end;
+  CheckEqual(UrlEncodeJsonObject('','{"b":30,"a":"toto"}',[]),'?b=30&a=toto');
 end;
 
 procedure TTestLowLevelCommon.MimeTypes;
@@ -20006,11 +20005,6 @@ begin
   finally
     proxy.Free;
   end;
-end;
-
-procedure TTestProtocols.SynRelay;
-begin
-
 end;
 
 

@@ -2043,7 +2043,7 @@ end;
 function TMVCRendererReturningData.Redirects(const action: TMVCAction): boolean;
 begin
   fOutput.Header := 'Location: '+UrlEncodeJsonObject(action.RedirectToMethodName,
-    pointer(action.RedirectToMethodParameters),['main']);
+    action.RedirectToMethodParameters,['main']);
   fOutput.Status := action.ReturnedStatus;
   result := true;
 end;
