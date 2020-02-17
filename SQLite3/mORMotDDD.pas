@@ -2190,7 +2190,6 @@ constructor TDDDMonitoredDaemon.Create(aRest: TSQLRest);
 begin
   fProcessIdleDelay := 50;
   fProcessLock := TAutoLocker.Create;
-  fProcessTimer.Start;
   if fProcessThreadCount<1 then
     fProcessThreadCount := 1 else
   if fProcessThreadCount>20 then

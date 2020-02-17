@@ -1783,7 +1783,7 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
           inc(U.Symbol.Stop,U.Symbol.Start-1);
           if (U.Symbol.Name<>'') and
              ((U.Symbol.Start<>0) or (U.Symbol.Stop<>0)) then
-            fUnits.FindHashedAndUpdate(U,true); // true for adding
+            fUnits.FindHashedAndUpdate(U,{addifnotexisting=}true);
         end;
         NextLine;
       end;

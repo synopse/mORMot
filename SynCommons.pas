@@ -792,7 +792,7 @@ type
   // - all Init() methods will allocate 16 more bytes, for a trailing #0 and
   // to ensure our fast JSON parsing won't trigger any GPF (since it may read
   // up to 4 bytes ahead via its PInteger() trick) or any SSE4.2 function
-  {$ifdef FPC_OR_UNICODE}TSynTempBuffer = record{$else}TSynTempBuffer = object{$endif}
+  TSynTempBuffer = object
   public
     /// the text/binary length, in bytes, excluding the trailing #0
     len: PtrInt;
@@ -827,15 +827,13 @@ type
     /// finalize the temporary storage, and create a RawUTF8 string from it
     procedure Done(EndBuf: pointer; var Dest: RawUTF8); overload;
   private
-    // default 4KB buffer allocated on stack
+    // default 4KB buffer allocated on stack - after the len/buf main fields
     tmp: array[0..4095] of AnsiChar;
   end;
 
   /// implements a stack-based writable storage of binary content
   // - memory allocation is performed via a TSynTempBuffer
-  {$ifdef FPC_OR_UNICODE}TSynTempWriter = record private
-  {$else}TSynTempWriter = object protected{$endif}
-    tmp: TSynTempBuffer;
+  TSynTempWriter = object
   public
     /// the current writable position in tmp.buf
     pos: PAnsiChar;
@@ -871,6 +869,8 @@ type
     function AsBinary: RawByteString;
     /// returns the buffer as a RawUTF8 instance
     procedure AsUTF8(var result: RawUTF8);
+  protected
+    tmp: TSynTempBuffer;
   end;
 
   /// function prototype to be used for hashing of an element
@@ -2260,8 +2260,8 @@ var strspn: function (s,accept: pointer): integer = strspnpas;
 // files - call explicitely strcspnsse42() if you are confident on your input
 var strcspn: function (s,reject: pointer): integer = strcspnpas;
 
-{$ifndef ABSOLUTEPASCAL}
 {$ifdef CPUINTEL}
+{$ifndef ABSOLUTEPASCAL}
 {$ifdef HASAESNI}
 /// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
@@ -2294,8 +2294,12 @@ function strspnsse42(s,accept: pointer): integer;
 // - could be used instead of strcspn() when you are confident about your
 // s/reject input buffers, checking if cfSSE42 in CpuFeatures
 function strcspnsse42(s,reject: pointer): integer;
-{$endif CPUINTEL}
 {$endif ABSOLUTEPASCAL}
+
+/// SSE 4.2 version of GetBitsCountPtrInt()
+// - defined just for regression tests - call GetBitsCountPtrInt() instead
+function GetBitsCountSSE42(value: PtrInt): PtrInt;
+{$endif CPUINTEL}
 
 /// use our fast version of StrIComp(), to be used with PUTF8Char/PAnsiChar
 function StrIComp(Str1, Str2: pointer): PtrInt;
@@ -2318,13 +2322,23 @@ var StrLen: function(S: pointer): PtrInt = StrLenPas;
 // - on Intel i386/x86_64, will use fast SSE2/ERMS instructions (if available),
 // or optimized X87 assembly implementation for older CPUs
 // - on non-Intel CPUs, it will fallback to the default RTL FillChar()
+// - note: Delphi x86_64 is far from efficient: even ERMS was wrongly
+// introduced in latest updates
+{$ifdef CPUX64}
+procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
+{$else}
 var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte);
+{$endif CPUX64}
 
 /// our fast version of move()
-// - on Intel i386/x86_64, will use fast SSE2 instructions (if available),
+// - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available),
 // or optimized X87 assembly implementation for older CPUs
 // - on non-Intel CPUs, it will fallback to the default RTL Move()
+{$ifdef CPUX64}
+procedure MoveFast(const src; var dst; cnt: PtrInt);
+{$else}
 var MoveFast: procedure(const Source; var Dest; Count: PtrInt);
+{$endif CPUX64}
 
 /// an alternative Move() function tuned for small unaligned counts
 // - warning: expects Count>0 and Source/Dest not nil
@@ -3453,7 +3467,9 @@ procedure AddRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
 
 type
   /// simple stack-allocated type for handling a type names list
-  {$ifdef FPC_OR_UNICODE}TPropNameList = record{$else}TPropNameList = object{$endif}
+  // - Delphi "object" is buggy on stack -> also defined as record with methods
+  {$ifdef FPC_OR_UNICODE}TPropNameList = record
+  {$else}TPropNameList = object{$endif}
   public
     Values: TRawUTF8DynArray;
     Count: Integer;
@@ -3728,7 +3744,9 @@ function TemporaryFileName: TFileName;
 type
   {$A-}
   /// file found result item, as returned by FindFiles()
-  {$ifdef FPC_OR_UNICODE}TFindFiles = record{$else}TFindFiles = object{$endif}
+  // - Delphi "object" is buggy on stack -> also defined as record with methods
+  {$ifdef FPC_OR_UNICODE}TFindFiles = record
+  {$else}TFindFiles = object{$endif}
   public
     /// the matching file name, including its folder name
     Name: TFileName;
@@ -3848,8 +3866,8 @@ type
   //  in a huge text buffer
   // - this version also handles french and spanish pronunciations on request,
   //  which differs from default Soundex, i.e. English
-  {$ifdef FPC_OR_UNICODE}TSynSoundEx = record private
-  {$else}TSynSoundEx = object protected{$endif}
+  TSynSoundEx = object
+  protected
     Search, FirstChar: cardinal;
     fValues: PSoundExValues;
   public
@@ -4622,10 +4640,9 @@ function FromU64(const Values: array of QWord): TQWordDynArray;
 
 type
   /// used to store and retrieve Words in a sorted array
-  // - is defined either as an object either as a record, due to a bug
-  // in Delphi 2009/2010 compiler (at least): this structure is not initialized
-  // if defined as an object on the stack, but will be as a record :(
-  {$ifdef FPC_OR_UNICODE}TSortedWordArray = record{$else}TSortedWordArray = object{$endif}
+  // - Delphi "object" is buggy on stack -> also defined as record with methods
+  {$ifdef FPC_OR_UNICODE}TSortedWordArray = record
+  {$else}TSortedWordArray = object{$endif}
   public
     Values: TWordDynArray;
     Count: integer;
@@ -5154,7 +5171,7 @@ type
   // methods can modify the content of the associated variable but the TDynArray
   // doesn't contain any data by itself. It is therefore aimed to initialize
   // a TDynArray wrapper on need, to access any existing dynamic array.
-  // - is defined either as an object either as a record, due to a bug
+  // - is defined as an object or as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
   {$ifdef UNDIRECTDYNARRAY}TDynArray = record private
@@ -5172,7 +5189,7 @@ type
     fIsObjArray: TDynArrayObjArray;
     function GetCount: PtrInt; {$ifdef HASINLINE}inline;{$endif}
     procedure SetCount(aCount: PtrInt);
-    function GetCapacity: PtrInt;
+    function GetCapacity: PtrInt; {$ifdef HASINLINE}inline;{$endif}
     procedure SetCapacity(aCapacity: PtrInt);
     procedure SetCompare(const aCompare: TDynArraySortCompare); {$ifdef HASINLINE}inline;{$endif}
     function FindIndex(const Elem; aIndex: PIntegerDynArray;
@@ -5182,8 +5199,6 @@ type
     function GetIsObjArray: boolean; {$ifdef HASINLINE}inline;{$endif}
     function ComputeIsObjArray: boolean;
     procedure SetIsObjArray(aValue: boolean); {$ifdef HASINLINE}inline;{$endif}
-    /// will set fKnownType and fKnownOffset/fKnownSize fields
-    function ToKnownType(exactType: boolean=false): TDynArrayKind;
     function LoadFromHeader(var Source: PByte; SourceMax: PByte): integer;
     function LoadKnownType(Data,Source,SourceMax: PAnsiChar): boolean;
     /// faster than RTL + handle T*ObjArray + ensure unique
@@ -5232,6 +5247,9 @@ type
     // the current value
     procedure UseExternalCount(var aCountPointer: Integer);
       {$ifdef HASINLINE}inline;{$endif}
+    /// low-level computation of KnownType and KnownSize fields from RTTI
+    // - do nothing if has already been set at initialization, or already computed
+    function GuessKnownType(exactType: boolean=false): TDynArrayKind;
     /// check this dynamic array from the GlobalJSONCustomParsers list
     // - returns TRUE if this array has a custom JSON parser
     function HasCustomJSONParser: boolean;
@@ -5284,7 +5302,7 @@ type
     /// delete one item inside the dynamic array
     // - the deleted element is finalized if necessary
     // - this method will recognize T*ObjArray types and free all instances
-    procedure Delete(aIndex: PtrInt);
+    function Delete(aIndex: PtrInt): boolean;
     /// search for an element value inside the dynamic array
     // - return the index found (0..Count-1), or -1 if Elem was not found
     // - will search for all properties content of the eLement: TList.IndexOf()
@@ -5692,8 +5710,11 @@ type
     property Sorted: boolean read fSorted write fSorted;
     /// low-level direct access to the storage variable
     property Value: PPointer read fValue;
-    /// the known type, possibly retrieved from dynamic array RTTI
+    /// the first field recognized type
+    // - could have been set at initialization, or after a GuessKnownType call
     property KnownType: TDynArrayKind read fKnownType;
+    /// the raw storage size of the first field KnownType
+    property KnownSize: integer read fKnownSize;
     /// the known RTTI information of the whole array
     property ArrayType: pointer read fTypeInfo;
     /// the known type name of the whole array, as RawUTF8
@@ -5713,8 +5734,8 @@ type
   /// allows to iterate over a TDynArray.SaveTo binary buffer
   // - may be used as alternative to TDynArray.LoadFrom, if you don't want
   // to allocate all items at once, but retrieve items one by one
-  {$ifdef FPC_OR_UNICODE}TDynArrayLoadFrom = record private
-  {$else}TDynArrayLoadFrom = object protected{$endif}
+  TDynArrayLoadFrom = object
+  protected
     DynArray: TDynArray; // used to access RTTI
     Hash: PCardinalArray;
     PositionEnd: PAnsiChar;
@@ -5764,20 +5785,68 @@ type
   // - can be set as an alternative to TDynArrayHashOne
   TEventDynArrayHashOne = function(const Elem): cardinal of object;
 
-  /// internal structure used to store one item hash
-  // - used e.g. by TDynArrayHashed or TObjectHash via TSynHashDynArray
-  TSynHash = record
-    /// unsigned integer hash of the item
-    Hash: cardinal;
-    /// index of the item in the main storage array
-    Index: cardinal;
-  end;
-
-  /// internal structure used to store hashs of items
-  // - used e.g. by TDynArrayHashed or TObjectHash
-  TSynHashDynArray = array of TSynHash;
-
   {.$define DYNARRAYHASHCOLLISIONCOUNT}
+
+  /// allow O(1) lookup to any dynamic array content
+  // - this won't handle the storage process (like add/update), just efficiently
+  // maintain a hash table over an existing dynamic array: several TDynArrayHasher
+  // could be applied to a single TDynArray wrapper
+  // - TDynArrayHashed will use a TDynArrayHasher for its own store
+  {$ifdef FPC_OR_UNICODE}TDynArrayHasher = record private
+  {$else}TDynArrayHasher = object protected{$endif}
+    DynArray: PDynArray;
+    HashElement: TDynArrayHashOne;
+    EventHash: TEventDynArrayHashOne;
+    Hasher: THasher;
+    HashTable: TIntegerDynArray; // store 0 for void entry, or Index+1
+    HashTableSize: integer;
+    ScanCounter: integer; // Scan()>=0 up to CountTrigger*2
+    State: set of (hasHasher, canHash);
+    function HashTableIndex(aHashCode: cardinal): cardinal; {$ifdef HASINLINE}inline;{$endif}
+    procedure HashAdd(aHashCode: cardinal; var result: integer);
+    procedure HashDelete(aArrayIndex, aHashTableIndex: integer; aHashCode: cardinal);
+    procedure RaiseFatalCollision(const caller: RawUTF8; aHashCode: cardinal);
+  public
+    /// associated item comparison - may differ from DynArray^.Compare
+    Compare: TDynArraySortCompare;
+    /// custom method-based comparison function
+    EventCompare: TEventDynArraySortCompare;
+    /// after how many FindBeforeAdd() or Scan() the hashing starts - default 32
+    CountTrigger: integer;
+    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+    /// low-level access to an hash collisions counter
+    FindCollisions: cardinal;
+    {$endif}
+    /// initialize the hash table for a given dynamic array storage
+    procedure Init(aDynArray: PDynArray; aHashElement: TDynArrayHashOne;
+      aCompare: TDynArraySortCompare; aHasher: THasher; aCaseInsensitive: boolean); overload;
+    /// allow custom hashing via a method event
+    procedure SetEventHash(const event: TEventDynArrayHashOne);
+    /// search for an element value inside the dynamic array without hashing
+    // - trigger hashing if ScanCounter reaches CountTrigger*2
+    function Scan(Elem: pointer): integer;
+    /// search for an element value inside the dynamic array with hashing
+    function Find(Elem: pointer): integer; overload;
+    /// search for a hashed element value inside the dynamic array with hashing
+    function Find(Elem: pointer; aHashCode: cardinal): integer; overload;
+    /// search for a hash position inside the dynamic array with hashing
+    function Find(aHashCode: cardinal; aForAdd: boolean): integer; overload;
+    /// returns position in array, or next void index in HashTable[] as -(index+1)
+    function FindOrNew(aHashCode: cardinal; Elem: pointer; aHashTableIndex: PInteger=nil): integer;
+    /// search an hashed element value for adding, updating the internal hash table
+    // - trigger hashing if Count reaches CountTrigger
+    function FindBeforeAdd(Elem: pointer; out wasAdded: boolean; aHashCode: cardinal): integer;
+    /// search and delete an element value, updating the internal hash table
+    function FindBeforeDelete(Elem: pointer): integer;
+    /// reset the hash table - no rehash yet
+    procedure Clear;
+    /// full computation of the internal hash table
+    function ReHash(forced, forceGrow: boolean): boolean;
+    /// compute the hash of a given item
+    function HashOne(Elem: pointer): cardinal; {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 -> C1632
+    /// retrieve the low-level hash of a given item
+    function GetHashFromIndex(aIndex: PtrInt): cardinal;
+  end;
 
   /// used to access any dynamic arrray elements using fast hash
   // - by default, binary sort could be used for searching items for TDynArray:
@@ -5831,33 +5900,9 @@ type
   TDynArrayHashed = object(TDynArray)
   protected
   {$endif UNDIRECTDYNARRAY}
-    fHashElement: TDynArrayHashOne;
-    fHasher: THasher;
-    fHashs: TSynHashDynArray;
-    fHashsCount: integer;
-    fEventCompare: TEventDynArraySortCompare;
-    fEventHash: TEventDynArrayHashOne;
-    fHashCountTrigger: integer;
-    fHashFindCount: integer;
-    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-    fHashFindCollisions: cardinal;
-    {$endif}
-    procedure HashAdd(const Elem; aHashCode: Cardinal; var result: integer);
-    /// low-level search of an element from its pre-computed hash
-    // - if not found and aForAdd=true, returns -(indexofvoidfHashs[]+1)
-    // - this overloaded method will return the first matching item: use the
-    // HashFindAndCompare(...; const Elem) method to avoid any collision issue
-    // - you should NOT use this method, but rather high-level FindHashed*()
-    function HashFind(aHashCode: cardinal; aForAdd: boolean): integer;
-    /// low-level search of an element from its pre-computed hash
-    // - search for the hash, then use fEventCompare/fCompare/ElemEquals
-    // - if not found, returns -(indexofvoidfHashs[]+1)
-    // - you should NOT use this method, but rather high-level FindHashed*()
-    function HashFindAndCompare(aHashCode: cardinal; const Elem): integer;
-    function GetHashFromIndex(aIndex: PtrInt): Cardinal;
-    procedure HashInvalidate;
-    procedure RaiseFatalCollision(const caller: RawUTF8; aHashCode: cardinal);
-    function InternalCompare(Index: cardinal; const Elem): boolean;
+    fHash: TDynArrayHasher;
+    procedure SetEventHash(const event: TEventDynArrayHashOne); {$ifdef HASINLINE}inline;{$endif}
+    function GetHashFromIndex(aIndex: PtrInt): Cardinal; {$ifdef HASINLINE}inline;{$endif}
   public
     /// initialize the wrapper with a one-dimension dynamic array
     // - this version accepts some hash-dedicated parameters: aHashElement to
@@ -5889,37 +5934,32 @@ type
     // the dynamic array content (e.g. in case of element deletion or update,
     // or after calling LoadFrom/Clear method) - this is not necessary after
     // FindHashedForAdding / FindHashedAndUpdate / FindHashedAndDelete methods
-    function ReHash(forAdd: boolean=false): boolean;
-    /// low-level function which would inspect the internal fHashs[] array for
-    // any collision
-    // - is a brute force search within fHashs[].Hash values, which may be handy
-    // to validate the current HashElement() function
-    // - nocompare=true won't check the actual values for collision, just the hash
-    // - returns -1 if no collision was found, or the index of the first collision
-    function IsHashElementWithoutCollision(nocompare: boolean): integer;
+    function ReHash(forAdd: boolean=false; forceGrow: boolean=false): boolean; {$ifdef HASINLINE}inline;{$endif}
     /// search for an element value inside the dynamic array using hashing
-    // - ELem should be of the same exact type than the dynamic array, or at
-    // least matchs the fields used by both the hash function and Equals method:
-    // e.g. if the searched/hashed field in a record is a string as first field,
-    // you may use a string variable as Elem: other fields will be ignored
+    // - Elem should be of the type expected by both the hash function and
+    // Equals/Compare methods: e.g. if the searched/hashed field in a record is
+    // a string as first field, you can safely use a string variable as Elem
+    // - Elem must refer to a variable: e.g. you can't write FindHashed(i+10)
+    // - will call fHashElement(Elem,fHasher) to compute the needed hash
     // - returns -1 if not found, or the index in the dynamic array if found
-    // - optional aHashCode parameter can be supplied with an already hashed
-    // value of the item, to be used e.g. after a call to HashFind() - default
-    // 0 will use fHashElement(Elem,fHasher)
-    function FindHashed(const Elem; aHashCode: cardinal=0): integer;
+    function FindHashed(const Elem): integer; overload;
+    /// search for an element value inside the dynamic array using its hash
+    // - returns -1 if not found, or the index in the dynamic array if found
+    // - aHashCode parameter constains an already hashed value of the item,
+    // to be used e.g. after a call to HashFind()
+    function FindHashed(const Elem; aHashCode: cardinal): integer; overload;
     /// search for an element value inside the dynamic array using hashing, and
     // fill Elem with the found content
     // - return the index found (0..Count-1), or -1 if Elem was not found
-    // - warning: Elem must be of the same exact type than the dynamic array,
-    // and must be a reference to a variable (you can't write Find(i+10) e.g.)
+    // - ElemToFill should be of the type expected by the dynamic array, since
+    // all its fields will be set on match
     function FindHashedAndFill(var ElemToFill): integer;
     /// search for an element value inside the dynamic array using hashing, and
-    // add a void entry to the array if was not found
+    // add a void entry to the array if was not found (unless noAddEntry is set)
     // - this method will use hashing for fast retrieval
-    // - Elem should be of the same exact type than the dynamic array, or at
-    // least matchs the fields used by both the hash function and Equals method:
-    // e.g. if the searched/hashed field in a record is a string as first field,
-    // you may use a string variable as Elem: other fields will be ignored
+    // - Elem should be of the type expected by both the hash function and
+    // Equals/Compare methods: e.g. if the searched/hashed field in a record is
+    // a string as first field, you can safely use a string variable as Elem
     // - returns either the index in the dynamic array if found (and set wasAdded
     // to false), either the newly created index in the dynamic array (and set
     // wasAdded to true)
@@ -5927,12 +5967,16 @@ type
     // - warning: in contrast to the Add() method, if an entry is added to the
     // array (wasAdded=true), the entry is left VOID: you must set the field
     // content to expecting value - in short, Elem is used only for searching,
-    // not copied to the newly created entry in the array
-    // - optional aHashCode parameter can be supplied with an already hashed
-    // value of the item, to be used e.g. after a call to HashFind() - default
-    // 0 will use fHashElement(Elem,fHasher)
+    // not copied to the newly created entry in the array  - check
+    // FindHashedAndUpdate() for a method actually copying Elem fields
     function FindHashedForAdding(const Elem; out wasAdded: boolean;
-      aHashCode: cardinal=0): integer;
+      noAddEntry: boolean=false): integer; overload;
+    /// search for an element value inside the dynamic array using hashing, and
+    // add a void entry to the array if was not found (unless noAddEntry is set)
+    // - overloaded method acepting an already hashed value of the item, to be used
+    // e.g. after a call to HashFind()
+    function FindHashedForAdding(const Elem; out wasAdded: boolean;
+      aHashCode: cardinal; noAddEntry: boolean=false): integer; overload;
     /// ensure a given element name is unique, then add it to the array
     // - expected element layout is to have a RawUTF8 field at first position
     // - the aName is searched (using hashing) to be unique, and if not the case,
@@ -5952,55 +5996,62 @@ type
     function AddAndMakeUniqueName(aName: RawUTF8): pointer;
     /// search for an element value inside the dynamic array using hashing, then
     // update any matching item, or add the item if none matched
+    // - by design, hashed field shouldn't have been modified by this update,
+    // otherwise the method won't be able to find and update the old hash: in
+    // this case, you should first call FindHashedAndDelete(OldElem) then
+    // FindHashedForAdding(NewElem) to properly handle the internal hash table
     // - if AddIfNotExisting is FALSE, returns the index found (0..Count-1),
     // or -1 if Elem was not found - update will force slow rehash all content
     // - if AddIfNotExisting is TRUE, returns the index found (0..Count-1),
     // or the index newly created/added is the Elem value was not matching -
     // add won't rehash all content - for even faster process (avoid ReHash),
     // please set the Capacity property
-    // - warning: Elem must be of the same exact type than the dynamic array, and
-    // must refer to a variable (you can't write FindHashedAndUpdate(i+10) e.g.)
+    // - Elem should be of the type expected by the dynamic array, since its
+    // content will be copied into the dynamic array, and it must refer to a
+    // variable: e.g. you can't write FindHashedAndUpdate(i+10)
     function FindHashedAndUpdate(const Elem; AddIfNotExisting: boolean): integer;
     /// search for an element value inside the dynamic array using hashing, and
     // delete it if matchs
     // - return the index deleted (0..Count-1), or -1 if Elem was not found
-    // - this will rehash all content: this method could be slow in the current
-    // implementation
-    // - warning: Elem must be of the same exact type than the dynamic array, and
-    // must refer to a variable (you can't write FindHashedAndDelete(i+10) e.g.)
-    function FindHashedAndDelete(const Elem): integer;
+    // - can optionally copy the deleted item to FillDeleted^ before erased
+    // - Elem should be of the type expected by both the hash function and
+    // Equals/Compare methods, and must refer to a variable: e.g. you can't
+    // write FindHashedAndDelete(i+10)
+    // - it won't call slow ReHash but refresh the hash table as needed
+    function FindHashedAndDelete(const Elem; FillDeleted: pointer=nil;
+      noDeleteEntry: boolean=false): integer;
     /// will search for an element value inside the dynamic array without hashing
     // - is used internally when Count < HashCountTrigger
     // - is preferred to Find(), since EventCompare would be used if defined
-    // - Elem should be of the same exact type than the dynamic array, or at
-    // least matchs the fields used by both the hash function and Equals method:
-    // e.g. if the searched/hashed field in a record is a string as first field,
-    // you may use a string variable as Elem: other fields will be ignored
+    // - Elem should be of the type expected by both the hash function and
+    // Equals/Compare methods, and must refer to a variable: e.g. you can't
+    // write Scan(i+10)
     // - returns -1 if not found, or the index in the dynamic array if found
+    // - an internal algorithm can switch to hashing if Scan() is called often,
+    // even if the number of items is lower than HashCountTrigger
     function Scan(const Elem): integer;
     /// retrieve the hash value of a given item, from its index
     property Hash[aIndex: PtrInt]: Cardinal read GetHashFromIndex;
     /// alternative event-oriented Compare function to be used for Sort and Find
     // - will be used instead of Compare, to allow object-oriented callbacks
-    property EventCompare: TEventDynArraySortCompare read fEventCompare write fEventCompare;
+    property EventCompare: TEventDynArraySortCompare read fHash.EventCompare write fHash.EventCompare;
     /// custom hash function to be used for hashing of a dynamic array element
-    property HashElement: TDynArrayHashOne read fHashElement;
+    property HashElement: TDynArrayHashOne read fHash.HashElement;
     /// alternative event-oriented Hash function for ReHash
     // - this object-oriented callback will be used instead of HashElement
     // on each dynamic array entries - HashElement will still be used on
     // const Elem values, since they may be just a sub part of the stored entry
-    property EventHash: TEventDynArrayHashOne read fEventHash write fEventHash;
+    property EventHash: TEventDynArrayHashOne read fHash.EventHash write SetEventHash;
     /// after how many items the hashing take place
-    // - for smallest arrays, O(n) seach if faster than O(1) hashing, since
-    // maintaining the fHashs[] lookup has some CPU and memory costs
-    // - equals 32 by default
-    property HashCountTrigger: integer read fHashCountTrigger write fHashCountTrigger;
-    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-    /// access to the internal collision of HashFind()
-    // - it won't depend only on the HashElement(), but also on the internal
-    // hash bucket size (which is much lower than 2^32 items)
-    property HashFindCollisions: cardinal read fHashFindCollisions write fHashFindCollisions;
-    {$endif}
+    // - for smallest arrays, O(n) search if faster than O(1) hashing, since
+    // maintaining internal hash table has some CPU and memory costs
+    // - internal search is able to switch to hashing if it founds out that it
+    // may have some benefit, e.g. if Scan() is called 2*HashCountTrigger times
+    // - equals 32 by default, i.e. start hashing when Count reaches 32 or
+    // manual Scan() is called 64 times
+    property HashCountTrigger: integer read fHash.CountTrigger write fHash.CountTrigger;
+    /// access to the internal hash table
+    property Hasher: TDynArrayHasher read fHash;
   end;
 
 
@@ -6119,7 +6170,7 @@ type
   // feature its own dedicated hashing, and any abstract mean of value storage
   TObjectHash = class
   protected
-    fHashs: TSynHashDynArray;
+    fHashs: array of packed record Hash, Index: cardinal; end;
     procedure HashInit(aCountToHash: integer);
     function HashFind(aHashCode: cardinal; Item: TObject): integer;
     /// abstract method to hash an item
@@ -6237,8 +6288,8 @@ type
   // from concurrent access with a mutex
   // - for object-level locking, see TSynPersistentLock which owns one such
   // instance, or call low-level NewSynLocker function then DoneAndFreemem
-  {$ifdef FPC_OR_UNICODE}TSynLocker = record private
-  {$else}TSynLocker = object protected{$endif}
+  TSynLocker = object
+  protected
     fSection: TRTLCriticalSection;
     fSectionPadding: PtrInt; // paranoid to avoid FUTEX_WAKE_PRIVATE=EAGAIN
     fLocked, fInitialized: boolean;
@@ -6449,7 +6500,9 @@ type
 
 
   /// used to store one list of hashed RawUTF8 in TRawUTF8Interning pool
-  {$ifdef FPC_OR_UNICODE}TRawUTF8InterningSlot = record{$else}TRawUTF8InterningSlot = object{$endif}
+  // - Delphi "object" is buggy on stack -> also defined as record with methods
+  {$ifdef FPC_OR_UNICODE}TRawUTF8InterningSlot = record
+  {$else}TRawUTF8InterningSlot = object{$endif}
   public
     /// actual RawUTF8 storage
     Value: TRawUTF8DynArray;
@@ -6573,9 +6626,7 @@ type
   // - is therefore faster than TRawUTF8List
   // - is defined as an object, not as a class: you can use this in any
   // class, without the need to destroy the content
-  // - is defined either as an object either as a record, due to a bug
-  // in Delphi 2009/2010 compiler (at least): this structure is not initialized
-  // if defined as an object on the stack, but will be as a record :(
+  // - Delphi "object" is buggy on stack -> also defined as record with methods
   {$ifdef FPC_OR_UNICODE}TSynNameValue = record private
   {$else}TSynNameValue = object protected{$endif}
     fOnAdd: TSynNameValueNotify;
@@ -7046,7 +7097,7 @@ type
   // - is not thread-safe by itself, but cross-compiler and cross-platform, still
   // very fast with a much better distribution than Delphi system's Random() function
   // - Random32gsl/Random32 will use a threadvar to have thread safety
-  {$ifdef FPC_OR_UNICODE}TLecuyer = record{$else}TLecuyer = object{$endif}
+  TLecuyer = object
   public
     rs1, rs2, rs3, seedcount: cardinal;
     /// force an immediate seed of the generator from current system state
@@ -7487,6 +7538,18 @@ function SortDynArrayVariantI(const A,B): integer;
 function SortDynArrayVariantComp(const A,B: TVarData; caseInsensitive: boolean): integer;
 {$endif NOVARIANTS}
 
+
+{$ifdef CPU32DELPHI}
+const
+  /// defined for inlining bitwise division in TDynArrayHasher.HashTableIndex
+  // - HashTableSize<=HASH_PO2 is expected to be a power of two (fast binary op);
+  // limit is set to 262,144 hash table slots (=1MB), for Capacity=131,072 items
+  // - above this limit, a set of increasing primes is used; using a prime as
+  // hashtable modulo enhances its distribution, especially for a weak hash function
+  // - 64-bit CPU and FPC can efficiently compute a prime reduction using Lemire
+  // algorithm, so no power of two is defined on those targets
+  HASH_PO2 = 1 shl 18;
+{$endif CPU32DELPHI}
 
 /// hash one AnsiString content with the suppplied Hasher() function
 function HashAnsiString(const Elem; Hasher: THasher): cardinal;
@@ -9163,7 +9226,6 @@ type
     fList: TObjectDynArray;
     fCount: integer;
     fHash: TDynArrayHashed;
-    fFreeItems: boolean;
   public
     /// initialize the class instance
     // - if aFreeItems is TRUE (default), will behave like a TObjectList
@@ -9178,9 +9240,13 @@ type
     // - returns -1 if not found
     function IndexOf(aObject: TObject): integer; virtual; abstract;
     /// delete an object from the list
+    // - the internal hash table is not recreated, just invalidated
+    // (i.e. this method calls HashInvalidate not FindHashedAndDelete)
+    // - will invalide the whole hash table
     procedure Delete(aIndex: integer); overload;
     /// delete an object from the list
-    procedure Delete(aObject: TObject); overload;
+    // - will invalide the whole hash table
+    procedure Delete(aObject: TObject); overload; virtual;
     /// direct access to the items list array
     property List: TObjectDynArray read fList;
     /// returns the count of stored objects
@@ -9200,6 +9266,9 @@ type
     /// retrieve an object index within the list, using a fast hash table
     // - returns -1 if not found
     function IndexOf(aObject: TObject): integer; override;
+    /// delete an object from the list
+    // - overriden method won't invalidate the whole hash table, but refresh it
+    procedure Delete(aObject: TObject); override;
   end;
 
   /// function prototype used to retrieve a pointer to the hashed property
@@ -9546,6 +9615,12 @@ type
     // into the TRawUTF8ListHashed
     function AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject;
       wasAdded: PBoolean=nil): PtrInt; override;
+    /// delete a stored RawUTF8 item, and its associated TObject
+    // - returns -1 if no entry was found and deleted
+    // - this overridden method will update and use the internal hash table,
+    // so is preferred to plain Add if you want faster insertion
+    // into the TRawUTF8ListHashed
+    function Delete(const aText: RawUTF8): PtrInt; override;
     /// search in the low-level internal hashing table
     function HashFind(aHashCode: cardinal): integer; {$ifdef HASINLINE}inline;{$endif}
     /// ensure all items are hashed if necessay
@@ -9555,7 +9630,6 @@ type
     // - returns true if stored information has been re-hashed
     function ReHash(aForceRehash: boolean=false): boolean; virtual;
     /// access to the low-level internal hashing table
-    // - could be used e.g. to retrieve Hash.IsHashElementWithoutCollision state
     property Hash: TDynArrayHashed read fHash;
   end;
 
@@ -9822,7 +9896,7 @@ type
       Partial: pointer; PartialLen, PartialLenMax: integer): integer; override;
   end;
 
-
+  // internal flag, used only by TSynDictionary.InArray protected method
   TSynDictionaryInArray = (
     iaFind, iaFindAndDelete, iaFindAndUpdate, iaFindAndAddIfNotExisting, iaAdd);
 
@@ -10024,14 +10098,12 @@ type
     /// unserialize the content from "key":value JSON object
     // - if the JSON input may not be correct (i.e. if not coming from SaveToJSON),
     // you may set EnsureNoKeyCollision=TRUE for a slow but safe keys validation
-    function LoadFromJSON(const JSON: RawUTF8; EnsureNoKeyCollision: boolean=false{$ifndef NOVARIANTS};
+    function LoadFromJSON(const JSON: RawUTF8 {$ifndef NOVARIANTS};
       CustomVariantOptions: PDocVariantOptions=nil{$endif}): boolean; overload;
     /// unserialize the content from "key":value JSON object
     // - note that input JSON buffer is not modified in place: no need to create
     // a temporary copy if the buffer is about to be re-used
-    // - if the JSON input may not be correct (i.e. if not coming from SaveToJSON),
-    // you may set EnsureNoKeyCollision=TRUE for a slow but safe keys uniqueness
-    function LoadFromJSON(JSON: PUTF8Char; EnsureNoKeyCollision: boolean=false{$ifndef NOVARIANTS};
+    function LoadFromJSON(JSON: PUTF8Char {$ifndef NOVARIANTS};
       CustomVariantOptions: PDocVariantOptions=nil{$endif}): boolean; overload;
     /// save the content as SynLZ-compressed raw binary data
     // - warning: this format is tied to the values low-level RTTI, so if you
@@ -10168,8 +10240,8 @@ var
 
 type
   /// handle memory mapping of a file content
-  {$ifdef FPC_OR_UNICODE}TMemoryMap = record private
-  {$else}TMemoryMap = object protected{$endif}
+  TMemoryMap = object
+  protected
     fBuf: PAnsiChar;
     fBufSize: PtrUInt;
     fFile: THandle;
@@ -10550,11 +10622,11 @@ type
   // file reading)
   // - can handle sophisticated storage layout of TFileBufferWriter for
   // dynamic arrays of Integer/Int64/RawUTF8
-  // - is defined either as an object either as a record, due to a bug
+  // - is defined as an object or as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
-  {$ifdef FPC_OR_UNICODE}TFileBufferReader = record private
-  {$else}TFileBufferReader = object protected{$endif}
+  TFileBufferReader = object
+  protected
     fCurrentPos: PtrUInt;
     fMap: TMemoryMap;
     /// get Isize + buffer from current memory map or fBufTemp into (P,PEnd)
@@ -10731,7 +10803,7 @@ procedure JSONEncodeNameSQLValue(const Name,SQLValue: RawUTF8; var result: RawUT
 type
   /// points to one value of raw UTF-8 content, decoded from a JSON buffer
   // - used e.g. by JSONDecode() overloaded function to returns names/values
-  {$ifdef FPC_OR_UNICODE}TValuePUTF8Char = record{$else}TValuePUTF8Char = object{$endif}
+  TValuePUTF8Char = object
   public
     /// a pointer to the actual UTF-8 text
     Value: PUTF8Char;
@@ -11123,6 +11195,8 @@ const
   POINTERSHR = {$ifdef CPU64}3{$else}2{$endif};
   /// could be used to compute the bitmask of a pointer integer
   POINTERAND = {$ifdef CPU64}7{$else}3{$endif};
+  /// could be used to check all bits on a pointer
+  POINTERBITS = {$ifdef CPU64}64{$else}32{$endif};
 
 
 { ************ some other common types and conversion routines ************** }
@@ -12300,6 +12374,15 @@ var
   /// the available CPU features, as recognized at program startup
   CpuFeatures: TIntelCpuFeatures;
 
+{$ifdef CPUX64}
+type
+  /// cpuERMS is slightly slower than cpuAVX so is not available by default
+  TX64CpuFeatures = set of(cpuAVX, cpuAVX2 {$ifdef WITH_ERMS}, cpuERMS{$endif});
+var
+  /// internal flags used by FillCharFast - easier from asm that CpuFeatures
+  CPUIDX64: TX64CpuFeatures;
+{$endif CPUX64}
+
 /// compute CRC32C checksum on the supplied buffer using SSE 4.2
 // - use Intel Streaming SIMD Extensions 4.2 hardware accelerated instruction
 // - SSE 4.2 shall be available on the processor (i.e. cfSSE42 in CpuFeatures)
@@ -12376,7 +12459,19 @@ procedure UnSetBitPtr(Bits: pointer; aIndex: PtrInt);
 
 /// compute the number of bits set in a bit array
 // - Count is the bit count, not byte size
-function GetBitsCount(const Bits; Count: PtrInt): integer;
+// - will use fast SSE4.2 popcnt instruction if available on the CPU
+function GetBitsCount(const Bits; Count: PtrInt): PtrInt;
+
+/// pure pascal version of GetBitsCountPtrInt()
+// - defined just for regression tests - call GetBitsCountPtrInt() instead
+// - has optimized asm on x86_64 and i386
+function GetBitsCountPas(value: PtrInt): PtrInt;
+
+/// compute how many bits are set in a given pointer-sized integer
+// - the PopCnt() intrinsic under FPC doesn't have any fallback on older CPUs,
+// and default implementation is 5 times slower than our GetBitsCountPas() on x64
+// - this redirected function will use fast SSE4.2 popcnt opcode, if available
+var GetBitsCountPtrInt: function(value: PtrInt): PtrInt;
 
 const
   /// constant array used by GetAllBits() function (when inlined)
@@ -12574,7 +12669,7 @@ type
   // is safe to be used
   // - DayOfWeek field is not handled by its methods by default, but could be
   // filled on demand via ComputeDayOfWeek - making this record 64-bit long
-  {$ifdef FPC_OR_UNICODE}TSynDate = record{$else}TSynDate = object{$endif}
+  TSynDate = object
     Year, Month, DayOfWeek, Day: word;
     /// set all fields to 0
     procedure Clear; {$ifdef HASINLINE}inline;{$endif}
@@ -12618,7 +12713,7 @@ type
   // for fast conversion from TDateTime to its ready-to-display members
   // - DayOfWeek field is not handled by most methods by default, but could be
   // filled on demand via ComputeDayOfWeek
-  {$ifdef FPC_OR_UNICODE}TSynSystemTime = record{$else}TSynSystemTime = object{$endif}
+  TSynSystemTime = object
   public
     Year, Month, DayOfWeek, Day,
     Hour, Minute, Second, MilliSecond: word;
@@ -12718,9 +12813,9 @@ type
   // - since TTimeLogBits.Value is bit-oriented, you can't just add or substract
   // two TTimeLog values when doing date/time computation: use a TDateTime
   // temporary conversion in such case
-  // - TTimeLogBits.Value has a 38-bit precision, so features exact representation
-  // as JavaScript numbers (stored in a 52-bit mantissa)
-  {$ifdef FPC_OR_UNICODE}TTimeLogBits = record{$else}TTimeLogBits = object{$endif}
+  // - TTimeLogBits.Value needs up to 40-bit precision, so features exact
+  // representation as JavaScript numbers (stored in a 52-bit mantissa)
+  TTimeLogBits = object
   public
     /// the bit-encoded value itself, which follows an abstract "year" of 16
     // months of 32 days of 32 hours of 64 minutes of 64 seconds
@@ -12729,7 +12824,7 @@ type
     // - bits 12..16 = Hours   (0..23)
     // - bits 17..21 = Day-1   (0..31)
     // - bits 22..25 = Month-1 (0..11)
-    // - bits 26..38 = Year    (0..4095)
+    // - bits 26..40 = Year    (0..9999)
     Value: Int64;
     /// extract the date and time content in Value into individual values
     procedure Expand(out Date: TSynSystemTime);
@@ -13213,7 +13308,9 @@ type
   TTimeZoneID = type RawUTF8;
 
   /// used to store Time Zone information for a single area in TSynTimeZone
-  {$ifdef FPC_OR_UNICODE}TTimeZoneData = record{$else}TTimeZoneData = object{$endif}
+  // - Delphi "object" is buggy on stack -> also defined as record with methods
+  {$ifdef FPC_OR_UNICODE}TTimeZoneData = record
+  {$else}TTimeZoneData = object{$endif}
   public
     id: TTimeZoneID;
     display: RawUTF8;
@@ -14196,7 +14293,7 @@ var
   /// a slightly faster alternative to Variants.Null function
   Null: variant absolute NullVarData;
 
-{$endif}
+{$endif LVCL}
 
 /// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
 // - we also discovered some issues with FPC's Variants unit, so this function
@@ -14831,6 +14928,7 @@ type
   // be a good idea to use DocVariantData(aVariant)^ or _Safe(aVariant)^ instead
   // of TDocVariantData(aVariant), if you are not sure how aVariant was allocated
   // (may be not _Obj/_Json, but retrieved as varByRef e.g. from late binding)
+  // - Delphi "object" is buggy on stack -> also defined as record with methods
   {$ifdef FPC_OR_UNICODE}TDocVariantData = record private
   {$else}TDocVariantData = object protected{$endif}
     VType: TVarType;
@@ -16274,9 +16372,9 @@ type
   // - WARNING: under Windows, this record MUST be aligned to 32-bit, otherwise
   // iFreq=0 - so you can use TLocalPrecisionTimer/ILocalPrecisionTimer if you
   // want to alllocate a local timer instance on the stack
-  {$ifdef FPC_OR_UNICODE}TPrecisionTimer = record private
-  {$else}TPrecisionTimer = object protected{$endif}
-    fStart,fStop,fResume,fLast: Int64;
+  TPrecisionTimer = object
+  protected
+    fStart,fStop: Int64;
     {$ifndef LINUX} // use QueryPerformanceMicroSeconds() fast API
     fWinFreq: Int64;
     {$endif}
@@ -16287,27 +16385,26 @@ type
     fPauseCount: TSynMonitorCount;
   public
     /// initialize the timer
-    // - not necessary if created on the heap (e.g. as class member)
-    // - will set all fields to 0
-    procedure Init;
+    // - will fill all internal state with 0
+    // - not necessary e.g. if TPrecisionTimer is defined as a TObject field
+    procedure Init; {$ifdef HASINLINE}inline;{$endif}
     /// initialize and start the high resolution timer
+    // - similar to Init + Resume
     procedure Start;
-    /// returns TRUE if fStart is not 0
-    function Started: boolean; {$ifdef HASINLINE}inline;{$endif}
-    /// stop the timer, setting the Time elapsed since last Start
-    procedure ComputeTime; {$ifdef LINUX}{$ifdef HASINLINE}inline;{$endif}{$endif}
     /// stop the timer, returning the total time elapsed as text
-    // - with appened time resolution (us,ms,s) - from MicroSecToString()
-    // - is just a wrapper around ComputeTime + Time
-    function Stop: TShort16;
+    // - with appended time resolution (us,ms,s) - from MicroSecToString()
+    // - is just a wrapper around Pause + Time
+    // - you can call Resume to continue adding time to this timer
+    function Stop: TShort16; {$ifdef HASINLINE}inline;{$endif}
     /// stop the timer, ready to continue its time measurement via Resume
+    // - will also compute the global Time value
+    // - do nothing if no previous Start/Resume call is pending
     procedure Pause;
-    /// resume a paused timer
-    // - if the previous method called was Pause, it will ignore all the
-    // time elapsed since then
-    // - if the previous method called was Start, it will start as if it was
-    // in pause mode
-    procedure Resume;
+    /// resume a paused timer, or start an initialized timer
+    // - do nothing if no timer has been initialized or paused just before
+    // - if the previous method called was Init, will act like Start
+    // - if the previous method called was Pause, it will continue counting
+    procedure Resume; {$ifdef HASINLINE}inline;{$endif}
     /// resume a paused timer until the method ends
     // - will internaly create a TInterfaceObject class to let the compiler
     // generate a try..finally block as expected to call Pause at method ending
@@ -16323,18 +16420,19 @@ type
     // - by default, this timer is not thread safe: you can use this method to
     // set the timing values from manually computed performance counters
     // - the caller should also use a mutex to prevent from race conditions:
-    // see e.g. TSynMonitor.FromExternalQueryPerformanceCounters implementation
-    // - returns the time elapsed, in micro seconds (i.e. LastTime value)
-    // - warning: Start, Stop, Pause and Resume methods are then disallowed
-    function FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
-    /// low-level method to force values settings to allow thread safe timing
-    // - by default, this timer is not thread safe: you can use this method to
-    // set the timing values from manually computed performance counters
-    // - the caller should also use a mutex to prevent from race conditions:
     // see e.g. TSynMonitor.FromExternalMicroSeconds implementation
     // - warning: Start, Stop, Pause and Resume methods are then disallowed
     procedure FromExternalMicroSeconds(const MicroSeconds: QWord);
       {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+    /// low-level method to force values settings to allow thread safe timing
+    // - by default, this timer is not thread safe: you can use this method to
+    // set the timing values from manually computed performance counters
+    // - the caller should also use a mutex to prevent from race conditions:
+    // see e.g. TSynMonitor.FromExternalQueryPerformanceCounters implementation
+    // - returns the time elapsed, in micro seconds (i.e. LastTime value)
+    // - warning: Start, Stop, Pause and Resume methods are then disallowed
+    function FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
+      {$ifdef FPCLINUX}inline;{$endif}
     /// compute the per second count
     function PerSec(const Count: QWord): QWord;
     /// compute the time elapsed by count, with appened time resolution (us,ms,s)
@@ -16372,7 +16470,7 @@ type
     function Stop: TShort16;
     /// stop the timer, ready to continue its time measure
     procedure Pause;
-    /// resume a paused timer
+    /// resume a paused timer, or start it if it hasn't be started
     procedure Resume;
     /// compute the per second count
     function PerSec(Count: cardinal): cardinal;
@@ -16401,7 +16499,7 @@ type
     function Stop: TShort16;
     /// stop the timer, ready to continue its time measure
     procedure Pause;
-    /// resume a paused timer
+    /// resume a paused timer, or start the timer
     procedure Resume;
     /// compute the per second count
     function PerSec(Count: cardinal): cardinal;
@@ -17515,7 +17613,7 @@ begin
       buf := @tmp else
       GetMem(buf,len+16); // +16 for trailing #0 and for PInteger() parsing
     if Source<>nil then begin
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(Source^,buf^,len);
+      MoveFast(Source^,buf^,len);
       PPtrInt(PAnsiChar(buf)+len)^ := 0; // init last 4/8 bytes (makes valgrid happy)
     end;
   end;
@@ -17945,7 +18043,7 @@ begin
     result := UTF8BufferToAnsi(tmp,pointer(s),result)-tmp;
     if result>=DestSize then
       result := DestSize-1;
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(tmp,Dest^,result);
+    MoveFast(tmp,Dest^,result);
   end;
   Dest[result] := #0;
 end;
@@ -18359,7 +18457,7 @@ end;
 function TSynAnsiUTF8.AnsiBufferToUTF8(Dest: PUTF8Char; Source: PAnsiChar;
   SourceChars: Cardinal; NoTrailingZero: boolean): PUTF8Char;
 begin
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Source^,Dest^,SourceChars);
+  MoveFast(Source^,Dest^,SourceChars);
   if not NoTrailingZero then
     Dest[SourceChars] := #0;
   result := Dest+SourceChars;
@@ -18413,7 +18511,7 @@ end;
 function TSynAnsiUTF8.UTF8BufferToAnsi(Dest: PAnsiChar; Source: PUTF8Char;
   SourceChars: Cardinal): PAnsiChar;
 begin
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Source^,Dest^,SourceChars);
+  MoveFast(Source^,Dest^,SourceChars);
   result := Dest+SourceChars;
 end;
 
@@ -18450,7 +18548,7 @@ end;
 function TSynAnsiUTF16.AnsiBufferToUnicode(Dest: PWideChar;
   Source: PAnsiChar; SourceChars: Cardinal; NoTrailingZero: boolean): PWideChar;
 begin
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Source^,Dest^,SourceChars);
+  MoveFast(Source^,Dest^,SourceChars);
   result := Pointer(PtrUInt(Dest)+SourceChars);
   if not NoTrailingZero then
     result^ := #0;
@@ -18484,7 +18582,7 @@ function TSynAnsiUTF16.UnicodeBufferToAnsi(Dest: PAnsiChar;
   Source: PWideChar; SourceChars: Cardinal): PAnsiChar;
 begin
   SourceChars := SourceChars shl 1; // from WideChar count to byte count
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Source^,Dest^,SourceChars);
+  MoveFast(Source^,Dest^,SourceChars);
   result := Dest+SourceChars;
 end;
 
@@ -20405,8 +20503,7 @@ begin
   Safe.LockedInt64[0] := 0;
   {$endif}
   Values.Init(TypeInfo(TRawUTF8DynArray),Value,HashAnsiString,
-    SortDynArrayAnsiString,crc32c,@Safe.Padding[0].VInteger,false);
-  Values.fHasher := InterningHasher; // consistent with TRawUTF8Interning
+    SortDynArrayAnsiString,InterningHasher,@Safe.Padding[0].VInteger,false);
 end;
 
 procedure TRawUTF8InterningSlot.Done;
@@ -20956,33 +21053,141 @@ begin
   exclude(PBits64(@Bits)^,aIndex);
 end;
 
-function GetBitsCount(const Bits; Count: PtrInt): integer;
-const POPCNTDATA: array[0..15+4] of integer = (0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4,0,1,3,7);
-var P: PByte;
-    v: PtrUInt;
-    tab: {$ifdef CPUX86NOTPIC}TIntegerArray absolute POPCNTDATA{$else}PIntegerArray{$endif};
+function GetBitsCount(const Bits; Count: PtrInt): PtrInt;
+var P: PPtrInt;
+    popcnt: function(value: PtrInt): PtrInt; // fast redirection within loop
 begin
-  {$ifndef CPUX86NOTPIC}
-  tab := @POPCNTDATA;
-  {$endif CPUX86NOTPIC}
   P := @Bits;
   result := 0;
-  while Count>=8 do begin
-    dec(Count,8);
-    v := P^;
-    inc(result,tab[v and $f]);
-    inc(result,tab[v shr 4]);
-    inc(P);
-  end;
-  v := P^;
-  if Count>=4 then begin
-    dec(Count,4);
-    inc(result,tab[v and $f]);
-    v := v shr 4;
-  end;
+  popcnt := @GetBitsCountPtrInt;
+  if Count>=POINTERBITS then
+    repeat
+      dec(Count,POINTERBITS);
+      inc(result,popcnt(P^)); // use SSE4.2 if available
+      inc(P);
+    until Count<POINTERBITS;
   if Count>0 then
-    inc(result,tab[v and tab[Count+16]]); // 0..3 -> bitmap with 0,1,3,7
+    inc(result,popcnt(P^ and ((PtrInt(1) shl Count)-1)));
 end;
+
+{  FPC x86_64 Linux:
+  1000000 pas in 4.67ms i.e. 213,949,507/s, aver. 0us, 1.5 GB/s
+  1000000 asm in 4.14ms i.e. 241,196,333/s, aver. 0us, 1.8 GB/s
+  1000000 sse4.2 in 2.36ms i.e. 423,011,844/s, aver. 0us, 3.1 GB/s
+  1000000 FPC in 21.32ms i.e. 46,886,721/s, aver. 0us, 357.7 MB/s
+   FPC i386 Windows:
+  1000000 pas in 3.40ms i.e. 293,944,738/s, aver. 0us, 1 GB/s
+  1000000 asm in 3.18ms i.e. 313,971,742/s, aver. 0us, 1.1 GB/s
+  1000000 sse4.2 in 2.74ms i.e. 364,166,059/s, aver. 0us, 1.3 GB/s
+  1000000 FPC in 8.18ms i.e. 122,204,570/s, aver. 0us, 466.1 MB/s
+ notes:
+ 1. AVX2 faster than popcnt on big buffers - https://arxiv.org/pdf/1611.07612.pdf
+ 2. our pascal/asm versions below use the efficient Wilkes-Wheeler-Gill algorithm
+    whereas FPC RTL's popcnt() is much slower }
+
+{$ifdef CPUX86}
+function GetBitsCountSSE42(value: PtrInt): PtrInt;
+asm
+        {$ifdef FPC}
+        popcnt  eax, eax
+        {$else} // oldest Delphi don't have this opcode
+        db       $f3,$0f,$B8,$c0
+        {$endif}
+end;
+function GetBitsCountPas(value: PtrInt): PtrInt;
+asm // branchless Wilkes-Wheeler-Gill i386 asm implementation
+        mov     edx, eax
+        shr     eax, 1
+        and     eax, $55555555
+        sub     edx, eax
+        mov     eax, edx
+        shr     edx, 2
+        and     eax, $33333333
+        and     edx, $33333333
+        add     eax, edx
+        mov     edx, eax
+        shr     eax, 4
+        add     eax, edx
+        and     eax, $0f0f0f0f
+        mov     edx, eax
+        shr     edx, 8
+        add     eax, edx
+        mov     edx, eax
+        shr     edx, 16
+        add     eax, edx
+        and     eax, $3f
+end;
+{$else}
+{$ifdef CPUX64}
+function GetBitsCountSSE42(value: PtrInt): PtrInt;
+{$ifdef FPC} assembler; nostackframe;
+asm
+        {$ifdef win64}
+        popcnt  rax, rcx
+        {$else}
+        popcnt  rax, rdi
+        {$endif win64}
+{$else} // Delphi version with no opcode
+asm     .noframe
+        {$ifdef win64}
+        db      $f3,$48,$0f,$B8,$c1
+        {$else}
+        db      $f3,$48,$0f,$B8,$c7
+        {$endif win64}
+{$endif FPC}
+end;
+function GetBitsCountPas(value: PtrInt): PtrInt;
+{$ifdef FPC} assembler; nostackframe;
+asm {$else} asm .noframe {$endif}
+        {$ifdef win64}
+        mov     rax, rcx
+        mov     rdx, rcx
+        {$else}
+        mov     rax, rdi
+        mov     rdx, rdi
+        {$endif win64}
+        shr     rax, 1
+        mov     rcx, $5555555555555555
+        mov     r8,  $3333333333333333
+        mov     r10, $0f0f0f0f0f0f0f0f
+        mov     r11, $0101010101010101
+        and     rax, rcx
+        sub     rdx, rax
+        mov     rax, rdx
+        shr     rdx, 2
+        and     rax, r8
+        and     rdx, r8
+        add     rax, rdx
+        mov     rdx, rax
+        shr     rax, 4
+        add     rax, rdx
+        and     rax, r10
+        imul    rax, r11
+        shr     rax, 56
+end;
+{$else}
+function GetBitsCountPas(value: PtrInt): PtrInt;
+begin // generic branchless Wilkes-Wheeler-Gill pure pascal version
+  result := value;
+  {$ifdef CPU64}
+  result := result-((result shr 1) and $5555555555555555);
+  result := (result and $3333333333333333)+((result shr 2) and $3333333333333333);
+  result := (result+(result shr 4)) and $0f0f0f0f0f0f0f0f;
+  inc(result,result shr 8); // avoid slow multiplication on ARM
+  inc(result,result shr 16);
+  inc(result,result shr 32);
+  result := result and $7f;
+  {$else}
+  result := result-((result shr 1) and $55555555);
+  result := (result and $33333333)+((result shr 2) and $33333333);
+  result := (result+(result shr 4)) and $0f0f0f0f;
+  inc(result,result shr 8);
+  inc(result,result shr 16);
+  result := result and $3f;
+  {$endif CPU64}
+end;
+{$endif CPUX64}
+{$endif CPUX86}
 
 type
 {$ifdef FPC}
@@ -21254,7 +21459,7 @@ begin
     PWord(PAnsiChar(sr)+len)^ := 0; // ensure ends with two #0
     r := pointer(sr);
     if p<>nil then
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(p^,sr^,len);
+      MoveFast(p^,sr^,len);
   end;
   {$ifdef FPC}Finalize(RawByteString(s)){$else}RawByteString(s) := ''{$endif};
   pointer(s) := r;
@@ -21276,7 +21481,7 @@ begin
     PCardinal(PAnsiChar(sr)+len)^ := 0; // ensure ends with four #0
     r := pointer(sr);
     if p<>nil then
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(p^,sr^,len);
+      MoveFast(p^,sr^,len);
   end;
   {$ifdef FPC}Finalize(s){$else}s := ''{$endif};
   pointer(s) := r;
@@ -21299,7 +21504,7 @@ begin
   aligned := pointer(s);
   inc(PByte(aligned),PtrUInt(aligned) and 15);
   if p<>nil then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(p^,aligned^,len);
+    MoveFast(p^,aligned^,len);
 end;
 
 function ToText(k: TTypeKind): PShortString;
@@ -21344,13 +21549,14 @@ begin
 end;
 {$endif FPC}
 
-function DynArrayLength(Value: Pointer): integer;
+function DynArrayLength(Value: Pointer): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  if Value=nil then
-    result := PtrInt(Value) else begin
+  result := PtrInt(Value);
+  if result<>0 then begin
     {$ifdef FPC}
-    result := PDynArrayRec(PtrUInt(Value)-SizeOf(TDynArrayRec))^.high+1;
+    result := PDynArrayRec(result-SizeOf(TDynArrayRec))^.high;
+    inc(result);
     {$else}
     result := PInteger(PtrUInt(Value)-SizeOf(PtrInt))^;
     {$endif}
@@ -23218,7 +23424,7 @@ begin
     exit;
   L := length(Text);
   SetLength(Text,L+BufferLen);
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Buffer^,pointer(PtrInt(Text)+L)^,BufferLen);
+  MoveFast(Buffer^,pointer(PtrInt(Text)+L)^,BufferLen);
 end;
 
 procedure AppendBuffersToRawUTF8(var Text: RawUTF8; const Buffers: array of PUTF8Char);
@@ -23239,7 +23445,7 @@ begin
   inc(P,TextLen);
   for i := 0 to high(Buffers) do
     if Buffers[i]<>nil then begin
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(Buffers[i]^,P^,lens[i]);
+      MoveFast(Buffers[i]^,P^,lens[i]);
       inc(P,lens[i]);
     end;
 end;
@@ -23310,10 +23516,10 @@ begin
   R^ := Quote;
   inc(R);
   if nquote=0 then begin
-    Move(P^,R^,L);
+    MoveFast(P^,R^,L);
     R[L] := Quote;
   end else begin
-    Move(P^,R^,quote1);
+    MoveFast(P^,R^,quote1);
     inc(R,quote1);
     inc(quote1,PtrInt(P)); // trick for reusing a register on FPC
     repeat
@@ -23379,7 +23585,7 @@ begin
       inc(D,Lp);
     end;
     D^ := '"';
-    Move(P^,D[1],PLen);
+    MoveFast(P^,D[1],PLen);
     inc(D,PLen);
     D[1] := '"';
     if Ls>0 then
@@ -23726,7 +23932,7 @@ begin
         '9': begin
           S[prec] := '0';
           if ((prec=2) and (S[1]='-')) or (prec=1) then begin
-            {$ifdef FPC}Move{$else}MoveFast{$endif}(S[prec],S[prec+1],result);
+            MoveFast(S[prec],S[prec+1],result);
             S[prec] := '1';
             break;
           end;
@@ -23866,8 +24072,7 @@ end;
 
 type
   // only supported token is %, with any const arguments
-  {$ifdef FPC_OR_UNICODE}TFormatUTF8 = record{$else}TFormatUTF8 = object{$endif}
-  public
+  TFormatUTF8 = object
     b: PTempUTF8;
     L,argN: integer;
     blocks: array[0..63] of TTempUTF8; // to avoid most heap allocations
@@ -24149,7 +24354,7 @@ Txt:  len := F-FDeb;
     L := {$ifdef FPC}_LStrLen(tmp[i]){$else}PInteger(PtrInt(tmp[i])-SizeOf(integer))^{$endif};
     {$ifdef HASINLINE}if L<MOVESMALL_MAX then
       MoveSmall(pointer(tmp[i]),F,L) else{$endif}
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(tmp[i])^,F^,L);
+      MoveFast(pointer(tmp[i])^,F^,L);
     inc(F,L);
     if byte(i) in inlin then begin
       PWord(F)^ := ord(')')+ord(':')shl 8;
@@ -24259,7 +24464,7 @@ begin
   P := pointer(Result);
   for i := 0 to high(Values) do begin
     L := length(Values[i]);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(Values[i])^,P^,L);
+    MoveFast(pointer(Values[i])^,P^,L);
     inc(P,L);
   end;
 end;
@@ -24270,7 +24475,7 @@ begin
   L := Length(buf);
   if L<>0 then begin
     SetLength(bytes,L);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(buf)^,pointer(bytes)^,L);
+    MoveFast(pointer(buf)^,pointer(bytes)^,L);
   end;
 end;
 
@@ -24934,10 +25139,46 @@ begin
     result := 0;
 end;
 
+{$ifdef CPUX64}
+function SortDynArrayAnsiString(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler; const _LEN=8; asm {$else} const _LEN=4;
+asm .noframe // rcx=A, rdx=B (Linux: rdi,rsi)
+{$endif FPC}
+{$ifdef win64}
+        mov     rcx, [rcx]
+        mov     rdx, [rdx]
+{$else}
+        mov     rcx, [rdi]
+        mov     rdx, [rsi]
+{$endif win64} // Agner Fog noted no gain with SSE -> simple efficient loop
+        cmp     rcx, rdx // A=B (happens with string refcounting)
+        je      @0
+        test    rcx, rdx // A^ or B^ may be nil i.e. ''
+        jz      @n1
+@s:     mov     al, byte ptr[rcx] // by char comparison
+        cmp     al, byte ptr[rdx]
+        jne     @ne
+        inc     rcx
+        inc     rdx
+        test    al, al
+        jnz     @s
+@0:     xor     eax, eax
+        ret
+@n1:    test    rcx, rcx
+        jz      @less    // A='' -> -1
+        test    rdx, rdx
+        jnz     @s       // B='' -> 1
+@1:     mov     eax, 1
+        ret
+@ne:    jnc     @1
+@less:  or      eax, -1
+end; // note: SSE4.2 read up to 16 bytes after buffer
+{$else}
 function SortDynArrayAnsiString(const A,B): integer;
 begin
-  result := StrComp(pointer(A),pointer(B));
+  result := StrCompFast(pointer(A),pointer(B));
 end;
+{$endif CPUX64}
 
 function SortDynArrayAnsiStringI(const A,B): integer;
 begin
@@ -24960,7 +25201,8 @@ begin // we can't use StrComp() since a RawByteString may contain #0
           l := l2;
         i := 0;
         repeat
-          result := p1[i]-p2[i];
+          result := p1[i];
+          dec(result,p2[i]);
           if result<>0 then
             exit;
           inc(i);
@@ -24974,7 +25216,7 @@ end;
 
 function SortDynArrayPUTF8Char(const A,B): integer;
 begin
-  result := StrComp(pointer(A),pointer(B));
+  result := StrCompFast(pointer(A),pointer(B));
 end;
 
 {$else PUREPASCAL}
@@ -26137,7 +26379,7 @@ asm
 end;
 
 function SortDynArrayAnsiString(const A,B): integer;
-asm // x86 version optimized for AnsiString/RawUTF8 types
+asm // x86 version optimized for AnsiString/RawUTF8/RawByteString types
         mov     eax, [eax]
         mov     edx, [edx]
         cmp     eax, edx
@@ -26351,7 +26593,7 @@ begin
   dst := pointer(result);
   for i := 0 to posCount-1 do begin
     sharedlen := pos[i]-last;
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(src^,dst^,sharedlen);
+    MoveFast(src^,dst^,sharedlen);
     inc(src,sharedlen+oldlen);
     inc(dst,sharedlen);
     if newlen>0 then begin
@@ -26360,7 +26602,7 @@ begin
     end;
     last := pos[i]+oldlen;
   end;
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(src^,dst^,length(S)-last+1);
+  MoveFast(src^,dst^,length(S)-last+1);
 end;
 
 function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
@@ -30202,7 +30444,7 @@ begin
         if Read<=0 then
           break;
         SetLength(result,Size+Read); // in-place resize
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(tmp,PByteArray(result)^[Size],Read);
+        MoveFast(tmp,PByteArray(result)^[Size],Read);
         inc(Size,Read);
       until false;
     end else begin
@@ -31016,7 +31258,7 @@ begin
   a := length(Another);
   if a>0 then begin
     SetLength(Values,v+a);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Another[0],Values[v],a*SizeOf(Integer));
+    MoveFast(Another[0],Values[v],a*SizeOf(Integer));
   end;
   result := v+a;
 end;
@@ -31053,7 +31295,7 @@ begin
   a := length(Another);
   if a>0 then begin
     SetLength(Values,v+a);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Another[0],Values[v],a*SizeOf(Int64));
+    MoveFast(Another[0],Values[v],a*SizeOf(Int64));
   end;
   result := v+a;
 end;
@@ -31087,7 +31329,7 @@ begin
   if n>Index then begin
     if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
       Values := copy(Values); // unique
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Values[Index+1],Values[Index],(n-Index)*SizeOf(Word));
+    MoveFast(Values[Index+1],Values[Index],(n-Index)*SizeOf(Word));
   end;
   SetLength(Values,n);
 end;
@@ -31102,7 +31344,7 @@ begin
   if n>Index then begin
     if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
       Values := copy(Values); // unique
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Values[Index+1],Values[Index],(n-Index)*SizeOf(Integer));
+    MoveFast(Values[Index+1],Values[Index],(n-Index)*SizeOf(Integer));
   end;
   SetLength(Values,n);
 end;
@@ -31117,7 +31359,7 @@ begin
   if n>0 then begin
     if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
       Values := copy(Values); // unique
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Values[Index+1],Values[Index],n*SizeOf(Integer));
+    MoveFast(Values[Index+1],Values[Index],n*SizeOf(Integer));
   end;
   dec(ValuesCount);
 end;
@@ -31132,7 +31374,7 @@ begin
   if n>Index then begin
     if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
       Values := copy(Values); // unique
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Values[Index+1],Values[Index],(n-Index)*SizeOf(Int64));
+    MoveFast(Values[Index+1],Values[Index],(n-Index)*SizeOf(Int64));
   end;
   SetLength(Values,n);
 end;
@@ -31147,7 +31389,7 @@ begin
   if n>0 then begin
     if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
       Values := copy(Values); // unique
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Values[Index+1],Values[Index],n*SizeOf(Int64));
+    MoveFast(Values[Index+1],Values[Index],n*SizeOf(Int64));
   end;
   dec(ValuesCount);
 end;
@@ -31367,7 +31609,7 @@ var n: integer;
 begin
   n := length(Source);
   SetLength(Dest,n);
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Source[0],Dest[0],n*SizeOf(Integer));
+  MoveFast(Source[0],Dest[0],n*SizeOf(Integer));
 end;
 
 procedure CopyInt64(const Source: TInt64DynArray; out Dest: TInt64DynArray);
@@ -31375,7 +31617,7 @@ var n: integer;
 begin
   n := length(Source);
   SetLength(Dest,n);
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Source[0],Dest[0],n*SizeOf(Int64));
+  MoveFast(Source[0],Dest[0],n*SizeOf(Int64));
 end;
 
 function MaxInteger(const Values: TIntegerDynArray; ValuesCount, MaxStart: integer): Integer;
@@ -31695,8 +31937,8 @@ function AnyScanIndex(P,Elem: pointer; Count,ElemSize: PtrInt): PtrInt;
 begin
   case ElemSize of
     // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
-    1: result := ByteScanIndex(P,Count,PByte(Elem)^);
-    2: result := WordScanIndex(P,Count,PWord(Elem)^);
+    1: result := {$ifdef FPC}IndexByte(P^{$else}ByteScanIndex(P{$endif},Count,PByte(Elem)^);
+    2: result := {$ifdef FPC}IndexWord(P^{$else}WordScanIndex(P{$endif},Count,PWord(Elem)^);
     4: result := IntegerScanIndex(P,Count,PInteger(Elem)^);
     8: result := Int64ScanIndex(P,Count,PInt64(Elem)^);
     // small ElemSize version (<SizeOf(PtrInt))
@@ -31984,7 +32226,7 @@ procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
 begin
   if ValuesCount>length(Dest) then
     SetLength(Dest,ValuesCount);
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Values^[0],Dest[0],ValuesCount*SizeOf(Integer));
+  MoveFast(Values^[0],Dest[0],ValuesCount*SizeOf(Integer));
   QuickSortInteger(pointer(Dest),0,ValuesCount-1);
 end;
 
@@ -31993,7 +32235,7 @@ procedure CopyAndSortInt64(Values: PInt64Array; ValuesCount: integer;
 begin
   if ValuesCount>length(Dest) then
     SetLength(Dest,ValuesCount);
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Values^[0],Dest[0],ValuesCount*SizeOf(Int64));
+  MoveFast(Values^[0],Dest[0],ValuesCount*SizeOf(Int64));
   QuickSortInt64(pointer(Dest),0,ValuesCount-1);
 end;
 
@@ -32160,9 +32402,9 @@ begin
   n := ValuesCount;
   if PtrUInt(result)<PtrUInt(n) then begin
     n := (n-result)*SizeOf(Integer);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Values[result],Values[result+1],n);
+    MoveFast(Values[result],Values[result+1],n);
     if CoValues<>nil then
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(CoValues^[result],CoValues^[result+1],n);
+      MoveFast(CoValues^[result],CoValues^[result+1],n);
   end else
     result := n;
   Values[result] := Value;
@@ -33488,7 +33730,7 @@ function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
         movdqa  xmm0, [rip + @for10]
         movdqa  xmm1, [rip + @for13]
         and     rdi, -16 // check first aligned 16 bytes
-        and     ecx, 15  // lower 4 bits indicate misalignment
+        and     ecx, 15  // lower cl 4 bits indicate misalignment
         movdqa  xmm2, [rdi]
         movdqa  xmm3, xmm2
         pcmpeqb xmm2, xmm0
@@ -34196,7 +34438,7 @@ begin
   repeat
     L := length(Values[i]);
     if L>0 then begin
-      Move(pointer(Values[i])^,P^,L);
+      MoveFast(pointer(Values[i])^,P^,L);
       inc(P,L);
     end;
     if i=high(Values) then
@@ -35369,7 +35611,7 @@ asm .noframe // rcx=dest, rdx=source, r8=len (Linux: rdi,rsi,rdx)
        shr     rdx, 4
        sub     r9, rcx
        add     rdx, 1
-       {$ifdef FPC}align 8{$endif}
+{$ifdef FPC} align 16 {$else} .align 16{$endif}
 @s:    movdqu  xmm2, [r9 + rcx]
        {$ifdef HASAESNI}
        pcmpistrm xmm1, xmm2, CMP_RANGES
@@ -35402,7 +35644,6 @@ asm .noframe // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
         jz      @0
         test    dl, 7
         jz      @8 // align to 8 bytes boundary
-        {$ifdef FPC}align 8{$endif}
 @7:     crc32   eax, byte ptr[rdx]
         inc     rdx
         dec     r8
@@ -35412,7 +35653,7 @@ asm .noframe // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
 @8:     mov     rcx, r8
         shr     r8, 3
         jz      @2
-        {$ifdef FPC}align 8{$endif}
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @1:     {$ifdef FPC}
         crc32   rax, qword [rdx] // hash 8 bytes per loop
         {$else}
@@ -35466,7 +35707,7 @@ asm .noframe // rcx=S (Linux: rdi)
         bsf     edx, edx             // find first 1-bit
         jnz     @L2                  // found
         // Main loop, search 16 bytes at a time
-        {$ifdef FPC}align 8{$endif}
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @L1:    add     rax, 10H             // increment pointer by 16
         movdqa  xmm1, [rax]          // read 16 bytes aligned
         pcmpeqb xmm1, xmm0           // compare 16 bytes with zero
@@ -35510,7 +35751,7 @@ asm .noframe // rcx=S (Linux: rdi)
         jnz     @L
         mov     eax, ecx
 @null:  ret
-        {$ifdef FPC}align 8{$endif}
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @L:     add     rax, 16   // add before comparison flag
         pcmpistri xmm0, [rdx + rax], EQUAL_EACH // result in ecx
         jnz     @L
@@ -35538,7 +35779,7 @@ asm .noframe // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
       jc        @2
       xor       rax, rax
       ret
-      {$ifdef FPC}align 8{$endif}
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @1:   add       rdx, 16
       movdqu    xmm0, dqword [rdx]
       pcmpistri xmm0, dqword [rdx + rax], EQUAL_EACH + NEGATIVE_POLARITY
@@ -35604,7 +35845,7 @@ begin
           mov     r9d, dword ptr [rdx + 4]
           mov     r10d, dword ptr [rdx + 8]
           mov     r11d, dword ptr [rdx + 12]
-          align 8
+          align 16
 @s:       crc32   r8d, dword ptr [rax]
           crc32   r9d, dword ptr [rax + 4]
           crc32   r10d, dword ptr [rax + 8]
@@ -35875,7 +36116,6 @@ procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);
 var h: THash128Rec absolute crc;
     h1,h2: cardinal;
 begin // see https://goo.gl/Pls5wi
-  assert(SizeOf(h)=SizeOf(crc));
   h1 := crc32c(0,buf,len);
   h2 := crc32c(h1,buf,len);
   h.i0 := h1; inc(h1,h2);
@@ -36182,150 +36422,438 @@ end;
 {$endif CPUX64}
 
 {$ifdef CPUX64}
-{ Some notes about MOVNTI opcode use below for x86_64 asm:
-  - Delphi inline assembler is not able to compile the instruction -> so we
-    had to write some manual DB $... values instead (FPC has no problem with it) :(
-  - The I in MOVNTI means "non-temporal hint". It is implemented by using a
-    write combining (WC) memory type protocol when writing the data to memory.
-    The processor does not write the data into the cache hierarchy, nor does
-    it fetch the corresponding cache line from memory into the cache hierarchy.
-    By-passing the cache should enhance speed of memory blocks >8KB. }
-procedure FillCharx64; {$ifdef FPC}nostackframe; assembler;
-asm {$else} asm .noframe {$endif} // rcx/rdi=Dest rdx/rsi=Count r8/rdx=Value
-        {$ifndef WIN64} // Linux 64-bit ABI
-        mov     rax, rdx
-        movzx   r8, dl
-        mov     rdx, rsi
-        mov     rcx, rdi
-        cmp     rsi, 32
-        {$else}
-        mov     rax, r8
-        and     r8, 0FFH
-        cmp     rdx, 32
-        {$endif}
-        jle     @_32 // small blocks (< 32 bytes) redirection
-        mov     r9, $0101010101010101
-        imul    r8, r9
-        // align rcx destination to QWord
-        test    cl, 7
-        jz      @27C5
-        test    cl, 1
-        jz      @27A4
-        mov     byte ptr[rcx], al
-        add     rcx, 1
-        sub     rdx, 1
-@27A4:  test    cl, 2
-        jz      @27B5
-        mov     word ptr[rcx], r8w
-        add     rcx, 2
-        sub     rdx, 2
-@27B5:  test    cl, 4
-        jz      @27C5
-        mov     dword ptr[rcx], r8d
-        add     rcx, 4
-        sub     rdx, 4
-@27C5:  mov     rax, rdx
-        and     rdx, $3F
-        shr     rax, 6
-        jnz     @_64
-        // handle less than 64 bytes
-@remain:mov     rax, rdx
-        and     rdx, 7
-        shr     rax, 3
-        jz      @27EC
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
-@27E0:  mov     qword ptr[rcx], r8
-        add     rcx, 8
-        dec     rax
-        jnz     @27E0
-@27EC:  test    rdx, rdx
-        jle     @27FC
-@27F1:  mov     byte ptr[rcx], r8b
-        inc     rcx
-        dec     rdx
-        jnz     @27F1
-@27FC:  ret
-@_64:   cmp     rax, 8192 // movnti is worth it only > 8KB of data (cache size)
-        jnc     @_8192
-        // 64-bytes loop through cache (regular mov)
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
-@_64s:  add     rcx, 64
-        mov     qword ptr[rcx - $40], r8
-        mov     qword ptr[rcx - $38], r8
-        mov     qword ptr[rcx - $30], r8
-        mov     qword ptr[rcx - $28], r8
-        mov     qword ptr[rcx - $20], r8
-        mov     qword ptr[rcx - $18], r8
-        mov     qword ptr[rcx - $10], r8
-        mov     qword ptr[rcx - $08], r8
-        dec     rax
-        jnz     @_64s
-        jmp     @remain
-        // 64-bytes loop bypassing cache (movnti)
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
-@_8192: add     rcx, 64
-        db      $4C, $0F, $C3, $41, $C0 // movnti  qword ptr [rcx-$40],r8
-        db      $4C, $0F, $C3, $41, $C8 // movnti  qword ptr [rcx-$38],r8
-        db      $4C, $0F, $C3, $41, $D0 // movnti  qword ptr [rcx-$30],r8
-        db      $4C, $0F, $C3, $41, $D8 // movnti  qword ptr [rcx-$28],r8
-        db      $4C, $0F, $C3, $41, $E0 // movnti  qword ptr [rcx-$20],r8
-        db      $4C, $0F, $C3, $41, $E8 // movnti  qword ptr [rcx-$18],r8
-        db      $4C, $0F, $C3, $41, $F0 // movnti  qword ptr [rcx-$10],r8
-        db      $4C, $0F, $C3, $41, $F8 // movnti  qword ptr [rcx-$08],r8
-        dec     rax
-        jnz     @_8192
-        mfence
-        jmp     @remain
-        // handle small blocks up to 32 bytes
-@_32:   test    rdx, rdx
-        jle     @done
-        mov     ah, al
-        mov     [rcx + rdx - 1], al
-        lea     r8, [rip + @table]
-        and     rdx, - 2
-        neg     rdx
-        lea     rdx, [r8 + rdx * 2 + 64]
-        jmp     rdx
-{$ifdef FPC} align 4 {$else} .align 4 {$endif}
-@table: mov     [rcx + 30], ax
-        mov     [rcx + 28], ax
-        mov     [rcx + 26], ax
-        mov     [rcx + 24], ax
-        mov     [rcx + 22], ax
-        mov     [rcx + 20], ax
-        mov     [rcx + 18], ax
-        mov     [rcx + 16], ax
-        mov     [rcx + 14], ax
-        mov     [rcx + 12], ax
-        mov     [rcx + 10], ax
-        mov     [rcx +  8], ax
-        mov     [rcx +  6], ax
-        mov     [rcx +  4], ax
-        mov     [rcx +  2], ax
-        mov     [rcx     ], ax
-@done:  ret // for 4-bytes @table alignment of last 'mov [rcx],ax'
-end;
-procedure Fillcharx64ERMS; {$ifdef FPC}nostackframe; assembler;
-asm {$else} asm .noframe {$endif} // rcx/rdi=Dest rdx/rsi=Count r8/rdx=Value
-        // use 'rep stosb' ERMS magic if > 2KB (from Intel's Manual)
+const
+  // non-temporal writes should bypass the cache when the size is bigger than
+  // half the size of the largest level cache - we assume low 1MB cache here
+  CPUCACHEX64 = 512*1024;
+{
+ -------------- TTestLowLevelCommon.CustomRTL RTL vs SynCommons
+ On FPC Linux (native):
+   FillChar in 30.33ms, 12.8 GB/s   FillCharFast [] in 14.16ms, 27.4 GB/s
+                                    FillCharFast [cpuAVX] in 11.98ms, 32.4 GB/s
+   Move in 1.92ms, 8.1 GB/s         MoveFast [] in 2.19ms, 7.1 GB/s
+                                    MoveFast [cpuAVX] in 1.60ms, 9.7 GB/s
+   small Move in 8.84ms, 2.4 GB/s   small MoveFast [] in 6.66ms, 3.2 GB/s
+                                    small MoveFast [cpuAVX] in 6.63ms, 3.3 GB/s
+   overlapping:
+   big Move in 39.94ms, 3.9 GB/s    big MoveFast [] in 38.13ms, 4 GB/s
+                                    big MoveFast [cpuAVX] in 36.86ms, 4.2 GB/s
+   non overlapping:
+   big Move in 54.55ms, 7.1 GB/s    big MoveFast [] in 40.45ms, 9.6 GB/s
+                                    big MoveFast [cpuAVX] in 39.57ms, 9.8 GB/s
+ Small backward/forward moves (on FPC Linux):
+   1b Move in 89us, 214.3 MB/s     1b MoveFast [] in 77us, 247.7 MB/s
+   2b Move in 95us, 401.5 MB/s     2b MoveFast [] in 72us, 529.8 MB/s
+   3b Move in 107us, 534.7 MB/s    3b MoveFast [] in 76us, 752.9 MB/s
+   4b Move in 129us, 591.4 MB/s    4b MoveFast [] in 92us, 829.2 MB/s
+   5b Move in 163us, 585 MB/s      5b MoveFast [] in 78us, 1.1 GB/s
+   6b Move in 143us, 800.2 MB/s    6b MoveFast [] in 77us, 1.4 GB/s
+   7b Move in 143us, 0.9 GB/s      7b MoveFast [] in 146us, 914.4 MB/s
+   8b Move in 159us, 0.9 GB/s      8b MoveFast [] in 73us, 2 GB/s
+   9b Move in 166us, 1 GB/s        9b MoveFast [] in 144us, 1.1 GB/s
+   10b Move in 170us, 1 GB/s       10b MoveFast [] in 144us, 1.2 GB/s
+   11b Move in 181us, 1.1 GB/s     11b MoveFast [] in 144us, 1.4 GB/s
+   12b Move in 153us, 1.4 GB/s     12b MoveFast [] in 143us, 1.5 GB/s
+   13b Move in 154us, 1.5 GB/s     13b MoveFast [] in 144us, 1.6 GB/s
+   14b Move in 150us, 1.7 GB/s     14b MoveFast [] in 143us, 1.8 GB/s
+   15b Move in 151us, 1.8 GB/s     15b MoveFast [] in 147us, 1.9 GB/s
+   16b Move in 159us, 1.8 GB/s     16b MoveFast [] in 73us, 4 GB/s
+   17b Move in 161us, 1.9 GB/s     17b MoveFast [] in 153us, 2 GB/s
+   18b Move in 167us, 2 GB/s       18b MoveFast [] in 153us, 2.1 GB/s
+   19b Move in 180us, 1.9 GB/s     19b MoveFast [] in 161us, 2.1 GB/s
+   20b Move in 155us, 2.4 GB/s     20b MoveFast [] in 153us, 2.4 GB/s
+   21b Move in 150us, 2.6 GB/s     21b MoveFast [] in 153us, 2.5 GB/s
+   22b Move in 155us, 2.6 GB/s     22b MoveFast [] in 163us, 2.5 GB/s
+   23b Move in 157us, 2.7 GB/s     23b MoveFast [] in 154us, 2.7 GB/s
+   24b Move in 166us, 2.6 GB/s     24b MoveFast [] in 91us, 4.9 GB/s
+   25b Move in 175us, 2.6 GB/s     25b MoveFast [] in 163us, 2.8 GB/s
+   26b Move in 183us, 2.6 GB/s     26b MoveFast [] in 170us, 2.8 GB/s
+   27b Move in 193us, 2.6 GB/s     27b MoveFast [] in 162us, 3.1 GB/s
+   28b Move in 166us, 3.1 GB/s     28b MoveFast [] in 163us, 3.2 GB/s
+   29b Move in 183us, 2.9 GB/s     29b MoveFast [] in 169us, 3.1 GB/s
+   30b Move in 170us, 3.2 GB/s     30b MoveFast [] in 176us, 3.1 GB/s
+   31b Move in 175us, 3.3 GB/s     31b MoveFast [] in 176us, 3.2 GB/s
+   32b Move in 185us, 3.2 GB/s     32b MoveFast [] in 146us, 4 GB/s
+   33b Move in 193us, 3.1 GB/s     33b MoveFast [] in 197us, 3.1 GB/s
+   34b Move in 198us, 3.1 GB/s     34b MoveFast [] in 157us, 4 GB/s
+   35b Move in 218us, 2.9 GB/s     35b MoveFast [] in 155us, 4.2 GB/s
+   36b Move in 196us, 3.4 GB/s     36b MoveFast [] in 155us, 4.3 GB/s
+   37b Move in 184us, 3.7 GB/s     37b MoveFast [] in 160us, 4.3 GB/s
+   38b Move in 209us, 3.3 GB/s     38b MoveFast [] in 160us, 4.4 GB/s
+   39b Move in 201us, 3.6 GB/s     39b MoveFast [] in 161us, 4.5 GB/s
+   40b Move in 218us, 3.4 GB/s     40b MoveFast [] in 161us, 4.6 GB/s
+   41b Move in 226us, 3.3 GB/s     41b MoveFast [] in 161us, 4.7 GB/s
+   42b Move in 236us, 3.3 GB/s     42b MoveFast [] in 162us, 4.8 GB/s
+   43b Move in 250us, 3.2 GB/s     43b MoveFast [] in 161us, 4.9 GB/s
+   44b Move in 180us, 4.5 GB/s     44b MoveFast [] in 215us, 3.8 GB/s
+   45b Move in 199us, 4.2 GB/s     45b MoveFast [] in 230us, 3.6 GB/s
+   46b Move in 195us, 4.3 GB/s     46b MoveFast [] in 164us, 5.2 GB/s
+   47b Move in 198us, 4.4 GB/s     47b MoveFast [] in 173us, 5 GB/s
+   48b Move in 231us, 3.8 GB/s     48b MoveFast [] in 163us, 5.4 GB/s
+
+  On Delphi XE4 Win64 (VM):
+    FillChar in 34.42ms, 11.2 GB/s   FillCharFast [] in 15.03ms, 25.8 GB/s
+    Move in 3.76ms, 4.1 GB/s         MoveFast [] in 2.16ms, 7.2 GB/s
+    small Move in 7.51ms, 2.9 GB/s   small MoveFast [] in 6.77ms, 3.2 GB/s
+    big Move in 67.06ms, 2.3 GB/s    big MoveFast [] in 41ms, 3.8 GB/s
+  On Delphi 10.3 Win64 (VM):
+    FillChar in 28.82ms, 13.4 GB/s   FillCharFast [] in 14.89ms, 26 GB/s
+    Move in 3.68ms, 4.2 GB/s         MoveFast [] in 2.13ms, 7.3 GB/s
+    small Move in 7.34ms, 2.9 GB/s   small MoveFast [] in 6.73ms, 3.2 GB/s
+    big Move in 50.90ms, 3 GB/s      big MoveFast [] in 40.74ms, 3.8 GB/s
+
+  -> numbers above are with 10% variation; please get your numbers!
+  -> FillCharFast/MoveFast are faster, especially for small lengths (strings)
+  -> Delphi RTL is lower than FPC's, and it doesn't support AVX assembly yet
+  -> cpuERMS - of little benefit - is disabled, unless WITH_ERMS is defined
+}
+
+// these stand-alone functions will use CPUIDX64 to adjust the algorithm
+procedure MoveFast(const src; var dst; cnt: PtrInt);
+{$ifdef FPC}nostackframe; assembler;
+asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         {$ifdef WIN64}
-        cmp     rdx, 2048
-        jb      FillCharx64
-        cld
-        push    rdi // preserve non volatile registers
         mov     rax, r8
-        mov     rdi, rcx
-        mov     rcx, rdx
-        rep     stosb
-        pop     rdi
         {$else}
-        cmp     rsi, 2048
-        jb      FillCharx64
-        cld
-        mov     rax, rdx
-        mov     rcx, rsi
-        rep     stosb
+        mov     rax, rdx // rax=r8=cnt
+        mov     r8, rdx
         {$endif}
+        lea     r10, [rip+@jmptab]
+        cmp     src, dst
+        je      @equal
+        cmp     cnt, 32
+        ja      @lrg  // >32
+        sub     rax, 8
+        jg      @sml  // 9..32
+        jmp     qword ptr[r10 + 64 + rax * 8]  // 0..7
+@equal: ret
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+@jmptab:dq      @exit, @01, @02, @03, @04, @05, @06, @07, @08
+@sml:   mov     r8, qword ptr[src + rax] // last 8
+        mov     r9, qword ptr[src]       // first 8
+        cmp     al, 8
+        jle     @sml16
+        mov     r10, qword ptr[src + 8]  // second 8
+        cmp     al, 16
+        jle     @sml24
+        mov     r11, qword ptr[src + 16] // third 8
+        mov     qword ptr[dst + 16], r11 // third 8
+@sml24: mov     qword ptr[dst + 8], r10  // second 8
+@sml16: mov     qword ptr[dst], r9       // first 8
+        mov     qword ptr[dst + rax], r8 // last 8 (may be overlapping)
+        ret
+@02:    movzx   eax, word ptr[src] // use small size moves as code alignment
+        mov     word ptr[dst], ax
+        ret
+@04:    mov     eax, [src]
+        mov     dword ptr[dst], eax
+        ret
+@08:    mov     rax, [src]
+        mov     [dst], rax
+@exit:  ret
+@lrg:   jng     @exit   // cnt < 0
+        cmp     src, dst
+        ja      @lrgfwd
+        sub     dst, rax
+        cmp     src, dst
+        lea     dst, [dst + rax]
+        ja     @lrgbwd
+@lrgfwd:{$ifdef WITH_ERMS}
+        test    byte ptr[rip+CPUIDX64], 1 shl cpuERMS
+        jz      @nofwe
+        cmp     rax, 2048
+        jb      @nofwe
+        cld
+@repmov:{$ifdef WIN64}
+        push    rsi
+        push    rdi
+        mov     rsi, src
+        mov     rdi, dst
+        mov     rcx, r8
+        rep movsb
+        pop     rdi
+        pop     rsi
+        {$else}
+        mov     rax, dst // dst=rsi and src=rdi -> rax to swap
+        mov     rsi, src
+        mov     rdi, rax
+        mov     rcx, r8
+        rep movsb
+        {$endif}
+        ret
+@nofwe: {$endif WITH_ERMS}
+        mov     r9, dst
+        {$ifdef FPC} // no AVX asm on Delphi :(
+        cmp     rax, 256  // vzeroupper penaly for cnt>255
+        jb      @fsse2
+        test    byte ptr[rip+CPUIDX64], 1 shl cpuAVX
+        jnz      @fwdavx
+        {$endif FPC}
+@fsse2: movdqu  xmm2, oword ptr[src]  // first 16
+        lea     src, [src + rax - 16]
+        lea     rax, [rax + dst - 16]
+        movdqu  xmm1, oword ptr[src]  // last 16
+        mov     r10, rax
+        neg     rax
+        and     dst,  -16  // 16-byte aligned writes
+        lea     rax, [rax + dst + 16]
+        cmp     r8, CPUCACHEX64
+        ja      @fwdnv  // bypass cache for cnt>512KB
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@fwd:   movdqu  xmm0, oword ptr[src + rax]  // regular loop
+        movdqa  [r10 + rax], xmm0
+        add     rax, 16
+        jl      @fwd
+@fwdend:movdqu  [r10], xmm1 // last 16
+        movdqu  [r9], xmm2  // first 16
+        ret
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@fwdnv: movdqu  xmm0, oword ptr[src + rax]  // non-temporal loop
+        movntdq [r10 + rax], xmm0
+        add     rax, 16
+        jl      @fwdnv
+        sfence
+        jmp     @fwdend
+{$ifdef FPC}
+@fwdavx:vmovups ymm2, oword ptr[src]  // first 32
+        lea     src, [src + rax - 32]
+        lea     rax, [rax + dst - 32]
+        vmovups ymm1, oword ptr[src]  // last 32
+        mov     r10, rax
+        neg     rax
+        and     dst,  -32  // 32-byte aligned writes
+        lea     rax, [rax + dst + 32]
+        cmp     r8, CPUCACHEX64
+        ja      @favxn  // bypass cache for cnt>512KB
+        align 16
+@favxr: vmovups ymm0, oword ptr[src + rax]  // regular loop
+        vmovaps [r10 + rax], ymm0
+        add     rax, 32
+        jl      @favxr
+@favxe: vmovups [r10], ymm1 // last 32
+        vmovups [r9], ymm2  // first 32
+// https://software.intel.com/en-us/articles/avoiding-avx-sse-transition-penalties
+        vzeroupper
+        ret
+        align 16
+@favxn: vmovups ymm0, oword ptr[src + rax]  // non-temporal loop
+        vmovntps [r10 + rax], ymm0
+        add     rax, 32
+        jl      @favxn
+        sfence
+        jmp     @favxe
+{$endif FPC}
+@lrgbwd:{$ifdef WITH_ERMS}  // backward move
+        test    byte ptr[rip+CPUIDX64], 1 shl cpuERMS
+        jz      @nobwe
+        cmp     rax, 2048
+        jb      @nobwe
+        std
+        lea     src, [src + rax - 1]
+        lea     dst, [dst + rax - 1]
+        jmp     @repmov
+@nobwe: {$endif WITH_ERMS}
+        {$ifdef FPC}
+        cmp     rax, 256
+        jb      @bsse2
+        test    byte ptr[rip+CPUIDX64], 1 shl cpuAVX
+        jnz      @bwdavx
+        {$endif FPC}
+@bsse2: sub     rax, 16
+        mov     r9, rax
+        movdqu  xmm2, oword ptr[src + rax]  // last 16
+        movdqu  xmm1, oword ptr[src]        // first 16
+        add     rax, dst
+        and     rax, -16  // 16-byte aligned writes
+        sub     rax, dst
+        cmp     r8, CPUCACHEX64
+        ja      @bwdnv    // bypass cache for cnt>512KB
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@bwd:   movdqu  xmm0, oword ptr[src + rax]  // regular loop
+        movdqa  oword ptr[dst + rax], xmm0
+        sub     rax, 16
+        jg      @bwd
+@bwdend:movdqu  oword ptr[dst], xmm1       // first 16
+        movdqu  oword ptr[dst + r9], xmm2  // last 16
+        ret
+@01:    mov     al, byte ptr[src]
+        mov     byte ptr[dst], al
+        ret
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@bwdnv: movdqu  xmm0, oword ptr[src + rax]  // non-temporal loop
+        movntdq oword ptr[dst + rax], xmm0
+        sub     rax, 16
+        jg      @bwdnv
+        sfence
+        jmp     @bwdend
+{$ifdef FPC}
+@bwdavx:sub     rax, 32
+        mov     r9, rax
+        vmovups ymm2, oword ptr[src + rax]  // last 32
+        vmovups ymm1, oword ptr[src]        // first 32
+        add     rax, dst
+        and     rax, -32  // 32-byte aligned writes
+        sub     rax, dst
+        cmp     r8, CPUCACHEX64
+        ja      @bavxn    // bypass cache for cnt>512KB
+        align 16
+@bavxr: vmovups ymm0, oword ptr[src + rax]  // regular loop
+        vmovaps oword ptr[dst + rax], ymm0
+        sub     rax, 32
+        jg      @bavxr
+@bavxe: vmovups oword ptr[dst], ymm1       // first 32
+        vmovups oword ptr[dst + r9], ymm2  // last 32
+        vzeroupper
+        ret
+        align 16
+@bavxn: vmovups ymm0, oword ptr[src + rax]  // non-temporal loop
+        vmovntps oword ptr[dst + rax], ymm0
+        sub     rax, 32
+        jg      @bavxn
+        sfence
+        jmp     @bavxe
+{$endif FPC}
+@03:    movzx   eax, word ptr[src]
+        mov     cl, byte ptr[src + 2]
+        mov     word ptr[dst], ax
+        mov     byte ptr[dst + 2], cl
+        ret
+@05:    mov     eax, dword ptr[src]
+        mov     cl, byte ptr[src + 4]
+        mov     dword ptr[dst], eax
+        mov     byte ptr[dst + 4], cl
+        ret
+@06:    mov     eax, dword ptr[src]
+        mov     cx, word ptr[src + 4]
+        mov     dword ptr[dst], eax
+        mov     word ptr[dst + 4], cx
+        ret
+@07:    mov     r8d, dword ptr[src]    // faster with no overlapping
+        mov     ax, word ptr[src + 4]
+        mov     cl, byte ptr[src + 6]
+        mov     dword ptr[dst], r8d
+        mov     word ptr[dst + 4], ax
+        mov     byte ptr[dst + 6], cl
+end;
+
+procedure FillCharFast(var dst; cnt: PtrInt; value: byte);
+{$ifdef FPC}nostackframe; assembler;
+asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
+        mov     r9, $0101010101010101
+        lea     r10, [rip+@jmptab]
+        {$ifdef WIN64}
+        movzx   eax, r8b
+        {$else}
+        movzx   eax, dl
+        mov     rdx, rsi // rdx=cnt
+        {$endif}
+        imul    rax, r9  // broadcast value into all bytes of rax (in 1 cycle)
+        cmp     cnt, 32
+        ja      @abv32  // >32
+        sub     rdx, 8
+        jg      @sml    // 9..32
+        jmp     qword ptr[r10 + 64 + rdx*8] // small blocks
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+@jmptab:dq @00, @01, @02, @03, @04, @05, @06, @07, @08
+@sml:   cmp     dl, 8  // 9..32 bytes
+        jle     @sml16
+        cmp     dl, 16
+        jle     @sml24
+        mov     qword ptr[dst+16], rax
+@sml24: mov     qword ptr[dst+8], rax
+@sml16: mov     qword ptr[dst+rdx], rax // last 8 (may be overlapping)
+@08:    mov     qword ptr[dst], rax
+@00:    ret
+@07:    mov     dword ptr[dst+3], eax
+@03:    mov     word ptr[dst+1], ax
+@01:    mov     byte ptr[dst], al
+        ret
+@06:    mov     dword ptr[dst+2], eax
+@02:    mov     word ptr[dst], ax
+        ret
+@05:    mov     byte ptr[dst+4], al
+@04:    mov     dword ptr[dst], eax
+        ret
+@abv32: movd    xmm0, eax
+        lea     r8, [dst+cnt]  // r8 point to end
+        pshufd  xmm0, xmm0, 0  // broadcast value into all bytes of xmm0
+        mov     r10, rdx       // save rdx=cnt
+        {$ifdef FPC} // Delphi doesn't support avx, and erms is slower
+        cmp     rdx, 256
+        jae     @abv256  // try erms or avx if cnt>255 (vzeroupper penaly)
+        {$endif FPC}
+@sse2:  movq    qword ptr[dst], xmm0  // first unaligned 16 bytes
+        movq    qword ptr[dst+8], xmm0
+        lea     rdx, [dst+rdx-1]
+        and     rdx, -16
+        add     dst, 16
+        and     dst, -16 // dst is 16-bytes aligned
+        sub     dst, rdx
+        jnb     @last
+        cmp     r10, CPUCACHEX64
+        ja      @nv  // bypass cache for cnt>512KB
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@reg:   movdqa  oword ptr[rdx+dst], xmm0  // regular loop
+        add     dst, 16
+        jnz     @reg
+@last:  movq    qword ptr[r8-16], xmm0 // last unaligned 16 bytes
+        movq    qword ptr[r8-8], xmm0
+        ret
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@nv:    movntdq [rdx+dst], xmm0 // non-temporal loop
+        add     dst, 16
+        jnz     @nv
+        sfence
+        jmp     @last
+{$ifdef FPC}
+@abv256:{$ifdef WITH_ERMS}
+        mov     r9b, byte ptr[rip+CPUIDX64]
+        test    r9b, 1 shl cpuERMS
+        jz      @noerms
+        cmp     rdx, 2048  // ERMS is worth it for cnt>2KB
+        jb      @noerms
+        cmp     rdx, CPUCACHEX64  // non-temporal moves are still faster
+        jae     @noerms
+        cld
+{$ifdef WIN64}
+        mov     r8, rdi
+        mov     rdi, dst
+        mov     rcx, cnt
+        rep     stosb
+        mov     rdi, r8
+{$else} mov     rcx, cnt
+        rep stosb
+{$endif}ret
+@noerms:test    r9b, 1 shl cpuAVX
+{$else} test    byte ptr[rip+CPUIDX64], 1 shl cpuAVX
+        {$endif WITH_ERMS}
+        jz      @sse2
+        movups  oword ptr[dst], xmm0 // first unaligned 1..16 bytes
+        add     dst, 16
+        and     dst, -16
+        movaps  oword ptr[dst], xmm0 // aligned 17..32 bytes
+        vinsertf128 ymm0,ymm0,xmm0,1
+        add     dst, 16
+        and     dst, -32 // dst is 32-bytes aligned
+        mov     rdx, r8
+        and     rdx, -32
+        sub     dst, rdx
+        cmp     r10, CPUCACHEX64
+        ja      @avxnv
+        align 16
+@avxreg:vmovaps ymmword ptr[rdx+dst], ymm0  // regular loop
+        add     dst, 32
+        jnz     @avxreg
+@avxok: vmovups oword ptr[r8-32], ymm0  // last unaligned 32 bytes
+        vzeroupper
+        ret
+        align 16
+@avxnv: vmovntps oword ptr [rdx+dst], ymm0 // non-temporal loop
+        add      dst, 32
+        jnz      @avxnv
+        sfence
+        jmp      @avxok
+{$endif FPC}
 end;
 {$endif CPUX64}
 
@@ -36952,8 +37480,8 @@ begin
 end;
 
 function Iso8601ToTimeLogPUTF8Char(P: PUTF8Char; L: integer; ContainsNoTime: PBoolean): TTimeLog;
-// bits: S=0..5 M=6..11 H=12..16 D=17..21 M=22..25 Y=26..38
-// i.e. S<64 M<64 H<32 D<32 M<16 Y<4096: power of 2 -> use fast shl/shr
+// bits: S=0..5 M=6..11 H=12..16 D=17..21 M=22..25 Y=26..40
+// i.e. S<64 M<64 H<32 D<32 M<16 Y<9999: power of 2 -> use fast shl/shr
 var V,B: PtrUInt;
     tab: {$ifdef CPUX86NOTPIC}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
 begin
@@ -37027,9 +37555,9 @@ end;
 
 { TTimeLogBits }
 
-// bits: S=0..5 M=6..11 H=12..16 D=17..21 M=22..25 Y=26..38
+// bits: S=0..5 M=6..11 H=12..16 D=17..21 M=22..25 Y=26..40
 // size: S=6 M=6  H=5  D=5  M=4  Y=12
-// i.e. S<64 M<64 H<32 D<32 M<16 Y<4096: power of 2 -> use fast shl/shr
+// i.e. S<64 M<64 H<32 D<32 M<16 Y<=9999: power of 2 -> use fast shl/shr
 
 procedure TTimeLogBits.From(Y, M, D, HH, MM, SS: cardinal);
 begin
@@ -37046,7 +37574,7 @@ procedure TTimeLogBits.Expand(out Date: TSynSystemTime);
 var V: PtrUInt;
 begin
   V := PPtrUint(@Value)^;
-  Date.Year := ({$ifdef CPU32}Value{$else}V{$endif} shr (6+6+5+5+4)) and 4095;
+  Date.Year := {$ifdef CPU32}Value{$else}V{$endif} shr (6+6+5+5+4);
   Date.Month := 1+(V shr (6+6+5+5)) and 15;
   Date.DayOfWeek := 0;
   Date.Day := 1+(V shr (6+6+5)) and 31;
@@ -37245,9 +37773,9 @@ var Y, lo: PtrUInt;
 begin
   {$ifdef CPU64}
   lo := Value;
-  Y := (lo shr (6+6+5+5+4)) and 4095;
+  Y := lo shr (6+6+5+5+4);
   {$else}
-  Y := (Value shr (6+6+5+5+4)) and 4095;
+  Y := Value shr (6+6+5+5+4);
   lo := PCardinal(@Value)^;
   {$endif}
   if (Y=0) or not TryEncodeDate(Y,1+(lo shr(6+6+5+5))and 15,1+(lo shr(6+6+5))and 31,result) then
@@ -37260,9 +37788,9 @@ var Y, lo: PtrUInt;
 begin
   {$ifdef CPU64}
   lo := Value;
-  Y := (lo shr (6+6+5+5+4)) and 4095;
+  Y := lo shr (6+6+5+5+4);
   {$else}
-  Y := (Value shr (6+6+5+5+4)) and 4095;
+  Y := Value shr (6+6+5+5+4);
   lo := PCardinal(@Value)^;
   {$endif}
   if (Y=0) or not TryEncodeDate(Y,1+(lo shr(6+6+5+5))and 15,1+(lo shr(6+6+5))and 31,result) then
@@ -37274,7 +37802,7 @@ end;
 
 function TTimeLogBits.Year: Integer;
 begin
-  result := (Value shr (6+6+5+5+4)) and 4095;
+  result := Value shr (6+6+5+5+4);
 end;
 
 function TTimeLogBits.Month: Integer;
@@ -37323,7 +37851,7 @@ begin
   if lo and (1 shl (6+6+5)-1)=0 then begin
     // no Time: just convert date
     DateToIso8601PChar(Dest, Expanded,
-      ({$ifdef CPU64}lo{$else}Value{$endif} shr (6+6+5+5+4)) and 4095,
+      {$ifdef CPU64}lo{$else}Value{$endif} shr (6+6+5+5+4),
       1+(lo shr (6+6+5+5)) and 15, 1+(lo shr (6+6+5)) and 31);
     if Expanded then
       result := 10 else
@@ -37341,7 +37869,7 @@ begin
   end else begin
     // convert time and date
     DateToIso8601PChar(Dest, Expanded,
-      ({$ifdef CPU64}lo{$else}Value{$endif} shr (6+6+5+5+4)) and 4095,
+      {$ifdef CPU64}lo{$else}Value{$endif} shr (6+6+5+5+4),
       1+(lo shr (6+6+5+5)) and 15, 1+(lo shr (6+6+5)) and 31);
     if Expanded then
       inc(Dest,10) else
@@ -38310,7 +38838,7 @@ asm .noframe {$endif FPC} {$else}
 {$ifdef FPC}nostackframe; assembler;{$endif} asm
 {$endif}
   // rdrand eax: same opcodes for x86 and x64
-  db $0f,$c7,$f0
+  db $0f, $c7, $f0
   // returns in eax, ignore carry flag (eax=0 won't hurt)
 end;
 {$endif CPUINTEL}
@@ -39498,11 +40026,11 @@ begin
   n := ValuesCount;
   if result<n then begin
     n := (n-result)*SizeOf(pointer);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Pointer(Values[result]),Pointer(Values[result+1]),n);
+    MoveFast(Pointer(Values[result]),Pointer(Values[result+1]),n);
     PtrInt(Values[result]) := 0; // avoid GPF
     if CoValues<>nil then begin
       {$ifdef CPU64}n := n shr 1;{$endif} // 64-bit pointer size is twice an integer
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(CoValues^[result],CoValues^[result+1],n);
+      MoveFast(CoValues^[result],CoValues^[result+1],n);
     end;
   end else
     result := n;
@@ -39513,8 +40041,7 @@ end;
 
 type
   /// used internaly for faster quick sort
-  {$ifdef FPC_OR_UNICODE}TQuickSortRawUTF8 = record{$else}TQuickSortRawUTF8 = object{$endif}
-  public
+  TQuickSortRawUTF8 = object
     Values: PPointerArray;
     Compare: TUTF8Compare;
     CoValues: PIntegerArray;
@@ -39585,8 +40112,7 @@ begin
       Values := copy(Values); // unique
     Values[Index] := ''; // avoid GPF
     if n>Index then begin
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(
-        pointer(Values[Index+1]),pointer(Values[Index]),(n-Index)*SizeOf(pointer));
+      MoveFast(pointer(Values[Index+1]),pointer(Values[Index]),(n-Index)*SizeOf(pointer));
       PtrUInt(Values[n]) := 0; // avoid GPF
     end;
     SetLength(Values,n);
@@ -39609,10 +40135,8 @@ begin
     dec(n,Index);
     if n>0 then begin
       if CoValues<>nil then
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(
-          CoValues^[Index+1],CoValues^[Index],n*SizeOf(Integer));
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(
-        pointer(Values[Index+1]),pointer(Values[Index]),n*SizeOf(pointer));
+        MoveFast(CoValues^[Index+1],CoValues^[Index],n*SizeOf(Integer));
+      MoveFast(pointer(Values[Index+1]),pointer(Values[Index]),n*SizeOf(pointer));
       PtrUInt(Values[ValuesCount]) := 0; // avoid GPF
     end;
     result := true;
@@ -40288,8 +40812,7 @@ begin
   if Count=length(Values) then
     SetLength(Values,Count+100);
   if result<Count then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      Values[result],Values[result+1],(Count-result)*2) else
+    MoveFast(Values[result],Values[result+1],(Count-result)*2) else
     result := Count;
   Values[result] := aValue;
   inc(Count);
@@ -40931,7 +41454,7 @@ begin
   Len := Length(Value);
   Dest := ToVarUInt32(Len,Dest);
   if Len>0 then begin
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(Value)^,Dest^,Len);
+    MoveFast(pointer(Value)^,Dest^,Len);
     result := pointer(PAnsiChar(Dest)+Len);
   end else
     result := Dest;
@@ -41332,7 +41855,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
       result := pointer(ToVarUInt32(itemsize,pointer(dest)));
       {$ifdef HASINLINE}if itemsize<MOVESMALL_MAX then
         MoveSmall(pointer(P^),result,itemsize) else{$endif}
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(P^)^,result^,itemsize);
+        MoveFast(pointer(P^)^,result^,itemsize);
       inc(result,itemsize);
     end;
     len := SizeOf(PtrUInt); // size of tkLString/tkUString in record
@@ -41340,7 +41863,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   tkWString: begin
     itemsize := length(PWideString(P)^)*2; // PStrRec doesn't match on FPC
     result := pointer(ToVarUInt32(itemsize,pointer(dest)));
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(P^)^,result^,itemsize);
+    MoveFast(pointer(P^)^,result^,itemsize);
     inc(result,itemsize);
     len := SizeOf(PtrUInt);
   end;
@@ -42167,219 +42690,7 @@ asm
   {$endif}
 end;
 
-{$ifdef CPU64}
-
-procedure Movex64;
-asm .noframe // rcx=Source, rdx=Dest, r8=Count
-        mov     rax, r8
-        sub     rcx, rdx
-        je      @11
-        jnc     @03
-        add     rax, rcx
-        jc      @17
-@03:    cmp     r8, 8
-        jl      @09
-        test    dl, 07H
-        jz      @06
-        test    dl, 01H
-        jz      @04
-        mov     al, byte ptr[rcx + rdx]
-        dec     r8
-        mov     byte ptr[rdx], al
-        add     rdx, 1
-@04:    test    dl, 02H
-        jz      @05
-        mov     ax, word ptr[rcx + rdx]
-        sub     r8, 2
-        mov     word ptr[rdx], ax
-        add     rdx, 2
-@05:    test    dl, 04H
-        jz      @06
-        mov     eax, dword ptr[rcx + rdx]
-        sub     r8, 4
-        mov     dword ptr[rdx], eax
-        add     rdx, 4
-@06:    mov     r9, r8
-        shr     r9, 5
-        jnz     @12
-@07:    mov     r9, r8
-        shr     r9, 3
-        jz      @09
-        nop
-@08:    mov     rax, qword ptr[rcx + rdx]
-        mov     qword ptr[rdx], rax
-        add     rdx, 8
-        dec     r9
-        jnz     @08
-        and     r8, 07H
-@09:    test    r8, r8
-        jle     @11
-@10:    mov     al, byte ptr[rcx + rdx]
-        mov     byte ptr[rdx], al
-        add     rdx, 1
-        dec     r8
-        jnz     @10
-@11:    ret
-@12:    cmp     r9, 8192
-        jc      @13
-        cmp     rcx, 4096
-        jnc     @14
-@13:    add     rdx, 32
-        mov     rax, qword ptr[rcx + rdx - 20H]
-        mov     r10, qword ptr[rcx + rdx - 18H]
-        mov     qword ptr[rdx - 20H], rax
-        mov     qword ptr[rdx - 18H], r10
-        mov     rax, qword ptr[rcx + rdx - 10H]
-        mov     r10, qword ptr[rcx + rdx - 8H]
-        mov     qword ptr[rdx - 10H], rax
-        mov     qword ptr[rdx - 8H], r10
-        dec     r9
-        jnz     @13
-        and     r8, 1FH
-        jmp     @07
-@14:    mov     eax, 32
-@15:    prefetchnta [rcx + rdx]
-        prefetchnta [rcx + rdx + 40H]
-        add     rdx, 128
-        dec     eax
-        jnz     @15
-        sub     rdx, 4096
-        mov     eax, 64
-@16:    add     rdx, 64
-        mov     r9, qword ptr[rcx + rdx - 40H]
-        mov     r10, qword ptr[rcx + rdx - 38H]
-        db      $4C, $0F, $C3, $4A, $C0 // movnti qword ptr [rdx-40H],r9
-        db      $4C, $0F, $C3, $52, $C8 // movnti qword ptr [rdx-38H],r10
-        mov     r9, qword ptr[rcx + rdx - 30H]
-        mov     r10, qword ptr[rcx + rdx - 28H]
-        db      $4C, $0F, $C3, $4A, $D0 // movnti qword ptr [rdx-30H],r9
-        db      $4C, $0F, $C3, $52, $D8 // movnti qword ptr [rdx-28H],r10
-        dec     eax
-        mov     r9, qword ptr[rcx + rdx - 20H]
-        mov     r10, qword ptr[rcx + rdx - 18H]
-        db      $4C, $0F, $C3, $4A, $E0 // movnti qword ptr [rdx-20H],r9
-        db      $4C, $0F, $C3, $52, $E8 // movnti qword ptr [rdx-18H],r10
-        mov     r9, qword ptr[rcx + rdx - 10H]
-        mov     r10, qword ptr[rcx + rdx - 8H]
-        db      $4C, $0F, $C3, $4A, $F0 // movnti qword ptr [rdx-10H],r9
-        db      $4C, $0F, $C3, $52, $F8 // movnti qword ptr [rdx-8H],r10
-        jnz     @16
-        sub     r8, 4096
-        cmp     r8, 4096
-        jnc     @14
-        mfence
-        jmp     @06
-@17:    add     rdx, r8
-        cmp     r8, 8
-        jl      @23
-        test    dl, 07H
-        jz      @20
-        test    dl, 01H
-        jz      @18
-        dec     rdx
-        mov     al, byte ptr[rcx + rdx]
-        dec     r8
-        mov     byte ptr[rdx], al
-@18:    test    dl, 02H
-        jz      @19
-        sub     rdx, 2
-        mov     ax, word ptr[rcx + rdx]
-        sub     r8, 2
-        mov     word ptr[rdx], ax
-@19:    test    dl, 04H
-        jz      @20
-        sub     rdx, 4
-        mov     eax, dword ptr[rcx + rdx]
-        sub     r8, 4
-        mov     dword ptr[rdx], eax
-@20:    mov     r9, r8
-        shr     r9, 5
-        jnz     @26
-@21:    mov     r9, r8
-        shr     r9, 3
-        jz      @23
-@22:    sub     rdx, 8
-        mov     rax, qword ptr[rcx + rdx]
-        dec     r9
-        mov     qword ptr[rdx], rax
-        jnz     @22
-        and     r8, 07H
-@23:    test    r8, r8
-        jle     @25
-@24:    dec     rdx
-        mov     al, byte ptr[rcx + rdx]
-        dec     r8
-        mov     byte ptr[rdx], al
-        jnz     @24
-@25:    ret
-@26:    cmp     r9, 8192
-        jc      @27
-        cmp     rcx,  - 4096
-        jc      @28
-@27:    sub     rdx, 32
-        mov     rax, qword ptr[rcx + rdx + 18H]
-        mov     r10, qword ptr[rcx + rdx + 10H]
-        mov     qword ptr[rdx + 18H], rax
-        mov     qword ptr[rdx + 10H], r10
-        dec     r9
-        mov     rax, qword ptr[rcx + rdx + 8H]
-        mov     r10, qword ptr[rcx + rdx]
-        mov     qword ptr[rdx + 8H], rax
-        mov     qword ptr[rdx], r10
-        jnz     @27
-        and     r8, 1FH
-        jmp     @21
-@28:    mov     eax, 32
-@29:    sub     rdx, 128
-        prefetchnta [rcx + rdx]
-        prefetchnta [rcx + rdx + 40H]
-        dec     eax
-        jnz     @29
-        add     rdx, 4096
-        mov     eax, 64
-@30:    sub     rdx, 64
-        sub     r8, 4096
-        mov     r9, qword ptr[rcx + rdx + 38H]
-        mov     r10, qword ptr[rcx + rdx + 30H]
-        db      $4C, $0F, $C3, $4A, $38 // movnti qword ptr [rdx+38H],r9
-        db      $4C, $0F, $C3, $52, $30 // movnti qword ptr [rdx+30H],r10
-        mov     r9, qword ptr[rcx + rdx + 28H]
-        mov     r10, qword ptr[rcx + rdx + 20H]
-        db      $4C, $0F, $C3, $4A, $28 // movnti qword ptr [rdx+28H],r9
-        db      $4C, $0F, $C3, $52, $20 // movnti qword ptr [rdx+20H],r10
-        dec     eax
-        mov     r9, qword ptr[rcx + rdx + 18H]
-        mov     r10, qword ptr[rcx + rdx + 10H]
-        db      $4C, $0F, $C3, $4A, $18 // movnti qword ptr [rdx+18H],r9
-        db      $4C, $0F, $C3, $52, $10 // movnti qword ptr [rdx+10H],r10
-        mov     r9, qword ptr[rcx + rdx + 8H]
-        mov     r10, qword ptr[rcx + rdx]
-        db      $4C, $0F, $C3, $4A, $08 // movnti qword ptr [rdx+8H],r9
-        db      $4C, $0F, $C3, $12 // movnti qword ptr [rdx],r10
-        jnz     @30
-        cmp     r8, 4096
-        jnc     @28
-        mfence
-        jmp     @20
-end;
-
-{$ifdef WITH_ERMS} // x64 version only for Windows ABI
-procedure FillCharERMSB; // Ivy Bridge+ Enhanced REP MOVSB/STOSB CPUs
-asm .noframe // rcx=Dest, rdx=Count, r8b=Value
-        test    rdx, rdx
-        jle     @none
-        cld
-        push    rdi
-        mov     rdi, rcx
-        mov     rax, r8
-        mov     rcx, rdx
-        rep     stosb
-        pop     rdi
-@none:
-end;
-{$endif WITH_ERMS}
-
-{$else CPU64}
+{$ifndef CPU64}
 
 {$ifndef PUREPASCAL}
 
@@ -42541,6 +42852,7 @@ asm // eax=source edx=dest ecx=count
         mov     [edx + 4], eax
 end;
 
+{$ifdef WITH_ERMS}
 procedure FillCharERMSB; // Ivy Bridge+ Enhanced REP MOVSB/STOSB CPUs
 asm // eax=Dest edx=Count cl=Value
       test    edx, edx
@@ -42559,14 +42871,14 @@ procedure MoveERMSB; // Ivy Bridge+ Enhanced REP MOVSB/STOSB CPUs
 asm // eax=source edx=dest ecx=count
       test    ecx, ecx
       jle     @none
-      cld
       push    esi
       push    edi
       cmp     edx, eax
       ja      @down
       mov     esi, eax
       mov     edi, edx
-      rep     movsb
+      cld
+      rep movsb
       pop     edi
       pop     esi
 @none:ret
@@ -42578,6 +42890,7 @@ asm // eax=source edx=dest ecx=count
       pop     esi
       cld
 end;
+{$endif WITH_ERMS}
 
 function StrLenX86(S: pointer): PtrInt;
 // pure x86 function (if SSE2 not available) - faster than SysUtils' version
@@ -42688,46 +43001,36 @@ begin
   MoveFast := @MoveX87;
   FillcharFast := @FillCharX87;
   {$else DELPHI5OROLDER}
-  {$ifdef CPU64}
-  {$ifdef HASAESNI}
-  {$ifdef FORCE_STRSSE42}
-  if cfSSE42 in CpuFeatures then begin
-    StrLen := @StrLenSSE42;
-    StrComp := @StrCompSSE42;
-  end else
-  {$endif FORCE_STRSSE42}
-  {$endif HASAESNI}
-    StrLen := @StrLenSSE2;
-  {$ifdef WITH_ERMS}{$ifdef MSWINDOWS} // disabled (slower for small blocks)
-  if cfERMS in CpuFeatures then begin
-    MoveFast := @MoveERMSB;
-    FillcharFast := @FillCharERMSB;
-  end else {$endif}{$endif} begin
-    MoveFast := @Movex64;
-    if cfERMS in CpuFeatures then
-      FillCharFast := @Fillcharx64ERMS else
-      FillCharFast := @Fillcharx64;
-  end;
-  {$else CPU64}
-  {$ifdef CPUINTEL}
-  if cfSSE2 in CpuFeatures then begin
+  {$ifdef CPU64} // x86_64 redirection
+    {$ifdef HASAESNI}
     {$ifdef FORCE_STRSSE42}
-    if cfSSE42 in CpuFeatures then
-      StrLen := @StrLenSSE42 else
+    if cfSSE42 in CpuFeatures then begin
+      StrLen := @StrLenSSE42;
+      StrComp := @StrCompSSE42;
+    end else
     {$endif FORCE_STRSSE42}
+    {$endif HASAESNI}
       StrLen := @StrLenSSE2;
-    FillcharFast := @FillCharSSE2;
-  end else begin
-    StrLen := @StrLenX86;
-    FillcharFast := @FillCharX87;
-  end;
-  {$ifdef WITH_ERMS} // disabled by default (much slower for small blocks)
-  if cfERMS in CpuFeatures then begin
-    MoveFast := @MoveERMSB;
-    FillcharFast := @FillCharERMSB;
-  end else {$endif}
-    MoveFast := @MoveX87; // SSE2 is not faster than X87 version on 32-bit CPU
-  {$endif CPUINTEL}
+  {$else}       // i386 redirection
+    {$ifdef CPUINTEL}
+    if cfSSE2 in CpuFeatures then begin
+      {$ifdef FORCE_STRSSE42}
+      if cfSSE42 in CpuFeatures then
+        StrLen := @StrLenSSE42 else
+      {$endif FORCE_STRSSE42}
+        StrLen := @StrLenSSE2;
+      FillcharFast := @FillCharSSE2;
+    end else begin
+      StrLen := @StrLenX86;
+      FillcharFast := @FillCharX87;
+    end;
+    {$ifdef WITH_ERMS} // disabled by default (much slower for small blocks)
+    if cfERMS in CpuFeatures then begin
+      MoveFast := @MoveERMSB;
+      FillcharFast := @FillCharERMSB;
+    end else {$endif}
+      MoveFast := @MoveX87; // SSE2 is not faster than X87 version on 32-bit CPU
+    {$endif CPUINTEL}
   {$endif CPU64}
   {$endif DELPHI5OROLDER}
   // do redirection from RTL to our fastest version
@@ -43290,7 +43593,8 @@ var tmp: TSynTempBuffer;
 begin
   tmp.Init(JSON); // make private copy before in-place decoding
   try
-    result := RecordLoadJSON(Rec,tmp.buf,TypeInfo,nil,CustomVariantOptions)<>nil;
+    result := RecordLoadJSON(Rec,tmp.buf,TypeInfo,nil
+      {$ifndef NOVARIANTS},CustomVariantOptions{$endif})<>nil;
   finally
     tmp.Done;
   end;
@@ -44775,7 +45079,7 @@ function VarStringOrNull(const v: RawUTF8): variant;
 begin
   if v='' then
     SetVariantNull(result) else
-    RawUTF8ToVariant(v,result);
+    {$ifdef NOVARIANTS} result := v {$else} RawUTF8ToVariant(v,result) {$endif};
 end;
 
 {$ifndef NOVARIANTS}
@@ -44983,7 +45287,7 @@ begin
       if LenBytes>0 then begin // direct raw copy
         {$ifdef HASINLINE}if LenBytes<MOVESMALL_MAX then
           MoveSmall(VAny,Dest,LenBytes) else{$endif}
-          {$ifdef FPC}Move{$else}MoveFast{$endif}(PPtrUInt(VAny)^,Dest^,LenBytes);
+          MoveFast(PPtrUInt(VAny)^,Dest^,LenBytes);
         inc(Dest,LenBytes);
       end;
     end;
@@ -47120,12 +47424,10 @@ begin
     VarClear(VValue[Index]);
     if Index<VCount then begin
       if VName<>nil then begin
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(
-          VName[Index+1],VName[Index],(VCount-Index)*SizeOf(pointer));
+        MoveFast(VName[Index+1],VName[Index],(VCount-Index)*SizeOf(pointer));
         PtrUInt(VName[VCount]) := 0; // avoid GPF
       end;
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(
-        VValue[Index+1],VValue[Index],(VCount-Index)*SizeOf(variant));
+      MoveFast(VValue[Index+1],VValue[Index],(VCount-Index)*SizeOf(variant));
       TVarData(VValue[VCount]).VType := varEmpty; // avoid GPF
     end;
     result := true;
@@ -48616,7 +48918,7 @@ begin
     ElemTypeInfo^ := DynArray.ElemType;
   if DynArray.ElemType<>nil then
     TypeInfoToName(ElemTypeInfo,result) else
-    result := KNOWNTYPE_ITEMNAME[DynArray.ToKnownType(ExactType)];
+    result := KNOWNTYPE_ITEMNAME[DynArray.GuessKnownType(ExactType)];
 end;
 
 function SortDynArrayBoolean(const A,B): integer;
@@ -48874,10 +49176,11 @@ begin
     result := PInteger(result)^ else begin
     result := PtrUInt(fValue);
     if result<>0 then begin
-      result := PPtrUInt(result)^;
+      result := PPtrInt(result)^;
       if result<>0 then begin
         {$ifdef FPC}
-        result := PDynArrayRec(result-SizeOf(TDynArrayRec))^.high+1;
+        result := PDynArrayRec(result-SizeOf(TDynArrayRec))^.high;
+        inc(result);
         {$else}
         result := PInteger(result-SizeOf(PtrInt))^;
         {$endif}
@@ -48959,7 +49262,7 @@ begin
   SetCount(n+1);
   if PtrUInt(Index)<PtrUInt(n) then begin
     P := pointer(PtrUInt(fValue^)+PtrUInt(Index)*ElemSize);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(P[0],P[ElemSize],PtrUInt(n-Index)*ElemSize);
+    MoveFast(P[0],P[ElemSize],PtrUInt(n-Index)*ElemSize);
     if ElemType<>nil then // avoid GPF in ElemCopy() below
       FillCharFast(P^,ElemSize,0);
   end else
@@ -48992,10 +49295,11 @@ begin
     result := o<>oaFalse;
 end;
 
-procedure TDynArray.Delete(aIndex: PtrInt);
+function TDynArray.Delete(aIndex: PtrInt): boolean;
 var n, len: PtrInt;
     P: PAnsiChar;
 begin
+  result := false;
   if fValue=nil then
     exit; // avoid GPF if void
   n := GetCount;
@@ -49011,11 +49315,12 @@ begin
       FreeAndNil(PObject(P)^);
   if n>aIndex then begin
     len := PtrUInt(n-aIndex)*ElemSize;
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(P[ElemSize],P[0],len);
+    MoveFast(P[ElemSize],P[0],len);
     FillCharFast(P[len],ElemSize,0);
   end else
     FillCharFast(P^,ElemSize,0);
   SetCount(n);
+  result := true;
 end;
 
 function TDynArray.ElemPtr(index: PtrInt): pointer;
@@ -49219,7 +49524,7 @@ begin
       raise ESynException.CreateUTF8('TDynArray.SaveTo(%) is a T*ObjArray',
         [ArrayTypeShort^]) else begin
       n := n*integer(ElemSize); // binary types: store as one
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,Dest^,n);
+      MoveFast(P^,Dest^,n);
       inc(Dest,n);
     end else
     if PTypeKind(ElemType)^ in tkRecordTypes then
@@ -49336,7 +49641,7 @@ begin // not inlined since PTypeInfo is private to implementation section
     result := PShortString(@PTypeInfo(fTypeInfo).NameLen);
 end;
 
-function TDynArray.ToKnownType(exactType: boolean): TDynArrayKind;
+function TDynArray.GuessKnownType(exactType: boolean): TDynArrayKind;
 const
   RTTI: array[TJSONCustomParserRTTIType] of TDynArrayKind = (
     djNone, djBoolean, djByte, djCardinal, djCurrency, djDouble, djNone, djInt64,
@@ -49454,7 +49759,7 @@ end;
 function TDynArray.ElemCopyFirstField(Source,Dest: Pointer): boolean;
 begin
   if fKnownType=djNone then
-    ToKnownType(false);
+    GuessKnownType(false);
   case fKnownType of
   djBoolean..djDateTimeMS,djHash128..djHash512: // no managed field
     MoveSmall(Source,Dest,fKnownSize);
@@ -49479,7 +49784,7 @@ function TDynArray.LoadKnownType(Data,Source,SourceMax: PAnsiChar): boolean;
 var info: PTypeInfo;
 begin
   if fKnownType=djNone then
-    ToKnownType({exacttype=}false); // set fKnownType and fKnownSize
+    GuessKnownType({exacttype=}false); // set fKnownType and fKnownSize
   if fKnownType in [djBoolean..djDateTimeMS,djHash128..djHash512] then
     if (SourceMax<>nil) and (Source+fKnownSize>SourceMax) then
       result := false else begin
@@ -49538,7 +49843,7 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
     CustomReader := nil;
   if Assigned(CustomReader) then
     T := djCustom else
-    T := ToKnownType({exacttype=}true);
+    T := GuessKnownType({exacttype=}true);
   if (T=djNone) and (P^='[') and (PTypeKind(ElemType)^=tkDynArray) then begin
     Count := n; // fast allocation of the whole dynamic array memory at once
     for i := 0 to n-1 do begin
@@ -49706,7 +50011,7 @@ begin
       // binary type was stored directly
       n := n*integer(ElemSize);
       if (SourceMax<>nil) and (Source+n>SourceMax) then exit;
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(Source^,P^,n);
+      MoveFast(Source^,P^,n);
       inc(Source,n);
     end else
     if PTypeKind(ElemType)^ in tkRecordTypes then
@@ -49827,24 +50132,11 @@ begin
           L := result+1 else
           n := result-1;
       until L>n;
-    end else begin
-      // array is very small, or not sorted -> use O(n) iterating search
-      if (ElemType=nil) and (@fCompare=@DYNARRAY_SORTFIRSTFIELD[false,fKnownType]) then
-      case fElemSize of // optimized for simple key types (e.g. TSynDictionary)
-      4: begin
-        result := IntegerScanIndex(pointer(P),n+1,Integer(Elem));
-        exit;
-      end;
-      8: begin
-        result := Int64ScanIndex(pointer(P),n+1,Int64(Elem));
-        exit;
-      end;
-      end;
+    end else // array is very small, or not sorted
       for result := 0 to n do
-        if fCompare(P^,Elem)=0 then
+        if fCompare(P^,Elem)=0 then // O(n) search
           exit else
           inc(P,ElemSize);
-    end;
   end;
   result := -1;
 end;
@@ -49931,8 +50223,7 @@ end;
 
 type
   // internal structure used to make QuickSort faster & with less stack usage
-  {$ifdef FPC_OR_UNICODE}TDynArrayQuickSort = record{$else}TDynArrayQuickSort = object{$endif}
-  public
+  TDynArrayQuickSort = object
     Compare: TDynArraySortCompare;
     CompareEvent: TEventDynArraySortCompare;
     Pivot: pointer;
@@ -50271,6 +50562,7 @@ begin
         2: result := word(A)=word(B);
         4: result := cardinal(A)=cardinal(B);
         8: result := Int64(A)=Int64(B);
+        16: result := IsEqual(THash128(A),THash128(B));
       else result := CompareMemFixed(@A,@B,ElemSize); // binary comparison
       end else
       if PTypeKind(ElemType)^ in tkRecordTypes then // most likely
@@ -50373,14 +50665,14 @@ begin
   if (fValue=nil) or (ArrayType<>Source.ArrayType) then
     exit;
   if (fCountP<>nil) and (Source.fCountP<>nil) then
-    SetCapacity(Source.Capacity);
+    SetCapacity(Source.GetCapacity);
   n := Source.Count;
   SetCount(n);
   if n<>0 then
     if ElemType=nil then
       if not ObjArrayByRef and GetIsObjArray then
         LoadFromJSON(pointer(Source.SaveToJSON)) else
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(Source.fValue^^,fValue^^,n*ElemSize) else
+        MoveFast(Source.fValue^^,fValue^^,n*ElemSize) else
       CopyArray(fValue^,Source.fValue^,ElemType,n);
 end;
 
@@ -50607,7 +50899,7 @@ begin // this method is faster than default System.DynArraySetLength() function
         FillCharFast(pp^,minLength*elemSize,0);
         CopyArray(pp,fValue^,ElemType,minLength);
       end else
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(fValue^^,pp^,minLength*elemSize);
+        MoveFast(fValue^^,pp^,minLength*elemSize);
     end;
   end;
   // set refCnt=1 and new length to the heap memory structure
@@ -50682,8 +50974,14 @@ begin // capacity = length(DynArray)
   result := PtrInt(fValue);
   if result<>0 then begin
     result := PPtrInt(result)^;
-    if result<>0 then
-      result := PDynArrayRec(result-SizeOf(TDynArrayRec))^.length;
+    if result<>0 then begin
+      {$ifdef FPC}
+      result := PDynArrayRec(result-SizeOf(TDynArrayRec))^.high;
+      inc(result);
+      {$else}
+      result := PInteger(result-SizeOf(PtrInt))^;
+      {$endif}
+    end;
   end;
 end;
 
@@ -50727,7 +51025,7 @@ begin
   if aCount>0 then begin
     P := PAnsiChar(fValue^)+aFirstIndex*ElemSize;
     if ElemType=nil then
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,D^^,aCount*ElemSize) else
+      MoveFast(P^,D^^,aCount*ElemSize) else
       CopyArray(D^,P,ElemType,aCount);
   end;
 end;
@@ -50752,7 +51050,7 @@ begin
   PS := pointer(PtrUInt(DynArrayVar)+cardinal(aStartIndex)*ElemSize);
   PD := pointer(PtrUInt(fValue^)+cardinal(n)*ElemSize);
   if ElemType=nil then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(PS^,PD^,cardinal(aCount)*ElemSize) else
+    MoveFast(PS^,PD^,cardinal(aCount)*ElemSize) else
     CopyArray(PD,PS,ElemType,aCount);
 end;
 
@@ -50891,20 +51189,738 @@ begin
 end;
 
 
+{ TDynArrayHasher }
+
+function HashAnsiString(const Elem; Hasher: THasher): cardinal;
+begin
+  if PtrUInt(Elem)=0 then
+    result := 0 else
+    result := Hasher(0,Pointer(Elem),{$ifdef FPC}_LStrLenP(pointer(Elem))
+      {$else}PInteger(PtrUInt(Elem)-SizeOf(integer))^{$endif});
+end;
+
+function HashAnsiStringI(const Elem; Hasher: THasher): cardinal;
+var tmp: array[byte] of AnsiChar; // avoid slow heap allocation
+begin
+  if PtrUInt(Elem)=0 then
+    result := 0 else
+    result := Hasher(0,tmp,UpperCopy255Buf(tmp,pointer(Elem),
+      {$ifdef FPC}_LStrLenP(pointer(Elem))
+      {$else}PInteger(PtrUInt(Elem)-SizeOf(integer))^{$endif})-tmp);
+end;
+
+{$ifdef UNICODE}
+
+function HashUnicodeString(const Elem; Hasher: THasher): cardinal;
+begin
+  if PtrUInt(Elem)=0 then
+    result := 0 else
+    result := Hasher(0,Pointer(Elem),length(UnicodeString(Elem))*2);
+end;
+
+function HashUnicodeStringI(const Elem; Hasher: THasher): cardinal;
+var tmp: array[byte] of AnsiChar; // avoid slow heap allocation
+begin
+  if PtrUInt(Elem)=0 then
+    result := 0 else
+    result := Hasher(0,tmp,UpperCopy255W(tmp,Pointer(Elem),length(UnicodeString(Elem)))-tmp);
+end;
+
+{$endif UNICODE}
+
+function HashSynUnicode(const Elem; Hasher: THasher): cardinal;
+begin
+  if PtrUInt(Elem)=0 then
+    result := 0 else
+    result := Hasher(0,Pointer(Elem),length(SynUnicode(Elem))*2);
+end;
+
+function HashSynUnicodeI(const Elem; Hasher: THasher): cardinal;
+var tmp: array[byte] of AnsiChar; // avoid slow heap allocation
+begin
+  if PtrUInt(Elem)=0 then
+    result := 0 else
+    result := Hasher(0,tmp,UpperCopy255W(tmp,SynUnicode(Elem))-tmp);
+end;
+
+function HashWideString(const Elem; Hasher: THasher): cardinal;
+begin // WideString internal size is in bytes, not WideChar
+  if PtrUInt(Elem)=0 then
+    result := 0 else
+    result := Hasher(0,Pointer(Elem),Length(WideString(Elem))*2);
+end;
+
+function HashWideStringI(const Elem; Hasher: THasher): cardinal;
+var tmp: array[byte] of AnsiChar; // avoid slow heap allocation
+begin
+  if PtrUInt(Elem)=0 then
+    result := 0 else
+    result := Hasher(0,tmp,UpperCopy255W(tmp,pointer(Elem),Length(WideString(Elem)))-tmp);
+end;
+
+function HashPtrUInt(const Elem; Hasher: THasher): cardinal;
+begin
+  result := Hasher(0,@Elem,SizeOf(PtrUInt));
+end;
+
+function HashPointer(const Elem; Hasher: THasher): cardinal;
+begin
+  result := Hasher(0,@Elem,SizeOf(pointer));
+end;
+
+function HashByte(const Elem; Hasher: THasher): cardinal;
+begin
+  result := Hasher(0,@Elem,SizeOf(byte));
+end;
+
+function HashWord(const Elem; Hasher: THasher): cardinal;
+begin
+  result := Hasher(0,@Elem,SizeOf(word));
+end;
+
+function HashInteger(const Elem; Hasher: THasher): cardinal;
+begin
+  result := Hasher(0,@Elem,SizeOf(integer));
+end;
+
+function HashInt64(const Elem; Hasher: THasher): cardinal;
+begin
+  result := Hasher(0,@Elem,SizeOf(Int64));
+end;
+
+function Hash128(const Elem; Hasher: THasher): cardinal;
+begin
+  result := Hasher(0,@Elem,SizeOf(THash128));
+end;
+
+function Hash256(const Elem; Hasher: THasher): cardinal;
+begin
+  result := Hasher(0,@Elem,SizeOf(THash256));
+end;
+
+function Hash512(const Elem; Hasher: THasher): cardinal;
+begin
+  result := Hasher(0,@Elem,SizeOf(THash512));
+end;
+
+{$ifndef NOVARIANTS}
+function VariantHash(const value: variant; CaseInsensitive: boolean;
+  Hasher: THasher): cardinal;
+var Up: array[byte] of AnsiChar; // avoid heap allocation
+  procedure ComplexType;
+  var tmp: RawUTF8;
+  begin // slow but always working conversion to string
+    VariantSaveJSON(value,twNone,tmp);
+    if CaseInsensitive then
+      result := Hasher(TVarData(value).VType,Up,UpperCopy255(Up,tmp)-Up) else
+      result := Hasher(TVarData(value).VType,pointer(tmp),length(tmp));
+  end;
+begin
+  if not Assigned(Hasher) then
+    Hasher := @crc32c;
+  with TVarData(value) do
+  case VType of
+    varNull, varEmpty:
+      result := VType; // good enough for void values
+    varShortInt, varByte:
+      result := Hasher(VType,@VByte,1);
+    varSmallint, varWord, varBoolean:
+      result := Hasher(VType,@VWord,2);
+    varLongWord, varInteger, varSingle:
+      result := Hasher(VType,@VLongWord,4);
+    varInt64, varDouble, varDate, varCurrency, varWord64:
+      result := Hasher(VType,@VInt64,SizeOf(Int64));
+    varString:
+      if CaseInsensitive then
+        result := Hasher(0,Up,UpperCopy255Buf(Up,VString,length(RawUTF8(VString)))-Up) else
+        result := Hasher(0,VString,length(RawUTF8(VString)));
+    varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}:
+      if CaseInsensitive then
+        result := Hasher(0,Up,UpperCopy255W(Up,VOleStr,StrLenW(VOleStr))-Up) else
+        result := Hasher(0,VAny,StrLenW(VOleStr)*2);
+  else
+    ComplexType;
+  end;
+end;
+
+function HashVariant(const Elem; Hasher: THasher): cardinal;
+begin
+  result := VariantHash(variant(Elem),false,Hasher);
+end;
+
+function HashVariantI(const Elem; Hasher: THasher): cardinal;
+begin
+  result := VariantHash(variant(Elem),true,Hasher);
+end;
+{$endif NOVARIANTS}
+
+procedure TDynArrayHasher.Init(aDynArray: PDynArray; aHashElement: TDynArrayHashOne;
+  aCompare: TDynArraySortCompare; aHasher: THasher; aCaseInsensitive: boolean);
+var k: TDynArrayKind;
+begin
+  DynArray := aDynArray;
+  if @aHasher=nil then
+    Hasher := DefaultHasher else
+    Hasher := aHasher;
+  if (@aHashElement=nil) or (@aCompare=nil) then begin
+    // it's faster to retrieve now the hashing/compare functions
+    k := DynArray^.GuessKnownType;
+    if @aHashElement=nil then
+      aHashElement := DYNARRAY_HASHFIRSTFIELD[aCaseInsensitive,k];
+    if @aCompare=nil then
+      aCompare := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,k];
+  end;
+  HashElement := aHashElement;
+  EventHash := nil;
+  Compare := aCompare;
+  EventCompare := nil;
+  CountTrigger := 32;
+  Clear;
+end;
+
+procedure TDynArrayHasher.Clear;
+begin
+  HashTable := nil;
+  HashTableSize := 0;
+  ScanCounter := 0;
+  if Assigned(HashElement) or Assigned(EventHash) then
+    State := [hasHasher] else
+    byte(State) := 0;
+end;
+
+function TDynArrayHasher.HashOne(Elem: pointer): cardinal;
+begin
+  if Assigned(EventHash) then
+    result := EventHash(Elem^) else
+  if Assigned(HashElement) then
+    result := HashElement(Elem^,Hasher) else
+    result := 0; // will be ignored afterwards for sure
+end;
+
+const // primes reduce memory consumption and enhance distribution
+  _PRIMES: array[0..38{$ifndef CPU32DELPHI}+13{$endif}] of integer = (
+    {$ifndef CPU32DELPHI} 251, 499, 797, 1259, 2011, 3203, 5087, 8089,
+    12853, 20399, 81649, 129607, 205759, {$endif}
+    // following HASH_PO2=2^18=262144 for Delphi Win32
+    326617, 411527, 518509, 653267, 823117, 1037059, 1306601, 1646237,
+    2074129, 2613229, 3292489, 4148279, 5226491, 6584983, 8296553, 10453007,
+    13169977, 16593127, 20906033, 26339969, 33186281, 41812097, 52679969,
+    66372617, 83624237, 105359939, 132745199, 167248483, 210719881, 265490441,
+    334496971, 421439783, 530980861, 668993977, 842879579, 1061961721,
+    1337987929, 1685759167, 2123923447);
+
+function NextPrime(v: integer): integer; {$ifdef HASINLINE}inline;{$endif}
+var i: PtrInt;
+    P: PIntegerArray;
+begin
+  P := @_PRIMES;
+  for i := 0 to high(_PRIMES) do begin
+    result := P^[i];
+    if result>v then
+      exit;
+  end;
+  result := maxInt; // would never happen
+end;
+
+function TDynArrayHasher.HashTableIndex(aHashCode: cardinal): cardinal;
+begin
+  result := HashTableSize;
+  {$ifdef CPU32DELPHI} // Delphi Win32 is not efficient with 64-bit multiplication
+  if result>HASH_PO2 then
+    result := aHashCode mod result else
+    result := aHashCode and (result-1);
+  {$else} // FPC or dcc64 compile next line as very optimized asm
+  result := (QWord(aHashCode)*result)shr 32;
+  // see https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction
+  {$endif CPU32DELPHI}
+end;
+
+function TDynArrayHasher.Find(aHashCode: cardinal; aForAdd: boolean): integer;
+var first,last: integer;
+    ndx,siz: PtrInt;
+    P: PAnsiChar;
+begin
+  P := DynArray^.Value^;
+  siz := DynArray^.ElemSize;
+  if not(canHash in State) then begin // Count=0 or Count<CountTrigger
+    if hasHasher in State then
+      for result := 0 to DynArray^.Count-1 do // O(n) linear search via hashing
+        if HashOne(P)=aHashCode then
+          exit else
+          inc(P,siz);
+    result := -1;
+    exit;
+  end;
+  result := HashTableIndex(aHashCode);
+  first := result;
+  last := HashTableSize;
+  repeat
+    ndx := HashTable[result]-1; // index+1 was stored
+    if ndx<0 then begin
+      result := -(result+1); // found void entry
+      exit;
+    end else
+    if not aForAdd and (HashOne(P+ndx*siz)=aHashCode) then begin
+      result := ndx;
+      exit;
+    end;
+    inc(result); // try next entry on hash collision
+    if result=last then
+      // reached the end -> search once from HashTable[0] to HashTable[first-1]
+      if result=first then
+        break else begin
+        result := 0;
+        last := first;
+      end;
+  until false;
+  RaiseFatalCollision('Find hash',aHashCode);
+end;
+
+function TDynArrayHasher.FindOrNew(aHashCode: cardinal; Elem: pointer;
+  aHashTableIndex: PInteger): integer;
+var first,last,ndx: integer;
+    found: boolean;
+    P: PAnsiChar;
+begin
+  if not(canHash in State) then begin // e.g. Count<CountTrigger
+    result := Scan(Elem);
+    exit;
+  end;
+  result := HashTableIndex(aHashCode);
+  first := result;
+  last := HashTableSize;
+  repeat
+    ndx := HashTable[result]-1;  // index+1 was stored
+    if ndx<0 then begin
+      result := -(result+1);
+      exit; // returns void index in HashTable[]
+    end;
+    with DynArray^ do
+      P := PAnsiChar(Value^)+cardinal(ndx)*ElemSize;
+    if Assigned(EventCompare) then
+      found := EventCompare(P^,Elem^)=0 else
+    if Assigned(Compare) then
+      found := Compare(P^,Elem^)=0 else
+      found := false;
+    if found then begin // faster than hash e.g. for strings
+      if aHashTableIndex<>nil then
+        aHashTableIndex^ := result;
+      result := ndx;
+      exit;
+    end;
+    // hash or slot collision -> search next item
+    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+    inc(FindCollisions);
+    {$endif}
+    //inc(TDynArrayHashedCollisionCount);
+    inc(result);
+    if result=last then
+      // reached the end -> search once from HashTable[0] to HashTable[first-1]
+      if result=first then
+        break else begin
+        result := 0;
+        last := first;
+      end;
+  until false;
+  RaiseFatalCollision('Find compared',aHashCode);
+end;
+
+procedure TDynArrayHasher.HashAdd(aHashCode: cardinal; var result: integer);
+var n: integer;
+begin // on input: HashTable[result] slot is already computed
+  n := DynArray^.Count;
+  if HashTableSize<n then
+    RaiseFatalCollision('HashAdd HashTableSize',aHashCode);
+  if HashTableSize-n<n shr 2 then begin // grow hash table when 25% void
+    ReHash({foradd=}true,{grow=}true);
+    result := Find(aHashCode,{foradd=}true); // recompute position
+    if result>=0 then
+      RaiseFatalCollision('HashAdd',aHashCode);
+  end;
+  HashTable[-result-1] := n+1; // store Index+1 (0 means void slot)
+  result := n;
+end; // on output: result holds the position in fValue[]
+
+
+// brute force O(n) indexes fix after deletion (much faster than full ReHash)
+procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
+{$ifdef CPUX64ASM} // SSE2 simd is 25x faster than "if P^>deleted then dec(P^)"
+{$ifdef FPC}nostackframe; assembler; asm {$else}
+asm .noframe // rcx=P, edx=deleted, r8=count  (Linux: rdi,esi,rdx)
+{$endif FPC}
+{$ifdef Linux}
+        mov     r8, rdx
+        mov     rcx, rdi
+        mov     rdx, rsi
+{$endif Linux}
+        xor     eax, eax    // reset eax high bits for setg al below
+        movq    xmm0, rdx   // xmm0 = 128-bit of quad deleted
+        pshufd  xmm0, xmm0, 0
+        test    cl, 3
+        jnz     @1  // paranoid: a dword dynamic array is always dword-aligned
+        // ensure P is 256-bit aligned (for avx2)
+@align: test    cl, 31
+        jz      @ok
+        cmp     dword ptr[rcx], edx
+        setg    al                  // P[]>deleted -> al=1, 0 otherwise
+        sub     dword ptr[rcx], eax // branchless dec(P[])
+        add     rcx, 4
+        dec     r8
+        jmp     @align
+@ok:    {$ifdef FPC} // AVX2 asm is not supported by Delphi (even 10.3) :(
+        test    byte ptr[rip+CPUIDX64], 1 shl cpuAVX2
+        jz      @sse2
+        vpshufd ymm0, ymm0, 0  // shuffle to 128-bit low lane
+        vperm2f128 ymm0, ymm0, ymm0, 0 // copy to 128-bit high lane of ymm0
+        // avx process of 128 bytes (32 indexes) per loop iteration
+        align 16
+@avx2:  sub      r8, 32
+        vmovdqa  ymm1, [rcx]       // 4 x 256-bit process
+        vmovdqa  ymm3, [rcx + 32]
+        vmovdqa  ymm5, [rcx + 64]
+        vmovdqa  ymm7, [rcx + 96]
+        vpcmpgtd ymm2, ymm1, ymm0  // compare P[]>deleted -> -1, 0 otherwise
+        vpcmpgtd ymm4, ymm3, ymm0
+        vpcmpgtd ymm6, ymm5, ymm0
+        vpcmpgtd ymm8, ymm7, ymm0
+        vpaddd   ymm1, ymm1, ymm2  // adjust by adding -1 / 0
+        vpaddd   ymm3, ymm3, ymm4
+        vpaddd   ymm5, ymm5, ymm6
+        vpaddd   ymm7, ymm7, ymm8
+        vmovdqa  [rcx], ymm1
+        vmovdqa  [rcx + 32], ymm3
+        vmovdqa  [rcx + 64], ymm5
+        vmovdqa  [rcx + 96], ymm7
+        add      rcx, 128
+        cmp      r8, 32
+        jae      @avx2
+        vzeroupper
+        jmp      @2
+        {$endif FPC}
+        // SSE2 process of 64 bytes (16 indexes) per loop iteration
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@sse2:  sub     r8, 16
+        movdqa  xmm1, dqword [rcx]  // 4 x 128-bit process
+        movdqa  xmm3, dqword [rcx + 16]
+        movdqa  xmm5, dqword [rcx + 32]
+        movdqa  xmm7, dqword [rcx + 48]
+        movdqa  xmm2, xmm1  // keep copy for paddd below
+        movdqa  xmm4, xmm3
+        movdqa  xmm6, xmm5
+        movdqa  xmm8, xmm7
+        pcmpgtd xmm1, xmm0  // quad compare P[]>deleted -> -1, 0 otherwise
+        pcmpgtd xmm3, xmm0
+        pcmpgtd xmm5, xmm0
+        pcmpgtd xmm7, xmm0
+        paddd   xmm1, xmm2  // quad adjust by adding -1 / 0
+        paddd   xmm3, xmm4
+        paddd   xmm5, xmm6
+        paddd   xmm7, xmm8
+        movdqa  dqword [rcx], xmm1  // quad store back
+        movdqa  dqword [rcx + 16], xmm3
+        movdqa  dqword [rcx + 32], xmm5
+        movdqa  dqword [rcx + 48], xmm7
+        add     rcx, 64
+        cmp     r8, 16
+        jae     @sse2
+        jmp     @2
+        // trailing indexes
+@1:     dec     r8
+        cmp     dword ptr[rcx + r8 * 4], edx
+        setg    al
+        sub     dword ptr[rcx + r8 * 4], eax
+@2:     test    r8, r8
+        jnz     @1
+end;
+{$else}
+begin
+  repeat
+    dec(count,8);
+    dec(P[0],ord(P[0]>deleted)); // branchless code is 10x faster than if :)
+    dec(P[1],ord(P[1]>deleted));
+    dec(P[2],ord(P[2]>deleted));
+    dec(P[3],ord(P[3]>deleted));
+    dec(P[4],ord(P[4]>deleted));
+    dec(P[5],ord(P[5]>deleted));
+    dec(P[6],ord(P[6]>deleted));
+    dec(P[7],ord(P[7]>deleted));
+    P := @P[8];
+  until count<8;
+  while count>0 do begin
+    dec(count);
+    dec(P[count],ord(P[count]>deleted));
+  end;
+end;
+{$endif CPUX64ASM} // SSE2 asm is invalid prior to Delphi XE7 (to be refined)
+
+// with x86_64/sse2 for 200,000 items: adjust=200.57ms (11.4GB/s) hash=2.46ms
+//  -> TDynArray.Delete move() takes more time than the HashTable update :)
+
+{ some numbers, with CITIES_MAX=200000, deleting 1/128 entries
+  first column (3..23) is the max number of indexes[] chunk to rehash
+1. naive loop
+  for i := 0 to HashTableSize-1 do
+    if HashTable[i]>aArrayIndex then
+      dec(HashTable[i]);
+  3 #257  adjust=7.95ms 191.7MB hash=8us
+  8 #384  adjust=11.93ms 255.8MB hash=10us
+  11 #1019  adjust=32.09ms 332.8MB hash=26us
+  13 #16259  adjust=511.10ms 379.2MB hash=230us
+  13 #32515  adjust=1.01s 383.6MB/s hash=440us
+  14 #33531  adjust=1.04s 382.2MB hash=459us
+  17 #46612  adjust=1.44s 386.3MB hash=639us
+  17 #65027  adjust=1.97s 396.3MB/s hash=916us
+  17 #97539  adjust=2.79s 419.9MB/s hash=1.37ms
+  18 #109858  adjust=3.05s 431.2MB hash=1.51ms
+  18 #130051  adjust=3.44s 454.1MB/s hash=1.75ms
+  18 #162563  adjust=3.93s 496.9MB/s hash=2.14ms
+  23 #172723  adjust=4.05s 511.7MB hash=2.26ms
+  23 #195075  adjust=4.27s 548.6MB/s hash=2.47ms
+2. branchless pure pascal code is about 10x faster!
+  3 #257  adjust=670us 2.2GB hash=8us
+  8 #384  adjust=1ms 2.9GB hash=9us
+  11 #1019  adjust=2.70ms 3.8GB hash=21us
+  13 #16259  adjust=43.65ms 4.3GB hash=210us
+  13 #32515  adjust=87.75ms 4.3GB/s hash=423us
+  14 #33531  adjust=90.44ms 4.3GB hash=441us
+  17 #46612  adjust=127.68ms 4.2GB hash=627us
+  17 #65027  adjust=179.64ms 4.2GB/s hash=908us
+  17 #97539  adjust=267.44ms 4.2GB/s hash=1.35ms
+  18 #109858  adjust=301.27ms 4.2GB hash=1.50ms
+  18 #130051  adjust=355.37ms 4.2GB/s hash=1.74ms
+  18 #162563  adjust=438.79ms 4.3GB/s hash=2.11ms
+  23 #172723  adjust=465.23ms 4.3GB hash=2.23ms
+  23 #195075  adjust=520.85ms 4.3GB/s hash=2.45ms
+3. SSE2 simd assembly makes about 3x improvement
+  3 #257  adjust=290us 5.1GB hash=8us
+  8 #384  adjust=427us 6.9GB hash=10us
+  11 #1019  adjust=1.11ms 9.3GB hash=20us
+  13 #16259  adjust=18.33ms 10.3GB hash=219us
+  13 #32515  adjust=36.32ms 10.5GB/s hash=435us
+  14 #33531  adjust=37.39ms 10.4GB hash=452us
+  17 #46612  adjust=51.70ms 10.5GB hash=622us
+  17 #65027  adjust=72.47ms 10.5GB/s hash=893us
+  17 #97539  adjust=107ms 10.6GB/s hash=1.32ms
+  18 #109858  adjust=120.08ms 10.7GB hash=1.46ms
+  18 #130051  adjust=140.50ms 10.8GB/s hash=1.71ms
+  18 #162563  adjust=171.44ms 11.1GB/s hash=2.10ms
+  23 #172723  adjust=181.02ms 11.1GB hash=2.22ms
+  23 #195075  adjust=201.53ms 11.3GB/s hash=2.44ms
+4. AVX2 simd assembly gives some additional 40% (consistent on my iCore3 cpu)
+  3 #257  adjust=262us 5.6GB hash=8us
+  8 #384  adjust=383us 7.7GB hash=10us
+  11 #1019  adjust=994us 10.4GB hash=21us
+  13 #16259  adjust=16.34ms 11.5GB hash=248us
+  13 #32515  adjust=32.12ms 11.8GB/s hash=464us
+  14 #33531  adjust=33.06ms 11.8GB hash=484us
+  17 #46612  adjust=45.49ms 11.9GB hash=678us
+  17 #65027  adjust=62.36ms 12.2GB/s hash=966us
+  17 #97539  adjust=90.80ms 12.6GB/s hash=1.43ms
+  18 #109858  adjust=101.82ms 12.6GB hash=1.59ms
+  18 #130051  adjust=117.37ms 13GB/s hash=1.83ms
+  18 #162563  adjust=140.08ms 13.6GB/s hash=2.23ms
+  23 #172723  adjust=147.20ms 13.7GB hash=2.34ms
+  23 #195075  adjust=161.73ms 14.1GB/s hash=2.57ms
+}
+procedure TDynArrayHasher.HashDelete(aArrayIndex,aHashTableIndex: integer; aHashCode: cardinal);
+var first,next,last,ndx,i,n: integer;
+    P: PAnsiChar;
+    indexes: array[0..511] of cardinal; // to be rehashed
+begin
+  // retrieve hash table entries to be recomputed
+  first := aHashTableIndex;
+  last := HashTableSize;
+  next := first;
+  n := 0;
+  repeat
+    HashTable[next] := 0; // Clear slots
+    inc(next);
+    if next=last then
+      if next=first then
+        RaiseFatalCollision('HashDelete down',aHashCode) else begin
+        next := 0;
+        last := first;
+      end;
+    ndx := HashTable[next]-1; // stored index+1
+    if ndx<0 then
+      break; // stop at void entry
+    if n=high(indexes) then // typical 0..23
+      RaiseFatalCollision('HashDelete indexes overflow',aHashCode);
+    indexes[n] := ndx;
+    inc(n);
+  until false;
+  // ReHash collided entries - note: item is not yet deleted in Value^[]
+  for i := 0 to n-1 do begin
+    P := PAnsiChar(DynArray^.Value^)+indexes[i]*DynArray^.ElemSize;
+    ndx := FindOrNew(HashOne(P),P,nil);
+    if ndx<0 then
+      HashTable[-ndx-1] := indexes[i]+1; // ignore ndx>=0 dups (like ReHash)
+  end;
+  // adjust all stored indexes
+  DynArrayHashTableAdjust(pointer(HashTable),aArrayIndex,HashTableSize);
+end;
+
+function TDynArrayHasher.FindBeforeAdd(Elem: pointer;
+  out wasAdded: boolean; aHashCode: cardinal): integer;
+var n: integer;
+begin
+  wasAdded := false;
+  if not(canHash in State) then begin
+    n := DynArray^.Count;
+    if n<CountTrigger then begin
+      result := Scan(Elem); // may trigger ReHash -> canHash
+      if result>=0 then
+        exit; // item found
+      if not(canHash in State) then begin
+        wasadded := true;
+        result := n;
+        exit;
+      end;
+    end;
+  end;
+  if not(canHash in State) then
+    ReHash({forced=}true,{grow=}false); // hash previous CountTrigger items
+  result := FindOrNew(aHashCode,Elem,nil);
+  if result<0 then begin // found no matching item
+    wasAdded := true;
+    HashAdd(aHashCode,result);
+  end;
+end;
+
+function TDynArrayHasher.FindBeforeDelete(Elem: pointer): integer;
+var hc: cardinal;
+    ht: integer;
+begin
+  if canHash in State then begin
+    hc := HashOne(Elem);
+    result := FindOrNew(hc,Elem,@ht);
+    if result<0 then
+      result := -1 else
+      HashDelete(result,ht,hc);
+  end else
+    result := Scan(Elem);
+end;
+
+procedure TDynArrayHasher.RaiseFatalCollision(const caller: RawUTF8;
+  aHashCode: cardinal);
+begin
+  raise ESynException.CreateUTF8('TDynArrayHasher.% fatal collision: '+
+    'aHashCode=% HashTableSize=% Count=% Capacity=% ArrayType=% KnownType=%',
+    [caller,CardinalToHexShort(aHashCode),HashTableSize,DynArray^.Count,
+     DynArray^.Capacity,DynArray^.ArrayTypeShort^,ToText(DynArray^.KnownType)^]);
+end;
+
+function TDynArrayHasher.GetHashFromIndex(aIndex: PtrInt): cardinal;
+var P: pointer;
+begin
+  P := DynArray^.ElemPtr(aIndex);
+  if P<>nil then
+    result := HashOne(P) else
+    result := 0;
+end;
+
+procedure TDynArrayHasher.SetEventHash(const event: TEventDynArrayHashOne);
+begin
+  EventHash := event;
+  Clear;
+end;
+
+function TDynArrayHasher.Scan(Elem: pointer): integer;
+var P: PAnsiChar;
+    i,max: integer;
+    siz: PtrInt;
+begin
+  result := -1;
+  max := DynArray^.Count-1;
+  P := DynArray^.Value^;
+  siz := DynArray^.ElemSize;
+  if Assigned(EventCompare) then begin // custom comparison
+    for i := 0 to max do
+      if EventCompare(P^,Elem^)=0 then begin
+        result := i;
+        break;
+      end else
+        inc(P,siz);
+  end else
+  if Assigned(Compare) then
+    for i := 0 to max do
+      if Compare(P^,Elem^)=0 then begin
+        result := i;
+        break;
+      end else
+        inc(P,siz);
+  // enable hashing if Scan() called 2*CountTrigger
+  if (hasHasher in State) and (max>7) then begin
+    inc(ScanCounter);
+    if ScanCounter>=CountTrigger*2 then begin
+      CountTrigger := 2; // rather use hashing from now on
+      ReHash(false,false);   // set HashTable[] and canHash
+    end;
+  end;
+end;
+
+function TDynArrayHasher.Find(Elem: pointer): integer;
+begin
+  result := Find(Elem,HashOne(Elem));
+end;
+
+function TDynArrayHasher.Find(Elem: pointer; aHashCode: cardinal): integer;
+begin
+  result := FindOrNew(aHashCode,Elem,nil); // fallback to Scan() if needed
+  if result<0 then
+    result := -1; // for coherency with most search methods
+end;
+
+function TDynArrayHasher.ReHash(forced, forceGrow: boolean): boolean;
+var i, n, cap, siz, ndx: integer;
+    P: PAnsiChar;
+    hc: cardinal;
+begin
+  result := false;
+  // initialize a new void HashTable[]=0
+  siz := HashTableSize;
+  Clear;
+  if not(hasHasher in State) then
+    exit;
+  n := DynArray^.Count;
+  if not forced and ((n=0) or (n<CountTrigger)) then
+    exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
+  if forceGrow and (siz>0) then // next power of two or next prime
+    {$ifdef CPU32DELPHI}
+    if siz<HASH_PO2 then
+      siz := siz shl 1 else {$endif}
+      siz := NextPrime(siz) else begin
+    cap := DynArray^.Capacity*2; // Capacity better than Count - *2 for void slots
+    {$ifdef CPU32DELPHI}
+    if cap<=HASH_PO2 then begin
+      siz := 256; // find nearest power of two for fast bitwise division
+      while siz<cap do
+        siz := siz shl 1;
+    end else {$endif}
+      siz := NextPrime(cap);
+  end;
+  HashTableSize := siz;
+  SetLength(HashTable,siz); // fill with 0 (void slot)
+  // fill HashTable[]=index+1 from all existing items
+  include(State,canHash); // needed before Find() below
+  P := DynArray^.Value^;
+  for i := 1 to n do begin
+    if Assigned(EventHash) then
+      hc := EventHash(P^) else
+      hc := HashElement(P^,Hasher);
+    ndx := FindOrNew(hc,P,nil);
+    if ndx<0 then
+      // >=0 means found exact duplicate of P^: shouldn't happen -> ignore
+      HashTable[-ndx-1] := i; // store index+1 (0 means void entry)
+    inc(P,DynArray^.ElemSize);
+  end;
+  result := true;
+end;
+
+
 { TDynArrayHashed }
 
-const
-  // marks a void entry in the hash table
-  // -> code below will replace all hash value from 0 (HASH_VOID)
-  // to 1 (HASH_ONVOIDCOLISION)
-  HASH_VOID = 0;
-  // marks a hash colision with a void entry in the hash table
-  HASH_ONVOIDCOLISION = 1;
-  // fHashsCount<=HASH_PO2 is expected to be a power of two (fast binary division)
-  // -> 262,144 TSynHash slots = 2MB, for a TDynArray.Capacity of 131,072 items
-  HASH_PO2 = 1 shl 18;
-
-{$ifdef UNDIRECTDYNARRAY}
+{$ifdef UNDIRECTDYNARRAY} // some Delphi 2009+ wrapper definitions
 
 function TDynArrayHashed.GetCount: PtrInt;
 begin
@@ -50916,7 +51932,7 @@ begin
 end;
 function TDynArrayHashed.GetCapacity: PtrInt;
 begin
-  result := InternalDynArray.Capacity;
+  result := InternalDynArray.GetCapacity;
 end;
 procedure TDynArrayHashed.SetCapacity(aCapacity: PtrInt);
 begin
@@ -50924,15 +51940,15 @@ begin
 end;
 function TDynArrayHashed.Value: PPointer;
 begin
-  result := InternalDynArray.Value;
+  result := InternalDynArray.fValue;
 end;
 function TDynArrayHashed.ElemSize: PtrUInt;
 begin
-  result := InternalDynArray.ElemSize;
+  result := InternalDynArray.fElemSize;
 end;
 function TDynArrayHashed.ElemType: Pointer;
 begin
-  result := InternalDynArray.ElemType;
+  result := InternalDynArray.fElemType;
 end;
 procedure TDynArrayHashed.ElemCopy(const A; var B);
 begin
@@ -51001,101 +52017,64 @@ end;
 
 {$endif UNDIRECTDYNARRAY}
 
-function TDynArrayHashed.Scan(const Elem): integer;
-var P: PAnsiChar;
-    n: integer;
+procedure TDynArrayHashed.Init(aTypeInfo: pointer; var aValue;
+  aHashElement: TDynArrayHashOne; aCompare: TDynArraySortCompare;
+  aHasher: THasher; aCountPointer: PInteger; aCaseInsensitive: boolean);
 begin
-  if Assigned(fEventCompare) then begin
-    P := Value^; // Count<fHashCountTrigger -> O(n) is faster than O(1)
-    n := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCount;
-    for result := 0 to n-1 do
-      if fEventCompare(P^,Elem)=0 then
-        exit else
-        inc(P,ElemSize);
-    result := -1;
-  end else
-    result := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}Find(Elem);
+  {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$else}inherited{$endif}
+    Init(aTypeInfo,aValue,aCountPointer);
+  fHash.Init(@self,aHashElement,aCompare,aHasher,aCaseInsensitive);
+  {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}SetCompare(fHash.Compare);
+end;
+
+procedure TDynArrayHashed.InitSpecific(aTypeInfo: pointer; var aValue;
+  aKind: TDynArrayKind; aCountPointer: PInteger; aCaseInsensitive: boolean);
+var cmp: TDynArraySortCompare;
+    hsh: TDynArrayHashOne;
+begin
+  cmp := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,aKind];
+  hsh := DYNARRAY_HASHFIRSTFIELD[aCaseInsensitive,aKind];
+  if (@hsh=nil) or (@cmp=nil) then
+    raise ESynException.CreateUTF8('TDynArrayHashed.InitSpecific unsupported %',
+      [ToText(aKind)^]);
+  Init(aTypeInfo,aValue,hsh,cmp,nil,aCountPointer,aCaseInsensitive);
+  {$ifdef UNDIRECTDYNARRAY}with InternalDynArray do{$endif} begin
+    fKnownType := aKind;
+    fKnownSize := KNOWNTYPE_SIZE[aKind];
+  end;
+end;
+
+function TDynArrayHashed.Scan(const Elem): integer;
+begin
+  result := fHash.Scan(@Elem);
+end;
+
+function TDynArrayHashed.FindHashed(const Elem): integer;
+begin
+  result := fHash.FindOrNew(fHash.HashOne(@Elem),@Elem);
+  if result<0 then
+    result := -1; // for coherency with most methods
 end;
 
 function TDynArrayHashed.FindHashed(const Elem; aHashCode: cardinal): integer;
 begin
-  if (fHashs<>nil) and Assigned(fHashElement) then begin
-    if aHashCode=0 then
-      aHashCode := fHashElement(Elem,fHasher);
-    result := HashFindAndCompare(aHashCode,Elem);
-    if result<0 then
-      result := -1; // for coherency with most methods
-  end else begin // Count<fHashCountTrigger
-    if Assigned(fEventCompare) then
-      result := Scan(Elem) else
-      result := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}Find(Elem);
-    if (result>=0) and (fHashCountTrigger>0) and
-       ({$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCountP<>nil) and
-       ({$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCountP^>4) then begin
-      inc(fHashFindCount);
-      if fHashFindCount>=fHashCountTrigger*2 then begin
-        fHashCountTrigger := 0; // FindHashed() should use O(1) hash
-        ReHash;
-      end;
-    end;
-  end;
-end;
-
-procedure TDynArrayHashed.HashAdd(const Elem; aHashCode: Cardinal; var result: integer);
-var n,cap: integer;
-begin
-  n := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCount;
-  SetCount(n+1); // reserve space for a void element in array
-  cap := Capacity;
-  if cap*2-cap shr 3>=fHashsCount then
-  {$ifdef UNDIRECTDYNARRAY}with InternalDynArray do{$endif} begin
-    // fHashs[] is too small -> recreate
-    if fCountP<>nil then
-      dec(fCountP^); // ignore latest entry (which is not filled yet)
-    ReHash;
-    if fCountP<>nil then
-      inc(fCountP^);
-    result := HashFind(aHashCode,true); // fHashs[] has changed -> recompute
-    assert(result<0);
-  end;
-  with fHashs[-result-1] do begin // HashFind returned negative index in fHashs[]
-    Hash := aHashCode;
-    Index := n;
-  end;
-  result := n;
+  result := fHash.FindOrNew(aHashCode,@Elem); // fallback to Scan() if needed
+  if result<0 then
+    result := -1; // for coherency with most methods
 end;
 
 function TDynArrayHashed.FindHashedForAdding(const Elem; out wasAdded: boolean;
-  aHashCode: cardinal): integer;
-var n: integer;
+  noAddEntry: boolean): integer;
 begin
-  n := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCount;
-  if n<fHashCountTrigger then begin
-    if Assigned(fEventCompare) then
-      result := Scan(Elem) else
-      result := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}Find(Elem);
-    if result<0 then begin
-      SetCount(n+1); // reserve space for added item, as in HashAdd()
-      result := n;
-      wasadded := true;
-    end else
-      wasadded := false;
-    exit;
-  end;
-  if fHashs=nil then
-    ReHash(true); // compute hash of all previously added fHashCountTrigger items
-  if (aHashCode=0) and Assigned(fHashElement) then
-    aHashCode := fHashElement(Elem,fHasher);
-  if aHashCode=HASH_VOID then
-    aHashCode := HASH_ONVOIDCOLISION; // as in HashFind() -> for HashAdd() below
-  result := HashFindAndCompare(aHashCode,Elem);
-  if result>=0 then
-    // found matching existing item
-    wasAdded := false else begin
-    // create a void element
-    HashAdd(Elem,aHashCode,result);
-    wasAdded := true;
-  end;
+  result := FindHashedForAdding(Elem,wasAdded,fHash.HashOne(@Elem),noAddEntry);
+end;
+
+function TDynArrayHashed.FindHashedForAdding(const Elem; out wasAdded: boolean;
+  aHashCode: cardinal; noAddEntry: boolean): integer;
+begin
+  result := fHash.FindBeforeAdd(@Elem,wasAdded,aHashCode);
+  if wasAdded then
+    SetCount(result+1); // reserve space for a void element in array
 end;
 
 function TDynArrayHashed.AddAndMakeUniqueName(aName: RawUTF8): pointer;
@@ -51136,490 +52115,63 @@ end;
 
 function TDynArrayHashed.FindHashedAndFill(var ElemToFill): integer;
 begin
-  if fHashs=nil then // Count<fHashCountTrigger
-    result := Scan(ElemToFill) else
-    if Assigned(fHashElement) then begin
-      result := HashFindAndCompare(fHashElement(ElemToFill,fHasher),ElemToFill);
-      if result<0 then
-        result := -1;
-    end else
-      result := -1;
-  if result>=0 then
-    ElemCopy((PAnsiChar(Value^)+cardinal(result)*ElemSize)^,ElemToFill);
+  result := fHash.FindOrNew(fHash.HashOne(@ElemtoFill),@ElemToFill);
+  if result<0 then
+    result := -1 else
+    ElemCopy(PAnsiChar(Value^)[cardinal(result)*ElemSize],ElemToFill);
+end;
+
+procedure TDynArrayHashed.SetEventHash(const event: TEventDynArrayHashOne);
+begin
+  fHash.SetEventHash(event);
 end;
 
 function TDynArrayHashed.FindHashedAndUpdate(const Elem; AddIfNotExisting: boolean): integer;
-var aHashCode: cardinal;
-label h;
+var hc: cardinal;
+label doh;
 begin
-  if fHashs=nil then begin // Count<fHashCountTrigger
-    result := Scan(Elem);
-    if result<0 then
+  if canHash in fHash.State then begin
+doh:hc := fHash.HashOne(@Elem);
+    result := fHash.FindOrNew(hc,@Elem);
+    if (result<0) and AddIfNotExisting then begin
+      fHash.HashAdd(hc,result); // ReHash only if necessary
+      SetCount(result+1); // add new item
+    end;
+  end else begin
+    result := fHash.Scan(@Elem);
+    if result<0 then begin
       if AddIfNotExisting then
-        if Count<fHashCountTrigger then
-          result := Add(Elem) else begin
-          ReHash; // compute hash of all previously added fHashCountTrigger items
-          goto h;
-        end else
-        result := -1 else
-      ElemCopy(Elem,(PAnsiChar(Value^)+cardinal(result)*ElemSize)^); // update
-    exit;
-  end;
-h:if Assigned(fHashElement) then begin
-    aHashCode := fHashElement(Elem,fHasher);
-    if aHashCode=HASH_VOID then
-      aHashCode := HASH_ONVOIDCOLISION; // as in HashFind() -> for HashAdd() below
-    result := HashFindAndCompare(aHashCode,Elem);
-    if result<0 then
-      if AddIfNotExisting then begin
-        // not existing -> add as new element
-        HashAdd(Elem,aHashCode,result); // ReHash only if necessary
-        ElemCopy(Elem,(PAnsiChar(Value^)+cardinal(result)*ElemSize)^);
-      end else
-        result := -1 else begin
-      // copy from Elem into dynamic array found entry = Update
-      ElemCopy(Elem,(PAnsiChar(Value^)+cardinal(result)*ElemSize)^);
-      ReHash; // whole hash table should be re-created for next search
+        if canHash in fHash.State then // Scan triggered ReHash
+          goto doh else begin
+          result := Add(Elem); // regular Add
+          exit;
+        end;
     end;
-  end else
-    result := -1;
+  end;
+  if result>=0 then
+    ElemCopy(Elem,PAnsiChar(Value^)[cardinal(result)*ElemSize]); // update
 end;
 
-function TDynArrayHashed.FindHashedAndDelete(const Elem): integer;
+function TDynArrayHashed.FindHashedAndDelete(const Elem; FillDeleted: pointer;
+  noDeleteEntry: boolean): integer;
 begin
-  if fHashs=nil then begin // Count<fHashCountTrigger
-    result := Scan(Elem);
-    if result>=0 then
+  result := fHash.FindBeforeDelete(@Elem);
+  if result>=0 then begin
+    if FillDeleted<>nil then
+      ElemCopyAt(result,FillDeleted^);
+    if not noDeleteEntry then
       Delete(result);
-  end else
-  if Assigned(fHashElement) then begin
-    result := HashFindAndCompare(fHashElement(Elem,fHasher),Elem);
-    if result<0 then
-      result := -1 else begin
-      Delete(result);
-      ReHash; // whole hash table should be re-created for next search
-    end;
-  end else
-    result := -1;
-end;
-
-function HashAnsiString(const Elem; Hasher: THasher): cardinal;
-begin
-  if PtrUInt(Elem)<>0 then
-    result := Hasher(0,Pointer(Elem),{$ifdef FPC}_LStrLenP(pointer(Elem))
-      {$else}PInteger(PtrUInt(Elem)-SizeOf(integer))^{$endif}) else
-    result := HASH_ONVOIDCOLISION;
-end;
-
-function HashAnsiStringI(const Elem; Hasher: THasher): cardinal;
-var tmp: array[byte] of AnsiChar; // avoid slow heap allocation
-begin
-  if PtrUInt(Elem)=0 then
-    result := HASH_ONVOIDCOLISION else
-    result := Hasher(0,tmp,UpperCopy255Buf(tmp,pointer(Elem),
-      {$ifdef FPC}_LStrLenP(pointer(Elem))
-      {$else}PInteger(PtrUInt(Elem)-SizeOf(integer))^{$endif})-tmp);
-end;
-
-{$ifdef UNICODE}
-
-function HashUnicodeString(const Elem; Hasher: THasher): cardinal;
-begin
-  if PtrUInt(Elem)=0 then
-    result := HASH_ONVOIDCOLISION else
-    result := Hasher(0,Pointer(Elem),length(UnicodeString(Elem))*2);
-end;
-
-function HashUnicodeStringI(const Elem; Hasher: THasher): cardinal;
-var tmp: array[byte] of AnsiChar; // avoid slow heap allocation
-begin
-  if PtrUInt(Elem)=0 then
-    result := HASH_ONVOIDCOLISION else
-    result := Hasher(0,tmp,UpperCopy255W(tmp,Pointer(Elem),length(UnicodeString(Elem)))-tmp);
-end;
-
-{$endif UNICODE}
-
-function HashSynUnicode(const Elem; Hasher: THasher): cardinal;
-begin
-  if PtrUInt(Elem)=0 then
-    result := HASH_ONVOIDCOLISION else
-    result := Hasher(0,Pointer(Elem),length(SynUnicode(Elem))*2);
-end;
-
-function HashSynUnicodeI(const Elem; Hasher: THasher): cardinal;
-var tmp: array[byte] of AnsiChar; // avoid slow heap allocation
-begin
-  if PtrUInt(Elem)=0 then
-    result := HASH_ONVOIDCOLISION else
-    result := Hasher(0,tmp,UpperCopy255W(tmp,SynUnicode(Elem))-tmp);
-end;
-
-function HashWideString(const Elem; Hasher: THasher): cardinal;
-begin // WideString internal size is in bytes, not WideChar
-  if PtrUInt(Elem)=0 then
-    result := HASH_ONVOIDCOLISION else
-    result := Hasher(0,Pointer(Elem),Length(WideString(Elem))*2);
-end;
-
-function HashWideStringI(const Elem; Hasher: THasher): cardinal;
-var tmp: array[byte] of AnsiChar; // avoid slow heap allocation
-begin
-  if PtrUInt(Elem)=0 then
-    result := HASH_ONVOIDCOLISION else
-    result := Hasher(0,tmp,UpperCopy255W(tmp,pointer(Elem),Length(WideString(Elem)))-tmp);
-end;
-
-function HashPtrUInt(const Elem; Hasher: THasher): cardinal;
-begin
-  {$ifdef CPU64}
-  result := Hasher(0,@Elem,SizeOf(PtrUInt));
-  {$else}
-  result := (PtrUInt(Elem) shr 4)+1; // naive but optimal for TDynArrayHashed
-  {$endif}
-end;
-
-function HashPointer(const Elem; Hasher: THasher): cardinal;
-begin
-  result := Hasher(0,@Elem,SizeOf(pointer));
-end;
-
-function HashByte(const Elem; Hasher: THasher): cardinal;
-begin
-  result := Hasher(0,@Elem,SizeOf(byte));
-end;
-
-function HashWord(const Elem; Hasher: THasher): cardinal;
-begin
-  result := Hasher(0,@Elem,SizeOf(word));
-end;
-
-function HashInteger(const Elem; Hasher: THasher): cardinal;
-begin
-  result := Hasher(0,@Elem,SizeOf(integer));
-end;
-
-function HashInt64(const Elem; Hasher: THasher): cardinal;
-begin
-  result := Hasher(0,@Elem,SizeOf(Int64));
-end;
-
-function Hash128(const Elem; Hasher: THasher): cardinal;
-begin
-  result := Hasher(0,@Elem,SizeOf(THash128));
-end;
-
-function Hash256(const Elem; Hasher: THasher): cardinal;
-begin
-  result := Hasher(0,@Elem,SizeOf(THash256));
-end;
-
-function Hash512(const Elem; Hasher: THasher): cardinal;
-begin
-  result := Hasher(0,@Elem,SizeOf(THash512));
-end;
-
-{$ifndef NOVARIANTS}
-
-function VariantHash(const value: variant; CaseInsensitive: boolean;
-  Hasher: THasher): cardinal;
-var Up: array[byte] of AnsiChar; // avoid heap allocation
-  procedure ComplexType;
-  var tmp: RawUTF8;
-  begin // slow but always working conversion to string
-    VariantSaveJSON(value,twNone,tmp);
-    if CaseInsensitive then
-      result := Hasher(TVarData(value).VType,Up,UpperCopy255(Up,tmp)-Up) else
-      result := Hasher(TVarData(value).VType,pointer(tmp),length(tmp));
   end;
-begin
-  if not Assigned(Hasher) then
-    Hasher := @crc32c;
-  with TVarData(value) do
-  case VType of
-    varNull, varEmpty:
-      result := VType+2; // not 0 (HASH_VOID) nor 1 (HASH_ONVOIDCOLISION)
-    varShortInt, varByte:
-      result := Hasher(VType,@VByte,1);
-    varSmallint, varWord, varBoolean:
-      result := Hasher(VType,@VWord,2);
-    varLongWord, varInteger, varSingle:
-      result := Hasher(VType,@VLongWord,4);
-    varInt64, varDouble, varDate, varCurrency, varWord64:
-      result := Hasher(VType,@VInt64,SizeOf(Int64));
-    varString:
-      if CaseInsensitive then
-        result := Hasher(0,Up,UpperCopy255Buf(Up,VString,length(RawUTF8(VString)))-Up) else
-        result := Hasher(0,VString,length(RawUTF8(VString)));
-    varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}:
-      if CaseInsensitive then
-        result := Hasher(0,Up,UpperCopy255W(Up,VOleStr,StrLenW(VOleStr))-Up) else
-        result := Hasher(0,VAny,StrLenW(VOleStr)*2);
-  else
-    ComplexType;
-  end;
-end;
-
-function HashVariant(const Elem; Hasher: THasher): cardinal;
-begin
-  result := VariantHash(variant(Elem),false,Hasher);
-end;
-
-function HashVariantI(const Elem; Hasher: THasher): cardinal;
-begin
-  result := VariantHash(variant(Elem),true,Hasher);
-end;
-
-{$endif NOVARIANTS}
-
-procedure TDynArrayHashed.InitSpecific(aTypeInfo: pointer; var aValue;
-  aKind: TDynArrayKind; aCountPointer: PInteger; aCaseInsensitive: boolean);
-var Comp: TDynArraySortCompare;
-    Hasher: TDynArrayHashOne;
-begin
-  Comp := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,aKind];
-  Hasher := DYNARRAY_HASHFIRSTFIELD[aCaseInsensitive,aKind];
-  if (@Hasher=nil) or (@Comp=nil) then
-    raise ESynException.CreateUTF8('TDynArrayHashed.InitSpecific unsupported %',
-      [ToText(aKind)^]);
-  Init(aTypeInfo,aValue,Hasher,Comp,nil,aCountPointer,aCaseInsensitive);
-  {$ifdef UNDIRECTDYNARRAY}with InternalDynArray do{$endif} begin
-    fKnownType := aKind;
-    fKnownSize := KNOWNTYPE_SIZE[aKind];
-  end;
-end;
-
-procedure TDynArrayHashed.Init(aTypeInfo: pointer; var aValue;
-  aHashElement: TDynArrayHashOne; aCompare: TDynArraySortCompare;
-  aHasher: THasher; aCountPointer: PInteger; aCaseInsensitive: boolean);
-var k: TDynArrayKind;
-begin
-  {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$else}inherited{$endif}
-    Init(aTypeInfo,aValue,aCountPointer);
-  fEventCompare := nil;
-  fEventHash := nil;
-  if @aHasher=nil then
-    fHasher := DefaultHasher else
-    fHasher := aHasher;
-  if (@aHashElement=nil) or (@aCompare=nil) then begin
-    // it's faster to retrieve now the hashing/compare function once here
-    k := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}ToKnownType;
-    if @aHashElement=nil then
-      aHashElement := DYNARRAY_HASHFIRSTFIELD[aCaseInsensitive,k];
-    if @aCompare=nil then
-      aCompare := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,k];
-  end;
-  fHashElement := aHashElement;
-  {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := aCompare;
-  fHashCountTrigger := 32;
-  fHashs := nil; // = HashInvalidate;
-  fHashFindCount := 0;
-end;
-
-procedure TDynArrayHashed.HashInvalidate;
-begin
-  fHashs := nil;
-  fHashFindCount := 0;
-end;
-
-//var TDynArrayHashedCollisionCount: cardinal;
-
-function TDynArrayHashed.HashFind(aHashCode: cardinal; aForAdd: boolean): integer;
-var first,last: integer;
-    h: cardinal;
-    P: PAnsiChar;
-begin
-  if fHashs=nil then begin // Count=0 or Count<fHashCountTrigger
-    if Assigned(fHashElement) then begin
-      P := Value^;
-      for result := 0 to Count-1 do begin
-        h := fHashElement(P^,fHasher);
-        if h=HASH_VOID then
-          h := HASH_ONVOIDCOLISION;
-        if h=aHashCode then
-          exit else
-          inc(P,ElemSize);
-      end;
-    end;
-    result := -1;
-    exit;
-  end;
-  if aHashCode=HASH_VOID then
-    aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
-  if fHashsCount<=HASH_PO2 then // fHashs[] has a power of 2 length -> binary div
-    result := (aHashCode-1) and (fHashsCount-1) else
-    result := (aHashCode-1) mod cardinal(fHashsCount);
-  last := fHashsCount;
-  first := result;
-  repeat
-    with fHashs[result] do
-      if (Hash=aHashCode) and not aForAdd then begin
-        result := Index;
-        exit;
-      end else
-      if Hash=HASH_VOID then begin
-        result := -(result+1);
-        exit; // aForAdd or not found -> returns void index in fHashs[] as negative
-      end;
-    inc(result); // try next entry on hash collision
-    if result=last then
-      // reached the end -> search once from fHash[0] to fHash[first-1]
-      if result=first then
-        break else begin
-        result := 0;
-        last := first;
-      end;
-  until false;
-  RaiseFatalCollision('HashFind',aHashCode);
-end;
-
-function TDynArrayHashed.InternalCompare(Index: cardinal; const Elem): boolean;
-var P: PAnsiChar;
-begin
-  P := PAnsiChar(Value^)+Index*ElemSize;
-  if Assigned(fEventCompare) then
-    result := fEventCompare(P^,Elem)=0 else
-    if @{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare<>nil then
-      result := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare(P^,Elem)=0 else
-      result := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}ElemEquals(P^,Elem);
-end;
-
-function TDynArrayHashed.HashFindAndCompare(aHashCode: cardinal; const Elem): integer;
-var first,last: integer;
-begin
-  if fHashs=nil then begin // e.g. Count<fHashCountTrigger
-    result := Scan(Elem);
-    exit;
-  end;
-  if aHashCode=HASH_VOID then
-    aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
-  if fHashsCount<=HASH_PO2 then // fHashs[] has a power of 2 length -> binary div
-    result := (aHashCode-1) and (fHashsCount-1) else
-    result := (aHashCode-1) mod cardinal(fHashsCount);
-  last := fHashsCount;
-  first := result;
-  repeat
-    with fHashs[result] do
-    if Hash=aHashCode then begin
-      if InternalCompare(Index,Elem) then begin
-        result := Index;
-        exit; // found -> returns index in dynamic array
-      end;
-    end else
-    if Hash=HASH_VOID then begin
-      result := -(result+1);
-      exit; // not found -> returns void index in fHashs[] as negative
-    end;
-    // fHashs[Hash mod fHashsCount].Hash collision -> search next item
-    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-    inc(fHashFindCollisions);
-    {$endif}
-    //inc(TDynArrayHashedCollisionCount);
-    inc(result);
-    if result=last then
-      // reached the end -> search once from fHash[0] to fHash[first-1]
-      if result=first then
-        break else begin
-        result := 0;
-        last := first;
-      end;
-  until false;
-  RaiseFatalCollision('HashFindAndCompare',aHashCode);
-end;
-
-procedure TDynArrayHashed.RaiseFatalCollision(const caller: RawUTF8;
-  aHashCode: cardinal);
-begin
-  {$ifdef UNDIRECTDYNARRAY}with InternalDynArray do{$endif}
-  raise ESynException.CreateUTF8('TDynArrayHashed.% fatal collision: '+
-    'aHashCode=% fHashsCount=% Count=% Capacity=% ArrayType=% fKnownType=%',
-    [caller,CardinalToHexShort(aHashCode),fHashsCount,GetCount,GetCapacity,
-     ArrayTypeShort^,ToText(fKnownType)^]);
 end;
 
 function TDynArrayHashed.GetHashFromIndex(aIndex: PtrInt): Cardinal;
-var P: pointer;
 begin
-  if (cardinal(aIndex)>=cardinal(Count)) or
-    (not Assigned(fHashElement) and not Assigned(fEventHash)) then
-    result := 0 else begin
-    // it's faster to rehash than to loop in fHashs[].Index values
-    // and it will also work with Count<fHashCountTrigger
-    P := PAnsiChar(Value^)+PtrUInt(aIndex)*ElemSize;
-    if Assigned(fEventHash) then
-      result := fEventHash(P^) else
-      result := fHashElement(P^,fHasher);
-    if result=HASH_VOID then
-      result := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
-  end;
+  result := fHash.GetHashFromIndex(aIndex);
 end;
 
-function TDynArrayHashed.IsHashElementWithoutCollision(nocompare: boolean): integer;
-var i,j: PtrInt;
-    pi,pj: ^TSynHash;
-    h: cardinal;
+function TDynArrayHashed.ReHash(forAdd: boolean; forceGrow: boolean): boolean;
 begin
-  if {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCount>0 then begin
-    ReHash;
-    pi := pointer(fHashs);
-    for i := 1 to fHashsCount do begin
-      h := pi^.Hash;
-      if h<>HASH_VOID then begin
-        pj := pointer(fHashs);
-        for j := 1 to fHashsCount do // O(n*n) brute force check
-          if (pj^.Hash=h) and (pi<>pj) and (nocompare or
-              InternalCompare(pi^.Index,PAnsiChar(Value)[pj^.Index*ElemSize])) then begin
-            result := pj^.Index; // found duplicate
-            exit;
-          end else
-            inc(pj);
-      end;
-      inc(pi);
-    end;
-  end;
-  result := -1;
-end;
-
-function TDynArrayHashed.ReHash(forAdd: boolean): boolean;
-var i, n, cap, ndx: integer;
-    P: PAnsiChar;
-    aHashCode: cardinal;
-begin
-  result := false;
-  fHashs := nil;
-  fHashFindCount := 0;
-  fHashsCount := 0;
-  n := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCount;
-  if not forAdd and ((n=0) or (n<fHashCountTrigger)) then
-    exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
-  if not Assigned(fEventHash) and not Assigned(fHashElement) then
-    exit;
-  cap := Capacity*2; // Capacity better than Count; *2 to have void slots
-  if cap>HASH_PO2 then // slightly slower lookup, but much less memory use
-    fHashsCount := cap else begin
-    fHashsCount := 256; // find nearest power of two for fast binary division
-    while fHashsCount<cap do
-      fHashsCount := fHashsCount shl 1;
-  end;
-  SetLength(fHashs,fHashsCount); // fill all fHashs[]=HASH_VOID=0
-  // fill fHashs[] from all existing items
-  P := Value^;
-  for i := 0 to n-1 do begin
-    if Assigned(fEventHash) then
-      aHashCode := fEventHash(P^) else
-      aHashCode := fHashElement(P^,fHasher);
-    if aHashCode=HASH_VOID then
-      aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
-    ndx := HashFindAndCompare(aHashCode,P^);
-    if ndx<0 then
-      // >=0 means found exact duplicate of P^: shouldn't happen -> ignore
-      with fHashs[-ndx-1] do begin
-        Hash := aHashCode;
-        Index := i;
-      end;
-    inc(P,ElemSize);
-  end;
-  result := true;
+  result := fHash.ReHash(forAdd,forceGrow);
 end;
 
 
@@ -51702,10 +52254,13 @@ begin
 end;
 
 function TObjectDynArrayWrapper.Find(Instance: TObject): integer;
+var P: PObjectArray;
 begin
-  for result := 0 to fCount-1 do
-    if TObjectDynArray(fValue^)[result]=Instance then
-      exit;
+  P := fValue^;
+  if P<>nil then
+    for result := 0 to fCount-1 do
+      if P[result]=Instance then
+        exit;
   result := -1;
 end;
 
@@ -51721,26 +52276,28 @@ begin
 end;
 
 procedure TObjectDynArrayWrapper.Delete(Index: integer);
+var P: PObjectArray;
 begin
-  if cardinal(Index)>=cardinal(fCount) then
+  P := fValue^;
+  if (P=nil) or (cardinal(Index)>=cardinal(fCount)) then
     exit; // avoid Out of range
   if fOwnObjects then
-    TObjectDynArray(fValue^)[Index].Free;
+    P[Index].Free;
   dec(fCount);
   if fCount>Index then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      TObjectDynArray(fValue^)[Index+1],TObjectDynArray(fValue^)[Index],
-      (fCount-Index)*SizeOf(pointer));
+    MoveFast(P[Index+1],P[Index],(fCount-Index)*SizeOf(pointer));
 end;
 
 procedure TObjectDynArrayWrapper.Clear;
-var i: integer;
+var i: PtrInt;
+    P: PObjectArray;
 begin
-  if fValue^<>nil then begin
+  P := fValue^;
+  if P<>nil then begin
     if fOwnObjects then
       for i := fCount-1 downto 0 do
       try
-        TObjectDynArray(fValue^)[i].Free;
+        P[i].Free;
       except
         on Exception do;
       end;
@@ -51811,8 +52368,7 @@ begin
     exit; // out of range
   dec(n);
   if n>aIndex then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      a[aIndex+1],a[aIndex],(n-aIndex)*SizeOf(pointer));
+    MoveFast(a[aIndex+1],a[aIndex],(n-aIndex)*SizeOf(pointer));
   if aCount=nil then
     SetLength(a,n) else
     aCount^ := n;
@@ -51830,8 +52386,7 @@ begin
     exit;
   dec(n);
   if n>result then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      a[result+1],a[result],(n-result)*SizeOf(pointer));
+    MoveFast(a[result+1],a[result],(n-result)*SizeOf(pointer));
   if aCount=nil then
     SetLength(a,n) else
     aCount^ := n;
@@ -51861,7 +52416,7 @@ begin
   result := length(d);
   n := length(s);
   SetLength(d,result+n);
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(s[0],d[result],n*SizeOf(pointer));
+  MoveFast(s[0],d[result],n*SizeOf(pointer));
   inc(result,n);
 end;
 
@@ -51955,8 +52510,7 @@ begin
     a[aItemIndex].Free;
   dec(n);
   if n>aItemIndex then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      a[aItemIndex+1],a[aItemIndex],(n-aItemIndex)*SizeOf(TObject));
+    MoveFast(a[aItemIndex+1],a[aItemIndex],(n-aItemIndex)*SizeOf(TObject));
   if aCount=nil then
     SetLength(a,n) else
     aCount^ := n;
@@ -52110,8 +52664,7 @@ begin
   a[aItemIndex] := nil;
   dec(n);
   if n>aItemIndex then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      a[aItemIndex+1],a[aItemIndex],(n-aItemIndex)*SizeOf(IInterface));
+    MoveFast(a[aItemIndex+1],a[aItemIndex],(n-aItemIndex)*SizeOf(IInterface));
   TPointerDynArray(aInterfaceArray)[n] := nil; // avoid GPF in SetLength()
   SetLength(a,n);
 end;
@@ -52189,7 +52742,6 @@ var PO2,i,ndx: integer;
     H: cardinal;
     O: TObject;
 begin
-  assert(fHashs=nil);
   // find nearest power of two for new fHashs[] size
   PO2 := 256;
   while PO2<aCountToHash*2 do
@@ -52738,8 +53290,7 @@ begin
   if fCount=length(fObjArray) then
     SetLength(fObjArray,NextGrow(fCount));
   if cardinal(Index)<cardinal(fCount) then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      fObjArray[Index],fObjArray[Index+1],(fCount-Index)*SizeOf(TObject)) else
+    MoveFast(fObjArray[Index],fObjArray[Index+1],(fCount-Index)*SizeOf(TObject)) else
     Index := fCount;
   fObjArray[Index] := Item;
   inc(fCount);
@@ -52755,8 +53306,7 @@ begin
       fObjArray[i].Free;
       dec(fCount);
       if fCount>i then
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(
-          fObjArray[i+1],fObjArray[i],(fCount-i)*SizeOf(TObject));
+        MoveFast(fObjArray[i+1],fObjArray[i],(fCount-i)*SizeOf(TObject));
       result := true;
     end;
   finally
@@ -53953,7 +54503,7 @@ begin // code below must match TDynArray.LoadFromJSON
     end;
   if Assigned(customWriter) then
     T := djCustom else
-    T := aDynArray.ToKnownType({exacttype=}true);
+    T := aDynArray.GuessKnownType({exacttype=}true);
   P := aDynArray.fValue^;
   Add('[');
   case T of
@@ -54775,7 +55325,7 @@ begin
       if i>0 then begin
         {$ifdef HASINLINE}if i<MOVESMALL_MAX then
           MoveSmall(P,B,i) else{$endif}
-          {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,B^,i);
+          MoveFast(P^,B^,i);
         inc(B,i);
       end;
       if i=Len then
@@ -55111,7 +55661,7 @@ noesc:c := i;
         AddNoJSONEscape(P,i) else begin
         {$ifdef HASINLINE}if i<MOVESMALL_MAX then
           MoveSmall(P,B+1,i) else{$endif}
-          {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,B[1],i);
+          MoveFast(P^,B[1],i);
         inc(B,i);
       end;
       if i>=Len then
@@ -55542,7 +56092,7 @@ begin
   if L<fTempBufSize then begin
     if BEnd-B<=L then
       FlushToStream;
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(Text)^,B[1],L);
+    MoveFast(pointer(Text)^,B[1],L);
     inc(B,L);
   end else
     AddNoJSONEscape(pointer(Text),L);
@@ -55889,7 +56439,7 @@ begin
     dec(L);
   LI := length(fEchoBuf); // fast append to fEchoBuf
   SetLength(fEchoBuf,LI+L);
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,PByteArray(fEchoBuf)[LI],L);
+  MoveFast(P^,PByteArray(fEchoBuf)[LI],L);
 end;
 
 procedure TTextWriterWithEcho.EchoReset;
@@ -57982,26 +58532,6 @@ end;
 
 { TPrecisionTimer }
 
-function TPrecisionTimer.ByCount(Count: QWord): TShort16;
-begin
-  if Count=0 then
-    result := '0' else // avoid div per 0 exception
-    MicroSecToString(fTime div Count,result);
-end;
-
-function TPrecisionTimer.PerSec(const Count: QWord): QWord;
-begin
-  if fTime<=0 then // avoid negative value in case of incorrect Start/Stop sequence
-    result := 0 else // avoid div per 0 exception
-    result := (Count*1000000) div fTime;
-end;
-
-function TPrecisionTimer.SizePerSec(Size: QWord): shortstring;
-begin
-  FormatShort('% in % i.e. %/s',[KB(Size),Stop,KB(PerSec(Size))],result);
-end;
-
-{$ifdef FPC} {$push} {$endif} {$HINTS OFF} // avoid "loop executed zero times"
 procedure TPrecisionTimer.Init;
 begin
   FillCharFast(self,SizeOf(self),0);
@@ -58011,61 +58541,37 @@ procedure TPrecisionTimer.Start;
 begin
   FillCharFast(self,SizeOf(self),0);
   {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(fStart);
-  fLast := fStart;
-end;
-{$ifdef FPC} {$pop} {$else} {$HINTS ON} {$endif}
-
-function TPrecisionTimer.Started: boolean;
-begin
-  result := fStart <> 0;
 end;
 
-procedure TPrecisionTimer.ComputeTime;
+procedure TPrecisionTimer.Resume;
 begin
-  {$ifdef LINUX}
-  QueryPerformanceMicroSeconds(fStop);
-  fTime := fStop-fStart;
-  fLastTime := fStop-fLast;
-  {$else}
-  QueryPerformanceCounter(fStop);
-  if fWinFreq=0 then begin
-    QueryPerformanceFrequency(fWinFreq);
-    if fWinFreq=0 then begin
-      fTime := 0;
-      fLastTime := 0;
-      exit;
-    end;
-  end;
-  {$ifdef DELPHI5OROLDER} // circumvent C1093 Error
-  fTime := ((fStop-fStart)*1000000) div fWinFreq;
-  if fLast=fStart then
-    fLastTime := fTime else
-    fLastTime := ((fStop-fLast)*1000000) div fWinFreq;
-  {$else}
-  fTime := (QWord(fStop-fStart)*QWord(1000000)) div QWord(fWinFreq);
-  if fLast=fStart then
-    fLastTime := fTime else
-    fLastTime := (QWord(fStop-fLast)*QWord(1000000)) div QWord(fWinFreq);
-  {$endif DELPHI5OROLDER}
-  {$endif LINUX}
+  if fStart=0 then
+    {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(fStart);
+end;
+
+procedure TPrecisionTimer.Pause;
+begin
+  if fStart=0 then
+    exit;
+  {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(fStop);
+  FromExternalQueryPerformanceCounters(fStop-fStart);
+  inc(fPauseCount);
 end;
 
 procedure TPrecisionTimer.FromExternalMicroSeconds(const MicroSeconds: QWord);
 begin
   fLastTime := MicroSeconds;
   inc(fTime,MicroSeconds);
+  fStart := 0; // indicates time has been computed
 end;
 
 function TPrecisionTimer.FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
-begin // mimics ComputeTime from already known elapsed time
+begin // mimics Pause from already known elapsed time
   {$ifdef LINUX}
   FromExternalMicroSeconds(CounterDiff);
   {$else}
-  if fWinFreq=0 then begin
-    fTime := 0;
-    fLastTime := 0;
+  if fWinFreq=0 then
     QueryPerformanceFrequency(fWinFreq);
-  end;
   if fWinFreq<>0 then
     FromExternalMicroSeconds((CounterDiff*1000000)div PQWord(@fWinFreq)^);
   {$endif LINUX}
@@ -58074,33 +58580,47 @@ end;
 
 function TPrecisionTimer.Stop: TShort16;
 begin
-  ComputeTime;
+  if fStart<>0 then
+    Pause;
   MicroSecToString(fTime,result);
-end;
-
-procedure TPrecisionTimer.Pause;
-begin
-  {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(fResume);
-  dec(fResume,fStart);
-  inc(fPauseCount);
-end;
-
-procedure TPrecisionTimer.Resume;
-begin
-  {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(fStart);
-  fLast := fStart;
-  dec(fStart,fResume);
-  fResume := 0;
 end;
 
 function TPrecisionTimer.Time: TShort16;
 begin
+  if fStart<>0 then
+    Pause;
   MicroSecToString(fTime,result);
 end;
 
 function TPrecisionTimer.LastTime: TShort16;
 begin
+  if fStart<>0 then
+    Pause;
   MicroSecToString(fLastTime,result);
+end;
+
+function TPrecisionTimer.ByCount(Count: QWord): TShort16;
+begin
+  if Count=0 then // avoid div per 0 exception
+    result := '0' else begin
+    if fStart<>0 then
+      Pause;
+    MicroSecToString(fTime div Count,result);
+  end;
+end;
+
+function TPrecisionTimer.PerSec(const Count: QWord): QWord;
+begin
+  if fStart<>0 then
+    Pause;
+  if fTime<=0 then // avoid negative value in case of incorrect Start/Stop sequence
+    result := 0 else // avoid div per 0 exception
+    result := (Count*1000000) div fTime;
+end;
+
+function TPrecisionTimer.SizePerSec(Size: QWord): shortstring;
+begin
+  FormatShort('% in % i.e. %/s',[KB(Size),Stop,KB(PerSec(Size))],result);
 end;
 
 
@@ -58129,9 +58649,7 @@ end;
 
 function TPrecisionTimer.ProfileCurrentMethod: IUnknown;
 begin
-  if fStart=0 then
-    Start else
-    Resume;
+  Resume;
   result := TPrecisionTimerProfiler.Create(@self);
 end;
 
@@ -58323,7 +58841,6 @@ begin
   fSafe^.Lock;
   try
     InternalTimer.Pause;
-    InternalTimer.ComputeTime;
     LockedFromProcessTimer;
   finally
     fSafe^.UnLock;
@@ -59229,12 +59746,10 @@ begin
   // swap the string/object arrays
   dec(fCount);
   if Index<fCount then begin
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      fList[Index+1],fList[Index],(fCount-Index)*SizeOf(fList[0]));
+    MoveFast(fList[Index+1],fList[Index],(fCount-Index)*SizeOf(fList[0]));
     PPointer(@fList[fCount])^ := nil; // avoid GPF
     if fObjects<>nil then begin
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(
-        fObjects[Index+1],fObjects[Index],(fCount-Index)*SizeOf(fObjects[0]));
+      MoveFast(fObjects[Index+1],fObjects[Index],(fCount-Index)*SizeOf(fObjects[0]));
       fObjects[fCount] := nil; // avoid GPF if fObjectsOwned is set
     end;
   end;
@@ -59696,27 +60211,21 @@ end;
 constructor TObjectListHashedAbstract.Create(aFreeItems: boolean);
 begin
   inherited Create;
-  fFreeItems := aFreeItems;
   fHash.Init(TypeInfo(TObjectDynArray),fList,@HashPtrUInt,@SortDynArrayPointer,nil,@fCount);
+  fHash.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}SetIsObjArray(aFreeItems);
 end;
 
 destructor TObjectListHashedAbstract.Destroy;
-var i: integer;
 begin
-  if fFreeItems then
-    for i := 0 to fCount-1 do
-      List[i].Free;
+  fHash.Clear; // will free items if needed
   inherited;
 end;
 
 procedure TObjectListHashedAbstract.Delete(aIndex: integer);
 begin
-  if (self=nil) or (cardinal(aIndex)>=cardinal(fCount)) then
-    exit;
-  if fFreeItems then
-    FreeAndNil(List[aIndex]);
-  fHash.Delete(aIndex);
-  fHash.HashInvalidate;
+  if (self<>nil) and
+     fHash.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}Delete(aIndex) then
+    fHash.fHash.Clear;
 end;
 
 procedure TObjectListHashedAbstract.Delete(aObject: TObject);
@@ -59746,6 +60255,10 @@ begin
     result := -1;
 end;
 
+procedure TObjectListHashed.Delete(aObject: TObject);
+begin
+  fHash.FindHashedAndDelete(aObject);
+end;
 
 { TObjectListPropertyHashed }
 
@@ -59757,18 +60270,18 @@ begin
   inherited Create(aFreeItems);
   fSubPropAccess := aSubPropAccess;
   if Assigned(aHashElement) then
-    fHash.fHashElement := aHashElement;
+    fHash.fHash.HashElement := aHashElement;
   if Assigned(aCompare) then
-    fHash.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := aCompare;
-  fHash.fEventCompare := IntComp;
-  fHash.fEventHash := IntHash;
+    fHash.fHash.Compare := aCompare;
+  fHash.EventCompare := IntComp;
+  fHash.EventHash := IntHash;
 end;
 
 function TObjectListPropertyHashed.IntHash(const Elem): cardinal;
 var O: TObject;
 begin
   O := fSubPropAccess(TObject(Elem));
-  result := fHash.fHashElement(O,fHash.fHasher);
+  result := fHash.fHash.HashElement(O,fHash.fHash.Hasher);
 end;
 
 function TObjectListPropertyHashed.IntComp(const A,B): integer;
@@ -59783,7 +60296,7 @@ begin
   wasAdded := false;
   if self<>nil then begin
     result := fHash.FindHashedForAdding(aObject,wasAdded,
-      fHash.fHashElement(aObject,fHash.fHasher));
+      fHash.fHash.HashElement(aObject,fHash.fHash.Hasher));
     if wasAdded then
       fList[result] := aObject;
   end else
@@ -59793,7 +60306,7 @@ end;
 function TObjectListPropertyHashed.IndexOf(aObject: TObject): integer;
 begin
   if fCount>0 then begin
-    result := fHash.FindHashed(aObject,fHash.fHashElement(aObject,fHash.fHasher));
+    result := fHash.FindHashed(aObject,fHash.fHash.HashElement(aObject,fHash.fHash.Hasher));
     if result>=0 then
       exit else // found
       result := -1; // for consistency
@@ -59996,9 +60509,9 @@ begin
   if fCaseSensitive=Value then
     exit;
   inherited;
-  fHash.fHashElement := DYNARRAY_HASHFIRSTFIELD[not Value,djRawUTF8];
-  fHash.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare :=
-    DYNARRAY_SORTFIRSTFIELDHASHONLY[Value];
+  fHash.fHash.HashElement := DYNARRAY_HASHFIRSTFIELD[not Value,djRawUTF8];
+  fHash.fHash.Compare :=  DYNARRAY_SORTFIRSTFIELDHASHONLY[Value];
+  fHash.fHash.Clear;
   if not fChanged then
     fChanged := Count>0; // force re-hash next IndexOf() call
 end;
@@ -60008,6 +60521,13 @@ begin
   if fChanged then
     fChanged := not fHash.ReHash; // rough, but working implementation
   result := fHash.FindHashed(aText);
+end;
+
+function TRawUTF8ListHashed.Delete(const aText: RawUTF8): PtrInt;
+begin
+  if fChanged then
+    fChanged := not fHash.ReHash; // rough, but working implementation
+  result := fHash.FindHashedAndDelete(aText);
 end;
 
 function TRawUTF8ListHashed.AddIfNotExisting(const aText: RawUTF8;
@@ -60045,7 +60565,7 @@ end;
 
 function TRawUTF8ListHashed.HashFind(aHashCode: cardinal): integer;
 begin
-  result := fHash.HashFind(aHashCode,false);
+  result := fHash.fHash.Find(aHashCode,{foradd=}false);
 end;
 
 function TRawUTF8ListHashed.ReHash(aForceRehash: boolean): boolean;
@@ -60208,8 +60728,7 @@ procedure TRawUTF8MethodList.Delete(Index: PtrInt);
 begin
   inherited Delete(Index);
   if Index<length(fEvents) then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      fEvents[Index+1],fEvents[Index],(length(fEvents)-Index)*SizeOf(TMethod));
+    MoveFast(fEvents[Index+1],fEvents[Index],(length(fEvents)-Index)*SizeOf(TMethod));
 end;
 
 function TRawUTF8MethodList.GetEvent(aIndex: PtrInt;
@@ -60248,12 +60767,13 @@ const
 
 function TSynDictionary.KeyFullHash(const Elem): cardinal;
 begin
-  result := fKeys.fHasher(0,@Elem,fKeys.ElemSize);
+  result := fKeys.fHash.Hasher(0,@Elem,fKeys.ElemSize);
 end;
 
 function TSynDictionary.KeyFullCompare(const A,B): integer;
-var i: integer;
+var i: PtrInt;
 begin
+
   for i := 0 to fKeys.ElemSize-1 do begin
     result := TByteArray(A)[i]-TByteArray(B)[i];
     if result<>0 then
@@ -60276,10 +60796,10 @@ begin
   fSafe.PaddingUsedCount := DIC_TIMETIX+1;
   fKeys.Init(aKeyTypeInfo,fSafe.Padding[DIC_KEY].VAny,nil,nil,nil,
     @fSafe.Padding[DIC_KEYCOUNT].VInteger,aKeyCaseInsensitive);
-  if not Assigned(fKeys.fHashElement) then
-    fKeys.fEventHash := KeyFullHash;
+  if not Assigned(fKeys.HashElement) then
+    fKeys.EventHash := KeyFullHash;
   if not Assigned(fKeys.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare) then
-    fKeys.fEventCompare := KeyFullCompare;
+    fKeys.EventCompare := KeyFullCompare;
   fValues.Init(aValueTypeInfo,fSafe.Padding[DIC_VALUE].VAny,
     @fSafe.Padding[DIC_VALUECOUNT].VInteger);
   fTimeouts.Init(TypeInfo(TIntegerDynArray),fTimeOut,@fSafe.Padding[DIC_TIMECOUNT].VInteger);
@@ -60299,7 +60819,7 @@ end;
 function TSynDictionary.GetCapacity: integer;
 begin
   fSafe.Lock;
-  result := fKeys.Capacity;
+  result := fKeys.GetCapacity;
   fSafe.UnLock;
 end;
 
@@ -60462,15 +60982,9 @@ end;
 
 function TSynDictionary.DeleteAt(aIndex: integer): boolean;
 begin
-  if cardinal(aIndex)<cardinal(fSafe.Padding[DIC_KEYCOUNT].VInteger) then begin
-    fKeys.Delete(aIndex);
-    fKeys.ReHash;
-    fValues.Delete(aIndex);
-    if fSafe.Padding[DIC_TIMESEC].VInteger>0 then
-      fTimeOuts.Delete(aIndex);
-    result := true;
-  end
-  else
+  if cardinal(aIndex)<cardinal(fSafe.Padding[DIC_KEYCOUNT].VInteger) then
+    // use Delete(aKey) to have efficient hash table update
+    result := Delete(fKeys.ElemPtr(aIndex)^)=aIndex else
     result := false;
 end;
 
@@ -60771,14 +61285,13 @@ begin
   end;
 end;
 
-function TSynDictionary.LoadFromJSON(const JSON: RawUTF8; EnsureNoKeyCollision: boolean
+function TSynDictionary.LoadFromJSON(const JSON: RawUTF8
   {$ifndef NOVARIANTS}; CustomVariantOptions: PDocVariantOptions{$endif}): boolean;
 begin // pointer(JSON) is not modified in-place thanks to JSONObjectAsJSONArrays()
-  result := LoadFromJSON(pointer(JSON),EnsureNoKeyCollision{$ifndef NOVARIANTS},
-      CustomVariantOptions{$endif});
+  result := LoadFromJSON(pointer(JSON){$ifndef NOVARIANTS},CustomVariantOptions{$endif});
 end;
 
-function TSynDictionary.LoadFromJSON(JSON: PUTF8Char; EnsureNoKeyCollision: boolean{$ifndef NOVARIANTS};
+function TSynDictionary.LoadFromJSON(JSON: PUTF8Char{$ifndef NOVARIANTS};
   CustomVariantOptions: PDocVariantOptions{$endif}): boolean;
 var k,v: RawUTF8; // private copy of the JSON input, expanded as Keys/Values arrays
 begin
@@ -60791,13 +61304,8 @@ begin
       if fValues.LoadFromJSON(pointer(v),nil{$ifndef NOVARIANTS},CustomVariantOptions{$endif})<>nil then
         if fKeys.Count=fValues.Count then begin
           SetTimeouts;
-          if EnsureNoKeyCollision then
-            // fKeys.Rehash is not enough, since input JSON may be invalid
-            result := fKeys.IsHashElementWithoutCollision({nocompare=}false)<0 else begin
-            // optimistic approach
-            fKeys.Rehash;
-            result := true;
-          end;
+          fKeys.Rehash; // warning: duplicated keys won't be identified
+          result := true;
         end;
   finally
     fSafe.UnLock;
@@ -60916,7 +61424,7 @@ begin
     result := 0 else begin
     fSafe.Lock;
     try
-      result := fValues.Capacity;
+      result := fValues.GetCapacity;
     finally
       fSafe.UnLock;
     end;
@@ -60959,7 +61467,7 @@ end;
 procedure TSynQueue.InternalGrow;
 var cap: integer;
 begin
-  cap := fValues.Capacity;
+  cap := fValues.GetCapacity;
   if fFirst>cap-fCount then // use leading space if worth it
     fLast := 0 else         // append at the end
     if fCount=cap then      // reallocation needed
@@ -61387,7 +61895,7 @@ begin
   end;
   {$ifdef HASINLINE}if DataLen<MOVESMALL_MAX then
     MoveSmall(Data,@fBuffer^[fPos],DataLen) else{$endif}
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Data^,fBuffer^[fPos],DataLen);
+    MoveFast(Data^,fBuffer^[fPos],DataLen);
   inc(fPos,DataLen);
 end;
 
@@ -61837,7 +62345,7 @@ begin
         n := (fBufLen-fPos)shr 2;
         if ValuesCount<n then
           n := ValuesCount;
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(Values^,P^,n*4);
+        MoveFast(Values^,P^,n*4);
         inc(P,n*4);
       end;
       wkVarInt32, wkVarUInt32, wkOffsetU, wkOffsetI: begin
@@ -62047,7 +62555,7 @@ begin
       if len>DataLen then
         len := DataLen;
       if Data<>nil then
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(fMap.fBuf[fCurrentPos],Data^,len);
+        MoveFast(fMap.fBuf[fCurrentPos],Data^,len);
       inc(fCurrentPos,len);
       result := len;
     end else
@@ -63114,7 +63622,7 @@ begin
     D := PAnsiChar(result.Memory)+resultSize;
     inc(resultSize,Head.UnCompressedSize);
     if stored then
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(S^,D^,Head.CompressedSize) else
+      MoveFast(S^,D^,Head.CompressedSize) else
     if SynLZDecompress1(S,Head.CompressedSize,D)<>Head.UnCompressedSize then
       FreeAndNil(result) else
     if Hash32(pointer(D),Head.UnCompressedSize)<>Head.HashUncompressed then
@@ -63252,7 +63760,7 @@ begin
     PCardinal(R)^ := crc;
     R[4] := COMPRESS_STORED;
     PCardinal(R+5)^ := crc;
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Plain^,R[9],PlainLen);
+    MoveFast(Plain^,R[9],PlainLen);
   end else begin
     len := CompressDestLen(PlainLen)+BufferOffset;
     if len>SizeOf(tmp) then begin
@@ -63266,7 +63774,7 @@ begin
     if len+64>=PlainLen then begin // store if compression was not worth it
       R[4] := COMPRESS_STORED;
       PCardinal(R+5)^ := crc;
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(Plain^,R[9],PlainLen);
+      MoveFast(Plain^,R[9],PlainLen);
       len := PlainLen;
     end else begin
       R[4] := AnsiChar(AlgoID);
@@ -63301,7 +63809,7 @@ begin
   end;
   Comp[4] := COMPRESS_STORED;
   PCardinal(Comp+5)^ := PCardinal(Comp)^;
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(Plain^,Comp[9],PlainLen);
+  MoveFast(Plain^,Comp[9],PlainLen);
   result := PlainLen+9;
 end;
 
@@ -63328,7 +63836,7 @@ begin
     PCardinal(R)^ := crc;
     R[4] := COMPRESS_STORED;
     PCardinal(R+5)^ := crc;
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Plain^,R[9],PlainLen);
+    MoveFast(Plain^,R[9],PlainLen);
   end else begin
     SetLength(result,CompressDestLen(PlainLen));
     R := pointer(result);
@@ -63337,7 +63845,7 @@ begin
     if len>=PlainLen then begin // store if compression not worth it
       R[4] := COMPRESS_STORED;
       PCardinal(R+5)^ := crc;
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(Plain^,R[9],PlainLen);
+      MoveFast(Plain^,R[9],PlainLen);
       len := PlainLen;
     end else begin
       R[4] := AnsiChar(AlgoID);
@@ -63434,7 +63942,7 @@ begin
   if PartialLen>BodyLen then
     PartialLen := BodyLen;
   if Comp[4]=COMPRESS_STORED then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Comp[9],Partial[0],PartialLen) else
+    MoveFast(Comp[9],Partial[0],PartialLen) else
     if AlgoDecompressPartial(Comp+9,CompLen-9,Partial,PartialLen,PartialLenMax)<PartialLen then
       exit;
   result := PartialLen;
@@ -63462,7 +63970,7 @@ begin
   if (self=nil) or (PlainLen<=0) then
     exit;
   if Comp[4]=COMPRESS_STORED then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Comp[9],Plain[0],PlainLen) else
+    MoveFast(Comp[9],Plain[0],PlainLen) else
   if Comp[4]=AnsiChar(AlgoID) then
     case Load of
     aclNormal:
@@ -63903,7 +64411,7 @@ begin
     Result := Length(fDataString)-fPosition;
     if Result>Count then
       Result := Count;
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(PByteArray(fDataString)[fPosition],Buffer,Result);
+    MoveFast(PByteArray(fDataString)[fPosition],Buffer,Result);
     inc(fPosition, Result);
   end;
 end;
@@ -63935,7 +64443,7 @@ begin
     Result := 0 else begin
     Result := Count;
     SetLength(fDataString,fPosition+Result);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Buffer,PByteArray(fDataString)[fPosition],Result);
+    MoveFast(Buffer,PByteArray(fDataString)[fPosition],Result);
     inc(FPosition,Result);
   end;
 end;
@@ -64055,7 +64563,7 @@ procedure TSynNameValue.Init(aCaseSensitive: boolean);
 begin
   // release dynamic arrays memory before FillcharFast()
   List := nil;
-  DynArray.HashInvalidate;
+  DynArray.fHash.Clear;
   // initialize hashed storage
   FillCharFast(self,SizeOf(self),0);
   DynArray.InitSpecific(TypeInfo(TSynNameValueItemDynArray),List,
@@ -64084,15 +64592,8 @@ begin
 end;
 
 function TSynNameValue.Delete(const aName: RawUTF8): boolean;
-var ndx: integer;
 begin
-  ndx := DynArray.FindHashed(aName);
-  if ndx>=0 then begin
-    DynArray.Delete(ndx);
-    DynArray.ReHash;
-    result := true;
-  end else
-    result := false;
+ result := DynArray.FindHashedAndDelete(aName)>=0;
 end;
 
 function TSynNameValue.DeleteByValue(const aValue: RawUTF8; Limit: integer): integer;
@@ -64425,8 +64926,7 @@ begin
   max := length(Events);
   if cardinal(index)<cardinal(max) then begin
     dec(max);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      Events[index+1],Events[index],(max-index)*SizeOf(Events[index]));
+    MoveFast(Events[index+1],Events[index],(max-index)*SizeOf(Events[index]));
     SetLength(Events,max);
   end;
 end;
@@ -64441,7 +64941,7 @@ begin
   if n=0 then
     exit;
   SetLength(Dest,d+n);
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(New[0],Dest[d],n*SizeOf(TMethod));
+  MoveFast(New[0],Dest[d],n*SizeOf(TMethod));
 end;
 
 function EventEquals(const eventA,eventB): boolean;
@@ -64517,6 +65017,16 @@ begin
   Exclude(CpuFeatures, cfSSE42);
   Exclude(CpuFeatures, cfAESNI);
   {$endif}
+  {$ifdef CPUX64}
+  {$ifdef WITH_ERMS}
+  if cfERMS in CpuFeatures then // actually slower than our AVX code -> disabled
+    include(CPUIDX64,cpuERMS);
+  {$endif WITH_ERMS}
+  if cfAVX in CpuFeatures then
+    include(CPUIDX64,cpuAVX);
+  if cfAVX2 in CpuFeatures then
+    include(CPUIDX64,cpuAVX2);
+  {$endif CPUX64}
   // validate accuracy of most used HW opcodes
   if cfRAND in CpuFeatures then
     try
@@ -64674,6 +65184,7 @@ begin
   end;
   UpperCopy255Buf := @UpperCopy255BufPas;
   DefaultHasher := @xxHash32; // faster than crc32cfast for small content
+  GetBitsCountPtrInt := @GetBitsCountPas;
   {$ifndef ABSOLUTEPASCAL}
   {$ifdef CPUINTEL}
   {$ifdef FPC} // done in InitRedirectCode for Delphi
@@ -64714,6 +65225,8 @@ begin
     {$endif FORCE_STRSSE42}
     DefaultHasher := crc32c;
   end;
+  if cfPOPCNT in CpuFeatures then
+    GetBitsCountPtrInt := @GetBitsCountSSE42;
   {$endif CPUINTEL}
   {$endif ABSOLUTEPASCAL}
   InterningHasher := DefaultHasher;
@@ -64758,23 +65271,23 @@ initialization
   {$endif PUREPASCAL}
   crc32c := @crc32cfast; // now to circumvent Internal Error C11715 for Delphi 5
   crc32cBy4 := @crc32cBy4fast;
+  {$ifndef CPUX64}
   MoveFast := @System.Move;
+  {$endif CPUX64}
   {$ifdef FPC}
-  {$ifdef CPUX64} // we have our own x64 asm version, faster for small blocks
-  if cfERMS in CpuFeatures then
-    FillCharFast := @Fillcharx64ERMS else
-    FillCharFast := @Fillcharx64;
-  {$else}
+  {$ifndef CPUX64}
   FillCharFast := @System.FillChar; // fallback to FPC cross-platform RTL
   {$endif CPUX64}
   {$ifdef Linux}
   stdoutIsTTY := IsATTY(StdOutputHandle)=1;
   {$endif Linux}
-  {$else}
+  {$else Dephi: }
   {$ifdef CPUARM}
   FillCharFast := @System.FillChar;
   {$else}
+  {$ifndef CPUX64}
   Pointer(@FillCharFast) := SystemFillCharAddress;
+  {$endif CPUX64}
   {$ifndef USEPACKAGES}
   InitRedirectCode;
   {$endif USEPACKAGES}

@@ -820,10 +820,8 @@ begin
   try
     if fStatementTimer<>nil then begin
       if fStatementMonitor<>nil then
-        fStatementMonitor.ProcessEnd else begin
+        fStatementMonitor.ProcessEnd else
         fStatementTimer^.Pause;
-        fStatementTimer^.ComputeTime;
-      end;
       if E=nil then
         if (fStatementTruncateSQLLogLen > 0) and
            (length(fStatementSQL) > fStatementTruncateSQLLogLen) then begin

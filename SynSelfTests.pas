@@ -323,6 +323,10 @@ type
     /// test the TDynArrayHashed object and methods (dictionary features)
     // - this test will create an array of 200,000 items to test speed
     procedure _TDynArrayHashed;
+    /// test the TSynDictionary class
+    procedure _TSynDictionary;
+    /// validate the TSynQueue class
+    procedure _TSynQueue;
     /// test TObjectListHashed class
     procedure _TObjectListHashed;
     /// test TObjectListSorted class
@@ -336,7 +340,11 @@ type
     procedure _TObjectDynArrayWrapper;
     /// test T*ObjArray types and the ObjArray*() wrappers
     procedure _TObjArray;
-    {$endif}
+    {$endif DELPHI5OROLDER}
+    {$ifdef CPUINTEL}
+    /// validate our optimized MoveFast/FillCharFast functions
+    procedure CustomRTL;
+    {$endif CPUINTEL}
     /// test StrIComp() and AnsiIComp() functions
     procedure FastStringCompare;
     /// test IdemPropName() and IdemPropNameU() functions
@@ -403,10 +411,6 @@ type
     procedure _TSynLogFile;
     /// client side geniune 64 bit identifiers generation
     procedure _TSynUniqueIdentifier;
-    /// test the TSynDictionary class
-    procedure _TSynDictionary;
-    /// validate the TSynQueue class
-    procedure _TSynQueue;
   end;
 
   /// this test case will test most low-level functions, classes and types
@@ -1442,12 +1446,120 @@ begin
   v := UnCamelCase('GoodBBCProgram'); Check(v='Good BBC program');
 end;
 
+function GetBitsCount64(const Bits; Count: PtrInt): PtrInt;
+begin // reference implementation
+  result := 0;
+  while Count>0 do begin
+    dec(Count);
+    if Count in TBits64(Bits) then // bt dword[rdi],edx is slow in such a loop
+      inc(result);                 // ... but correct :)
+  end;
+end;
+
+function GetBitsCountPurePascal(value: PtrInt): PtrInt;
+begin
+  result := value;
+  {$ifdef CPU64}
+  result := result-((result shr 1) and $5555555555555555);
+  result := (result and $3333333333333333)+((result shr 2) and $3333333333333333);
+  result := (result+(result shr 4)) and $0f0f0f0f0f0f0f0f;
+  inc(result,result shr 8); // avoid slow multiplication
+  inc(result,result shr 16);
+  inc(result,result shr 32);
+  result := result and $7f;
+  {$else}
+  result := result-((result shr 1) and $55555555);
+  result := (result and $33333333)+((result shr 2) and $33333333);
+  result := (result+(result shr 4)) and $0f0f0f0f;
+  inc(result,result shr 8);
+  inc(result,result shr 16);
+  result := result and $3f;
+  {$endif CPU64}
+end;
+
 procedure TTestLowLevelCommon.Bits;
+const N = 1000000;
+  procedure TestPopCnt(const ctxt: string);
+  var timer: TPrecisionTimer;
+      i,c: integer;
+      v: QWord;
+  begin
+    CheckEqual(GetBitsCountPtrInt(0),0);
+    CheckEqual(GetBitsCountPtrInt($f),4);
+    CheckEqual(GetBitsCountPtrInt($ff),8);
+    CheckEqual(GetBitsCountPtrInt($fff),12);
+    CheckEqual(GetBitsCountPtrInt($ffff),16);
+    CheckEqual(GetBitsCountPtrInt(-1),POINTERBITS);
+    v := PtrUInt(-1);
+    CheckEqual(GetBitsCount(v,0),0);
+    CheckEqual(GetBitsCount64(v,0),0);
+    for i := 0 to POINTERBITS-1 do begin
+      CheckEqual(GetBitsCountPtrInt(PtrInt(1) shl i),1);
+      if i<POINTERBITS-1 then begin
+        CheckEqual(GetBitsCountPtrInt(PtrInt(3) shl i),2);
+        CheckEqual(GetBitsCountPtrInt((PtrInt(1) shl (i+1))-1),i+1);
+      end;
+      if i<POINTERBITS-2 then
+        CheckEqual(GetBitsCountPtrInt(PtrInt(7) shl i),3);
+      if i<POINTERBITS-3 then
+        CheckEqual(GetBitsCountPtrInt(PtrInt(15) shl i),4);
+      CheckEqual(GetBitsCount64(v,i+1),i+1);
+      CheckEqual(GetBitsCount(v,i+1),i+1);
+    end;
+    for i := 1 to 32 do begin
+      v := ALLBITS_CARDINAL[i];
+      CheckEqual(GetBitsCountPtrInt(v),i);
+      CheckEqual(GetBitsCount(v,POINTERBITS),i);
+      CheckEqual(GetBitsCount(v,i),i);
+    end;
+    for i := 1 to 1000 do begin
+      v := i;
+      c := GetBitsCount64(v,POINTERBITS);
+      CheckEqual(GetBitsCountPtrInt(v),c);
+      CheckEqual(GetBitsCount(v,POINTERBITS),c);
+      {$ifdef FPC}CheckEqual(popcnt(v),c);{$endif}
+      v := v*v*19;
+      c := GetBitsCount64(v,POINTERBITS);
+      CheckEqual(GetBitsCountPtrInt(v),c);
+      {$ifdef FPC}CheckEqual(popcnt(v),c);{$endif}
+      v := random32gsl{$ifdef CPU64}or (PtrUInt(random32gsl) shl 32){$endif};
+      c := GetBitsCount64(v,POINTERBITS);
+      CheckEqual(GetBitsCountPtrInt(v),c);
+      CheckEqual(GetBitsCount(v,POINTERBITS),c);
+      {$ifdef FPC}CheckEqual(popcnt(v),c);{$endif}
+    end;
+    timer.Start;
+    for i := 1 to N do
+      GetBitsCountPtrInt(i);
+    NotifyTestSpeed(ctxt,N,N shl POINTERSHR,@timer,{onlylog=}true);
+  end;
 var Bits: array[byte] of byte;
     Bits64: Int64 absolute Bits;
     Si,i: integer;
     c: cardinal;
+    {$ifdef FPC}
+    u: {$ifdef CPU64}QWord{$else}DWord{$endif};
+    timer: TPrecisionTimer;
+    {$endif FPC}
 begin
+  {$ifdef CPUINTEL}
+  GetBitsCountPtrInt := @GetBitsCountPurePascal;
+  TestPopCnt('pas');
+  GetBitsCountPtrInt := @GetBitsCountPas; // x86/x86_64 assembly
+  TestPopCnt('asm');
+  if cfPOPCNT in CpuFeatures then begin
+    GetBitsCountPtrInt := @GetBitsCountSSE42;
+    TestPopCnt('sse4.2');
+  end;
+  {$else}
+  TestPopCnt('pas');
+  {$endif CPUINTEL}
+  {$ifdef FPC}
+  timer.Start;
+  for u := 1 to N do
+    i := popcnt(u);
+  NotifyTestSpeed('FPC',N,N shl POINTERSHR,@timer,{onlylog=}true);
+  {$endif FPC}
   FillcharFast(Bits,sizeof(Bits),0);
   for i := 0 to high(Bits)*8+7 do
     Check(not GetBit(Bits,i));
@@ -1938,7 +2050,7 @@ begin
   City.Country := 'Argentina';
   City.Latitude := -34.6;
   City.Longitude := -58.45;
-  Check(ACities.FindHashedAndUpdate(City,false)>=0);
+  Check(ACities.FindHashedAndUpdate(City,{addifnotexisting=}false)>=0);
   City.Latitude := 0;
   City.Longitude := 0;
   Check(City.Name='Buenos Aires');
@@ -1961,6 +2073,7 @@ begin
   Check(ACities.Count=3);
   Check(City.Name='Iasi');
   Check(ACities.FindHashed(City)>=0);
+  // add CITIES_MAX items
   for i := 1 to 2000 do begin
     City.Name := IntToString(i);
     City.Latitude := i*3.14;
@@ -1968,21 +2081,40 @@ begin
     Check(ACities.FindHashedAndUpdate(City,true)=i+2,'multiple ReHash');
     Check(ACities.FindHashed(City)=i+2);
   end;
-  ACities.Capacity := CITIES_MAX+3; // make it as fast as possible
+  ACities.Capacity := CITIES_MAX+30; // will trigger HASH_PO2
   for i := 2001 to CITIES_MAX do begin
     City.Name := IntToString(i);
     City.Latitude := i*3.14;
     City.Longitude := i*6.13;
-    Check(ACities.FindHashedAndUpdate(City,true)=i+2,'use Capacity: no ReHash');
+    if i=8703 then
+      City.Latitude := i*3.14;
+    Check(ACities.FindHashedAndUpdate(City,true)=i+2);
     Check(ACities.FindHashed(City.Name)=i+2);
   end;
   for i := 1 to CITIES_MAX do begin
     N := IntToString(i);
+    Check(ACities.FindHashed(N)=i+2);
+  end;
+  for i := 1 to CITIES_MAX do begin
+    N := IntToString(i);
     j := ACities.FindHashed(N);
-    Check(j=i+2,'hashing with string not City.Name');
-    Check(Cities[j].Name=N);
-    CheckSame(Cities[j].Latitude,i*3.14);
-    CheckSame(Cities[j].Longitude,i*6.13);
+    Check(j>=0);
+    if i and 127=0 then begin
+      Check(ACities.FindHashedAndDelete(N)>=0,'delete');
+      j := ACities.FindHashed(N);
+      Check(j<0);
+    end;
+  end;
+  for i := 1 to CITIES_MAX do begin
+    N := IntToString(i);
+    j := ACities.FindHashed(N);
+    if i and 127=0 then
+      Check(j<0,'deteled') else
+      if not CheckFailed(j>=0,N) then begin
+        Check(Cities[j].Name=N);
+        CheckSame(Cities[j].Latitude,i*3.14);
+        CheckSame(Cities[j].Longitude,i*6.13);
+      end;
   end;
 end;
 
@@ -2764,6 +2896,184 @@ begin
   Check(ACities.Count=count);
   TestCities;
 end;
+
+{$ifdef CPUINTEL}
+function BufEquals(P, n, b: PtrInt): boolean;
+begin // slower than FillChar, faster than for loop, but fast enough for testing
+  result := false;
+  b := b*{$ifdef CPU32}$01010101{$else}$0101010101010101{$endif};
+  inc(n,P-SizeOf(P));
+  if n>=P then
+    repeat
+      if PPtrInt(P)^<>b then
+        exit;
+      inc(PPtrInt(P));
+    until n<P;
+  inc(n,SizeOf(P));
+  if P<n then
+    repeat
+      if PByte(P)^<>byte(b) then
+        exit;
+      inc(P);
+    until P>=n;
+  result := true;
+end;
+
+function BufIncreasing(P: PByteArray; n: PtrInt; b: byte): boolean;
+var i: PtrInt;
+begin
+  result := false;
+  for i := 0 to n-1 do
+    if P[i]<>b then
+      exit else
+      inc(b);
+  result := true;
+end;
+
+procedure TTestLowLevelCommon.CustomRTL;
+// note: FPC uses the RTL for FillCharFast/MoveFast
+var buf: RawByteString;
+   procedure Validate(rtl: boolean=false);
+   var i,len,filled,moved: PtrInt;
+       b1,b2: byte;
+       timer: TPrecisionTimer;
+       P: PByteArray;
+       msg: string;
+       elapsed: Int64;
+   begin
+     // first validate FillCharFast
+     filled := 0;
+     b1 := 0;
+     len := 1;
+     repeat
+       b2 := (b1+1) and 255;
+       buf[len+1] := AnsiChar(b1);
+       if rtl then
+         FillChar(pointer(buf)^,len,b2) else
+         FillCharFast(pointer(buf)^,len,b2);
+       inc(filled,len);
+       Check(BufEquals(PtrInt(buf),len,b2));
+       Check(ord(buf[len+1])=b1);
+       b1 := b2;
+       if len<16384 then
+         inc(len) else
+         inc(len,777+len shr 4);
+     until len>=length(buf);
+     // small len makes timer.Resume/Pause unreliable -> single shot measure
+     b1 := 0;
+     len := 1;
+     timer.Start;
+     repeat
+       b2 := (b1+1) and 255;
+       if rtl then
+         FillChar(pointer(buf)^,len,b2) else
+         FillCharFast(pointer(buf)^,len,b2);
+       b1 := b2;
+       if len<16384 then
+         inc(len) else
+         inc(len,777+len shr 4);
+     until len>=length(buf);
+     timer.Stop;
+     if rtl then
+       msg := 'FillChar' else
+       {$ifdef CPUX64}
+       FormatString('FillCharFast [%]',[GetSetName(TypeInfo(TX64CpuFeatures),CPUIDX64)],msg);
+       {$else}
+       msg := 'FillCharFast';
+       {$endif}
+     NotifyTestSpeed(msg,1,filled,@timer);
+     // validates overlapping forward Move/MoveFast
+     if rtl then
+       msg := 'Move' else
+       {$ifdef CPUX64}
+       FormatString('MoveFast [%]',[GetSetName(TypeInfo(TX64CpuFeatures),CPUIDX64)],msg);
+       {$else}
+       msg := 'MoveFast';
+       {$endif}
+     P := pointer(buf);
+     for i := 0 to length(buf)-1 do
+       P[i] := i; // fills with 0,1,2,...
+     Check(BufIncreasing(p,length(buf),0));
+     len := 1;
+     moved := 0;
+     timer.Start;
+     repeat
+       if rtl then
+         Move(P[moved+1],P[moved],len) else
+         MoveFast(p[moved+1],p[moved],len);
+       inc(moved,len);
+       Check(p[moved]=p[moved-1]);
+       inc(len);
+     until moved+len>=length(buf);
+     NotifyTestSpeed(msg,1,moved,@timer);
+     Check(BufIncreasing(p,moved,1));
+     checkEqual(Hash32(buf),2284147540);
+     // forward and backward overlapped moves on small buffers
+     elapsed := 0;
+     moved := 0;
+     for len := 1 to 48 do begin
+       timer.Start;
+       if rtl then
+         for i := 1 to 10000 do begin
+           Move(P[100],P[i],len);
+           Move(P[i],P[100],len);
+         end else
+         for i := 1 to 10000 do begin
+           MoveFast(P[100],P[i],len);
+           MoveFast(P[i],P[100],len);
+         end;
+       inc(moved,20000*len);
+       inc(elapsed,NotifyTestSpeed(IntToStr(len)+'b '+msg,1,20000*len,
+         @timer,{onlylog=}true));
+     end;
+     timer.FromExternalMicroSeconds(elapsed);
+     NotifyTestSpeed('small '+msg,1,moved,@timer);
+     checkEqual(Hash32(buf),1635609040);
+     // forward and backward non-overlapped moves on big buffers
+     len := (length(buf)-3200) shr 1;
+     timer.Start;
+     for i := 1 to 25 do
+       if rtl then begin
+         Move(P[len],P[i],len-i*10);
+         Move(P[i],P[len],len-i*10);
+       end else begin
+         MoveFast(p[len],p[i],len-i*10);
+         MoveFast(P[i],P[len],len-i*10);
+       end;
+     NotifyTestSpeed('big '+msg,1,50*len,@timer);
+     checkEqual(Hash32(buf),818419281);
+     // forward and backward overlapped moves on big buffers
+     len := length(buf)-3200;
+     for i := 1 to 3 do
+       if rtl then begin
+         Move(P[3100],P[i],len-i);
+         Move(P[i],P[3200],len-i);
+       end else begin
+         MoveFast(p[3100],p[i],len-i);
+         MoveFast(P[i],P[3200],len-i);
+       end;
+     checkEqual(Hash32(buf),1646145792);
+   end;
+{$ifdef CPUX64} var cpu: TX64CpuFeatures; {$endif}
+begin
+  SetLength(buf,16 shl 20); // 16MB
+  Validate({rtl=}true);
+  {$ifdef CPUX64} // activate and validate the available SSE2 + AVX branches
+  cpu := CPUIDX64;
+  CPUIDX64 := []; // default SSE2 128-bit process
+  Validate;
+  {$ifdef FPC} // Delphi doesn't support AVX asm
+  if cpuAvx in cpu then begin
+    CPUIDX64 := [cpuAvx]; // AVX 256-bit process
+    Validate;
+  end;
+  {$endif FPC}
+  CPUIDX64 := cpu; // there is no AVX2 move/fillchar (still 256-bit wide)
+  if (cpu<>[]) and (cpu<>[cpuAvx]) and (cpu<>[cpuAvx,cpuAvx2]) then
+  {$endif CPUX64}
+    Validate;
+end;
+{$endif CPUINTEL}
 
 procedure TTestLowLevelCommon.SystemCopyRecord;
 type TR = record
@@ -3579,7 +3889,6 @@ begin
   for i := 0 to High(crc) do
     with crc[i] do
       Check(hash(0,pointer(s),length(s))=crc);
-  Timer.ComputeTime;
   fRunConsole := format('%s %s %s/s',[fRunConsole,name,KB(Timer.PerSec(totallen))]);
 end;
 procedure test16(const text: RawUTF8; expected: cardinal);
@@ -5786,10 +6095,20 @@ begin
   try
     //obj.Hash.Capacity := MAX; // we will test hash size growing abilities
     Check(obj.Count=0);
-    for i := 1 to MAX do
-      obj.Add(pointer(Random(MaxInt)),added);
+    for i := 0 to MAX do begin
+      obj.Add(pointer(i),added);
+      check(added);
+    end;
     for i := 0 to obj.Count-1 do
       Check(obj.IndexOf(obj.List[i])=i);
+    for i := obj.Count-1 downto 0 do
+      if i and 255=0 then
+        obj.Delete(i); // will invalidate hash, but won't rehash now
+     CheckEqual(obj.IndexOf(TObject(255)),254);
+     CheckEqual(obj.IndexOf(TObject(256)),-1);
+     CheckEqual(obj.IndexOf(TObject(512)),-1);
+    for i := 0 to obj.Count-1 do
+      Check(obj.IndexOf(obj.List[i])=i); // will rehash after trigger=32
   finally
     obj.Free;
   end;
@@ -5917,7 +6236,7 @@ var v: tvalue;
     i: integer;
     exists: boolean;
 begin
-  dict := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray), TypeInfo(tvalues));
+  dict := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray),TypeInfo(tvalues));
   try
     for i := 1 to MAX do begin
       UInt32ToUTF8(i,k);
@@ -5930,13 +6249,13 @@ begin
     dict.DeleteAll;
     check(dict.Count=0);
     check(not dict.Exists(k));
-    check(dict.LoadFromJSON(s,false));
+    check(dict.LoadFromJSON(s));
     Test;
     s := dict.SaveToBinary;
   finally
     dict.Free;
   end;
-  dict := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray), TypeInfo(tvalues));
+  dict := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray),TypeInfo(tvalues));
   try
     check(dict.LoadFromBinary(s));
     Test;
@@ -5944,6 +6263,7 @@ begin
     if i and 127=0 then begin
       UInt32ToUTF8(i,k);
       check(dict.Delete(k)=i-1);
+      check(dict.Exists(k)=false);
     end;
     for i := 1 to MAX do begin
       exists := (i and 127)<>0;
@@ -5953,9 +6273,11 @@ begin
         v := 0;
         check(dict.FindAndCopy(k, v));
         check(v=i);
-        k := '';
-        check(dict.FindKeyFromValue(v,k));
-        check(GetInteger(pointer(k))=i);
+        if i<10000 then begin // FindKeyFromValue() brute force is slow
+          k := '';
+          check(dict.FindKeyFromValue(v,k));
+          check(GetInteger(pointer(k))=i);
+        end;
       end;
     end;
   finally
@@ -11031,11 +11353,11 @@ procedure TTestCompression._TAlgoCompress;
         s := RandomTextParagraph(i*8);
       timer.Start;
       t := algo.Compress(s);
-      timer.ComputeTime;
+      timer.Pause;
       inc(timecomp, timer.LastTimeInMicroSec);
       timer.Start;
       s2 := algo.Decompress(t,aclNoCrcFast);
-      timer.ComputeTime;
+      timer.Pause;
       inc(timedecomp, timer.LastTimeInMicroSec);
       Check(s2=s, algo.ClassName);
       if (log<>'') and (s2<>s) then FileFromString(s2,'bigTest'+algo.ClassName+'.log');
@@ -11226,7 +11548,6 @@ begin
         Timer[noaesni].Resume;
         Check(SynCrypto.AES(Key,ks,SynCrypto.AES(Key,ks,st,true),false)=st);
         Timer[noaesni].Pause;
-        Timer[noaesni].ComputeTime;
         st := st+RandomString(4);
       end;
       PC := Pointer(orig);
@@ -11290,7 +11611,7 @@ begin
     {$else}
     if noaesni then begin
       fRunConsole := format('%s cypher 1..%d bytes with AES-NI: %s, without: %s',
-        [fRunConsole,length(st),Timer[false].Time,Timer[true].Time]);
+        [fRunConsole,length(st),Timer[false].Stop,Timer[true].Stop]);
       Include(CpuFeatures,cfAESNI); // revert Exclude() below from previous loop
     end;
     if A.UsesAESNI then
@@ -12054,8 +12375,8 @@ begin
         end;
         Check((b >= bRC4) or (dig.d0 <> 0) or (dig.d1 <> 0));
       end;
-      //NotifyTestSpeed(format('%s %s',[TXT[b],SIZ[s]]),COUNT,SIZ[s]*COUNT,@timer);
-      timer.ComputeTime;
+      NotifyTestSpeed(FormatString('% %',[TXT[b],SIZ[s]]),COUNT,SIZ[s]*COUNT,@timer,{onlylog=}true);
+      timer.Pause;
       inc(time[b],timer.LastTimeInMicroSec);
       //if b in [bSHA3_512,high(b)] then AddConsole('');
     end;
@@ -12760,7 +13081,7 @@ end;
 
 procedure TTestECCCryptography.ECDHEStreamProtocol;
 const MAX = 10000;
-var timer: TPrecisionTimer;
+var //timer: TPrecisionTimer;
     str: TRawByteStringDynArray;
   function Test(const prot: IProtocol; const name: string): integer;
   var i: integer;
@@ -12769,7 +13090,7 @@ var timer: TPrecisionTimer;
   begin
     ref := prot;
     result := 0;
-    timer.Start;
+    //timer.Start;
     for i := 0 to MAX do begin
       prot.Encrypt(str[i],enc);
       inc(result,length(str[i])+length(enc));
@@ -12777,7 +13098,6 @@ var timer: TPrecisionTimer;
       check(prot.Decrypt(enc,after)=sprSuccess);
       check(after=str[i]);
     end;
-    timer.ComputeTime;
     //fRunConsole := format('%s %s %s',[fRunConsole,name,KB(timer.PerSec(result))]);
   end;
 var key: THash256;
@@ -17793,6 +18113,7 @@ begin
   fClient.Server.Services.ExpectMangledURI := true;
   Check(fClient.Server.Services[S.InterfaceMangledURI]=S);
   fClient.Server.Services.ExpectMangledURI := false;
+  Check(fClient.Server.Services['Calculator']=S);
   Check(fClient.Server.Services['CALCULAtor']=S);
   Check(fClient.Server.Services['CALCULAtors']=nil);
   if CheckFailed(length(S.InterfaceFactory.Methods)=13) then exit;

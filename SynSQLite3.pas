@@ -2107,6 +2107,7 @@ type
     property VersionText: RawUTF8 read fVersionText;
   published
     /// will return the class name and SQLite3 version number
+    // - if self (e.g. global sqlite3) is nil, will return ''
     property Version: RawUTF8 read GetVersion;
   end;
   {$M-}
@@ -5961,7 +5962,7 @@ const MM: array[boolean] of string[2] = ('ex','in');
 begin
   if self=nil then
     result := 'No TSQLite3Library available' else
-    FormatUTF8('% with %ternal MM',[fVersionText,MM[fUseInternalMM]],result);
+    FormatUTF8('% % with %ternal MM',[self,fVersionText,MM[fUseInternalMM]],result);
 end;
 
 

@@ -24630,7 +24630,7 @@ procedure TSQLPropInfoRecordFixedSize.CopySameClassProp(Source: TObject;
   DestInfo: TSQLPropInfo; Dest: TObject);
 begin
   if TSQLPropInfoRecordFixedSize(DestInfo).fTypeInfo=fTypeInfo then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(GetFieldAddr(Source)^,
+    MoveFast(GetFieldAddr(Source)^,
       TSQLPropInfoRecordFixedSize(DestInfo).GetFieldAddr(Dest)^,fRecordSize) else
     inherited CopySameClassProp(Source,DestInfo,Dest);
 end;
@@ -24685,8 +24685,7 @@ procedure TSQLPropInfoRecordFixedSize.SetVariant(Instance: TObject;
   const Source: Variant);
 begin
   if TVarData(Source).VType=varString then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      TVarData(Source).VAny^,GetFieldAddr(Instance)^,fRecordSize) else
+    MoveFast(TVarData(Source).VAny^,GetFieldAddr(Instance)^,fRecordSize) else
     FillCharFast(GetFieldAddr(Instance)^,fRecordSize,0);
 end;
 {$endif NOVARIANTS}
@@ -24722,7 +24721,7 @@ begin
   result := P+fRecordSize;
   if result>PEnd then
     result := nil else
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,GetFieldAddr(Instance)^,fRecordSize);
+    MoveFast(P^,GetFieldAddr(Instance)^,fRecordSize);
 end;
 
 procedure TSQLPropInfoRecordFixedSize.SetValue(Instance: TObject; Value: PUTF8Char;
@@ -24733,7 +24732,7 @@ begin
   Value := pointer(data);
   if Value=nil then
     FillCharFast(GetFieldAddr(Instance)^,fRecordSize,0) else
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Value^,GetFieldAddr(Instance)^,fRecordSize);
+    MoveFast(Value^,GetFieldAddr(Instance)^,fRecordSize);
 end;
 
 function TSQLPropInfoRecordFixedSize.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
@@ -24741,7 +24740,7 @@ begin
   if aValue.VType=ftBlob then begin
     result := aValue.VBlobLen=fRecordSize;
     if result then
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(aValue.VBlob^,GetFieldAddr(Instance)^,fRecordSize)
+      MoveFast(aValue.VBlob^,GetFieldAddr(Instance)^,fRecordSize)
   end else
     result := inherited SetFieldSQLVar(Instance,aValue);
 end;
@@ -26533,7 +26532,7 @@ begin
     end;
   // TEXT format
   SetLength(Result,Len);
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,pointer(Result)^,Len);
+  MoveFast(P^,pointer(Result)^,Len);
 end;
 
 function TSQLRawBlobToBlob(const RawBlob: TSQLRawBlob): RawUTF8;
@@ -26670,7 +26669,7 @@ begin
   U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
   len := tmp.buf;
   for i := 2 to fRowCount do begin
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(U^^,P^,len^);
+    MoveFast(U^^,P^,len^);
     inc(P,len^);
     if SepLen>0 then begin
       MoveSmall(pointer(Sep),P,SepLen);
@@ -26679,9 +26678,9 @@ begin
     inc(len);
     inc(U,FieldCount); // go to next row
   end;
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(U^^,P^,len^); // last row without Sep
+  MoveFast(U^^,P^,len^); // last row without Sep
   if Trail<>'' then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(Trail)^,P[len^],length(Trail));
+    MoveFast(pointer(Trail)^,P[len^],length(Trail));
   tmp.Done;
 end;
 
@@ -27673,7 +27672,7 @@ begin
   n := length(Tables);
   if n>0 then begin
     SetLength(fQueryTables,n);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Tables[0],fQueryTables[0],n*SizeOf(TClass));
+    MoveFast(Tables[0],fQueryTables[0],n*SizeOf(TClass));
   end;
 end;
 
@@ -29471,13 +29470,13 @@ begin
   S := pointer(prev);
   D := pointer(fJSONResults);
   rowlen := result*SizeOf(pointer);
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(S^,D^,rowlen);
+  MoveFast(S^,D^,rowlen);
   inc(S,rowlen);
   inc(D,rowlen);
   PPUTF8Char(D)^ := pointer(FieldName);
   inc(D,SizeOf(pointer));
   for i := 1 to fRowCount do begin
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(S^,D^,rowlen);
+    MoveFast(S^,D^,rowlen);
     inc(S,rowlen);
     inc(D,rowlen+SizeOf(pointer)); // leave new field value as D^=nil
   end;
@@ -31122,7 +31121,7 @@ begin
           P := @V^[1];
         end;
         Line[L] := #0; // GetCaptionFromPCharLen() expect it as ASCIIZ
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,Line,L);
+        MoveFast(P^,Line,L);
         GetCaptionFromPCharLen(Line,s);
         Strings.AddObject(s,pointer(i));
       end;
@@ -35984,12 +35983,12 @@ begin
     repeat
       L := Lens[i-1];
       if L<>0 then begin
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(T.fResults[i]^,P^,L);
+        MoveFast(T.fResults[i]^,P^,L);
         inc(P,L);
       end;
       if i=T.fRowCount then
         break;
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(Separator)^,P^,SepLen);
+      MoveFast(pointer(Separator)^,P^,SepLen);
       inc(P,SepLen);
       inc(i);
     until false;
@@ -38113,8 +38112,7 @@ begin
     end;
   dec(Count);
   if index<Count then
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(
-      List[index+1],List[index],(Count-index)*SizeOf(List[index]));
+    MoveFast(List[index+1],List[index],(Count-index)*SizeOf(List[index]));
 end;
 
 function TSQLRestClientCallbacks.UnRegister(aInstance: pointer): boolean;
@@ -39433,7 +39431,7 @@ begin
       result := pointer(GlobalAlloc(GMEM_FIXED,L)) else
     {$endif}
       GetMem(result,L);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(s)^,result^,L);
+    MoveFast(pointer(s)^,result^,L);
   end;
 end;
 var call: TSQLRestURIParams;
@@ -47335,8 +47333,7 @@ end;
 
 function TSQLRestStorageInMemory.SearchField(const FieldName, FieldValue: RawUTF8;
   out ResultID: TIDDynArray): boolean;
-var n, WhereField: integer;
-    {$ifndef CPU64}i: integer;{$endif}
+var n, WhereField,i: integer;
     Where: TList;
 begin
   result := false;
@@ -47360,13 +47357,8 @@ begin
     if n=0 then
       exit;
     SetLength(ResultID,n);
-    {$ifdef CPU64} // on x64 TList[]=Pointer does map an TID/Int64
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(Where.List[0],ResultID[0],n*SizeOf(TID));
-    {$else}
-    with Where do
-      for i := 0 to Count-1 do
-        ResultID[i] := PPtrIntArray(List)^[i];
-    {$endif}
+    for i := 0 to n-1 do
+      ResultID[i] := TSQLRecord(fValue.List[PtrUInt(Where.List[i])]).IDValue;
   finally
     Where.Free;
   end;
@@ -50765,8 +50757,7 @@ end;
 class procedure TSQLRecordRTree.BlobToCoord(const InBlob;
   var OutCoord: TSQLRecordTreeCoords);
 begin // direct memory copy with no memory check
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(
-    InBlob,OutCoord,(RecordProps.RTreeCoordBoundaryFields shr 1)*SizeOf(double));
+  MoveFast(InBlob,OutCoord,(RecordProps.RTreeCoordBoundaryFields shr 1)*SizeOf(double));
 end;
 
 class function TSQLRecordRTree.ContainedIn(const BlobA,BlobB): boolean;
@@ -50787,8 +50778,7 @@ end;
 class procedure TSQLRecordRTreeInteger.BlobToCoord(const InBlob;
   var OutCoord: TSQLRecordTreeCoordsInteger);
 begin // direct memory copy with no memory check
-  {$ifdef FPC}Move{$else}MoveFast{$endif}(
-    InBlob,OutCoord,(RecordProps.RTreeCoordBoundaryFields shr 1)*SizeOf(integer));
+  MoveFast(InBlob,OutCoord,(RecordProps.RTreeCoordBoundaryFields shr 1)*SizeOf(integer));
 end;
 
 class function TSQLRecordRTreeInteger.ContainedIn(const BlobA,BlobB): boolean;
@@ -55019,7 +55009,7 @@ var method: PServiceMethod;
             resultType := ValueType;
             if ValueType in [smvBoolean..smvCurrency] then
               // ordinal/real result values to CPU/FPU registers
-              {$ifdef FPC}Move{$else}MoveFast{$endif}(V^,Result,SizeInStorage);
+              MoveFast(V^,Result,SizeInStorage);
           end;
         end;
         if R=nil then
@@ -58344,8 +58334,7 @@ begin
             [self,aInterface^.Name]);
         Instance := nil; // avoid GPF
         if n>i then
-          {$ifdef FPC}Move{$else}MoveFast{$endif}(
-            GlobalInterfaceResolution[i+1],GlobalInterfaceResolution[i],
+          MoveFast(GlobalInterfaceResolution[i+1],GlobalInterfaceResolution[i],
             (n-i)*SizeOf(GlobalInterfaceResolution[i]));
         SetLength(GlobalInterfaceResolution,n);
         exit;
@@ -58952,7 +58941,7 @@ class function TServiceContainerServer.CallbackReleasedOnClientSide(
     s := ord(source[0]);
     if d+s<254 then begin
       dest[d+1] := ' ';
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(source[1],dest[d+2],s);
+      MoveFast(source[1],dest[d+2],s);
       inc(dest[0],s+1);
     end;
   end;
@@ -59329,13 +59318,15 @@ end;
 
 {$ifdef CPUX86}
 
-{$ifdef DARWIN}
-  {$define REQUIREX86ALIGNEDSTACK16} // always require aligned stack on OSX
-{$else}
-  {$if defined(FPC_STACKALIGNMENT) and (FPC_STACKALIGNMENT=16)}
-  {$define REQUIREX86ALIGNEDSTACK16} // e.g. on i386-linux since SVN 43005-43014
-  {$ifend} // https://www.mail-archive.com/fpc-devel@lists.freepascal.org/msg38885.html
-{$endif DARWIN}
+{$ifdef FPC}
+  {$ifdef DARWIN}
+    {$define REQUIREX86ALIGNEDSTACK16} // always require aligned stack on OSX
+  {$else}
+    {$if defined(FPC_STACKALIGNMENT) and (FPC_STACKALIGNMENT=16)}
+    {$define REQUIREX86ALIGNEDSTACK16} // e.g. on i386-linux since SVN 43005-43014
+    {$ifend} // https://www.mail-archive.com/fpc-devel@lists.freepascal.org/msg38885.html
+  {$endif DARWIN}
+{$endif FPC}
 
 procedure CallMethod(var Args: TCallMethodArgs); {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
@@ -61717,7 +61708,7 @@ begin
          (ValueType in [smvRecord{$ifndef NOVARIANTS},smvVariant{$endif}]) then begin
           // pass by reference
           if (RegisterIdent=0) and (FPRegisterIdent=0) and (SizeInStack>0) then
-            {$ifdef FPC}Move{$else}MoveFast{$endif}(Value,Stack[InStackOffset],SizeInStack) else begin
+            MoveFast(Value,Stack[InStackOffset],SizeInStack) else begin
             if RegisterIdent>0 then
               call.ParamRegs[RegisterIdent] := PtrInt(Value);
             if FPRegisterIdent>0 then
@@ -61728,7 +61719,7 @@ begin
         else begin
           // pass by value
           if (RegisterIdent=0) AND (FPRegisterIdent=0) AND (SizeInStack>0) then
-            {$ifdef FPC}Move{$else}MoveFast{$endif}(Value^,Stack[InStackOffset],SizeInStack) else begin
+            MoveFast(Value^,Stack[InStackOffset],SizeInStack) else begin
             if (RegisterIdent>0) then begin
               call.ParamRegs[RegisterIdent] := PPtrInt(Value)^;
               {$ifdef CPUARM}
@@ -61894,7 +61885,7 @@ begin
   tmp.Init(n+2);
   try
     PAnsiChar(tmp.buf)[0] := '[';
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(params)^,PAnsiChar(tmp.buf)[1],n);
+    MoveFast(pointer(params)^,PAnsiChar(tmp.buf)[1],n);
     PWord(PAnsiChar(tmp.buf)+n+1)^ := ord(']'); // ']'#0
     if output<>nil then begin
       WR := TempTextWriter;

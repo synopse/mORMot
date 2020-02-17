@@ -599,7 +599,7 @@ begin
     PInteger(@self)^ := 0;
     exit; // invalid ISO-8601 text -> store as null date
   end;
-  Y := (Value shr (6+6+5+5+4)) and 4095;
+  Y := Value shr (6+6+5+5+4);
   Cent := (Y div 100)+100;
   Year := (Y mod 100)+100;
   Month := ((Value32 shr (6+6+5+5)) and 15)+1;
@@ -2519,7 +2519,7 @@ constructor TSQLDBOracleStatement.CreateFromExistingStatement(
   aConnection: TSQLDBConnection; aStatement: POCIStmt);
 begin
   Create(aConnection);
-  with fTimeElapsed do if Started then Resume else Start;
+  fTimeElapsed.Resume;
   try
     fStatement := aStatement;
     try
@@ -2664,7 +2664,7 @@ begin
       tmp := SQLWithInlinedParams;
       Log(sllSQL,tmp,self,2048);
     end;
-  with fTimeElapsed do if Started then Resume else Start;
+  fTimeElapsed.Resume;
   try
     ociArraysCount := 0;
     Env := (Connection as TSQLDBOracleConnection).fEnv;
@@ -3354,7 +3354,7 @@ procedure TSQLDBOracleStatement.Prepare(const aSQL: RawUTF8;
 var oSQL: RawUTF8;
     env: POCIEnv;
 begin
-  with fTimeElapsed do if Started then Resume else Start;
+  fTimeElapsed.Resume;
   try
     try
       if (fStatement<>nil) or (fColumnCount>0) then

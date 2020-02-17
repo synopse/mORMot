@@ -44,6 +44,7 @@ Contributors
   Kevin Chen
   Lagodny
   Leon Oosthuizen
+  Macc2010
   Maciej Izak (hnb)
   Marcos Douglas B. Santos (mdbs99)
   Mario Moretti

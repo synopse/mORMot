@@ -210,7 +210,7 @@
   {$define HASUINT64}
   {$define HASINLINENOTX86}
   {$define NODELPHIASM}   // ignore low-level System.@LStrFromPCharLen calls
-  {$define HASAESNI} // should be commented to test project with valgrind
+  {$define HASAESNI}    // should be commented to test project with valgrind
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSTRING_USESTR} // FloatToText uses str() in FPC
@@ -325,8 +325,9 @@
     {$ifdef CPUX64}
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
-      {$define FPC_X64}
-      {$ASMMODE INTEL} // as Delphi expects
+      {$define CPUX64ASM} // Delphi XE4 SSE asm is buggy :(
+      {$define FPC_X64}   // supports AVX/AVX2/AVX512 - which Delphi doesn't
+      {$ASMMODE INTEL}    // to share asm code with Delphi
     {$endif CPUX64}
   {$else}
     {$define FPC_32}
@@ -498,9 +499,12 @@
         {$define ISDELPHI2007ANDUP} // Delphi 2007 or newer
       {$ifend}
       {$if CompilerVersion = 20}
-        {$define ISDELPHI2009} // Delphi 2009 has specific compilation issues :(
-        // for Delphi 2009 and up, use UNICODE conditional :)
+        {$define ISDELPHI20092010} // specific compilation issues
+        // for Delphi 2009 and up, use UNICODE conditional
         {$define FPC_OR_UNICODE}
+      {$ifend}
+      {$if CompilerVersion = 21}
+        {$define ISDELPHI20092010} //specific compilation issues
       {$ifend}
       {$if CompilerVersion >= 21.0}
         {$define ISDELPHI2010}
@@ -542,6 +546,9 @@
       {$ifend}
       {$if CompilerVersion >= 28.0}
         {$define ISDELPHIXE7}
+        {$ifdef CPU64}
+          {$define CPUX64ASM} // e.g. Delphi XE4 SSE asm is buggy :(
+        {$endif}
       {$ifend}
       {$if CompilerVersion >= 29.0}
         {$define ISDELPHIXE8}
