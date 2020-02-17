@@ -385,6 +385,9 @@ type
     procedure IniFiles;
     /// test UTF-8 and Win-Ansi conversion (from or to, through RawUnicode)
     procedure _UTF8;
+    /// test UrlEncode() and UrlDecode() functions
+    // - this method use some ISO-8601 encoded dates and times for the testing
+    procedure UrlDecoding;
     /// test ASCII Baudot encoding
     procedure BaudotCode;
     /// the ISO-8601 date and time encoding
@@ -392,9 +395,6 @@ type
     procedure Iso8601DateAndTime;
     /// test the TSynTimeZone class and its cross-platform local time process
     procedure TimeZones;
-    /// test UrlEncode() and UrlDecode() functions
-    // - this method use some ISO-8601 encoded dates and times for the testing
-    procedure UrlDecoding;
     /// test mime types recognition
     procedure MimeTypes;
     /// validates the median computation using the "Quick Select" algorithm
@@ -3021,11 +3021,10 @@ var buf: RawByteString;
            MoveFast(P[i],P[100],len);
          end;
        inc(moved,20000*len);
-       inc(elapsed,NotifyTestSpeed(IntToStr(len)+'b '+msg,1,20000*len,
-         @timer,{onlylog=}true));
+       inc(elapsed,NotifyTestSpeed('%b %',[len,msg],1,20000*len,@timer,{onlylog=}true));
      end;
      timer.FromExternalMicroSeconds(elapsed);
-     NotifyTestSpeed('small '+msg,1,moved,@timer);
+     NotifyTestSpeed('small %',[msg],1,moved,@timer);
      checkEqual(Hash32(buf),1635609040);
      // forward and backward non-overlapped moves on big buffers
      len := (length(buf)-3200) shr 1;
@@ -3038,7 +3037,7 @@ var buf: RawByteString;
          MoveFast(p[len],p[i],len-i*10);
          MoveFast(P[i],P[len],len-i*10);
        end;
-     NotifyTestSpeed('big '+msg,1,50*len,@timer);
+     NotifyTestSpeed('big %',[msg],1,50*len,@timer);
      checkEqual(Hash32(buf),818419281);
      // forward and backward overlapped moves on big buffers
      len := length(buf)-3200;
@@ -3736,7 +3735,7 @@ begin
       v := i and 511;
       int.Unique(vs[i],pointer(SmallUInt32UTF8[v]),length(SmallUInt32UTF8[v]));
     end;
-    NotifyTestSpeed(Format('interning %s',[KB(INTSIZE)]),MAX,DIRSIZE,@timer);
+    NotifyTestSpeed('interning %',[KB(INTSIZE)],MAX,DIRSIZE,@timer);
     for i := 0 to MAX do
       check(UTF8ToInteger(vs[i])=i and 511);
     check(int.Count=512);
@@ -3757,7 +3756,7 @@ begin
     v := i and 511;
     FastSetString(vs[i],pointer(SmallUInt32UTF8[v]),length(SmallUInt32UTF8[v]));
   end;
-  NotifyTestSpeed(Format('direct %s',[KB(DIRSIZE)]),MAX,DIRSIZE,@timer);
+  NotifyTestSpeed('direct %',[KB(DIRSIZE)],MAX,DIRSIZE,@timer);
   for i := 0 to MAX do
     check(UTF8ToInteger(vs[i])=i and 511);
 end;
@@ -5865,7 +5864,8 @@ begin
     Check(UrlDecodeInteger(U,'WHERE=',V,@U));
     Check(U=nil);
   end;
-  CheckEqual(UrlEncodeJsonObject('','{"b":30,"a":"toto"}',[]),'?b=30&a=toto');
+  s := '{"b":30,"a":"toto"}'; // temp read-only var for proper overload call 
+  CheckEqual(UrlEncodeJsonObject('',s,[]),'?b=30&a=toto');
 end;
 
 procedure TTestLowLevelCommon.MimeTypes;
@@ -12220,7 +12220,7 @@ procedure TTestCryptographicRoutines._JWT;
         check(jwt.result=jwtValid);
         check(jwt.reg[jrcIssuer]='myself');
       end;
-      NotifyTestSpeed(string(JWT_TEXT[algo]),1000,0,@tim);
+      NotifyTestSpeed('%',[JWT_TEXT[algo]],1000,0,@tim);
     finally
       j.Free;
     end;
@@ -12372,8 +12372,7 @@ begin
         end;
         Check((b >= bRC4) or (dig.d0 <> 0) or (dig.d1 <> 0));
       end;
-      NotifyTestSpeed(FormatString('% %',[TXT[b],SIZ[s]]),COUNT,SIZ[s]*COUNT,@timer,{onlylog=}true);
-      inc(time[b],timer.LastTimeInMicroSec);
+      inc(time[b],NotifyTestSpeed('% %',[TXT[b],SIZ[s]],COUNT,SIZ[s]*COUNT,@timer,{onlylog=}true));
       //if b in [bSHA3_512,high(b)] then AddConsole('');
     end;
     inc(size,SIZ[s]*COUNT);
