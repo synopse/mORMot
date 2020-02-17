@@ -13241,6 +13241,9 @@ type
     property NonBlockWithoutAnswer: boolean read fNonBlockWithoutAnswer write fNonBlockWithoutAnswer;
   end;
 
+  /// class-reference type (metaclass) of a TServiceFactoryClient kind
+  TServiceFactoryClientClass = class of TServiceFactoryClient;
+
   /// used to lookup one method in a global list of interface-based services
   TServiceContainerInterfaceMethod = record
     /// one 'service.method' item, as set at URI
@@ -13277,6 +13280,7 @@ type
     fListInterfaceMethod: TServiceContainerInterfaceMethods;
     fListInterfaceMethods: TDynArrayHashed;
     fExpectMangledURI: boolean;
+    fServicesFactoryClients: TServiceFactoryClientClass;
     procedure SetExpectMangledURI(aValue: Boolean);
     procedure SetInterfaceMethodBits(MethodNamesCSV: PUTF8Char;
       IncludePseudoMethods: boolean; out bits: TServiceContainerInterfaceMethodBits);
@@ -13363,6 +13367,9 @@ type
     // - if this property is set to TRUE, the mangled URI value will be expected
     // instead (may enhance security) - e.g. '00amyWGct0y_ze4lIsj2Mw'
     property ExpectMangledURI: boolean read fExpectMangledURI write SetExpectMangledURI;
+    /// the services factory client classes
+    // - by default, will use TServiceFactoryClient
+    property ServicesFactoryClients: TServiceFactoryClientClass read fServicesFactoryClients write fServicesFactoryClients;
   end;
 
   /// a callback interface used to notify a TSQLRecord modification in real time
@@ -54302,7 +54309,7 @@ begin
     exit;
   CheckInterface(aInterfaces);
   for i := 0 to high(aInterfaces) do begin
-    F := TServiceFactoryClient.Create(
+    F := ServicesFactoryClients.Create(
       Rest,aInterfaces[i],aInstanceCreation,aContractExpected);
     AddServiceInternal(F);
     aContractExpected := ''; // supplied contract is only for the 1st interface
@@ -54315,7 +54322,7 @@ function TServiceContainer.AddInterface(aInterface: PTypeInfo;
   const aContractExpected: RawUTF8): TServiceFactoryClient;
 begin
   CheckInterface([aInterface]);
-  result := TServiceFactoryClient.Create(Rest,aInterface,aInstanceCreation,aContractExpected);
+  result := ServicesFactoryClients.Create(Rest,aInterface,aInstanceCreation,aContractExpected);
   AddServiceInternal(result);
 end;
 
@@ -54333,6 +54340,7 @@ begin
   fList.CaseSensitive := false;
   fListInterfaceMethods.InitSpecific(TypeInfo(TServiceContainerInterfaceMethods),
     fListInterfaceMethod,djRawUTF8,nil,true);
+  fServicesFactoryClients := TServiceFactoryClient;
 end;
 
 destructor TServiceContainer.Destroy;
