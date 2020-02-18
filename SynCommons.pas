@@ -6946,6 +6946,9 @@ procedure ObjArrayObjArrayClear(var aObjArray);
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 procedure ObjArraysClear(const aObjArray: array of pointer);
 
+/// low-level function calling FreeAndNil(o^) successively n times
+procedure RawObjectsClear(o: PObject; n: integer);
+
 {$ifndef DELPHI5OROLDER}
 
 /// wrapper to add an item to a T*InterfaceArray dynamic array storage
@@ -50879,7 +50882,6 @@ procedure TDynArray.InternalSetLength(NewLength: PtrUInt);
 var p: PDynArrayRec;
     OldLength, NeededSize, minLength: PtrUInt;
     pp: pointer;
-    i: integer;
 begin // this method is faster than default System.DynArraySetLength() function
   p := fValue^;
   // check that new array length is not just a finalize in disguise
@@ -50922,12 +50924,8 @@ begin // this method is faster than default System.DynArraySetLength() function
         if ElemType<>nil then // release managed types in trailing items
           {$ifdef FPC}FPCFinalizeArray{$else}_FinalizeArray{$endif}(
             PAnsiChar(p)+NeededSize,ElemType,OldLength-NewLength) else
-          if GetIsObjArray then begin // FreeAndNil() of resized objects list
-            for i := NewLength to OldLength-1 do
-              PObjectArray(fValue^)^[i].Free;
-            FillCharFast(
-              PAnsiChar(p)[NeededSize],(OldLength-NewLength) shl POINTERSHR,0);
-          end;
+          if GetIsObjArray then // FreeAndNil() of resized objects list
+            RawObjectsClear(pointer(PAnsiChar(p)+NeededSize),OldLength-NewLength);
       ReallocMem(p,NeededSize);
     end else begin // make copy
       InterlockedDecrement(PInteger(@p^.refCnt)^); // FPC has refCnt: PtrInt
@@ -50943,7 +50941,7 @@ begin // this method is faster than default System.DynArraySetLength() function
         MoveFast(fValue^^,pp^,minLength*elemSize);
     end;
   end;
-  // set refCnt=1 and new length to the heap memory structure
+  // set refCnt=1 and new length to the heap header
   with p^ do begin
     refCnt := 1;
     {$ifdef FPC}
@@ -50957,8 +50955,7 @@ begin // this method is faster than default System.DynArraySetLength() function
   // reset new allocated elements content to zero
   if NewLength>OldLength then begin
     OldLength := OldLength*elemSize;
-    FillCharFast(
-      PAnsiChar(p)[OldLength],NewLength*ElemSize-OldLength,0);
+    FillCharFast(PAnsiChar(p)[OldLength],NewLength*ElemSize-OldLength,0);
   end;
 end;
 
@@ -52586,13 +52583,18 @@ begin
 end;
 
 procedure RawObjectsClear(o: PObject; n: integer);
-var i: integer;
+var obj: TObject;
 begin
-  for i := 1 to n do begin
-    if o^<>nil then // inlined o^.Free
-      o^.Destroy;
-    inc(o);
-  end;
+  if n>0 then
+    repeat
+      obj := o^;
+      if obj<>nil then begin // inlined FreeAndNil(o^)
+        o^ := nil;
+        obj.Destroy;
+      end;
+      inc(o);
+      dec(n);
+    until n=0;
 end;
 
 procedure ObjArrayClear(var aObjArray);
