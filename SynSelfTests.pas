@@ -4187,6 +4187,7 @@ var i, j, b, err: integer;
     q: QWord;
     s,s2: RawUTF8;
     d,e: double;
+    sd,se: single;
     {$ifndef DELPHI5OROLDER}
     c: currency;
     ident: TRawUTF8DynArray;
@@ -4506,6 +4507,23 @@ begin
     Check(not SameValue(e+1,d));
     u := DoubleToString(d);
     Check(Ansi7ToString(s)=u,u);
+    sd := d;
+    e := d;
+    Check(d=e);
+    Check(SortDynArrayDouble(d,d)=0);
+    Check(SortDynArrayDouble(d,e)=0);
+    se := sd;
+    Check(SortDynArraySingle(sd,sd)=0);
+    Check(SortDynArraySingle(sd,se)=0);
+    if d<0 then
+      e := e*0.9 else
+      e := e*1.1;
+    check(d<e);
+    Check(SortDynArrayDouble(d,e)=-1);
+    Check(SortDynArrayDouble(e,d)=1);
+    se := e;
+    Check(SortDynArraySingle(sd,se)=-1);
+    Check(SortDynArraySingle(se,sd)=1);
     PC := ToVarUInt32(juint,@varint);
     Check(PC<>nil);
     Check(PtrInt(PC)-PtrInt(@varint)=integer(ToVarUInt32Length(juint)));
@@ -4596,18 +4614,16 @@ begin
   end;
   exit; // code below is speed informative only, without any test
   Timer.Start;
-  RandSeed := 10;
   for i := 0 to 99999 do
-    SysUtils.IntToStr(Int64(7777)*Random(maxInt));
+    SysUtils.IntToStr(Int64(7777)*Random32gsl);
   fRunConsole := format('%s SysUtils.IntToStr %s %s/s',[fRunConsole,Timer.Stop,
     IntToThousandString(Timer.PerSec(100000))]);
   Timer.Start;
   RandSeed := 10;
   for i := 0 to 99999 do
-    StrInt64(@varint[31],Int64(7777)*Random(maxInt));
+    StrInt64(@varint[31],Int64(7777)*Random32gsl);
   fRunConsole := format('%s StrInt64 %s %s/s',[fRunConsole,Timer.Stop,
     IntToThousandString(Timer.PerSec(100000))]);
-  Randomize; // we fixed the RandSeed value above -> get true random now
 end;
 
 function LowerCaseReference(const S: RawByteString): RawByteString;
@@ -10537,7 +10553,7 @@ begin
             R.CheckWith(self,i);
           end;
           for i := 1 to 19999 do begin
-            j := Random(9999)+1;
+            j := Random32(9999)+1;
             Check(R.FillRow(j));
             R.CheckWith(self,j);
           end;
@@ -16248,6 +16264,8 @@ procedure TestVirtual(aClient: TSQLRestClient; DirectSQL: boolean; const Msg: st
 var n, i, ndx, added: integer;
     VD, VD2: TSQLRecordDali1;
     Rest: TSQLRest;
+    stor: TSQLRestStorageInMemoryExternal;
+    fn: TFileName;
 begin
   Client.Server.StaticVirtualTableDirect := DirectSQL;
   Check(Client.Server.ExecuteFmt('DROP TABLE %',[aClass.SQLTableName]));
@@ -16304,19 +16322,19 @@ begin
       Rest := Client.Server.StaticVirtualTable[aClass];
       if CheckFailed(Rest<>nil) then
         exit;
-      if TSQLRestStorageInMemoryExternal(Rest).FileName<>'' then begin
+      fn := TSQLRestStorageInMemoryExternal(Rest).FileName;
+      if fn<>'' then begin
         // no file content if ':memory' DB
         TSQLRestStorageInMemoryExternal(Rest).UpdateFile; // force update (COMMIT not always calls xCommit)
-        Rest := TSQLRestStorageInMemoryExternal.Create(aClass,nil,
-          TSQLRestStorageInMemoryExternal(Rest).FileName,
-          aClass=TSQLRecordDali2);
+        stor := TSQLRestStorageInMemoryExternal.Create(
+          aClass,nil,fn,{bin=}aClass=TSQLRecordDali2);
         try
-          Check(TSQLRestStorageInMemory(Rest).Count=n);
+          Check(stor.Count=n);
           for i := 1 to n do begin
-            ndx := TSQLRestStorageInMemory(Rest).IDToIndex(i);
+            ndx := stor.IDToIndex(i);
             if CheckFailed(ndx>=0) then
               continue;
-            VD2 := TSQLRestStorageInMemory(Rest).Items[ndx] as TSQLRecordDali1;
+            VD2 := stor.Items[ndx] as TSQLRecordDali1;
             if CheckFailed(VD2<>nil) then
               continue;
             Check(VD2.ID=i);
@@ -16325,7 +16343,7 @@ begin
             Check(VD2.YearOfDeath=1989+i);
           end;
         finally
-          Rest.Free;
+          stor.Free;
         end;
       end;
     except
