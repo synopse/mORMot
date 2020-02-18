@@ -6762,7 +6762,7 @@ begin
   test.Check(Ansi=WinAnsiString(self.Test));
   test.Check(Unicode=WinAnsiToRawUnicode(Ansi));
   test.Check(ValFloat=i*2.5);
-  test.Check(ValWord=i+offset);
+  test.Check(ValWord=(i+offset) and $ffff);
   test.Check(ValDate=i+30000);
   if checkblob then
     test.Check(Data=self.Test);
@@ -10451,7 +10451,7 @@ var Model: TSQLModel;
     R: TSQLRecordTest;
     Batch: TSQLRestBatch;
     IDs: TIDDynArray;
-    i,j: integer;
+    i,j,n: integer;
     dummy: RawUTF8;
 {$ifndef NOVARIANTS}
 procedure CheckVariantWith(V: Variant; i: Integer; offset: integer=0);
@@ -10661,11 +10661,32 @@ begin
           R.Free;
         end;
         {$endif}
+        n := 20000;
+        R := TSQLRecordTest.create;
+        try
+          for i := 10100 to n do begin
+            R.FillWith(i);
+            Check(Server.AddWithBlobs(R,false)=i);
+          end;
+        finally
+          R.Free;
+        end;
+        CheckEqual(Server.TableRowCount(TSQLRecordTest),n);
+        for i := 1 to n do
+          if i and 511=0 then begin
+            Check(Server.Delete(TSQLRecordTest,i));
+            dec(n);
+          end;
+        CheckEqual(Server.TableRowCount(TSQLRecordTest),n);
+        for i := 1 to n do
+          Check(Server.MemberExists(TSQLRecordTest,i)=(i and 511<>0));
         R := TSQLRecordTest.CreateAndFillPrepare(Server,'','*');
         try
           i := 0;
           while R.FillOne do begin
             inc(i);
+            if i and 511=0 then
+              inc(i);
             if i=110 then
               R.CheckWith(self,i,10) else
             if (i=200) or (i=300) then begin
@@ -10677,7 +10698,7 @@ begin
             end else
               R.CheckWith(self,i);
           end;
-          Check(i=10099);
+          Check(i=20000);
         finally
           R.Free;
         end;
