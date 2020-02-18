@@ -17645,9 +17645,6 @@ begin
 end;
 {$endif FPC}
 
-const
-  MOVESMALL_MAX = 32;
-
 procedure MoveSmall(Source, Dest: Pointer; Count: PtrUInt);
 begin
   dec(PtrUInt(Source),PtrUInt(Dest));
@@ -20960,7 +20957,7 @@ begin
       FastSetString(result,nil,len);
       P := pointer(result);
       if n>0 then
-        MoveSmall(pointer(text),P,n);
+        MoveFast(pointer(text)^,P^,n);
       for j := i+1 to len do
         if not(text[j] in controls) then begin
           P[n] := text[j];
@@ -23478,7 +23475,7 @@ var L: PtrInt;
 begin
   L := length(Text);
   if L<>0 then begin
-    MoveSmall(Pointer(Text),Buffer,L);
+    MoveFast(Pointer(Text)^,Buffer^,L);
     inc(Buffer,L);
   end;
   result := Buffer;
@@ -24375,9 +24372,7 @@ Txt:  len := F-FDeb;
       inc(F,2);
     end;
     L := {$ifdef FPC}_LStrLen(tmp[i]){$else}PInteger(PtrInt(tmp[i])-SizeOf(integer))^{$endif};
-    {$ifdef HASINLINE}if L<MOVESMALL_MAX then
-      MoveSmall(pointer(tmp[i]),F,L) else{$endif}
-      MoveFast(pointer(tmp[i])^,F^,L);
+    MoveFast(pointer(tmp[i])^,F^,L);
     inc(F,L);
     if byte(i) in inlin then begin
       PWord(F)^ := ord(')')+ord(':')shl 8;
@@ -26504,7 +26499,7 @@ asm // x86 version optimized for AnsiString/RawUTF8/RawByteString types
         jne     @no
         push    ebx
         mov     ebx, [eax - 4]
-        sub     ebx, [edx - 4]
+        sub     ebx, [edx - 4]   // ebx = length(A)-length(B)
         push    ebx
         adc     ecx, -1
         and     ecx, ebx
@@ -36611,7 +36606,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         ja      @lrg  // >32
         sub     rax, 8
         jg      @sml  // 9..32
-        jmp     qword ptr[r10 + 64 + rax * 8]  // 0..7
+        jmp     qword ptr[r10 + 64 + rax * 8]  // 0..8
 @equal: ret
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @jmptab:dq      @exit, @01, @02, @03, @04, @05, @06, @07, @08
@@ -41932,9 +41927,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
         itemsize := itemsize*2;
       {$endif}
       result := pointer(ToVarUInt32(itemsize,pointer(dest)));
-      {$ifdef HASINLINE}if itemsize<MOVESMALL_MAX then
-        MoveSmall(pointer(P^),result,itemsize) else{$endif}
-        MoveFast(pointer(P^)^,result^,itemsize);
+      MoveFast(pointer(P^)^,result^,itemsize);
       inc(result,itemsize);
     end;
     len := SizeOf(PtrUInt); // size of tkLString/tkUString in record
@@ -42221,7 +42214,7 @@ begin
     {$endif};
     offset := integer(field^.Offset)-offset;
     if offset>0 then begin
-      MoveSmall(R,Dest,offset);
+      MoveFast(R^,Dest^,offset);
       inc(R,offset);
       inc(Dest,offset);
     end;
@@ -42238,7 +42231,7 @@ begin
   if offset<0 then
     raise ESynException.Create('RecordSave offset<0') else
   if offset<>0 then begin
-    MoveSmall(R,Dest,offset);
+    MoveFast(R^,Dest^,offset);
     result := Dest+offset;
   end else
     result := Dest;
@@ -42368,7 +42361,7 @@ begin
     if offset<>0 then begin
       if (SourceMax<>nil) and (Source+offset>SourceMax) then
         exit;
-      MoveSmall(Source,R,offset);
+      MoveFast(Source^,R^,offset);
       inc(Source,offset);
       inc(R,offset);
     end;
@@ -42385,7 +42378,7 @@ begin
   if offset<>0 then begin
     if (SourceMax<>nil) and (Source+offset>SourceMax) then
       exit;
-    MoveSmall(Source,R,offset);
+    MoveFast(Source^,R^,offset);
     result := Source+offset;
   end else
     result := Source;
@@ -45369,9 +45362,7 @@ begin
       end;
       Dest := pointer(ToVarUInt32(LenBytes,pointer(Dest)));
       if LenBytes>0 then begin // direct raw copy
-        {$ifdef HASINLINE}if LenBytes<MOVESMALL_MAX then
-          MoveSmall(VAny,Dest,LenBytes) else{$endif}
-          MoveFast(PPtrUInt(VAny)^,Dest^,LenBytes);
+        MoveFast(PPtrUInt(VAny)^,Dest^,LenBytes);
         inc(Dest,LenBytes);
       end;
     end;
@@ -49164,7 +49155,7 @@ begin
   if B.VType=varVariant or varByRef then
     result := SortDynArrayVariantComp(A,PVarData(B.VPointer)^,caseInsensitive) else
   if A.VType=B.VType then
-    case A.VType of // optimized value comparison if A and B share the same type
+    case A.VType of // optimized comparison if A and B share the same type
     low(SORT1)..high(SORT1):
       result := SORT1[A.VType](A.VAny,B.VAny);
     low(SORT2)..high(SORT2):
@@ -49236,7 +49227,7 @@ end;
 procedure TDynArray.ElemCopy(const A; var B);
 begin
   if ElemType=nil then
-    MoveSmall(@A,@B,ElemSize) else begin
+    MoveFast(A,B,ElemSize) else begin
     {$ifdef FPC}
     {$ifdef FPC_OLDRTTI}
     FPCFinalize(@B,ElemType); // inlined CopyArray()
@@ -49260,7 +49251,7 @@ begin
   SetCount(result+1);
   p := PtrUInt(fValue^)+PtrUInt(result)*ElemSize;
   if ElemType=nil then
-    MoveSmall(@Elem,pointer(p),ElemSize) else
+    MoveFast(Elem,pointer(p)^,ElemSize) else
     {$ifdef FPC}
     FPCRecordCopy(Elem,pointer(p)^,ElemType);
     {$else}
@@ -49336,7 +49327,7 @@ begin
   o := fIsObjArray; // oaUnknown, oaFalse, oaTrue
   if o=oaUnknown then
     result := ComputeIsObjArray else
-    result := o<>oaFalse;
+    result := o=oaTrue;
 end;
 
 function TDynArray.Delete(aIndex: PtrInt): boolean;
@@ -49398,7 +49389,7 @@ begin
   p := ElemPtr(index);
   if p<>nil then
     if ElemType=nil then
-      MoveSmall(p,@Dest,ElemSize) else
+      MoveFast(p^,Dest,ElemSize) else
       {$ifdef FPC}
       FPCRecordCopy(p^,Dest,ElemType); // works for any kind of ElemTyp
       {$else}
@@ -49413,7 +49404,7 @@ begin
   if (p=nil) or (@Dest=nil) then
     exit;
   ElemClear(Dest);
-  MoveSmall(p,@Dest,ElemSize);
+  MoveFast(p^,Dest,ElemSize);
   FillCharFast(p^,ElemSize,0); // ElemType=nil for ObjArray
 end;
 
@@ -49423,7 +49414,7 @@ begin
   p := ElemPtr(index);
   if p<>nil then
     if ElemType=nil then
-      MoveSmall(@Source,p,ElemSize) else begin
+      MoveFast(Source,p^,ElemSize) else begin
       if ClearBeforeCopy then // safer if Source is a copy of p^
         {$ifdef FPC}FPCFinalize{$else}_Finalize{$endif}(p,ElemType);
       {$ifdef FPC}
@@ -49806,7 +49797,7 @@ begin
     GuessKnownType(false);
   case fKnownType of
   djBoolean..djDateTimeMS,djHash128..djHash512: // no managed field
-    MoveSmall(Source,Dest,fKnownSize);
+    MoveFast(Source^,Dest^,fKnownSize);
   djRawUTF8, djWinAnsi, djRawByteString:
     PRawByteString(Dest)^ := PRawByteString(Source)^;
   djSynUnicode:
@@ -49832,7 +49823,7 @@ begin
   if fKnownType in [djBoolean..djDateTimeMS,djHash128..djHash512] then
     if (SourceMax<>nil) and (Source+fKnownSize>SourceMax) then
       result := false else begin
-      MoveSmall(Source,Data,fKnownSize);
+      MoveFast(Source^,Data^,fKnownSize);
       result := true;
     end else begin
     info := KINDTYPE_INFO[fKnownType];
@@ -51124,7 +51115,7 @@ begin
   if Source<>nil then // avoid GPF
     if ElemType=nil then begin
       if (SourceMax=nil) or (Source+ElemSize<=SourceMax) then
-        MoveSmall(Source,@Elem,ElemSize);
+        MoveFast(Source^,Elem,ElemSize);
     end else
       ManagedTypeLoad(@Elem,Source,ElemType,SourceMax);
 end;
@@ -51201,7 +51192,7 @@ begin
     if DynArray.ElemType=nil then begin
       if (PositionEnd<>nil) and (Position+DynArray.ElemSize>PositionEnd) then
         exit;
-      MoveSmall(Position,@Elem,DynArray.ElemSize);
+      MoveFast(Position^,Elem,DynArray.ElemSize);
       inc(Position,DynArray.ElemSize);
     end else begin
       ManagedTypeLoad(@Elem,Position,DynArray.ElemType,PositionEnd);
@@ -54727,7 +54718,7 @@ begin
     FlushToStream;
   inc(B);
   if L>0 then begin
-    MoveSmall(@Text[1],B,L);
+    MoveFast(Text[1],B^,L);
     inc(B,L);
   end;
   PWord(B)^ := 13+10 shl 8; // CR + LF
@@ -55373,9 +55364,7 @@ begin
         i := Len;
       // add UTF-8 bytes
       if i>0 then begin
-        {$ifdef HASINLINE}if i<MOVESMALL_MAX then
-          MoveSmall(P,B,i) else{$endif}
-          MoveFast(P^,B^,i);
+        MoveFast(P^,B^,i);
         inc(B,i);
       end;
       if i=Len then
@@ -55709,9 +55698,7 @@ noesc:c := i;
       dec(Len,c);
       if BEnd-B<=i then
         AddNoJSONEscape(P,i) else begin
-        {$ifdef HASINLINE}if i<MOVESMALL_MAX then
-          MoveSmall(P,B+1,i) else{$endif}
-          MoveFast(P^,B[1],i);
+        MoveFast(P^,B[1],i);
         inc(B,i);
       end;
       if i>=Len then
@@ -56068,7 +56055,7 @@ begin
     exit;
   if BEnd-B<=L then
     FlushToStream;
-  MoveSmall(@Text[1],B+1,L);
+  MoveFast(Text[1],B[1],L);
   inc(B,L);
 end;
 
@@ -56183,7 +56170,7 @@ begin
       if BEnd-B<=L*count then
         FlushToStream;
       for i := 1 to count do begin
-        MoveSmall(pointer(Text),B+1,L);
+        MoveFast(pointer(Text)^,B[1],L);
         inc(B,L);
       end;
     end;
@@ -59933,7 +59920,7 @@ begin
   repeat
     Len := length(fList[i]);
     if Len>0 then begin
-      MoveSmall(pointer(fList[i]),P,Len);
+      MoveFast(pointer(fList[i])^,P^,Len);
       inc(P,Len);
     end;
     inc(i);
@@ -61966,9 +61953,7 @@ begin
       exit;
     end;
   end;
-  {$ifdef HASINLINE}if DataLen<MOVESMALL_MAX then
-    MoveSmall(Data,@fBuffer^[fPos],DataLen) else{$endif}
-    MoveFast(Data^,fBuffer^[fPos],DataLen);
+  MoveFast(Data^,fBuffer^[fPos],DataLen);
   inc(fPos,DataLen);
 end;
 
@@ -62202,7 +62187,7 @@ begin
               break; // avoid buffer overflow
             end;
             P := ToVarUInt32(len,P);
-            MoveSmall(pointer(PI^[i]),P,len); // here len>0
+            MoveFast(pointer(PI^[i])^,P^,len); // here len>0
             inc(P,len);
           end else // fixedsize<>0:
         for i := 0 to ValuesCount-1 do begin
