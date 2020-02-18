@@ -14989,9 +14989,9 @@ asm // rcx=crc, rdx=buf, r8=len (linux: rdi, rsi, rdx)
         ja      @intel // only call Intel code if worth it
         shr     r8, 3
         jz      @2
-        {$ifdef FPC} align 8 {$else} .align 8 {$endif}
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @1:     {$ifdef FPC}
-        crc32   rax, qword [rdx] // hash 8 bytes per opcode
+        crc32   rax, qword [rdx] // hash 8 unaligned bytes per opcode
         {$else}
         db $F2,$48,$0F,$38,$F1,$02 // circumvent Delphi inline asm compiler bug
         {$endif}
