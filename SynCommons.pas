@@ -3478,7 +3478,9 @@ type
   {$ifdef FPC_OR_UNICODE}TPropNameList = record
   {$else}TPropNameList = object{$endif}
   public
+    /// the actual names storage
     Values: TRawUTF8DynArray;
+    /// how many items are currently in Values[]
     Count: Integer;
     /// initialize the list
     // - set Count := 0
@@ -4712,7 +4714,7 @@ procedure QuickSortCompare(const OnCompare: TOnValueGreater;
   Index: PIntegerArray; L,R: PtrInt);
 
 /// convert a cardinal into a 32-bit variable-length integer buffer
-function ToVarUInt32(Value: PtrUInt; Dest: PByte): PByte;
+function ToVarUInt32(Value: cardinal; Dest: PByte): PByte;
 
 /// return the number of bytes necessary to store a 32-bit variable-length integer
 // - i.e. the ToVarUInt32() buffer size
@@ -25095,7 +25097,7 @@ begin // 0=0,1=1,2=-1,3=2,4=-2...
   result := ToVarUInt32(Value,Dest);
 end;
 
-function ToVarUInt32(Value: PtrUInt; Dest: PByte): PByte;
+function ToVarUInt32(Value: cardinal; Dest: PByte): PByte;
 label _1,_2,_3; // ugly but fast
 begin
   if Value>$7f then begin
@@ -40874,13 +40876,15 @@ end;
 
 function TSortedWordArray.Add(aValue: Word): PtrInt;
 begin
-  result := FastLocateWordSorted(pointer(Values),Count-1,aValue);
+  result := Count; // optimistic check of perfectly increasing aValue
+  if (result>0) and (aValue<=Values[result-1]) then
+    result := FastLocateWordSorted(pointer(Values),result-1,aValue);
   if result<0 then // aValue already exists in Values[] -> fails
     exit;
   if Count=length(Values) then
-    SetLength(Values,Count+100);
+    SetLength(Values,NextGrow(Count));
   if result<Count then
-    MoveFast(Values[result],Values[result+1],(Count-result)*2) else
+    MoveFast(Values[result],Values[result+1],(Count-result)*SizeOf(word)) else
     result := Count;
   Values[result] := aValue;
   inc(Count);
@@ -41300,45 +41304,36 @@ begin // 0=0,1=1,2=-1,3=2,4=-2...
 end;
 
 function ToVarUInt64(Value: QWord; Dest: PByte): PByte;
-label _1,_2,_3; // ugly but fast
+label _1,_2,_4; // ugly but fast
 var c: cardinal;
 begin
-  c := Value;
-  if {$ifdef CPU32}PInt64Rec(@Value)^.Hi=0{$else}Value shr 32=0{$endif} then begin
-    if c>$7f then begin // inlined result := ToVarUInt32(Value,Dest);
-      if c<$80 shl 7 then goto _1 else
-        if c<$80 shl 14 then goto _2 else
-          if c<$80 shl 21 then goto _3;
-      Dest^ := (c and $7F) or $80;
-      c := c shr 7;
-      inc(Dest);
-  _3: Dest^ := (c and $7F) or $80;
-      c := c shr 7;
-      inc(Dest);
-  _2: Dest^ := (c and $7F) or $80;
-      c := c shr 7;
-      inc(Dest);
-  _1: Dest^ := (c and $7F) or $80;
-      c := c shr 7;
-      inc(Dest);
-    end;
-    Dest^ := c;
-    inc(Dest);
-    result := Dest;
-    exit;
-  end;
-  PCardinal(Dest)^ := (c and $7F) or (((c shr 7)and $7F)shl 8) or
-    (((c shr 14)and $7F)shl 16) or (((c shr 21)and $7F)shl 24) or $80808080;
-  Value := Value shr 28;
-  inc(Dest,4);
   repeat
-    Dest^ := (Value and $7F) or $80;
-    Value := Value shr 7;
-    inc(Dest);
-  until Value<=$7f;
-  Dest^ := Value;
-  inc(Dest);
-  result := Dest;
+    c := Value;
+    if {$ifdef CPU32}PInt64Rec(@Value)^.Hi=0{$else}Value shr 32=0{$endif} then begin
+      if c>$7f then begin // inlined result := ToVarUInt32(Value,Dest);
+        if c<$80 shl 7 then goto _1 else
+          if c<$80 shl 14 then goto _2 else
+            if c>=$80 shl 21 then goto _4;
+        Dest^ := (c and $7F) or $80;
+        c := c shr 7;
+        inc(Dest);
+    _2: Dest^ := (c and $7F) or $80;
+        c := c shr 7;
+        inc(Dest);
+    _1: Dest^ := (c and $7F) or $80;
+        c := c shr 7;
+        inc(Dest);
+      end;
+      Dest^ := c;
+      inc(Dest);
+      result := Dest;
+      exit;
+    end;
+_4: PCardinal(Dest)^ := (c and $7F) or (((c shr 7)and $7F)shl 8) or
+      (((c shr 14)and $7F)shl 16) or (((c shr 21)and $7F)shl 24) or $80808080;
+    inc(Dest,4);
+    Value := Value shr 28;
+  until false;
 end;
 
 function FromVarUInt64(var Source: PByte): QWord;
