@@ -4651,8 +4651,10 @@ type
   {$ifdef FPC_OR_UNICODE}TSortedWordArray = record
   {$else}TSortedWordArray = object{$endif}
   public
+    /// the actual 16-bit word storage
     Values: TWordDynArray;
-    Count: integer;
+    /// how many items are currently in Values[]
+    Count: PtrInt;
     /// add a value into the sorted array
     // - return the index of the new inserted value into the Values[] array
     // - return -(foundindex+1) if this value is already in the Values[] array
@@ -4661,6 +4663,26 @@ type
     // - return -1 if not found
     function IndexOf(aValue: Word): PtrInt; {$ifdef HASINLINE}inline;{$endif}
   end;
+  PSortedWordArray = ^TSortedWordArray;
+
+  /// used to store and retrieve Integers in a sorted array
+  // - Delphi "object" is buggy on stack -> also defined as record with methods
+  {$ifdef FPC_OR_UNICODE}TSortedIntegerArray = record
+  {$else}TSortedIntegerArray = object{$endif}
+  public
+    /// the actual 32-bit integers storage
+    Values: TIntegerDynArray;
+    /// how many items are currently in Values[]
+    Count: PtrInt;
+    /// add a value into the sorted array
+    // - return the index of the new inserted value into the Values[] array
+    // - return -(foundindex+1) if this value is already in the Values[] array
+    function Add(aValue: integer): PtrInt;
+    /// return the index if the supplied value in the Values[] array
+    // - return -1 if not found
+    function IndexOf(aValue: integer): PtrInt; {$ifdef HASINLINE}inline;{$endif}
+  end;
+  PSortedIntegerArray = ^TSortedIntegerArray;
 
   /// comparison function as expected by MedianQuickSelect()
   // - should return TRUE if Values[IndexA]>Values[IndexB]
@@ -32398,6 +32420,27 @@ begin
     SetLength(Values,ValuesCount+1); // manual size increase
     result := InsertInteger(Values,ValuesCount,Value,result,CoValues);
   end;
+end;
+
+function TSortedIntegerArray.Add(aValue: Integer): PtrInt;
+begin
+  result := Count; // optimistic check of perfectly increasing aValue
+  if (result>0) and (aValue<=Values[result-1]) then
+    result := FastLocateIntegerSorted(pointer(Values),result-1,aValue);
+  if result<0 then // aValue already exists in Values[] -> fails
+    exit;
+  if Count=length(Values) then
+    SetLength(Values,NextGrow(Count));
+  if result<Count then
+    MoveFast(Values[result],Values[result+1],(Count-result)*SizeOf(Integer)) else
+    result := Count;
+  Values[result] := aValue;
+  inc(Count);
+end;
+
+function TSortedIntegerArray.IndexOf(aValue: Integer): PtrInt;
+begin
+  result := FastFindIntegerSorted(pointer(Values),Count-1,aValue);
 end;
 
 function InsertInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
