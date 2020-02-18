@@ -25022,16 +25022,16 @@ begin
   tab := @crc32ctab;
   c := crc128^[0] xor data128^[0];
   crc128^[0] := tab[3,ToByte(c)] xor tab[2,ToByte(c shr 8)]
-            xor tab[1,ToByte(c shr 16)] xor tab[0,c shr 24];
+            xor tab[1,ToByte(c shr 16)] xor tab[0,ToByte(c shr 24)];
   c := crc128^[1] xor data128^[1];
   crc128^[1] := tab[3,ToByte(c)] xor tab[2,ToByte(c shr 8)]
-            xor tab[1,ToByte(c shr 16)] xor tab[0,c shr 24];
+            xor tab[1,ToByte(c shr 16)] xor tab[0,ToByte(c shr 24)];
   c := crc128^[2] xor data128^[2];
   crc128^[2] := tab[3,ToByte(c)] xor tab[2,ToByte(c shr 8)]
-            xor tab[1,ToByte(c shr 16)] xor tab[0,c shr 24];
+            xor tab[1,ToByte(c shr 16)] xor tab[0,ToByte(c shr 24)];
   c := crc128^[3] xor data128^[3];
   crc128^[3] := tab[3,ToByte(c)] xor tab[2,ToByte(c shr 8)]
-            xor tab[1,ToByte(c shr 16)] xor tab[0,c shr 24];
+            xor tab[1,ToByte(c shr 16)] xor tab[0,ToByte(c shr 24)];
 end;
 
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
@@ -25055,7 +25055,7 @@ begin
         result := tab[3,ToByte(result)] xor
                   tab[2,ToByte(result shr 8)] xor
                   tab[1,ToByte(result shr 16)] xor
-                  tab[0,result shr 24];
+                  tab[0,ToByte(result shr 24)];
       until len<4;
     while len>0 do begin
       result := tab[0,ToByte(result xor ord(buf^))] xor (result shr 8);
@@ -25124,6 +25124,17 @@ function SortDynArrayCardinal(const A,B): integer;
         seta    al
         sbb     eax, 0
 end;
+function SortDynArrayInt64(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     r8, qword ptr[A]
+        mov     rdx, qword ptr[B]
+        xor     eax, eax
+        xor     ecx, ecx
+        cmp     r8, rdx
+        setl    cl
+        setg    al
+        sub     eax, ecx
+end;
 function SortDynArrayQWord(const A,B): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     rcx, qword ptr[A]
@@ -25141,17 +25152,6 @@ function SortDynArrayPointer(const A,B): integer;
         cmp     rcx, rdx
         seta    al
         sbb     eax, 0
-end;
-function SortDynArrayInt64(const A,B): integer;
-{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        mov     r8, qword ptr[A]
-        mov     rdx, qword ptr[B]
-        xor     eax, eax
-        xor     ecx, ecx
-        cmp     r8, rdx
-        setl    cl
-        setg    al
-        sub     eax, ecx
 end;
 function SortDynArrayDouble(const A,B): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
@@ -25204,60 +25204,32 @@ end; // note: SSE4.2 read up to 16 bytes after buffer, this version won't
 {$else}
 function SortDynArrayInteger(const A,B): integer;
 begin
-  if integer(A)<integer(B) then
-    result := -1 else
-  if integer(A)>integer(B) then
-    result := 1 else
-    result := 0;
+  result := ord(integer(A)>integer(B))-ord(integer(A)<integer(B));
 end;
 function SortDynArrayCardinal(const A,B): integer;
 begin
-  if cardinal(A)<cardinal(B) then
-    result := -1 else
-  if cardinal(A)>cardinal(B) then
-    result := 1 else
-    result := 0;
+  result := ord(cardinal(A)>cardinal(B))-ord(cardinal(A)<cardinal(B));
 end;
 
 function SortDynArrayInt64(const A,B): integer;
 begin
-  if Int64(A)<Int64(B) then
-    result := -1 else
-  if Int64(A)>Int64(B) then
-    result := 1 else
-    result := 0;
+  result := ord(Int64(A)>Int64(B))-ord(Int64(A)<Int64(B));
 end;
 function SortDynArrayQWord(const A,B): integer;
 begin
-  if QWord(A)<QWord(B) then
-    result := -1 else
-  if QWord(A)>QWord(B) then
-    result := 1 else
-    result := 0;
+  result := ord(QWord(A)>QWord(B))-ord(QWord(A)<QWord(B));
 end;
 function SortDynArrayPointer(const A,B): integer;
 begin
-  if PtrUInt(A)<PtrUInt(B) then
-    result := -1 else
-  if PtrUInt(A)>PtrUInt(B) then
-    result := 1 else
-    result := 0;
+  result := ord(PtrUInt(A)>PtrUInt(B))-ord(PtrUInt(A)<PtrUInt(B));
 end;
 function SortDynArrayDouble(const A,B): integer;
 begin
-  if Double(A)<Double(B) then
-    result := -1 else
-  if Double(A)>Double(B) then
-    result := 1 else
-    result := 0;
+  result := ord(double(A)>double(B))-ord(double(A)<double(B));
 end;
 function SortDynArraySingle(const A,B): integer;
 begin
-  if Single(A)<Single(B) then
-    result := -1 else
-  if Single(A)>Single(B) then
-    result := 1 else
-    result := 0;
+  result := ord(single(A)>single(B))-ord(single(A)<single(B));
 end;
 function SortDynArrayAnsiString(const A,B): integer;
 begin
@@ -25267,11 +25239,7 @@ end;
 
 function CompareQWord(A, B: QWord): integer;
 begin
-  if A<B then
-    result := -1 else
-  if A>B then
-    result := 1 else
-    result := 0;
+  result := ord(A>B)-ord(A<B);
 end;
 
 function SortDynArrayAnsiStringI(const A,B): integer;
@@ -26411,11 +26379,7 @@ end;
 function CompareQWord(A, B: QWord): integer;
 begin
   {$ifdef FPC_OR_UNICODE} // recent compilers are able to generate correct code
-  if A<B then
-    result := -1 else
-  if A>B then
-    result := 1 else
-    result := 0;
+  result := ord(A>B)-ord(A<B);
   {$else}
   result := SortDynArrayQWord(A,B); // use correct x86 asm version below
   {$endif}
@@ -29841,38 +29805,22 @@ end;
 
 function CompareFloat(const A, B: double): integer;
 begin
-  if A<B then
-    result := -1 else
-  if A>B then
-    result := 1 else
-    result := 0;
+  result := ord(A>B)-ord(A<B);
 end;
 
 function CompareInteger(const A, B: integer): integer;
 begin
-  if A<B then
-    result := -1 else
-  if A>B then
-    result := 1 else
-    result := 0;
+  result := ord(A>B)-ord(A<B);
 end;
 
 function CompareInt64(const A, B: Int64): integer;
 begin
-  if A<B then
-    result := -1 else
-  if A>B then
-    result := 1 else
-    result := 0;
+  result := ord(A>B)-ord(A<B);
 end;
 
 function CompareCardinal(const A, B: cardinal): integer;
 begin
-  if A<B then
-    result := -1 else
-  if A>B then
-    result := 1 else
-    result := 0;
+  result := ord(A>B)-ord(A<B);
 end;
 
 procedure KahanSum(const Data: double; var Sum, Carry: double);
@@ -30245,7 +30193,7 @@ begin // expect UpperName as 'NAME='
         if ToByte(by4)>13 then
           if ToByte(by4 shr 8)>13 then
             if ToByte(by4 shr 16)>13 then
-              if by4 shr 24>13 then begin
+              if ToByte(by4 shr 24)>13 then begin
                 inc(u,4);
                 continue;
               end else
@@ -33636,7 +33584,7 @@ begin
         Dest[0] := up[ToByte(c)];
         Dest[1] := up[ToByte(c shr 8)];
         Dest[2] := up[ToByte(c shr 16)];
-        Dest[3] := up[c shr 24];
+        Dest[3] := up[ToByte(c shr 24)];
         inc(Dest,4);
       until Source>endSourceBy4;
     // generic loop, handling one UCS4 char per iteration
@@ -36120,7 +36068,7 @@ begin
   result := tab[3,ToByte(result)] xor
             tab[2,ToByte(result shr 8)] xor
             tab[1,ToByte(result shr 16)] xor
-            tab[0,result shr 24];
+            tab[0,ToByte(result shr 24)];
 end;
 
 function crc32cinlined(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
@@ -36131,7 +36079,7 @@ begin
   if len>0 then begin
     tab := @crc32ctab;
     repeat
-      result := tab[0,(result xor ord(buf^))and 255] xor (result shr 8);
+      result := tab[0,ToByte(result) xor ord(buf^)] xor (result shr 8);
       inc(buf);
       dec(len);
     until len=0;
@@ -51607,12 +51555,12 @@ asm .noframe // rcx=P, edx=deleted, r8=count  (Linux: rdi,esi,rdx)
 @ok:    {$ifdef FPC} // AVX2 asm is not supported by Delphi (even 10.3) :(
         test    byte ptr[rip+CPUIDX64], 1 shl cpuAVX2
         jz      @sse2
-        vpshufd ymm0, ymm0, 0  // shuffle to 128-bit low lane
-        vperm2f128 ymm0, ymm0, ymm0, 0 // copy to 128-bit high lane of ymm0
+        vpshufd ymm0, ymm0, 0          // shuffle to ymm0 128-bit low lane
+        vperm2f128 ymm0, ymm0, ymm0, 0 // copy to ymm0 128-bit high lane
         // avx process of 128 bytes (32 indexes) per loop iteration
         align 16
 @avx2:  sub      r8, 32
-        vmovdqa  ymm1, [rcx]       // 4 x 256-bit process
+        vmovdqa  ymm1, [rcx]       // 4 x 256-bit process = 4 x 8 integers
         vmovdqa  ymm3, [rcx + 32]
         vmovdqa  ymm5, [rcx + 64]
         vmovdqa  ymm7, [rcx + 96]
@@ -51637,7 +51585,7 @@ asm .noframe // rcx=P, edx=deleted, r8=count  (Linux: rdi,esi,rdx)
         // SSE2 process of 64 bytes (16 indexes) per loop iteration
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @sse2:  sub     r8, 16
-        movdqa  xmm1, dqword [rcx]  // 4 x 128-bit process
+        movdqa  xmm1, dqword [rcx]  // 4 x 128-bit process = 4 x 4 integers
         movdqa  xmm3, dqword [rcx + 16]
         movdqa  xmm5, dqword [rcx + 32]
         movdqa  xmm7, dqword [rcx + 48]
