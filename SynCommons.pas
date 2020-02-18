@@ -9634,6 +9634,7 @@ type
     procedure SetCaseSensitive(Value: boolean); override;
     /// will set fChanged=true to force full re-hash after TRawUTF8List methods
     procedure Changed; override;
+    procedure RehashOnChanged;
   public
     /// initialize the class instance
     constructor Create(aOwnObjects: boolean=false);
@@ -51437,7 +51438,9 @@ begin
     Hasher := DefaultHasher else
     Hasher := aHasher;
   HashElement := aHashElement;
-  EventHash := nil;
+  EventHash := aEventHash;
+  if (@HashElement=nil) and (@EventHash=nil) then // fallback to first field RTTI
+    HashElement := DYNARRAY_HASHFIRSTFIELD[aCaseInsensitive,DynArray^.GuessKnownType];
   Compare := aCompare;
   EventCompare := aEventCompare;
   if (@Compare=nil) and (@EventCompare=nil) then
@@ -60607,17 +60610,26 @@ begin
     fChanged := Count>0; // force re-hash next IndexOf() call
 end;
 
+procedure TRawUTF8ListHashed.RehashOnChanged;
+var collisions: integer;
+begin // rough but safe if user called non-hash-aware methods
+  collisions := fHash.Rehash({forced=}true);
+  if collisions<>0 then
+    raise ESynException.CreateUTF8('%.Rehash collisions=%',[self,collisions]);
+  fChanged := false;
+end;
+
 function TRawUTF8ListHashed.IndexOf(const aText: RawUTF8): PtrInt;
 begin
   if fChanged then
-    fChanged := not fHash.ReHash; // rough, but working implementation
+    RehashOnChanged;
   result := fHash.FindHashed(aText);
 end;
 
 function TRawUTF8ListHashed.Delete(const aText: RawUTF8): PtrInt;
 begin
   if fChanged then
-    fChanged := not fHash.ReHash; // rough, but working implementation
+    RehashOnChanged;
   result := fHash.FindHashedAndDelete(aText);
 end;
 
@@ -60626,7 +60638,7 @@ function TRawUTF8ListHashed.AddIfNotExisting(const aText: RawUTF8;
 var added: boolean;
 begin
   if fChanged then
-    fChanged := not fHash.ReHash; // rough, but working implementation
+    RehashOnChanged;
   result := fHash.FindHashedForAdding(aText,added);
   if added then begin
     fList[result] := aText;
@@ -60642,7 +60654,7 @@ function TRawUTF8ListHashed.AddObjectIfNotExisting(
 var added: boolean;
 begin
   if fChanged then
-    fChanged := not fHash.ReHash; // rough, but working implementation
+    RehashOnChanged;
   result := fHash.FindHashedForAdding(aText,added);
   if added then begin
     fList[result] := aText;
@@ -60661,9 +60673,11 @@ end;
 
 function TRawUTF8ListHashed.ReHash(aForceRehash: boolean): boolean;
 begin
-  if fChanged or aForceRehash then
-    fChanged := not fHash.ReHash(aForceRehash);
-  result := not fChanged;
+  result := fChanged or aForceRehash;
+  if result then begin
+    fChanged := false;
+    RehashOnChanged;
+  end;
 end;
 
 
