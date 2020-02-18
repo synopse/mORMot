@@ -6206,45 +6206,6 @@ type
     function Capacity: integer;
   end;
 
-  /// abstract class able to use hashing to find an object in O(1) speed
-  // - all protected abstract methods shall be overridden and implemented
-  // - use this class instead of a plain TDynArrayHashed, since it would
-  // feature its own dedicated hashing, and any abstract mean of value storage
-  TObjectHash = class
-  protected
-    fHashs: array of packed record Hash, Index: cardinal; end;
-    procedure HashInit(aCountToHash: integer);
-    function HashFind(aHashCode: cardinal; Item: TObject): integer;
-    /// abstract method to hash an item
-    // - note that the overridden method shall not return 0 (mark void fHashs[])
-    function Hash(Item: TObject): cardinal; virtual; abstract;
-    /// abstract method to compare two items
-    function Compare(Item1,Item2: TObject): boolean; virtual; abstract;
-    /// abstract method to get an item
-    // - shall return nil if Index is out of range (e.g. >= Count)
-    // - will be called e.g. by Find() with Compare() to avoid collision
-    function Get(Index: integer): TObject; virtual; abstract;
-    /// used to retrieve the number of items
-    function Count: integer; virtual; abstract;
-  public
-    /// search one item in the internal hash array
-    function Find(Item: TObject): integer;
-    /// search one item using slow list browsing
-    // - this version expects the internal list count to be supplied, if some
-    // last items are to be ignored (used e.g. in EnsureJustAddedNotDuplicated)
-    function Scan(Item: TObject; ListCount: integer): integer; virtual;
-    /// to be called when an item is modified
-    // - for Delete/Update will force a full rehash on next Find() call
-    procedure Invalidate;
-    /// to be called when an item has just been added
-    // - the index of the latest added item should be Count-1
-    // - this method will update the internal hash table, and check if
-    // the newly added value is not duplicated
-    // - return FALSE if this item is already existing (i.e. insert error)
-    // - return TRUE if has been added to the internal hash table
-    function EnsureJustAddedNotDuplicated: boolean;
-  end;
-
   /// abstract parent class with a virtual constructor, ready to be overridden
   // to initialize the instance
   // - you can specify such a class if you need an object including published
@@ -25155,8 +25116,8 @@ function SortDynArrayPointer(const A,B): integer;
 end;
 function SortDynArrayDouble(const A,B): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        movsd    xmm0, qword ptr[A]
-        movsd    xmm1, qword ptr[B]
+        movsd   xmm0, qword ptr[A]
+        movsd   xmm1, qword ptr[B]
         xor     eax, eax
         xor     edx, edx
         comisd  xmm0, xmm1
@@ -36811,8 +36772,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         cmp     rdx, 256
         jae     @abv256  // try erms or avx if cnt>255 (vzeroupper penaly)
         {$endif FPC}
-@sse2:  movq    qword ptr[dst], xmm0  // first unaligned 16 bytes
-        movq    qword ptr[dst+8], xmm0
+@sse2:  movups  oword ptr[dst], xmm0  // first unaligned 16 bytes
         lea     rdx, [dst+rdx-1]
         and     rdx, -16
         add     dst, 16
@@ -36825,15 +36785,15 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
 @reg:   movdqa  oword ptr[rdx+dst], xmm0  // regular loop
         add     dst, 16
         jnz     @reg
-@last:  movq    qword ptr[r8-16], xmm0 // last unaligned 16 bytes
-        movq    qword ptr[r8-8], xmm0
+@last:  movups  oword ptr[r8-16], xmm0 // last unaligned 16 bytes
         ret
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @nv:    movntdq [rdx+dst], xmm0 // non-temporal loop
         add     dst, 16
         jnz     @nv
         sfence
-        jmp     @last
+        movups  oword ptr[r8-16], xmm0
+        ret
 {$ifdef FPC}
 @abv256:{$ifdef WITH_ERMS}
         mov     r9b, byte ptr[rip+CPUIDX64]
@@ -41488,21 +41448,21 @@ begin
 end;
 
 function FromVarString(var Source: PByte): RawUTF8;
-var Len: PtrUInt;
+var len: PtrUInt;
 begin
-  Len := FromVarUInt32(Source);
-  FastSetStringCP(Result,Source,Len,CP_UTF8);
-  inc(Source,Len);
+  len := FromVarUInt32(Source);
+  FastSetStringCP(Result,Source,len,CP_UTF8);
+  inc(Source,len);
 end;
 
 function FromVarString(var Source: PByte; SourceMax: PByte): RawUTF8;
-var Len: cardinal;
+var len: cardinal;
 begin
-  Source := FromVarUInt32Safe(Source,SourceMax,Len);
-  if (Source=nil) or (PAnsiChar(Source)+Len>PAnsiChar(SourceMax)) then
-    Len := 0;
-  FastSetStringCP(Result,Source,Len,CP_UTF8);
-  inc(Source,Len);
+  Source := FromVarUInt32Safe(Source,SourceMax,len);
+  if (Source=nil) or (PAnsiChar(Source)+len>PAnsiChar(SourceMax)) then
+    len := 0;
+  FastSetStringCP(Result,Source,len,CP_UTF8);
+  inc(Source,len);
 end;
 
 procedure FromVarString(var Source: PByte; var Value: TSynTempBuffer);
@@ -41518,14 +41478,18 @@ function FromVarString(var Source: PByte; SourceMax: PByte;
   var Value: TSynTempBuffer): boolean;
 var len: cardinal;
 begin
-  if not FromVarUInt32(Source,SourceMax,len) or
-     ((SourceMax<>nil) and (PAnsiChar(Source)+len>PAnsiChar(SourceMax))) then
-    result := false else begin
-    Value.Init(Source,len);
-    PByteArray(Value.buf)[len] := 0; // include trailing #0
-    inc(Source,len);
-    result := true;
+  if SourceMax=nil then
+    len := FromVarUInt32(Source) else begin
+    Source := FromVarUInt32Safe(Source,SourceMax,len);
+    if (Source=nil) or (PAnsiChar(Source)+len>PAnsiChar(SourceMax)) then begin
+      result := false;
+      exit;
+    end;
   end;
+  Value.Init(Source,len);
+  PByteArray(Value.buf)[len] := 0; // include trailing #0
+  inc(Source,len);
+  result := true;
 end;
 
 procedure FromVarString(var Source: PByte; var Value: RawByteString;
@@ -41541,13 +41505,17 @@ function FromVarString(var Source: PByte; SourceMax: PByte;
   var Value: RawByteString; CodePage: integer): boolean;
 var len: cardinal;
 begin
-  if not FromVarUInt32(Source,SourceMax,len) or
-     ((SourceMax<>nil) and (PAnsiChar(Source)+len>PAnsiChar(SourceMax))) then
-    result := false else begin
-    FastSetStringCP(Value,Source,Len,CodePage);
-    inc(Source,Len);
-    result := true;
+  if SourceMax=nil then
+    len := FromVarUInt32(Source) else begin
+    Source := FromVarUInt32Safe(Source,SourceMax,len);
+    if (Source=nil) or (PAnsiChar(Source)+len>PAnsiChar(SourceMax)) then begin
+      result := false;
+      exit;
+    end;
   end;
+  FastSetStringCP(Value,Source,len,CodePage);
+  inc(Source,len);
+  result := true;
 end;
 
 function FromVarBlob(Data: PByte): TValueResult;
@@ -51881,7 +51849,7 @@ begin
   HashTableSize := siz;
   SetLength(HashTable,siz); // fill with 0 (void slot)
   // fill HashTable[]=index+1 from all existing items
-  include(State,canHash); // needed before Find() below
+  include(State,canHash);   // needed before Find() below
   P := DynArray^.Value^;
   for i := 1 to n do begin
     if Assigned(EventHash) then
@@ -51889,8 +51857,8 @@ begin
       hc := HashElement(P^,Hasher);
     ndx := FindOrNew(hc,P,nil);
     if ndx>=0 then
-      inc(result) else  // found duplicated value
-      HashTable[-ndx-1] := i; // store index+1 (0 means void entry)
+      inc(result) else         // found duplicated value
+      HashTable[-ndx-1] := i;  // store index+1 (0 means void entry)
     inc(P,DynArray^.ElemSize);
   end;
 end;
@@ -52661,124 +52629,6 @@ begin
 end;
 
 {$endif DELPHI5OROLDER}
-
-
-{ TObjectHash }
-
-const
-  COUNT_TO_START_HASHING = 16;
-
-function TObjectHash.Find(Item: TObject): integer;
-var n: integer;
-begin
-  n := Count;
-  if n<=COUNT_TO_START_HASHING then
-    result := Scan(Item,n) else
-    result := HashFind(Hash(Item),Item);
-end;
-
-function TObjectHash.Scan(Item: TObject; ListCount: integer): integer;
-begin
-  for result := 0 to ListCount-1 do
-    if Compare(Get(result),Item) then
-      exit;
-  result := -1;
-end;
-
-function TObjectHash.HashFind(aHashCode: cardinal; Item: TObject): integer;
-var n, first: integer;
-    looped: boolean;
-begin
-  looped := false;
-  if fHashs=nil then
-    HashInit(Count);
-  n := length(fHashs);
-  result := (aHashCode-1) and (n-1); // fHashs[] has a power of 2 length
-  first := result;
-  repeat
-    with fHashs[result] do
-    if Hash=aHashCode then begin
-      if Compare(Get(Index),Item) then begin
-        result := Index;
-        exit; // found -> returns index in list
-      end;
-    end else
-    if Hash=0 then begin
-      result := -(result+1);
-      exit; // not found -> returns void index in fHashs[] as negative
-    end;
-    // hash colision -> search next item
-    inc(result);
-    if result=n then
-      // reached the end -> search once from fHash[0] to fHash[first-1]
-      if looped then
-        Break else begin
-        result := 0;
-        n := first;
-        looped := true;
-      end;
-  until false;
-  raise ESynException.CreateUTF8('%.HashFind fatal collision',[self]);
-end;
-
-procedure TObjectHash.HashInit(aCountToHash: integer);
-var PO2,i,ndx: integer;
-    H: cardinal;
-    O: TObject;
-begin
-  // find nearest power of two for new fHashs[] size
-  PO2 := 256;
-  while PO2<aCountToHash*2 do
-    PO2 := PO2 shl 1;
-  SetLength(fHashs,PO2);
-  // hash all items
-  for i := 0 to aCountToHash-1 do begin
-    O := Get(i);
-    H := Hash(O);
-    ndx := HashFind(H,O);
-    if ndx>=0 then
-      raise ESynException.CreateUTF8('%.HashInit found dup at index %',[self,ndx]);
-    with fHashs[-ndx-1] do begin
-      Hash := H;
-      Index := i;
-    end;
-  end;
-end;
-
-procedure TObjectHash.Invalidate;
-begin
-  fHashs := nil; // force HashInit call on next Find()
-end;
-
-function TObjectHash.EnsureJustAddedNotDuplicated: boolean;
-var H: cardinal;
-    lastNdx,ndx: integer;
-    lastObject: TObject;
-begin
-  lastNdx := Count-1;
-  lastObject := Get(lastNdx);
-  if lastObject=nil then
-    raise ESynException.CreateUTF8('Invalid %.EnsureJustAddedNotDuplicated call',[self]);
-  if lastNdx<COUNT_TO_START_HASHING then begin
-    result := Scan(lastObject,lastNdx)<0; // O(n) search if not worth it
-    exit;
-  end;
-  if lastNdx*2-lastNdx shr 3>length(fHashs) then begin
-    fHashs := nil;
-    HashInit(lastNdx); // re-compute fHashs up to Count-1 if not enough void positions
-  end;
-  H := Hash(lastObject);
-  ndx := HashFind(H,lastObject);
-  if ndx>=0 then begin
-    result := false; // duplicate found
-    exit;
-  end;
-  with fHashs[-ndx-1] do begin
-    Hash := H;
-    Index := lastNdx;
-  end;
-  result := true; // last inserted item is OK
-end;
 
 
 { TInterfacedObjectWithCustomCreate }
