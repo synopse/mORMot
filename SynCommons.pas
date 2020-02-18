@@ -14958,19 +14958,17 @@ type
   // to access directly its internals (like Count or Values[]/Names[]):
   // ! aVariantObject := TDocVariant.NewObject(['name','John','year',1972]);
   // ! aVariantObject := _ObjFast(['name','John','year',1972]);
-  // ! with TDocVariantData(aVariantObject) do
+  // ! with _Safe(aVariantObject)^ do
   // !   for i := 0 to Count-1 do
   // !     writeln(Names[i],'=',Values[i]); // for an object
   // ! aVariantArray := TDocVariant.NewArray(['one',2,3.0]);
   // ! aVariantArray := _JsonFast('["one",2,3.0]');
-  // ! with TDocVariantData(aVariantArray) do
+  // ! with _Safe(aVariantArray)^ do
   // !   for i := 0 to Count-1 do
   // !     writeln(Values[i]); // for an array
-  // here, using "with TDocVariantData(...) do" syntax can be very convenient
-  // - since variants may be stored by reference (i.e. as varByRef), it may
-  // be a good idea to use DocVariantData(aVariant)^ or _Safe(aVariant)^ instead
-  // of TDocVariantData(aVariant), if you are not sure how aVariant was allocated
-  // (may be not _Obj/_Json, but retrieved as varByRef e.g. from late binding)
+  // - use "with _Safe(...)^ do"  and not "with TDocVariantData(...) do" as the
+  // former will handle internal variant redirection (varByRef), e.g. from late
+  // binding or assigned another TDocVariant
   // - Delphi "object" is buggy on stack -> also defined as record with methods
   {$ifdef FPC_OR_UNICODE}TDocVariantData = record private
   {$else}TDocVariantData = object protected{$endif}
@@ -15859,6 +15857,13 @@ const
 // ! with _Safe(aDocVariant)^ do
 // !   for ndx := 0 to Count-1 do // here Count=0 for the "fake" result
 // !     writeln(Names[ndx]);
+// or excluding the "with" statement, as more readable code:
+// ! var dv: PDocVariantData;
+// !     ndx: PtrInt;
+// ! begin
+// !   dv := _Safe(aDocVariant);
+// !   for ndx := 0 to dv.Count-1 do // here Count=0 for the "fake" result
+// !     writeln(dv.Names[ndx]);
 function _Safe(const DocVariant: variant): PDocVariantData; overload;
   {$ifdef FPC}inline;{$endif} // Delphi has problems inlining this :(
 
@@ -26479,7 +26484,6 @@ asm // Delphi x86 compiler is not efficient, and oldest even incorrect
         ret
 @p:     mov     eax, 1
 end;
-
 function SortDynArrayRawByteString(const A,B): integer;
 asm
         jmp     SortDynArrayAnsiString
@@ -36578,86 +36582,13 @@ const
   // non-temporal writes should bypass the cache when the size is bigger than
   // half the size of the largest level cache - we assume low 1MB cache here
   CPUCACHEX64 = 512*1024;
+
 {
- -------------- TTestLowLevelCommon.CustomRTL RTL vs SynCommons
- On FPC Linux (native):
-   FillChar in 30.33ms, 12.8 GB/s   FillCharFast [] in 14.16ms, 27.4 GB/s
-                                    FillCharFast [cpuAVX] in 11.98ms, 32.4 GB/s
-   Move in 1.92ms, 8.1 GB/s         MoveFast [] in 2.19ms, 7.1 GB/s
-                                    MoveFast [cpuAVX] in 1.60ms, 9.7 GB/s
-   small Move in 8.84ms, 2.4 GB/s   small MoveFast [] in 6.66ms, 3.2 GB/s
-                                    small MoveFast [cpuAVX] in 6.63ms, 3.3 GB/s
-   overlapping:
-   big Move in 39.94ms, 3.9 GB/s    big MoveFast [] in 38.13ms, 4 GB/s
-                                    big MoveFast [cpuAVX] in 36.86ms, 4.2 GB/s
-   non overlapping:
-   big Move in 54.55ms, 7.1 GB/s    big MoveFast [] in 40.45ms, 9.6 GB/s
-                                    big MoveFast [cpuAVX] in 39.57ms, 9.8 GB/s
- Small backward/forward moves (on FPC Linux):
-   1b Move in 89us, 214.3 MB/s     1b MoveFast [] in 77us, 247.7 MB/s
-   2b Move in 95us, 401.5 MB/s     2b MoveFast [] in 72us, 529.8 MB/s
-   3b Move in 107us, 534.7 MB/s    3b MoveFast [] in 76us, 752.9 MB/s
-   4b Move in 129us, 591.4 MB/s    4b MoveFast [] in 92us, 829.2 MB/s
-   5b Move in 163us, 585 MB/s      5b MoveFast [] in 78us, 1.1 GB/s
-   6b Move in 143us, 800.2 MB/s    6b MoveFast [] in 77us, 1.4 GB/s
-   7b Move in 143us, 0.9 GB/s      7b MoveFast [] in 146us, 914.4 MB/s
-   8b Move in 159us, 0.9 GB/s      8b MoveFast [] in 73us, 2 GB/s
-   9b Move in 166us, 1 GB/s        9b MoveFast [] in 144us, 1.1 GB/s
-   10b Move in 170us, 1 GB/s       10b MoveFast [] in 144us, 1.2 GB/s
-   11b Move in 181us, 1.1 GB/s     11b MoveFast [] in 144us, 1.4 GB/s
-   12b Move in 153us, 1.4 GB/s     12b MoveFast [] in 143us, 1.5 GB/s
-   13b Move in 154us, 1.5 GB/s     13b MoveFast [] in 144us, 1.6 GB/s
-   14b Move in 150us, 1.7 GB/s     14b MoveFast [] in 143us, 1.8 GB/s
-   15b Move in 151us, 1.8 GB/s     15b MoveFast [] in 147us, 1.9 GB/s
-   16b Move in 159us, 1.8 GB/s     16b MoveFast [] in 73us, 4 GB/s
-   17b Move in 161us, 1.9 GB/s     17b MoveFast [] in 153us, 2 GB/s
-   18b Move in 167us, 2 GB/s       18b MoveFast [] in 153us, 2.1 GB/s
-   19b Move in 180us, 1.9 GB/s     19b MoveFast [] in 161us, 2.1 GB/s
-   20b Move in 155us, 2.4 GB/s     20b MoveFast [] in 153us, 2.4 GB/s
-   21b Move in 150us, 2.6 GB/s     21b MoveFast [] in 153us, 2.5 GB/s
-   22b Move in 155us, 2.6 GB/s     22b MoveFast [] in 163us, 2.5 GB/s
-   23b Move in 157us, 2.7 GB/s     23b MoveFast [] in 154us, 2.7 GB/s
-   24b Move in 166us, 2.6 GB/s     24b MoveFast [] in 91us, 4.9 GB/s
-   25b Move in 175us, 2.6 GB/s     25b MoveFast [] in 163us, 2.8 GB/s
-   26b Move in 183us, 2.6 GB/s     26b MoveFast [] in 170us, 2.8 GB/s
-   27b Move in 193us, 2.6 GB/s     27b MoveFast [] in 162us, 3.1 GB/s
-   28b Move in 166us, 3.1 GB/s     28b MoveFast [] in 163us, 3.2 GB/s
-   29b Move in 183us, 2.9 GB/s     29b MoveFast [] in 169us, 3.1 GB/s
-   30b Move in 170us, 3.2 GB/s     30b MoveFast [] in 176us, 3.1 GB/s
-   31b Move in 175us, 3.3 GB/s     31b MoveFast [] in 176us, 3.2 GB/s
-   32b Move in 185us, 3.2 GB/s     32b MoveFast [] in 146us, 4 GB/s
-   33b Move in 193us, 3.1 GB/s     33b MoveFast [] in 197us, 3.1 GB/s
-   34b Move in 198us, 3.1 GB/s     34b MoveFast [] in 157us, 4 GB/s
-   35b Move in 218us, 2.9 GB/s     35b MoveFast [] in 155us, 4.2 GB/s
-   36b Move in 196us, 3.4 GB/s     36b MoveFast [] in 155us, 4.3 GB/s
-   37b Move in 184us, 3.7 GB/s     37b MoveFast [] in 160us, 4.3 GB/s
-   38b Move in 209us, 3.3 GB/s     38b MoveFast [] in 160us, 4.4 GB/s
-   39b Move in 201us, 3.6 GB/s     39b MoveFast [] in 161us, 4.5 GB/s
-   40b Move in 218us, 3.4 GB/s     40b MoveFast [] in 161us, 4.6 GB/s
-   41b Move in 226us, 3.3 GB/s     41b MoveFast [] in 161us, 4.7 GB/s
-   42b Move in 236us, 3.3 GB/s     42b MoveFast [] in 162us, 4.8 GB/s
-   43b Move in 250us, 3.2 GB/s     43b MoveFast [] in 161us, 4.9 GB/s
-   44b Move in 180us, 4.5 GB/s     44b MoveFast [] in 215us, 3.8 GB/s
-   45b Move in 199us, 4.2 GB/s     45b MoveFast [] in 230us, 3.6 GB/s
-   46b Move in 195us, 4.3 GB/s     46b MoveFast [] in 164us, 5.2 GB/s
-   47b Move in 198us, 4.4 GB/s     47b MoveFast [] in 173us, 5 GB/s
-   48b Move in 231us, 3.8 GB/s     48b MoveFast [] in 163us, 5.4 GB/s
-
-  On Delphi XE4 Win64 (VM):
-    FillChar in 34.42ms, 11.2 GB/s   FillCharFast [] in 15.03ms, 25.8 GB/s
-    Move in 3.76ms, 4.1 GB/s         MoveFast [] in 2.16ms, 7.2 GB/s
-    small Move in 7.51ms, 2.9 GB/s   small MoveFast [] in 6.77ms, 3.2 GB/s
-    big Move in 67.06ms, 2.3 GB/s    big MoveFast [] in 41ms, 3.8 GB/s
-  On Delphi 10.3 Win64 (VM):
-    FillChar in 28.82ms, 13.4 GB/s   FillCharFast [] in 14.89ms, 26 GB/s
-    Move in 3.68ms, 4.2 GB/s         MoveFast [] in 2.13ms, 7.3 GB/s
-    small Move in 7.34ms, 2.9 GB/s   small MoveFast [] in 6.73ms, 3.2 GB/s
-    big Move in 50.90ms, 3 GB/s      big MoveFast [] in 40.74ms, 3.8 GB/s
-
-  -> numbers above are with 10% variation; please get your numbers!
+  regarding benchmark numbers from TTestLowLevelCommon.CustomRTL
   -> FillCharFast/MoveFast are faster, especially for small lengths (strings)
   -> Delphi RTL is lower than FPC's, and it doesn't support AVX assembly yet
   -> cpuERMS - of little benefit - is disabled, unless WITH_ERMS is defined
+  http://blog.synopse.info/post/2020/02/17/New-move/fillchar-optimized-sse2/avx-asm-version
 }
 
 // these stand-alone functions will use CPUIDX64 to adjust the algorithm
