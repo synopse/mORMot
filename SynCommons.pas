@@ -21171,30 +21171,16 @@ end;
 function GetBitsCountSSE42(value: PtrInt): PtrInt;
 {$ifdef FPC} assembler; nostackframe;
 asm
-        {$ifdef win64}
-        popcnt  rax, rcx
-        {$else}
-        popcnt  rax, rdi
-        {$endif win64}
-{$else} // Delphi version with no opcode
+        popcnt  rax, value
+{$else}
 asm     .noframe
-        {$ifdef win64}
-        db      $f3,$48,$0f,$B8,$c1
-        {$else}
-        db      $f3,$48,$0f,$B8,$c7
-        {$endif win64}
+        db      $f3,$48,$0f,$B8,{$ifdef win64}$c1{$else}$c7{$endif}
 {$endif FPC}
 end;
 function GetBitsCountPas(value: PtrInt): PtrInt;
-{$ifdef FPC} assembler; nostackframe;
-asm {$else} asm .noframe {$endif}
-        {$ifdef win64}
-        mov     rax, rcx
-        mov     rdx, rcx
-        {$else}
-        mov     rax, rdi
-        mov     rdx, rdi
-        {$endif win64}
+{$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
+        mov     rax, value
+        mov     rdx, value
         shr     rax, 1
         mov     rcx, $5555555555555555
         mov     r8,  $3333333333333333
@@ -22797,24 +22783,13 @@ asm
 end;
 {$else}
 {$ifdef CPUX64}
-{$ifdef FPC}nostackframe; assembler; asm {$else}
-asm .noframe // rcx=@a rdx=@b r8=n (Linux: rdi,rsi,rdx)
-{$endif FPC}
-@1: {$ifdef win64}
-    mov   rax, qword ptr[rcx]
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe  {$endif FPC}
+@1: mov   rax, qword ptr[a]
     bswap rax
-    mov   qword ptr[rdx], rax
-    add   rcx, 8
-    add   rdx, 8
-    dec   r8
-    {$else}
-    mov   rax, qword ptr[rdi]
-    bswap rax
-    mov   qword ptr[rsi], rax
-    add   rdi, 8
-    add   rsi, 8
-    dec   rdx
-    {$endif win64}
+    mov   qword ptr[b], rax
+    add   a, 8
+    add   b, 8
+    dec   n
     jnz @1
 end;
 {$else}
@@ -22827,25 +22802,16 @@ end;
 {$endif CPUX86}
 
 {$ifdef CPUX64}
-function bswap32(a: cardinal): cardinal; {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm .noframe // ecx=a (Linux: edi)
-{$endif FPC}
-  {$ifdef win64}
-  mov eax, ecx
-  {$else}
-  mov eax, edi
-  {$endif win64}
+function bswap32(a: cardinal): cardinal;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+  mov eax, a
   bswap eax
 end;
 
 function bswap64(const a: QWord): QWord; {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm .noframe // rcx=a (Linux: rdi)
 {$endif FPC}
-  {$ifdef win64}
-  mov rax, rcx
-  {$else}
-  mov rax, rdi
-  {$endif win64}
+  mov rax, a
   bswap rax
 end;
 {$else}
@@ -25134,72 +25100,82 @@ _1: Dest^ := (Value and $7F) or $80;
   result := Dest;
 end;
 
+{$ifdef CPUX64}  // very efficient branchless asm - rcx/rdi=A rdx/rsi=B
 function SortDynArrayInteger(const A,B): integer;
-begin
-  if integer(A)<integer(B) then
-    result := -1 else
-  if integer(A)>integer(B) then
-    result := 1 else
-    result := 0;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     r8d, dword ptr[A]
+        mov     edx, dword ptr[B]
+        xor     eax, eax
+        xor     ecx, ecx
+        cmp     r8d, edx
+        setl    cl
+        setg    al
+        sub     eax, ecx
 end;
-
-function SortDynArrayInt64(const A,B): integer;
-{$ifdef CPU64}
-begin
-  if Int64(A)<Int64(B) then
-    result := -1 else
-  if Int64(A)>Int64(B) then
-    result := 1 else
-    result := 0;
+function SortDynArrayCardinal(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     ecx, dword ptr[A]
+        mov     edx, dword ptr[B]
+        xor     eax, eax
+        cmp     ecx, edx
+        seta    al
+        sbb     eax, 0
 end;
-{$else}
-var tmp: Int64;
-begin
-  tmp := Int64(A)-Int64(B);
-  if tmp<0 then
-    result := -1 else
-  if tmp>0 then
-    result := 1 else
-    result := 0;
-end;
-{$endif CPU64}
-
 function SortDynArrayQWord(const A,B): integer;
-begin
-  {$ifdef CPU64}
-  if QWord(A)<QWord(B) then
-    result := -1 else
-  if QWord(A)>QWord(B) then
-  {$else}
-  if PQWord(@A)<PQWord(@B) then
-    result := -1 else
-  if PQWord(@A)>PQWord(@B) then
-  {$endif CPU64}
-    result := 1 else
-    result := 0;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     rcx, qword ptr[A]
+        mov     rdx, qword ptr[B]
+        xor     eax, eax
+        cmp     rcx, rdx
+        seta    al
+        sbb     eax, 0
 end;
-
-function CompareQWord(A, B: QWord): integer;
-begin
-  if A<B then
-    result := -1 else
-  if A>B then
-    result := 1 else
-    result := 0;
+function SortDynArrayPointer(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     rcx, qword ptr[A]
+        mov     rdx, qword ptr[B]
+        xor     eax, eax
+        cmp     rcx, rdx
+        seta    al
+        sbb     eax, 0
 end;
-
-{$ifdef CPUX64}
+function SortDynArrayInt64(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     r8, qword ptr[A]
+        mov     rdx, qword ptr[B]
+        xor     eax, eax
+        xor     ecx, ecx
+        cmp     r8, rdx
+        setl    cl
+        setg    al
+        sub     eax, ecx
+end;
+function SortDynArrayDouble(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        movsd    xmm0, qword ptr[A]
+        movsd    xmm1, qword ptr[B]
+        xor     eax, eax
+        xor     edx, edx
+        comisd  xmm0, xmm1
+        seta    al
+        setb    dl
+        sub     eax, edx
+end;
+function SortDynArraySingle(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        movss   xmm0, dword ptr[A]
+        movss   xmm1, dword ptr[B]
+        xor     eax, eax
+        xor     edx, edx
+        comiss  xmm0, xmm1
+        seta    al
+        setb    dl
+        sub     eax, edx
+end;
 function SortDynArrayAnsiString(const A,B): integer;
-{$ifdef FPC}nostackframe; assembler; const _LEN=8; asm {$else} const _LEN=4;
-asm .noframe // rcx=A, rdx=B (Linux: rdi,rsi)
-{$endif FPC}
-{$ifdef win64}
-        mov     rcx, [rcx]
-        mov     rdx, [rdx]
-{$else}
-        mov     rcx, [rdi]
-        mov     rdx, [rsi]
-{$endif win64} // Agner Fog noted no gain with SSE -> simple efficient loop
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     rcx, qword ptr[A]
+        mov     rdx, qword ptr[B]
         cmp     rcx, rdx // A=B (happens with string refcounting)
         je      @0
         test    rcx, rdx // A^ or B^ may be nil i.e. ''
@@ -25221,13 +25197,79 @@ asm .noframe // rcx=A, rdx=B (Linux: rdi,rsi)
         ret
 @ne:    jnc     @1
 @less:  or      eax, -1
-end; // note: SSE4.2 read up to 16 bytes after buffer
+end; // note: SSE4.2 read up to 16 bytes after buffer, this version won't
 {$else}
+function SortDynArrayInteger(const A,B): integer;
+begin
+  if integer(A)<integer(B) then
+    result := -1 else
+  if integer(A)>integer(B) then
+    result := 1 else
+    result := 0;
+end;
+function SortDynArrayCardinal(const A,B): integer;
+begin
+  if cardinal(A)<cardinal(B) then
+    result := -1 else
+  if cardinal(A)>cardinal(B) then
+    result := 1 else
+    result := 0;
+end;
+
+function SortDynArrayInt64(const A,B): integer;
+begin
+  if Int64(A)<Int64(B) then
+    result := -1 else
+  if Int64(A)>Int64(B) then
+    result := 1 else
+    result := 0;
+end;
+function SortDynArrayQWord(const A,B): integer;
+begin
+  if QWord(A)<QWord(B) then
+    result := -1 else
+  if QWord(A)>QWord(B) then
+    result := 1 else
+    result := 0;
+end;
+function SortDynArrayPointer(const A,B): integer;
+begin
+  if PtrUInt(A)<PtrUInt(B) then
+    result := -1 else
+  if PtrUInt(A)>PtrUInt(B) then
+    result := 1 else
+    result := 0;
+end;
+function SortDynArrayDouble(const A,B): integer;
+begin
+  if Double(A)<Double(B) then
+    result := -1 else
+  if Double(A)>Double(B) then
+    result := 1 else
+    result := 0;
+end;
+function SortDynArraySingle(const A,B): integer;
+begin
+  if Single(A)<Single(B) then
+    result := -1 else
+  if Single(A)>Single(B) then
+    result := 1 else
+    result := 0;
+end;
 function SortDynArrayAnsiString(const A,B): integer;
 begin
   result := StrCompFast(pointer(A),pointer(B));
 end;
 {$endif CPUX64}
+
+function CompareQWord(A, B: QWord): integer;
+begin
+  if A<B then
+    result := -1 else
+  if A>B then
+    result := 1 else
+    result := 0;
+end;
 
 function SortDynArrayAnsiStringI(const A,B): integer;
 begin
@@ -25236,7 +25278,7 @@ end;
 
 function SortDynArrayRawByteString(const A,B): integer;
 var p1,p2: PByteArray;
-    l1,l2,i,l: PtrInt; // FPC uses efficiently the CPU registers
+    l1,l2,i,l: PtrInt; // FPC will use very efficiently the CPU registers
 begin // we can't use StrComp() since a RawByteString may contain #0
   p1 := pointer(A);
   p2 := pointer(B);
@@ -26363,11 +26405,24 @@ asm
         lea     eax, [edx + 1]
 end;
 
+function CompareQWord(A, B: QWord): integer;
+begin
+  {$ifdef FPC_OR_UNICODE} // recent compilers are able to generate correct code
+  if A<B then
+    result := -1 else
+  if A>B then
+    result := 1 else
+    result := 0;
+  {$else}
+  result := SortDynArrayQWord(A,B); // use correct x86 asm version below
+  {$endif}
+end;
+
 function SortDynArrayInteger(const A,B): integer;
 asm
         mov     ecx, [eax]
-        xor     eax, eax
         mov     edx, [edx]
+        xor     eax, eax
         cmp     ecx, edx
         je      @0
         jg      @1
@@ -26375,9 +26430,26 @@ asm
 @0:     ret
 @1:     inc     eax
 end;
-
+function SortDynArrayCardinal(const A,B): integer;
+asm
+        mov     ecx, [eax]
+        mov     edx, [edx]
+        xor     eax, eax
+        cmp     ecx, edx
+        seta    al
+        sbb     eax,0
+end;
+function SortDynArrayPointer(const A,B): integer;
+asm
+        mov     ecx, [eax]
+        mov     edx, [edx]
+        xor     eax, eax
+        cmp     ecx, edx
+        seta    al
+        sbb     eax,0
+end;
 function SortDynArrayInt64(const A,B): integer;
-asm // Delphi x86 compiler is not efficient at compiling below code
+asm // Delphi x86 compiler is not efficient at compiling Int64 comparisons
         mov     ecx, [eax]
         mov     eax, [eax + 4]
         cmp     eax, [edx + 4]
@@ -26392,20 +26464,6 @@ asm // Delphi x86 compiler is not efficient at compiling below code
 @nz:    jl      @n
 @p:     mov     eax, 1
 end;
-
-function CompareQWord(A, B: QWord): integer;
-begin
-  {$ifdef FPC_OR_UNICODE} // recent compilers are able to generate correct code
-  if A<B then
-    result := -1 else
-  if A>B then
-    result := 1 else
-    result := 0;
-  {$else}
-  result := SortDynArrayQWord(A,B); // use correct x86 asm version below
-  {$endif}
-end;
-
 function SortDynArrayQWord(const A,B): integer;
 asm // Delphi x86 compiler is not efficient, and oldest even incorrect
         mov     ecx, [eax]
@@ -26426,7 +26484,6 @@ function SortDynArrayRawByteString(const A,B): integer;
 asm
         jmp     SortDynArrayAnsiString
 end;
-
 function SortDynArrayAnsiString(const A,B): integer;
 asm // x86 version optimized for AnsiString/RawUTF8/RawByteString types
         mov     eax, [eax]
@@ -26483,21 +26540,46 @@ asm // x86 version optimized for AnsiString/RawUTF8/RawByteString types
         ret
 @1:     mov     eax, 1
 end;
-
 function SortDynArrayAnsiStringI(const A,B): integer;
 asm // avoid a call on the stack on x86 platform
         mov     eax, [eax]
         mov     edx, [edx]
         jmp     StrIComp
 end;
-
 function SortDynArrayPUTF8Char(const A,B): integer;
 asm // avoid a call on the stack on x86 platform
         mov     eax, [eax]
         mov     edx, [edx]
         jmp     dword ptr[StrComp]
 end;
-
+function SortDynArrayDouble(const A,B): integer;
+asm
+        fld     qword ptr[eax]
+        fcomp   qword ptr[edx]
+        fstsw   ax
+        sahf
+        jz      @0
+@nz:    jnb     @p
+        or      eax, -1
+        ret
+@0:     xor     eax, eax
+        ret
+@p:     mov     eax, 1
+end;
+function SortDynArraySingle(const A,B): integer;
+asm
+        fld     dword ptr[eax]
+        fcomp   dword ptr[edx]
+        fstsw   ax
+        sahf
+        jz      @0
+@nz:    jnb     @p
+        or      eax, -1
+        ret
+@0:     xor     eax, eax
+        ret
+@p:     mov     eax, 1
+end;
 {$endif PUREPASCAL}
 
 function PosExChar(Chr: AnsiChar; const Str: RawUTF8): PtrInt;
@@ -35630,13 +35712,8 @@ procedure GetCPUID(Param: Cardinal; var Registers: TRegisters);
 {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm .noframe // ecx=param, rdx=Registers (Linux: edi,rsi)
 {$endif FPC}
-        {$ifdef win64}
-        mov     eax, ecx
-        mov     r9, rdx
-        {$else}
-        mov     eax, edi
-        mov     r9, rsi
-        {$endif win64}
+        mov     eax, Param
+        mov     r9, Registers
         mov     r10, rbx // preserve rbx
         xor     ebx, ebx
         xor     ecx, ecx
@@ -35815,17 +35892,10 @@ const
 
 {$ifdef HASAESNI}
 function StrLenSSE42(S: pointer): PtrInt;
-{$ifdef FPC}nostackframe; assembler; asm {$else}
-asm .noframe // rcx=S (Linux: rdi)
-{$endif FPC}
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         xor     rax, rax
-        {$ifdef win64}
-        mov     rdx, rcx
-        test    rcx, rcx
-        {$else}
-        mov     rdx, rdi
-        test    rdi, rdi
-        {$endif}
+        mov     rdx, S
+        test    S, S
         jz      @null
         xor     rcx, rcx
         pxor    xmm0, xmm0
@@ -49023,46 +49093,6 @@ end;
 function SortDynArrayWord(const A,B): integer;
 begin
   result := word(A)-word(B);
-end;
-
-function SortDynArrayCardinal(const A,B): integer;
-begin
-  if cardinal(A)<cardinal(B) then
-    result := -1 else
-  if cardinal(A)>cardinal(B) then
-    result := 1 else
-    result := 0;
-end;
-
-function SortDynArrayPointer(const A,B): integer;
-begin
-  {$ifdef CPU64}
-  if PtrInt(A)<PtrInt(B) then
-    result := -1 else
-  if PtrInt(A)>PtrInt(B) then
-    result := 1 else
-    result := 0;
-  {$else}
-  result := PtrInt(A)-PtrInt(B);
-  {$endif}
-end;
-
-function SortDynArraySingle(const A,B): integer;
-begin
-  if Single(A)<Single(B) then
-    result := -1 else
-  if Single(A)>Single(B) then
-    result := 1 else
-    result := 0;
-end;
-
-function SortDynArrayDouble(const A,B): integer;
-begin
-  if Double(A)<Double(B) then
-    result := -1 else
-  if Double(A)>Double(B) then
-    result := 1 else
-    result := 0;
 end;
 
 function SortDynArrayPUTF8CharI(const A,B): integer;
