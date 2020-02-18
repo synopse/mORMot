@@ -50923,8 +50923,7 @@ begin
       {$else}
       capa := PInteger(v-SizeOf(PtrInt))^;
       {$endif}
-      if delta>0 then begin
-        // size-up -> grow by chunks
+      if delta>0 then begin  // size-up -> grow by chunks
         c := PInteger(c)^;
         if capa>=c then
           exit; // no need to grow
@@ -50933,15 +50932,12 @@ begin
           aCount := c else
           aCount := capa;
       end else  // SetCount(0) from TDynArray.Clear
-      if (aCount>0) and ((fIsObjArray=oaFalse) or
-         ((fIsObjArray=oaUnknown) and not ComputeIsObjArray)) then
-        // size-down -> only if worth it (for faster Delete)
-        if (capa<=MINIMUM_SIZE) or (capa-aCount<capa shr 3) then
-          exit;
+      if (aCount>0) and ((capa<=MINIMUM_SIZE) or (capa-aCount<capa shr 3)) then
+        exit;  // size-down -> only if worth it (for faster Delete)
     end;
   end else
     if (v<>0) and (PDynArrayRec(v-SizeOf(TDynArrayRec))^.length=aCount) then
-      exit; // avoid InternalSetLength() to make a private copy
+      exit;  // no InternalSetLength(samecount) which would make a private copy
   // no external Count, array size-down or array up-grow -> realloc
   InternalSetLength(aCount);
 end;
@@ -51463,8 +51459,7 @@ end;
 
 function TDynArrayHasher.FindOrNew(aHashCode: cardinal; Elem: pointer;
   aHashTableIndex: PInteger): integer;
-var first,last,ndx: integer;
-    found: boolean;
+var first,last,ndx,cmp: integer;
     P: PAnsiChar;
 begin
   if not(canHash in State) then begin // e.g. Count<CountTrigger
@@ -51483,11 +51478,11 @@ begin
     with DynArray^ do
       P := PAnsiChar(Value^)+cardinal(ndx)*ElemSize;
     if Assigned(EventCompare) then
-      found := EventCompare(P^,Elem^)=0 else
+      cmp := EventCompare(P^,Elem^) else
     if Assigned(Compare) then
-      found := Compare(P^,Elem^)=0 else
-      found := false;
-    if found then begin // faster than hash e.g. for strings
+      cmp := Compare(P^,Elem^) else
+      cmp := 1;
+    if cmp=0 then begin // faster than hash e.g. for strings
       if aHashTableIndex<>nil then
         aHashTableIndex^ := result;
       result := ndx;
