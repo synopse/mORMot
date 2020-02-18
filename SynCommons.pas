@@ -42277,10 +42277,15 @@ begin
 end;
 
 procedure RecordSave(const Rec; var Dest: TSynTempBuffer; TypeInfo: pointer);
-var dummy: integer;
+var dummylen: integer;
+    P: PAnsiChar;
 begin
   Dest.Init(RecordSaveLength(Rec,TypeInfo));
-  RecordSave(Rec,Dest.buf,TypeInfo,dummy);
+  P := RecordSave(Rec,Dest.buf,TypeInfo,dummylen);
+  if (P=nil) or (P-Dest.buf<>Dest.len) then begin // paranoid check
+    Dest.Done;
+    raise ESynException.CreateUTF8('RecordSave TSynTempBuffer %',[TypeInfoToShortString(TypeInfo)^]);
+  end;
 end;
 
 function RecordSaveBase64(const Rec; TypeInfo: pointer; UriCompatible: boolean): RawUTF8;
