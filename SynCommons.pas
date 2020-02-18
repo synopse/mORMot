@@ -5850,7 +5850,10 @@ type
     {$endif}
     /// initialize the hash table for a given dynamic array storage
     procedure Init(aDynArray: PDynArray; aHashElement: TDynArrayHashOne;
-      aCompare: TDynArraySortCompare; aHasher: THasher; aCaseInsensitive: boolean); overload;
+     aEventHash: TEventDynArrayHashOne; aHasher: THasher; aCompare: TDynArraySortCompare;
+     aEventCompare: TEventDynArraySortCompare; aCaseInsensitive: boolean);
+    /// initialize a known hash table for a given dynamic array storage
+    procedure InitSpecific(aDynArray: PDynArray; aKind: TDynArrayKind; aCaseInsensitive: boolean);
     /// allow custom hashing via a method event
     procedure SetEventHash(const event: TEventDynArrayHashOne);
     /// search for an element value inside the dynamic array without hashing
@@ -5872,12 +5875,16 @@ type
     /// reset the hash table - no rehash yet
     procedure Clear;
     /// full computation of the internal hash table
-    function ReHash(forced, forceGrow: boolean): boolean;
+    // - returns the number of duplicated values found
+    function ReHash(forced, forceGrow: boolean): integer;
     /// compute the hash of a given item
     function HashOne(Elem: pointer): cardinal; {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 -> C1632
     /// retrieve the low-level hash of a given item
     function GetHashFromIndex(aIndex: PtrInt): cardinal;
   end;
+
+  /// pointer to a TDynArrayHasher instance
+  PDynArrayHasher = ^TDynArrayHasher;
 
   /// used to access any dynamic arrray elements using fast hash
   // - by default, binary sort could be used for searching items for TDynArray:
@@ -5924,6 +5931,8 @@ type
       NoCheckHash: boolean=false; SourceMax: PAnsiChar=nil): PAnsiChar;  inline;
     function LoadFromBinary(const Buffer: RawByteString;
       NoCheckHash: boolean=false): boolean; inline;
+    procedure CreateOrderedIndex(var aIndex: TIntegerDynArray;
+      aCompare: TDynArraySortCompare);
     property Count: PtrInt read GetCount write SetCount;
     property Capacity: PtrInt read GetCapacity write SetCapacity;
   private
@@ -5965,7 +5974,9 @@ type
     // the dynamic array content (e.g. in case of element deletion or update,
     // or after calling LoadFrom/Clear method) - this is not necessary after
     // FindHashedForAdding / FindHashedAndUpdate / FindHashedAndDelete methods
-    function ReHash(forAdd: boolean=false; forceGrow: boolean=false): boolean; {$ifdef HASINLINE}inline;{$endif}
+    // - returns the number of duplicated items found - which won't be available
+    // by hashed FindHashed() by definition
+    function ReHash(forAdd: boolean=false; forceGrow: boolean=false): integer;
     /// search for an element value inside the dynamic array using hashing
     // - Elem should be of the type expected by both the hash function and
     // Equals/Compare methods: e.g. if the searched/hashed field in a record is
@@ -9621,7 +9632,7 @@ type
     fHash: TDynArrayHashed;
     fChanged: boolean;
     procedure SetCaseSensitive(Value: boolean); override;
-    /// will set fChanged=true to force re-hash of all items
+    /// will set fChanged=true to force full re-hash after TRawUTF8List methods
     procedure Changed; override;
   public
     /// initialize the class instance
@@ -9649,7 +9660,7 @@ type
     /// delete a stored RawUTF8 item, and its associated TObject
     // - returns -1 if no entry was found and deleted
     // - this overridden method will update and use the internal hash table,
-    // so is preferred to plain Add if you want faster insertion
+    // so is preferred to plain Delete if you want faster insertion
     // into the TRawUTF8ListHashed
     function Delete(const aText: RawUTF8): PtrInt; override;
     /// search in the low-level internal hashing table
@@ -51418,27 +51429,33 @@ end;
 {$endif NOVARIANTS}
 
 procedure TDynArrayHasher.Init(aDynArray: PDynArray; aHashElement: TDynArrayHashOne;
-  aCompare: TDynArraySortCompare; aHasher: THasher; aCaseInsensitive: boolean);
-var k: TDynArrayKind;
+  aEventHash: TEventDynArrayHashOne; aHasher: THasher; aCompare: TDynArraySortCompare;
+  aEventCompare: TEventDynArraySortCompare; aCaseInsensitive: boolean);
 begin
   DynArray := aDynArray;
   if @aHasher=nil then
     Hasher := DefaultHasher else
     Hasher := aHasher;
-  if (@aHashElement=nil) or (@aCompare=nil) then begin
-    // it's faster to retrieve now the hashing/compare functions
-    k := DynArray^.GuessKnownType;
-    if @aHashElement=nil then
-      aHashElement := DYNARRAY_HASHFIRSTFIELD[aCaseInsensitive,k];
-    if @aCompare=nil then
-      aCompare := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,k];
-  end;
   HashElement := aHashElement;
   EventHash := nil;
   Compare := aCompare;
-  EventCompare := nil;
+  EventCompare := aEventCompare;
+  if (@Compare=nil) and (@EventCompare=nil) then
+    Compare := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,DynArray^.GuessKnownType];
   CountTrigger := 32;
   Clear;
+end;
+
+procedure TDynArrayHasher.InitSpecific(aDynArray: PDynArray; aKind: TDynArrayKind;
+  aCaseInsensitive: boolean);
+var cmp: TDynArraySortCompare;
+    hsh: TDynArrayHashOne;
+begin
+  cmp := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,aKind];
+  hsh := DYNARRAY_HASHFIRSTFIELD[aCaseInsensitive,aKind];
+  if (@hsh=nil) or (@cmp=nil) then
+    raise ESynException.CreateUTF8('TDynArrayHasher.InitSpecific: %?',[ToText(aKind)^]);
+  Init(aDynArray,hsh,nil,nil,cmp,nil,aCaseInsensitive)
 end;
 
 procedure TDynArrayHasher.Clear;
@@ -51897,14 +51914,13 @@ begin
   max := DynArray^.Count-1;
   P := DynArray^.Value^;
   siz := DynArray^.ElemSize;
-  if Assigned(EventCompare) then begin // custom comparison
+  if Assigned(EventCompare) then // custom comparison
     for i := 0 to max do
       if EventCompare(P^,Elem^)=0 then begin
         result := i;
         break;
       end else
-        inc(P,siz);
-  end else
+        inc(P,siz) else
   if Assigned(Compare) then
     for i := 0 to max do
       if Compare(P^,Elem^)=0 then begin
@@ -51934,12 +51950,12 @@ begin
     result := -1; // for coherency with most search methods
 end;
 
-function TDynArrayHasher.ReHash(forced, forceGrow: boolean): boolean;
+function TDynArrayHasher.ReHash(forced, forceGrow: boolean): integer;
 var i, n, cap, siz, ndx: integer;
     P: PAnsiChar;
     hc: cardinal;
 begin
-  result := false;
+  result := 0;
   // initialize a new void HashTable[]=0
   siz := HashTableSize;
   Clear;
@@ -51972,12 +51988,11 @@ begin
       hc := EventHash(P^) else
       hc := HashElement(P^,Hasher);
     ndx := FindOrNew(hc,P,nil);
-    if ndx<0 then
-      // >=0 means found exact duplicate of P^: shouldn't happen -> ignore
+    if ndx>=0 then
+      inc(result) else  // found duplicated value
       HashTable[-ndx-1] := i; // store index+1 (0 means void entry)
     inc(P,DynArray^.ElemSize);
   end;
-  result := true;
 end;
 
 
@@ -52067,6 +52082,11 @@ procedure TDynArrayHashed.Sort(aCompare: TDynArraySortCompare);
 begin
   InternalDynArray.Sort(aCompare);
 end;
+procedure TDynArrayHashed.CreateOrderedIndex(var aIndex: TIntegerDynArray;
+  aCompare: TDynArraySortCompare);
+begin
+  InternalDynArray.CreateOrderedIndex(aIndex,aCompare);
+end;
 function TDynArrayHashed.LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char{$ifndef NOVARIANTS};
       CustomVariantOptions: PDocVariantOptions{$endif}): PUTF8Char;
 begin
@@ -52086,22 +52106,18 @@ procedure TDynArrayHashed.Init(aTypeInfo: pointer; var aValue;
 begin
   {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$else}inherited{$endif}
     Init(aTypeInfo,aValue,aCountPointer);
-  fHash.Init(@self,aHashElement,aCompare,aHasher,aCaseInsensitive);
+  fHash.Init(@self,aHashElement,nil,aHasher,aCompare,nil,aCaseInsensitive);
   {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}SetCompare(fHash.Compare);
 end;
 
 procedure TDynArrayHashed.InitSpecific(aTypeInfo: pointer; var aValue;
   aKind: TDynArrayKind; aCountPointer: PInteger; aCaseInsensitive: boolean);
-var cmp: TDynArraySortCompare;
-    hsh: TDynArrayHashOne;
 begin
-  cmp := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,aKind];
-  hsh := DYNARRAY_HASHFIRSTFIELD[aCaseInsensitive,aKind];
-  if (@hsh=nil) or (@cmp=nil) then
-    raise ESynException.CreateUTF8('TDynArrayHashed.InitSpecific unsupported %',
-      [ToText(aKind)^]);
-  Init(aTypeInfo,aValue,hsh,cmp,nil,aCountPointer,aCaseInsensitive);
+  {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$else}inherited{$endif}
+    Init(aTypeInfo,aValue,aCountPointer);
+  fHash.InitSpecific(@self,aKind,aCaseInsensitive);
   {$ifdef UNDIRECTDYNARRAY}with InternalDynArray do{$endif} begin
+    fCompare := fHash.Compare;
     fKnownType := aKind;
     fKnownSize := KNOWNTYPE_SIZE[aKind];
   end;
@@ -52232,7 +52248,7 @@ begin
   result := fHash.GetHashFromIndex(aIndex);
 end;
 
-function TDynArrayHashed.ReHash(forAdd: boolean; forceGrow: boolean): boolean;
+function TDynArrayHashed.ReHash(forAdd: boolean; forceGrow: boolean): integer;
 begin
   result := fHash.ReHash(forAdd,forceGrow);
 end;
