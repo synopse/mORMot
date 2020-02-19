@@ -2537,15 +2537,17 @@ function UrlEncode(const NameValuePairs: array of const): RawUTF8; overload;
 
 /// encode a JSON object UTF-8 buffer into URI parameters
 // - you can specify property names to ignore during the object decoding
+// - you can force to omit the leading query delimiter ('?') by setting IncludeQueryDelimiter to false
 // - warning: the ParametersJSON input buffer will be modified in-place
 function UrlEncodeJsonObject(const URIName: RawUTF8; ParametersJSON: PUTF8Char;
-  const PropNamesToIgnore: array of RawUTF8): RawUTF8; overload;
+  const PropNamesToIgnore: array of RawUTF8; const IncludeQueryDelimiter: Boolean=true): RawUTF8; overload;
 
 /// encode a JSON object UTF-8 buffer into URI parameters
 // - you can specify property names to ignore during the object decoding
+// - you can force to omit the leading query delimiter ('?') by setting IncludeQueryDelimiter to false
 // - overloaded function which will make a copy of the input JSON before parsing
 function UrlEncodeJsonObject(const URIName, ParametersJSON: RawUTF8;
-  const PropNamesToIgnore: array of RawUTF8): RawUTF8; overload;
+  const PropNamesToIgnore: array of RawUTF8; const IncludeQueryDelimiter: Boolean=true): RawUTF8; overload;
 
 /// decode a string compatible with URI encoding into its original value
 // - you can specify the decoding range (as in copy(s,i,len) function)
@@ -10275,7 +10277,7 @@ type
   TOnKeyResolve = function(const aInterface: TGUID; const Key: RawUTF8; out Obj): boolean of object;
   /// event signature to notify a given string key
   TOnKeyNotify = procedure(Sender: TObject; const Key: RawUTF8) of object;
-  
+
 var
   /// mORMot.pas will registry here its T*ObjArray serialization process
   // - will be used by TDynArray.GetIsObjArray
@@ -30962,7 +30964,7 @@ begin
   {$endif}
 end;
 
-function SearchRecValidFile(const F: TSearchRec): boolean; 
+function SearchRecValidFile(const F: TSearchRec): boolean;
 begin
   {$ifndef DELPHI5OROLDER}
   {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
@@ -34812,9 +34814,9 @@ begin
 end;
 
 function UrlEncodeJsonObject(const URIName: RawUTF8; ParametersJSON: PUTF8Char;
-  const PropNamesToIgnore: array of RawUTF8): RawUTF8;
+  const PropNamesToIgnore: array of RawUTF8; const IncludeQueryDelimiter: Boolean=true): RawUTF8;
 var i,j: integer;
-    sep: AnsiChar;
+    sep: AnsiString;
     Params: TNameValuePUTF8CharDynArray;
     temp: TTextWriterStackBuffer;
 begin
@@ -34824,7 +34826,9 @@ begin
     try
       AddString(URIName);
       if (JSONDecode(ParametersJSON,Params,true)<>nil) and (Params<>nil) then begin
-        sep := '?';
+        if IncludeQueryDelimiter then
+          sep := '?' else
+          sep := '';
         for i := 0 to High(Params) do
         with Params[i] do begin
           for j := 0 to high(PropNamesToIgnore) do
@@ -34834,7 +34838,7 @@ begin
             end;
           if NameLen=0 then
             continue;
-          Add(sep);
+          AddAnsiString(sep,twNone);
           AddNoJSONEscape(Name,NameLen);
           Add('=');
           AddString(UrlEncode(Value));
@@ -34848,12 +34852,12 @@ begin
 end;
 
 function UrlEncodeJsonObject(const URIName, ParametersJSON: RawUTF8;
-  const PropNamesToIgnore: array of RawUTF8): RawUTF8;
+  const PropNamesToIgnore: array of RawUTF8; const IncludeQueryDelimiter: Boolean=true): RawUTF8;
 var temp: TSynTempBuffer;
 begin
   temp.Init(ParametersJSON);
   try
-    result := UrlEncodeJsonObject(URIName,temp.buf,PropNamesToIgnore);
+    result := UrlEncodeJsonObject(URIName,temp.buf,PropNamesToIgnore,IncludeQueryDelimiter);
   finally
     temp.Done;
   end;
