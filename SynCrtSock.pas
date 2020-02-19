@@ -9212,8 +9212,8 @@ begin
           continue;
         end;
         if Assigned(OnBeforeBody) then begin
-          with Context do
-            Err := OnBeforeBody(URL,Method,InHeaders,InContentType,RemoteIP,InContentLength,fUseSSL);
+          Err := OnBeforeBody(Context.URL,Context.Method,Context.InHeaders,
+            Context.InContentType,RemoteIP,InContentLength,Context.fUseSSL);
           if Err<>STATUS_SUCCESS then begin
             SendError(Err,'Rejected');
             continue;
