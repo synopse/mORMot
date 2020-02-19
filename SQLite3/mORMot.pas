@@ -21064,7 +21064,7 @@ asm
 end;
 
 function TSQLRecordDynArrayCompare(const Item1,Item2): integer;
-{$ifdef CPUX642}  // very efficient branchless asm - rcx/rdi=Item1 rdx/rsi=Item2
+{$ifdef CPUX64}  // very efficient branchless asm - rcx/rdi=Item1 rdx/rsi=Item2
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     rcx, qword ptr[Item1]
         mov     rdx, qword ptr[Item2]
@@ -22507,7 +22507,8 @@ begin
     result := -1 else
   if Item2=nil then
     result := 1 else
-    result := CompareInteger(fPropInfo.GetOrdProp(Item1),fPropInfo.GetOrdProp(Item2));
+    result := {$ifdef HASINLINE}CompareInteger{$else}SortDynArrayInteger{$endif}(
+      fPropInfo.GetOrdProp(Item1),fPropInfo.GetOrdProp(Item2));
 end;
 
 function TSQLPropInfoRTTIInt32.SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar;
