@@ -21142,7 +21142,8 @@ asm
         popcnt  rax, value
 {$else}
 asm     .noframe
-        db      $f3,$48,$0f,$B8,{$ifdef win64}$c1{$else}$c7{$endif}
+        {$ifdef win64} db $f3,$48,$0f,$B8,$c1
+        {$else}        db $f3,$48,$0f,$B8,$c7 {$endif}
 {$endif FPC}
 end;
 function GetBitsCountPas(value: PtrInt): PtrInt;
@@ -35720,54 +35721,43 @@ function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm .noframe // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
 {$endif FPC}
-        {$ifdef win64}
-        mov     eax, ecx
-        {$else}
-        mov     eax, edi
-        mov     r8, rdx
-        mov     rdx, rsi
-        {$endif win64}
+        mov     eax, crc
         not     eax
-        test    rdx, rdx
+        test    len, len
         jz      @0
-        test    r8, r8
+        test    buf, buf
         jz      @0
-        test    dl, 7
-        jz      @8 // align to 8 bytes boundary
-@7:     crc32   eax, byte ptr[rdx]
-        inc     rdx
-        dec     r8
+        jmp     @align
+@7:     crc32   eax, byte ptr[buf]
+        inc     buf
+        dec     len
         jz      @0
-        test    dl, 7
+@align: test    buf, 7
         jnz     @7
-@8:     mov     rcx, r8
-        shr     r8, 3
-        jz      @2
-{$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@1:     {$ifdef FPC}
-        crc32   rax, qword [rdx] // hash 8 bytes per loop
-        {$else}
-        db $F2,$48,$0F,$38,$F1,$02 // circumvent Delphi inline asm compiler bug
-        {$endif}
-        add     rdx, 8
-        dec     r8
-        jnz     @1
-@2:     and     ecx, 7
+        mov     ecx, len
+        shr     len, 3
+        jnz     @s
+@2:     test    cl, 4
+        jz      @3
+        crc32   eax, dword ptr[buf]
+        add     buf, 4
+@3:     test    cl, 2
+        jz      @1
+        crc32   eax, word ptr[buf]
+        add     buf, 2
+@1:     test    cl, 1
         jz      @0
-        cmp     ecx, 4
-        jb      @4
-        crc32   eax, dword ptr[rdx]
-        add     rdx, 4
-        sub     ecx, 4
-        jz      @0
-@4:     crc32   eax, byte ptr[rdx]
-        dec     ecx
-        jz      @0
-        crc32   eax, byte ptr[rdx + 1]
-        dec     ecx
-        jz      @0
-        crc32   eax, byte ptr[rdx + 2]
+        crc32   eax, byte ptr[buf]
 @0:     not     eax
+        ret
+{$ifdef FPC} align 16
+@s:     crc32   rax, qword [buf] // hash 8 bytes per loop
+{$else} .align 16
+@s:     db $F2,$48,$0F,$38,$F1,$02 // circumvent Delphi inline asm compiler bug
+{$endif}add     buf, 8
+        dec     len
+        jnz     @s
+        jmp     @2
 end;
 
 function StrLenSSE2(S: pointer): PtrInt;

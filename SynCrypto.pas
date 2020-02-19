@@ -14967,66 +14967,43 @@ end;
 
 function crc32_iscsi_01(buf: PAnsiChar; len: PtrUInt; crc: cardinal): cardinal; {$ifdef FPC}cdecl;{$endif} external;
 
-function crc32c_sse42_aesni(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
-{$ifdef FPC}nostackframe; assembler; asm{$else}
-asm // rcx=crc, rdx=buf, r8=len (linux: rdi, rsi, rdx)
-        .noframe
-{$endif}{$ifdef win64}
-        mov     rax, rcx
-        mov     rcx, r8
-        {$else}
-        mov     rax, rdi
-        mov     r8, rdx
-        mov     rcx, rdx
-        mov     rdx, rsi
-        {$endif}
+function crc32c_sse42_aesni(crc: PtrUInt; buf: PAnsiChar; len: PtrUInt): cardinal;
+{$ifdef FPC}nostackframe; assembler; asm{$else}asm .noframe {$endif}
+        mov     rax, crc
+        mov     rcx, len
         not     eax
-        test    rdx, rdx
-        jz      @0
-        test    r8, r8
-        jz      @0
-        cmp     r8, 64
-        ja      @intel // only call Intel code if worth it
-        shr     r8, 3
-        jz      @2
-{$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@1:     {$ifdef FPC}
-        crc32   rax, qword [rdx] // hash 8 unaligned bytes per opcode
-        {$else}
-        db $F2,$48,$0F,$38,$F1,$02 // circumvent Delphi inline asm compiler bug
-        {$endif}
-        add     rdx, 8
-        dec     r8
-        jnz     @1
-@2:     and     ecx, 7
-        jz      @0
-        cmp     ecx, 4
-        jb      @4
-        crc32   eax, dword ptr[rdx]
-        add     rdx, 4
-        sub     ecx, 4
-        jz      @0
-@4:     crc32   eax, byte ptr[rdx]
-        dec     ecx
-        jz      @0
-        crc32   eax, byte ptr[rdx + 1]
-        dec     ecx
-        jz      @0
-        crc32   eax, byte ptr[rdx + 2]
-@0:     not     eax
-        ret
-@intel: {$ifdef win64}
-        mov     rcx, rdx
-        mov     rdx, r8
-        mov     r8, rax
-        {$else}
-        mov     rdi, rdx
-        mov     rsi, r8
-        mov     rdx, rax
-        {$endif}
+        test    buf, buf
+        jz      @z
+        cmp     len, 64
+        jb      @sml
+        // our  call: rcx/rdi=crc rdx/rsi=buf r8/rdx=len
+        // iscsi_01:  rcx/rdi=buf rdx/rsi=len r8/rdx=crc
+        mov     crc, buf
+        mov     buf, len
+        mov     len, rax
         call    crc32_iscsi_01
-        not     eax
-@none:
+@z:     not eax
+        ret
+@sml:   shr     len, 3
+        jz      @2
+{$ifdef FPC} align 16
+@s:     crc32   rax, qword [buf] // hash 8 bytes per loop
+{$else} @s:     db $F2,$48,$0F,$38,$F1,$02 // circumvent Delphi inline asm compiler bug
+{$endif}add     buf, 8
+        dec     len
+        jnz     @s
+@2:     test    cl, 4
+        jz      @3
+        crc32   eax, dword ptr[buf]
+        add     buf, 4
+@3:     test    cl, 2
+        jz      @1
+        crc32   eax, word ptr[buf]
+        add     buf, 2
+@1:     test    cl, 1
+        jz      @0
+        crc32   eax, byte ptr[buf]
+@0:     not     eax
 end;
 
 {$endif CRC32C_X64}
