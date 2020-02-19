@@ -14261,10 +14261,11 @@ const
   // - equals private constant varDeepData in Delphi's Variants.pas and
   // varComplexType in FPC's variants.pp - seldom used on FPC
   // - make some false positive to varBoolean and varError
+  // - our overloaded VarClear() inlined function uses this constant
   VTYPE_STATIC = $BFE8;
 
 {$ifdef FPC}
-/// overwritten function which can be properly inlined
+/// overloaded function which can be properly inlined
 procedure VarClear(var v: variant); inline;
 {$endif FPC}
 
@@ -14394,10 +14395,9 @@ type
     procedure CopyByValue(var Dest: TVarData; const Source: TVarData); virtual;
     /// this method will allow to look for dotted name spaces, e.g. 'parent.child'
     // - should return Unassigned if the FullName does not match any value
-    // - this default implementation will handle TDocVariant storage, or using
-    // generic TSynInvokeableVariantType.IntGet() until nested value match
-    // - you can override it with a more optimized version
-    procedure Lookup(var Dest: TVarData; const V: TVarData; FullName: PUTF8Char); virtual;
+    // - will identify TDocVariant storage, or resolve and call the generic
+    // TSynInvokeableVariantType.IntGet() method until nested value match
+    procedure Lookup(var Dest: TVarData; const V: TVarData; FullName: PUTF8Char);
     /// will check if the value is an array, and return the number of items
     // - if the document is an array, will return the items count (0 meaning
     // void array)
@@ -14647,7 +14647,7 @@ function RawUTF8ToVariant(const Txt: RawUTF8): variant; overload;
 // varOleStr / varUString) - if the type is not handled, will raise an
 // EVariantTypeCastError
 procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: TVarData;
-  ExpectedValueType: word); overload;
+  ExpectedValueType: cardinal); overload;
 
 /// convert an open array (const Args: array of const) argument to a variant
 // - note that, due to a Delphi compiler limitation, cardinal values should be
@@ -17600,7 +17600,7 @@ procedure VarClear(var v: variant); // defined here for proper inlining
 var p: pointer; // more efficient generated asm with an explicit temp variable
 begin
   p := @v;
-  if PVarData(p)^.VType and VTYPE_STATIC=0 then
+  if integer(PVarData(p)^.VType) and VTYPE_STATIC=0 then
     PPtrInt(p)^ := 0 else
     VarClearProc(PVarData(p)^);
 end;
@@ -20745,13 +20745,15 @@ begin
 end;
 
 procedure TRawUTF8Interning.UniqueVariant(var aResult: variant);
+var vt: cardinal;
 begin
+  vt := TVarData(aresult).VType;
   with TVarData(aresult) do
-    if VType=varString then
+    if vt=varString then
       UniqueText(RawUTF8(VString)) else
-    if VType=varVariant or varByRef then
+    if vt=varVariant or varByRef then
       UniqueVariant(PVariant(VPointer)^) else
-    if VType=varString or varByRef then
+    if vt=varString or varByRef then
       UniqueText(PRawUTF8(VPointer)^);
 end;
 
@@ -22173,7 +22175,7 @@ begin
   typ := typ and not varByRef;
   case typ of
   varVariant:
-    if PVarData(TVarData(Source).VPointer)^.VType in
+    if integer(PVarData(TVarData(Source).VPointer)^.VType) in
         [varEmpty..varDate,varBoolean,varShortInt..varWord64] then begin
       Dest := PVarData(TVarData(Source).VPointer)^;
       result := true;
@@ -22188,9 +22190,11 @@ end;
 
 function VariantToInteger(const V: Variant; var Value: integer): boolean;
 var tmp: TVarData;
+    vt: cardinal;
 begin
   result := false;
-  case TVarData(V).VType of
+  vt := TVarData(V).VType;
+  case vt of
   varNull,
   varEmpty:    Value := 0;
   varBoolean:  if TVarData(V).VBoolean then Value := 1 else Value := 0; // normalize
@@ -22225,13 +22229,15 @@ end;
 
 function VariantToDouble(const V: Variant; var Value: double): boolean;
 var tmp: TVarData;
+    vt: cardinal;
 begin
-  if TVarData(V).VType=varVariant or varByRef then
+  vt := TVarData(V).VType;
+  if vt=varVariant or varByRef then
     result := VariantToDouble(PVariant(TVarData(V).VPointer)^,Value) else begin
     result := true;
     if VariantToInt64(V,tmp.VInt64) then // also handle varEmpty,varNull
       Value := tmp.VInt64 else
-    case TVarData(V).VType of
+    case vt of
     varDouble,varDate:
       Value := TVarData(V).VDouble;
     varSingle:
@@ -22255,13 +22261,15 @@ end;
 
 function VariantToCurrency(const V: Variant; var Value: currency): boolean;
 var tmp: TVarData;
+    vt: cardinal;
 begin
-  if TVarData(V).VType=varVariant or varByRef then
+  vt := TVarData(V).VType;
+  if vt=varVariant or varByRef then
     result := VariantToCurrency(PVariant(TVarData(V).VPointer)^,Value) else begin
     result := true;
     if VariantToInt64(V,tmp.VInt64) then
       Value := tmp.VInt64 else
-    case TVarData(V).VType of
+    case vt of
     varDouble,varDate:
       Value := TVarData(V).VDouble;
     varSingle:
@@ -22278,8 +22286,10 @@ end;
 
 function VariantToBoolean(const V: Variant; var Value: Boolean): boolean;
 var tmp: TVarData;
+    vt: cardinal;
 begin
-  case TVarData(V).VType of
+  vt := TVarData(V).VType;
+  case vt of
   varEmpty, varNull: begin
     result := false;
     exit;
@@ -22314,8 +22324,10 @@ end;
 
 function VariantToInt64(const V: Variant; var Value: Int64): boolean;
 var tmp: TVarData;
+    vt: cardinal;
 begin
-  case TVarData(V).VType of
+  vt := TVarData(V).VType;
+  case vt of
   varNull,
   varEmpty:    Value := 0;
   varBoolean:  if TVarData(V).VBoolean then Value := 1 else Value := 0; // normalize
@@ -22375,11 +22387,13 @@ end;
 function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
 var tmp: RawUTF8;
     vd: TVarData;
+    vt: cardinal;
 begin
-  if TVarData(V).VType=varVariant or varByRef then
+  vt := TVarData(V).VType;
+  if vt=varVariant or varByRef then
     result := VariantToDateTime(PVariant(TVarData(V).VPointer)^,Value) else begin
     result := true;
-    case TVarData(V).VType of
+    case vt of
     varDouble,varDate:
       Value := TVarData(V).VDouble;
     varSingle:
@@ -22420,10 +22434,12 @@ end;
 procedure VariantToUTF8(const V: Variant; var result: RawUTF8;
   var wasString: boolean);
 var tmp: TVarData;
+    vt: cardinal;
 begin
   wasString := false;
+  vt := TVarData(V).VType;
   with TVarData(V) do
-  case VType of
+  case vt of
   varEmpty,
   varNull:
     result := NULL_STR_VAR;
@@ -22480,9 +22496,9 @@ begin
   else
   if SetVariantUnRefSimpleValue(V,tmp) then
     VariantToUTF8(Variant(tmp),result,wasString) else
-  if VType=varVariant or varByRef then // complex varByRef
+  if vt=varVariant or varByRef then // complex varByRef
     VariantToUTF8(PVariant(VPointer)^,result,wasString) else
-  if VType=varByRef or varString then begin
+  if vt=varByRef or varString then begin
     wasString := true;
     {$ifdef HASCODEPAGE}
     AnyAnsiToUTF8(PRawByteString(VString)^,result);
@@ -22490,12 +22506,12 @@ begin
     result := PRawUTF8(VString)^;
     {$endif}
   end else
-  if VType=varByRef or varOleStr then begin
+  if vt=varByRef or varOleStr then begin
     wasString := true;
     RawUnicodeToUtf8(pointer(PWideString(VAny)^),length(PWideString(VAny)^),result);
   end else
   {$ifdef HASVARUSTRING}
-  if VType=varByRef or varUString then begin
+  if vt=varByRef or varUString then begin
     wasString := true;
     RawUnicodeToUtf8(pointer(PUnicodeString(VAny)^),length(PUnicodeString(VAny)^),result);
   end else
@@ -22533,9 +22549,11 @@ function VariantEquals(const V: Variant; const Str: RawUTF8;
       result := IdemPropNameU(tmp,Str);
   end;
 var v1,v2: Int64;
+    vt: cardinal;
 begin
+  vt := TVarData(V).VType;
   with TVarData(V) do
-    case VType of
+    case vt of
     varEmpty,varNull:
       result := Str='';
     varBoolean:
@@ -22555,16 +22573,18 @@ end;
 function VariantToString(const V: Variant): string;
 var wasString: boolean;
     tmp: RawUTF8;
+    vt: cardinal;
 begin
+  vt := TVarData(V).VType;
   with TVarData(V) do
-    case VType of
+    case vt of
     varEmpty,varNull:
       result := ''; // default VariantToUTF8(null)='null'
     {$ifdef UNICODE} // not HASVARUSTRING: here we handle string=UnicodeString
     varUString:
       result := UnicodeString(VAny);
     else
-    if VType=varByRef or varUString then
+    if vt=varByRef or varUString then
       result := PUnicodeString(VAny)^
     {$endif}
     else begin
@@ -22579,8 +22599,7 @@ end;
 procedure VariantDynArrayClear(var Value: TVariantDynArray);
 var p: PDynArrayRec;
     V: PVarData;
-    i: integer;
-    docv: word;
+    i,vt,docv: integer;
     handler: TCustomVariantType;
 begin
   if pointer(Value)=nil then
@@ -22595,7 +22614,8 @@ begin
   handler := nil;
   docv := DocVariantVType;
   for i := 1 to p^.length do begin
-    case V^.VType of
+    vt := V^.VType;
+    case vt of
     varEmpty..varDate,varError,varBoolean,varShortInt..varWord64: ;
     varString: {$ifdef FPC}Finalize(RawUTF8(V^.VAny)){$else}RawUTF8(V^.VAny) := ''{$endif};
     varOleStr: WideString(V^.VAny) := '';
@@ -22603,16 +22623,16 @@ begin
     varUString: UnicodeString(V^.VAny) := '';
     {$endif}
     else
-    if V^.VType=docv then
+    if vt=docv then
       DocVariantType.Clear(V^) else
-    if V^.VType=varVariant or varByRef then
+    if vt=varVariant or varByRef then
       VarClear(PVariant(V^.VPointer)^) else
     if handler=nil then
-      if (V^.VType and varByRef=0) and
-         FindCustomVariantType(V^.VType,handler) then
+      if (vt and varByRef=0) and
+         FindCustomVariantType(vt,handler) then
         handler.Clear(V^) else
         VarClear(variant(V^)) else
-      if V^.VType=handler.VarType then
+      if vt=handler.VarType then
         handler.Clear(V^) else
         VarClear(variant(V^));
     end;
@@ -44493,7 +44513,7 @@ begin
                  result := PInt64(Value)^=0;
     ptExtended:  result := PExtended(Value)^=0;
     {$ifndef NOVARIANTS}
-    ptVariant:   result := PVarData(Value)^.VType<=varNull;
+    ptVariant:   result := integer(PVarData(Value)^.VType)<=varNull;
     {$endif}
     ptRawJSON,ptRawByteString,ptRawUTF8,ptString,ptSynUnicode,ptWideString,
     {$ifdef HASVARUSTRING}ptUnicodeString,{$endif}ptArray:
@@ -44988,7 +45008,7 @@ end;
 
 procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
 begin
-  case TVarData(Value).VType of
+  case integer(TVarData(Value).VType) of
   varEmpty, varNull:
     Dest := '';
   varString:
@@ -45007,9 +45027,11 @@ end;
 {$endif LVCL}
 
 function VarDataIsEmptyOrNull(VarData: pointer): Boolean;
+var vt: cardinal;
 begin
   repeat
-    if PVarData(VarData)^.VType<>varVariant or varByRef then
+    vt := PVarData(VarData)^.VType;
+    if vt<>varVariant or varByRef then
       break;
     VarData := PVarData(VarData)^.VPointer;
     if VarData=nil then begin
@@ -45017,8 +45039,7 @@ begin
       exit;
     end;
   until false;
-  result := (PVarData(VarData)^.VType<=varNull) or
-            (PVarData(VarData)^.VType=varNull or varByRef);
+  result := (vt<=varNull) or (vt=varNull or varByRef);
 end;
 
 function VarIsEmptyOrNull(const V: Variant): Boolean;
@@ -45028,10 +45049,12 @@ end;
 
 function VarIs(const V: Variant; const VTypes: TVarDataTypes): Boolean;
 var VD: PVarData;
+    vt: cardinal;
 begin
   VD := @V;
   repeat
-    if VD^.VType<>varVariant or varByRef then
+    vt := VD^.VType;
+    if vt<>varVariant or varByRef then
       break;
     VD := VD^.VPointer;
     if VD=nil then begin
@@ -45039,13 +45062,15 @@ begin
       exit;
     end;
   until false;
-  result := VD^.VType in VTypes;
+  result := vt in VTypes;
 end;
 
 function VarIsVoid(const V: Variant): boolean;
+var vt: cardinal;
 begin
+  vt := TVarData(V).VType;
   with TVarData(V) do
-    case VType of
+    case vt of
     varEmpty,varNull:
       result := true;
     varBoolean:
@@ -45055,13 +45080,13 @@ begin
     varDate:
       result := VInt64=0;
     else
-      if VType=varVariant or varByRef then
+      if vt=varVariant or varByRef then
         result := VarIsVoid(PVariant(VPointer)^) else
-      if (VType=varByRef or varString) or (VType=varByRef or varOleStr)
-         {$ifdef HASVARUSTRING} or (VType=varByRef or varUString) {$endif} then
+      if (vt=varByRef or varString) or (vt=varByRef or varOleStr)
+         {$ifdef HASVARUSTRING} or (vt=varByRef or varUString) {$endif} then
         result := PPointer(VAny)^=nil else
       {$ifndef NOVARIANTS}
-      if VType=word(DocVariantVType) then
+      if vt=cardinal(DocVariantVType) then
         result := TDocVariantData(V).Count=0 else
       {$endif}
         result := false;
@@ -45083,12 +45108,13 @@ procedure GetJSONToAnyVariant(var Value: variant; var JSON: PUTF8Char;
   EndOfObject: PUTF8Char; Options: PDocVariantOptions; AllowDouble: boolean); forward;
 
 procedure SetVariantByRef(const Source: Variant; var Dest: Variant);
+var vt: cardinal;
 begin
   {$ifndef FPC}if TVarData(Dest).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(Dest);
-  if (TVarData(Source).VType=varVariant or varByRef) or
-     (TVarData(Source).VType in // already byref or simple
-       [varEmpty..varDate,varBoolean,varShortInt..varWord64]) then
+  vt := TVarData(Source).VType;
+  if (vt=varVariant or varByRef) or
+     (vt in [varEmpty..varDate,varBoolean,varShortInt..varWord64]) then
     TVarData(Dest) := TVarData(Source) else
   if not SetVariantUnRefSimpleValue(Source,TVarData(Dest)) then begin
     TVarData(Dest).VType := varVariant or varByRef;
@@ -45099,15 +45125,19 @@ end;
 procedure SetVariantByValue(const Source: Variant; var Dest: Variant);
 var s: PVarData;
     d: TVarData absolute Dest;
+    vt: cardinal;
 begin
   s := @Source;
-  if s^.VType=varVariant or varByRef then
-    s := s^.VPointer;
   {$ifndef FPC}if d.VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(Dest);
-  case s^.VType of
+  vt := s^.VType;
+  if vt=varVariant or varByRef then begin
+    s := s^.VPointer;
+    vt := s^.VType;
+  end;
+  case vt of
   varEmpty..varDate,varBoolean,varShortInt..varWord64: begin
-    d.VType := s^.VType;
+    d.VType := vt;
     d.VInt64 := s^.VInt64;
   end;
   varString: begin
@@ -45128,7 +45158,7 @@ begin
   end;
   else
     if not SetVariantUnRefSimpleValue(PVariant(s)^,d) then
-      if s^.VType=word(DocVariantVType) then
+      if vt=cardinal(DocVariantVType) then
         DocVariantType.CopyByValue(d,s^) else
         Dest := PVariant(s)^;
   end;
@@ -45147,7 +45177,7 @@ end;
 procedure FillZero(var value: variant);
 begin
   with TVarData(Value) do
-    case VType of
+    case cardinal(VType) of
     varString: FillZero(RawByteString(VAny));
     end;
   VarClear(Value);
@@ -45156,7 +45186,7 @@ end;
 procedure RawUTF8ToVariant(Txt: PUTF8Char; TxtLen: integer; var Value: variant);
 begin
   with TVarData(Value) do begin
-    if VType<>varString then begin // in-place replacement of a RawUTF8 value
+    if cardinal(VType)<>varString then begin // in-place replacement of a RawUTF8 value
       {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
         VarClear(Value);
       VType := varString;
@@ -45169,7 +45199,7 @@ end;
 procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: variant);
 begin
   with TVarData(Value) do begin
-    if VType<>varString then begin // in-place replacement of a RawUTF8 value
+    if cardinal(VType)<>varString then begin // in-place replacement of a RawUTF8 value
       {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
         VarClear(Value);
       VType := varString;
@@ -45197,7 +45227,7 @@ begin
 end;
 
 procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: TVarData;
-  ExpectedValueType: word);
+  ExpectedValueType: cardinal);
 begin
   {$ifndef FPC}if Value.VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(variant(Value));
@@ -45592,50 +45622,57 @@ procedure TSynInvokeableVariantType.Lookup(var Dest: TVarData; const V: TVarData
 var itemName: RawUTF8;
     Handler: TSynInvokeableVariantType;
     DestVar,LookupVar: TVarData;
+    vt: cardinal;
 begin
   Dest.VType := varEmpty; // left to Unassigned if not found
   DestVar := V;
-  while DestVar.VType=varByRef or varVariant do
-    DestVar := PVarData(DestVar.VPointer)^;
   repeat
+    vt := DestVar.VType;
+    if vt<>varByRef or varVariant then
+      break;
+    DestVar := PVarData(DestVar.VPointer)^;
+  until false;
+  repeat
+    if vt and VTYPE_STATIC=0 then
+      exit; // we need a complex type to lookup
     GetNextItem(FullName,'.',itemName);
     if itemName='' then
       exit;
-    if DestVar.VType=word(DocVariantVType) then begin
+    if vt=cardinal(DocVariantVType) then begin
       if not TDocVariantData(DestVar).GetVarData(itemName,DestVar) then
         exit;
-    end else
-    if FindCustomVariantType(DestVar.VType,TCustomVariantType(Handler)) and
-       Handler.InheritsFrom(TSynInvokeableVariantType) then
-    try // handle any kind of document storage: TSynTableVariant,TBSONVariant...
-      LookupVar.VType := varEmpty;
-      Handler.IntGet(LookupVar,DestVar,pointer(itemName),length(itemName));
-      if LookupVar.VType<=varNull then
-        exit; // assume varNull means not found
-      DestVar := LookupVar;
-    except
-      on Exception do begin
-        DestVar.VType := varEmpty;
-        exit;
+    end else begin
+      if vt=VarType then
+        Handler := self else
+        if not FindCustomVariantType(vt,TCustomVariantType(Handler)) or not
+           Handler.InheritsFrom(TSynInvokeableVariantType) then
+          exit;
+      try // handle any kind of document storage: TSynTableVariant,TBSONVariant...
+        LookupVar.VType := varEmpty;
+        Handler.IntGet(LookupVar,DestVar,pointer(itemName),length(itemName));
+        if LookupVar.VType<=varNull then
+          exit; // assume varNull means not found
+        DestVar := LookupVar;
+      except
+        on Exception do
+          exit;
       end;
-    end else
-      exit;
-    while DestVar.VType=varByRef or varVariant do
+    end;
+    repeat
+      vt := DestVar.VType;
+      if vt<>varByRef or varVariant then
+        break;
       DestVar := PVarData(DestVar.VPointer)^;
-    if (DestVar.VType=word(DocVariantVType)) and
-       (TDocVariantData(DestVar).VCount=0) then
+    until false;
+    if (vt=cardinal(DocVariantVType)) and (TDocVariantData(DestVar).VCount=0) then begin
       DestVar.VType := varNull; // recognize void TDocVariant as null
+      vt := varNull;
+    end;
     if FullName=nil then begin // found full name scope
       Dest := DestVar;
       exit;
     end;
     // if we reached here, we should try for the next scope within Dest
-    if DestVar.VType=VarType then // most likely to be of the same exact type
-      continue;
-    if FindCustomVariantType(DestVar.VType,TCustomVariantType(Handler)) and
-       Handler.InheritsFrom(TSynInvokeableVariantType) then
-      Handler.Lookup(Dest,DestVar,FullName);
-    break;
   until false;
 end;
 
@@ -45694,6 +45731,7 @@ function TSynInvokeableVariantType.SetProperty(const V: TVarData;
 var ValueSet: TVarData;
     PropName: PAnsiChar;
     PropNameLen: PtrInt;
+    vt: cardinal;
 {$ifdef UNICODE}
     Buf: array[byte] of AnsiChar; // to avoid heap allocation
 {$endif}
@@ -45706,17 +45744,18 @@ begin
   PropNameLen := length(Name);
 {$endif}
   ValueSet.VString := nil; // to avoid GPF in RawUTF8(ValueSet.VString) below
-  if Value.VType=varByRef or varOleStr then
+  vt := Value.VType;
+  if vt=varByRef or varOleStr then
     RawUnicodeToUtf8(PPointer(Value.VAny)^,length(PWideString(Value.VAny)^),
       RawUTF8(ValueSet.VString)) else
-  if Value.VType=varOleStr then
+  if vt=varOleStr then
     RawUnicodeToUtf8(Value.VAny,length(WideString(Value.VAny)),
       RawUTF8(ValueSet.VString)) else
   {$ifdef HASVARUSTRING}
-  if Value.VType=varByRef or varUString then
+  if vt=varByRef or varUString then
     RawUnicodeToUtf8(PPointer(Value.VAny)^,length(PUnicodeString(Value.VAny)^),
       RawUTF8(ValueSet.VString)) else
-  if Value.VType=varUString then
+  if vt=varUString then
     RawUnicodeToUtf8(Value.VAny,length(UnicodeString(Value.VAny)),
       RawUTF8(ValueSet.VString)) else
   {$endif}
@@ -45772,12 +45811,15 @@ begin
 end;
 
 function TSynInvokeableVariantType.IsOfType(const V: variant): boolean;
+var vt: cardinal;
 begin
   if self=nil then
-    result := false else
-    if TVarData(V).VType=varByRef or varVariant then
+    result := false else begin
+    vt := TVarData(V).VType;
+    if vt=varByRef or varVariant then
       result := IsOfType(PVariant(TVarData(V).VPointer)^) else
-      result := TVarData(V).VType=VarType;
+      result := vt=VarType;
+  end;
 end;
 
 
@@ -46294,25 +46336,33 @@ begin
 end;
 
 function DocVariantData(const DocVariant: variant): PDocVariantData;
+var docv,vt: integer;
 begin
   result := @DocVariant;
-  if result^.VType=varByRef or varVariant then
+  docv := DocVariantVType;
+  vt := result^.VType;
+  if vt=docv then
+    exit else
+  if vt=varByRef or varVariant then begin
     result := PVarData(result)^.VPointer;
-  if result^.VType<>word(DocVariantVType) then
-    raise EDocVariant.CreateUTF8('DocVariantType.Data(%<>TDocVariant)',[result^.VType]);
+    if integer(result^.VType)=docv then
+      exit;
+  end;
+  raise EDocVariant.CreateUTF8('DocVariantType.Data(%<>TDocVariant)',[ord(result^.VType)]);
 end;
 
 function _Safe(const DocVariant: variant): PDocVariantData;
 {$ifdef FPC_OR_PUREPASCAL}
-var docv: integer;
+var docv,vt: integer;
 begin
   result := @DocVariant;
   docv := DocVariantVType;
-  if result^.VType=docv then
+  vt := result^.VType;
+  if vt=docv then
     exit else
-  if result^.VType=varByRef or varVariant then begin
+  if vt=varByRef or varVariant then begin
     result := PVarData(result)^.VPointer;
-    if result^.VType=docv then
+    if integer(result^.VType)=docv then
       exit;
   end;
   result := @DocVariantDataFake;
@@ -46764,19 +46814,18 @@ end;
 
 procedure TDocVariantData.InitCopy(const SourceDocVariant: variant;
   aOptions: TDocVariantOptions);
-var ndx: integer;
+var ndx,vt: integer;
     Source: PDocVariantData;
     SourceVValue: TVariantDynArray;
     Handler: TCustomVariantType;
-    t: word;
     v: PVarData;
 begin
   with TVarData(SourceDocVariant) do
-    if VType=varByRef or varVariant then
+    if integer(VType)=varByRef or varVariant then
       Source := VPointer else
       Source := @SourceDocVariant;
-  if Source^.VType<>word(DocVariantVType) then
-    raise ESynException.CreateUTF8('No TDocVariant for InitCopy(%)',[Source.VType]);
+  if integer(Source^.VType)<>DocVariantVType then
+    raise ESynException.CreateUTF8('No TDocVariant for InitCopy(%)',[ord(Source.VType)]);
   SourceVValue := Source^.VValue; // local fast per-reference copy
   if Source<>@self then begin
     VType := Source^.VType;
@@ -46805,17 +46854,19 @@ begin
     SetLength(VValue,VCount);
     for ndx := 0 to VCount-1 do begin
       v := @SourceVValue[ndx];
-      while v^.VType=varByRef or varVariant do
+      repeat
+        vt := v^.VType;
+        if vt<>varByRef or varVariant then
+          break;
         v := v^.VPointer;
-      t := v^.VType;
-      if t<=varNativeString then // simple string/number types copy
+      until false;
+      if vt<=varNativeString then // simple string/number types copy
         VValue[ndx] := variant(v^) else
-      if t=VType then // direct recursive copy for TDocVariant
+      if vt=DocVariantVType then // direct recursive copy for TDocVariant
         TDocVariantData(VValue[ndx]).InitCopy(variant(v^),VOptions) else
-      if FindCustomVariantType(t,Handler) then
+      if FindCustomVariantType(vt,Handler) then
         if Handler.InheritsFrom(TSynInvokeableVariantType) then
-          TSynInvokeableVariantType(Handler).CopyByValue(
-            TVarData(VValue[ndx]),v^) else
+          TSynInvokeableVariantType(Handler).CopyByValue(TVarData(VValue[ndx]),v^) else
           Handler.Copy(TVarData(VValue[ndx]),v^,false) else
         VValue[ndx] := variant(v^); // default copy
     end;
@@ -46829,7 +46880,7 @@ end;
 
 procedure TDocVariantData.Clear;
 begin
-  if VType=word(DocVariantVType)then begin
+  if integer(VType)=DocVariantVType then begin
     PInteger(@VType)^ := 0;
     VName := nil;
     VariantDynArrayClear(VValue);
@@ -46959,7 +47010,7 @@ begin
     exit;
   for p := 0 to High(aPaths) do begin
     DocVariantType.Lookup(v,TVarData(aSource),pointer(aPaths[p]));
-    if v.VType<varNull then
+    if integer(v.VType)<varNull then
       continue; // path not found
     added := InternalAdd(aPaths[p]);
     PVarData(@VValue[added])^ := v;
@@ -47502,7 +47553,7 @@ function TDocVariantData.GetValueIndex(aName: PUTF8Char; aNameLen: PtrInt;
   aCaseSensitive: boolean): integer;
 var err: integer;
 begin
-  if (VType=word(DocVariantVType)) and (VCount>0) then
+  if (integer(VType)=DocVariantVType) and (VCount>0) then
     if dvoIsArray in VOptions then begin
       result := GetInteger(aName,err);
       if err<>0 then
@@ -47527,7 +47578,7 @@ function TDocVariantData.GetValueOrDefault(const aName: RawUTF8;
   const aDefault: variant): variant;
 var ndx: integer;
 begin
-  if (VType<>word(DocVariantVType)) or not(dvoIsObject in VOptions) then
+  if (integer(VType)<>DocVariantVType) or not(dvoIsObject in VOptions) then
     result := aDefault else begin
     ndx := GetValueIndex(aName);
     if ndx>=0 then
@@ -47539,7 +47590,7 @@ end;
 function TDocVariantData.GetValueOrNull(const aName: RawUTF8): variant;
 var ndx: integer;
 begin
-  if (VType<>word(DocVariantVType)) or not(dvoIsObject in VOptions) then
+  if (integer(VType)<>DocVariantVType) or not(dvoIsObject in VOptions) then
     SetVariantNull(result) else begin
     ndx := GetValueIndex(aName);
     if ndx>=0 then
@@ -47552,7 +47603,7 @@ function TDocVariantData.GetValueOrEmpty(const aName: RawUTF8): variant;
 var ndx: integer;
 begin
   VarClear(result);
-  if (VType=word(DocVariantVType)) and (dvoIsObject in VOptions) then begin
+  if (integer(VType)=DocVariantVType) and (dvoIsObject in VOptions) then begin
     ndx := GetValueIndex(aName);
     if ndx>=0 then
       result := VValue[ndx];
@@ -47607,7 +47658,7 @@ begin
   found := GetVarData(aName,aSortedCompare);
   if found=nil then
     result := false else begin
-    if found^.VType>varNull then // default VariantToUTF8(null)='null'
+    if integer(found^.VType)>varNull then // default VariantToUTF8(null)='null'
       VariantToUTF8(PVariant(found)^,aValue,wasString);
     result := true;
   end;
@@ -47677,7 +47728,7 @@ function TDocVariantData.GetVarData(const aName: RawUTF8;
   aSortedCompare: TUTF8Compare): PVarData;
 var ndx: Integer;
 begin
-  if (VType<>word(DocVariantVType)) or not(dvoIsObject in VOptions) or (VCount=0) then
+  if (integer(VType)<>DocVariantVType) or not(dvoIsObject in VOptions) or (VCount=0) then
     result := nil else begin
     if Assigned(aSortedCompare) then
       ndx := FastFindPUTF8CharSorted(pointer(VName),VCount-1,pointer(aName),aSortedCompare) else
@@ -47692,10 +47743,10 @@ function TDocVariantData.GetValueByPath(const aPath: RawUTF8): variant;
 var Dest: TVarData;
 begin
   VarClear(result);
-  if (VType<>word(DocVariantVType)) or not(dvoIsObject in VOptions) then
+  if (integer(VType)<>DocVariantVType) or not(dvoIsObject in VOptions) then
     exit;
   DocVariantType.Lookup(Dest,TVarData(self),pointer(aPath));
-  if Dest.VType>=varNull then
+  if integer(Dest.VType)>=varNull then
     result := variant(Dest); // copy
 end;
 
@@ -47703,7 +47754,7 @@ function TDocVariantData.GetValueByPath(const aPath: RawUTF8; out aValue: varian
 var Dest: TVarData;
 begin
   result := false;
-  if (VType<>word(DocVariantVType)) or not(dvoIsObject in VOptions) then
+  if (integer(VType)<>DocVariantVType) or not(dvoIsObject in VOptions) then
     exit;
   DocVariantType.Lookup(Dest,TVarData(self),pointer(aPath));
   if Dest.VType=varEmpty then
@@ -47718,7 +47769,7 @@ var p: PUTF8Char;
     par: PVariant;
 begin
   result := nil;
-  if (VType<>word(DocVariantVType)) or (aPath='') or
+  if (integer(VType)<>DocVariantVType) or (aPath='') or
      not(dvoIsObject in VOptions) or (Count=0) then
     exit;
   par := @self;
@@ -47741,17 +47792,17 @@ begin
   v := GetPVariantByPath(aPath);
   if v<>nil then begin
     aValue := _Safe(v^);
-    result := aValue^.VType>varNull;
+    result := integer(aValue^.VType)>varNull;
   end else
     result := false;
 end;
 
 function TDocVariantData.GetValueByPath(const aDocVariantPath: array of RawUTF8): variant;
 var found,res: PVarData;
-    P: integer;
+    vt,P: integer;
 begin
   VarClear(result);
-  if (VType<>word(DocVariantVType)) or not(dvoIsObject in VOptions) or
+  if (integer(VType)<>DocVariantVType) or not(dvoIsObject in VOptions) or
      (high(aDocVariantPath)<0) then
     exit;
   found := @self;
@@ -47764,16 +47815,20 @@ begin
       break; // we found the item!
     inc(P);
     // if we reached here, we should try for the next scope within Dest
-    while found^.VType=varByRef or varVariant do
+    repeat
+      vt := found^.VType;
+      if vt<>varByRef or varVariant then
+        break;
       found := found^.VPointer;
-    if found^.VType=VType then
+    until false;
+    if vt=VType then
       continue;
     exit;
   until false;
   res := found;
-  while res^.VType=varByRef or varVariant do
+  while integer(res^.VType)=varByRef or varVariant do
     res := res^.VPointer;
-  if (res^.VType=VType) and (PDocVariantData(res)^.VCount=0) then
+  if (integer(res^.VType)=VType) and (PDocVariantData(res)^.VCount=0) then
     // return void TDocVariant as null
     TVarData(result).VType := varNull else
     // copy found value
@@ -47976,7 +48031,7 @@ function TDocVariantData.ToJSON(const Prefix, Suffix: RawUTF8;
 var W: TTextWriter;
     temp: TTextWriterStackBuffer;
 begin
-  if (VType<>word(DocVariantVType)) and (VType>varNull) then begin
+  if (integer(VType)<>DocVariantVType) and (VType>varNull) then begin
     result := ''; // null -> 'null'
     exit;
   end;
@@ -48411,12 +48466,14 @@ end;
 procedure TDocVariant.ToJSON(W: TTextWriter; const Value: variant;
   escape: TTextWriterKind);
 var ndx: integer;
+    vt: cardinal;
     backup: TTextWriterOptions;
     checkExtendedPropName: boolean;
 begin
+  vt := TDocVariantData(Value).VType;
+  if vt>varNull then
+  if vt=cardinal(DocVariantVType) then
   with TDocVariantData(Value) do
-  if integer(VType)>varNull then
-  if integer(VType)=DocVariantVType then
   if [dvoIsArray,dvoIsObject]*VOptions=[] then
     W.AddShort('null') else begin
     backup := W.fCustomOptions;
@@ -48452,7 +48509,7 @@ begin
     end;
     W.fCustomOptions := backup;
   end else
-    raise ESynException.CreateUTF8('Unexpected variant type %',[VType]) else
+    raise ESynException.CreateUTF8('Unexpected variant type %',[vt]) else
     W.AddShort('null');
 end;
 
@@ -48620,11 +48677,12 @@ end;
 
 class procedure TDocVariant.GetSingleOrDefault(const docVariantArray, default: variant;
   var result: variant);
+var vt: integer;
 begin
-  if TVarData(DocVariantArray).VType=varByRef or varVariant then
+  vt := TVarData(DocVariantArray).VType;
+  if vt=varByRef or varVariant then
     GetSingleOrDefault(PVariant(TVarData(DocVariantArray).VPointer)^,default,result) else
-  if (TVarData(DocVariantArray).VType<>word(DocVariantVType)) or
-     (TDocVariantData(DocVariantArray).Count<>1) or
+  if (vt<>DocVariantVType) or (TDocVariantData(DocVariantArray).Count<>1) or
      not(dvoIsArray in TDocVariantData(DocVariantArray).VOptions) then
     result := default else
     result := TDocVariantData(DocVariantArray).Values[0];
@@ -49065,17 +49123,20 @@ const
   SORT2: array[varShortInt..varWord64] of TDynArraySortCompare = (
     SortDynArrayShortInt, SortDynArrayByte, SortDynArrayWord, SortDynArrayCardinal,
     SortDynArrayInt64, SortDynArrayQWord);
+var AT,BT: integer;
 begin
-  if A.VType=varVariant or varByRef then
+  AT := integer(A.VType);
+  BT := integer(B.VType);
+  if AT=varVariant or varByRef then
     result := SortDynArrayVariantComp(PVarData(A.VPointer)^,B,caseInsensitive) else
-  if B.VType=varVariant or varByRef then
+  if BT=varVariant or varByRef then
     result := SortDynArrayVariantComp(A,PVarData(B.VPointer)^,caseInsensitive) else
-  if A.VType=B.VType then
-    case A.VType of // optimized comparison if A and B share the same type
+  if AT=BT then
+    case AT of // optimized comparison if A and B share the same type
     low(SORT1)..high(SORT1):
-      result := SORT1[A.VType](A.VAny,B.VAny);
+      result := SORT1[AT](A.VAny,B.VAny);
     low(SORT2)..high(SORT2):
-      result := SORT2[A.VType](A.VAny,B.VAny);
+      result := SORT2[AT](A.VAny,B.VAny);
     varString: // RawUTF8 most of the time (e.g. from TDocVariant)
       if caseInsensitive then
         result := StrIComp(A.VAny,B.VAny) else
@@ -49093,14 +49154,13 @@ begin
         result := AnsiICompW(A.VAny,B.VAny) else
         result := StrCompW(A.VAny,B.VAny);
     else
-      if A.VType and VTYPE_STATIC=0 then
+      if AT and VTYPE_STATIC=0 then
         result := ICMP[VarCompareValue(variant(A),variant(B))] else
         result := CMP[caseInsensitive](variant(A),variant(B));
     end else
-  if (A.VType<=varNull) or (B.VType<=varNull) then
-    result := ord(A.VType>varNull)-ord(B.VType>varNull) else
-  if (A.VType and VTYPE_STATIC=0) and
-     (B.VType and VTYPE_STATIC=0) then
+  if (AT<=varNull) or (BT<=varNull) then
+    result := ord(AT>varNull)-ord(BT>varNull) else
+  if (AT and VTYPE_STATIC=0) and (BT and VTYPE_STATIC=0) then
     result := ICMP[VarCompareValue(variant(A),variant(B))] else
     result := CMP[caseInsensitive](variant(A),variant(B));
 end;
@@ -51248,37 +51308,39 @@ end;
 function VariantHash(const value: variant; CaseInsensitive: boolean;
   Hasher: THasher): cardinal;
 var Up: array[byte] of AnsiChar; // avoid heap allocation
+    vt: cardinal;
   procedure ComplexType;
   var tmp: RawUTF8;
   begin // slow but always working conversion to string
     VariantSaveJSON(value,twNone,tmp);
     if CaseInsensitive then
-      result := Hasher(TVarData(value).VType,Up,UpperCopy255(Up,tmp)-Up) else
-      result := Hasher(TVarData(value).VType,pointer(tmp),length(tmp));
+      result := Hasher(vt,Up,UpperCopy255(Up,tmp)-Up) else
+      result := Hasher(vt,pointer(tmp),length(tmp));
   end;
 begin
   if not Assigned(Hasher) then
-    Hasher := @crc32c;
+    Hasher := DefaultHasher;
+  vt := TVarData(value).VType;
   with TVarData(value) do
-  case VType of
+  case vt of
     varNull, varEmpty:
-      result := VType; // good enough for void values
+      result := vt; // good enough for void values
     varShortInt, varByte:
-      result := Hasher(VType,@VByte,1);
+      result := Hasher(vt,@VByte,1);
     varSmallint, varWord, varBoolean:
-      result := Hasher(VType,@VWord,2);
+      result := Hasher(vt,@VWord,2);
     varLongWord, varInteger, varSingle:
-      result := Hasher(VType,@VLongWord,4);
+      result := Hasher(vt,@VLongWord,4);
     varInt64, varDouble, varDate, varCurrency, varWord64:
-      result := Hasher(VType,@VInt64,SizeOf(Int64));
+      result := Hasher(vt,@VInt64,SizeOf(Int64));
     varString:
       if CaseInsensitive then
-        result := Hasher(0,Up,UpperCopy255Buf(Up,VString,length(RawUTF8(VString)))-Up) else
-        result := Hasher(0,VString,length(RawUTF8(VString)));
+        result := Hasher(vt,Up,UpperCopy255Buf(Up,VString,length(RawUTF8(VString)))-Up) else
+        result := Hasher(vt,VString,length(RawUTF8(VString)));
     varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}:
       if CaseInsensitive then
-        result := Hasher(0,Up,UpperCopy255W(Up,VOleStr,StrLenW(VOleStr))-Up) else
-        result := Hasher(0,VAny,StrLenW(VOleStr)*2);
+        result := Hasher(vt,Up,UpperCopy255W(Up,VOleStr,StrLenW(VOleStr))-Up) else
+        result := Hasher(vt,VAny,StrLenW(VOleStr)*2);
   else
     ComplexType;
   end;
@@ -52672,7 +52734,8 @@ end;
 { TSynLocker }
 
 const
-  SYNLOCKER_VTYPENOCLEAR = [varEmpty..varDate,varBoolean,varShortInt..varWord64,varUnknown];
+  SYNLOCKER_VTYPENOCLEAR = [varEmpty..varDate,varBoolean,
+    varShortInt..varWord64,varUnknown];
 
 procedure TSynLocker.Init;
 begin
@@ -52687,7 +52750,7 @@ procedure TSynLocker.Done;
 var i: PtrInt;
 begin
   for i := 0 to PaddingUsedCount-1 do
-    if not(Padding[i].VType in SYNLOCKER_VTYPENOCLEAR) then
+    if not(integer(Padding[i].VType) in SYNLOCKER_VTYPENOCLEAR) then
       VarClear(variant(Padding[i]));
   DeleteCriticalSection(fSection);
   fInitialized := false;
@@ -52846,7 +52909,7 @@ begin
       if Index>=PaddingUsedCount then
         PaddingUsedCount := Index+1;
       with Padding[index] do begin
-        if not(VType in SYNLOCKER_VTYPENOCLEAR) then
+        if not(integer(VType) in SYNLOCKER_VTYPENOCLEAR) then
           VarClear(PVariant(@VType)^);
         VType := varUnknown;
         VUnknown := Value;
@@ -53949,9 +54012,11 @@ end;
 {$ifndef NOVARIANTS}
 procedure TTextWriter.AddVariant(const Value: variant; Escape: TTextWriterKind);
 var CustomVariantType: TCustomVariantType;
+    vt: cardinal;
 begin
+  vt := TVarData(Value).VType;
   with TVarData(Value) do
-  case VType of
+  case vt of
   varEmpty,
   varNull:     AddShort('null');
   varSmallint: Add(VSmallint);
@@ -53987,9 +54052,9 @@ begin
       Add('"');
   end;
   else
-  if VType=varVariant or varByRef then
+  if vt=varVariant or varByRef then
     AddVariant(PVariant(VPointer)^,Escape) else
-  if VType=varByRef or varString then begin
+  if vt=varByRef or varString then begin
     if Escape=twJSONEscape then
       Add('"');
     {$ifdef HASCODEPAGE}
@@ -54000,19 +54065,19 @@ begin
     if Escape=twJSONEscape then
       Add('"');
   end else
-  if {$ifdef HASVARUSTRING}(VType=varByRef or varUString) or {$endif}
-     (VType=varByRef or varOleStr) then begin
+  if {$ifdef HASVARUSTRING}(vt=varByRef or varUString) or {$endif}
+     (vt=varByRef or varOleStr) then begin
     if Escape=twJSONEscape then
       Add('"');
     AddW(PPointer(VAny)^,0,Escape);
     if Escape=twJSONEscape then
       Add('"');
   end else
-  if FindCustomVariantType(VType,CustomVariantType) then
+  if FindCustomVariantType(vt,CustomVariantType) then
     if CustomVariantType.InheritsFrom(TSynInvokeableVariantType) then
       TSynInvokeableVariantType(CustomVariantType).ToJson(self,Value,Escape) else
       GlobalJSONCustomParsers.VariantWrite(CustomVariantType,self,Value,Escape) else
-    raise ESynException.CreateUTF8('%.AddVariant VType=%',[self,ord(VType)]);
+    raise ESynException.CreateUTF8('%.AddVariant VType=%',[self,vt]);
   end;
 end;
 {$endif NOVARIANTS}
@@ -55611,7 +55676,7 @@ procedure TTextWriter.Add(const V: TVarRec; Escape: TTextWriterKind;
   WriteObjectOptions: TTextWriterWriteObjectOptions);
 begin
   with V do
-  case Vtype of
+  case VType of
   vtInteger:      Add(VInteger);
   vtBoolean:      if VBoolean then Add('1') else Add('0'); // normalize
   vtChar:         Add(@VChar,1,Escape);
@@ -61881,10 +61946,11 @@ end;
 {$ifndef NOVARIANTS}
 procedure TFileBufferWriter.Write(const Value: variant);
 var buf: PAnsiChar;
-    len: integer;
+    vt,len: integer;
     tmp: RawByteString;
 begin
-  if TVarData(Value).VType>varAny then begin // avoid VariantSaveLength() call
+  vt := TVarData(Value).VType;
+  if vt>varAny then begin // avoid VariantSaveLength() call
     Write(@TVarData(Value).VType,SizeOf(TVarData(Value).VType));
     tmp := VariantSaveJSON(Value);
     Write(tmp);
@@ -61892,12 +61958,10 @@ begin
   end;
   len := VariantSaveLength(Value);
   if len=0 then
-    raise ESynException.CreateUTF8('%.Write(VType=%) VariantSaveLength=0',
-      [self,TVarData(Value).VType]);
+    raise ESynException.CreateUTF8('%.Write(VType=%) VariantSaveLength=0',[self,vt]);
   buf := DirectWritePrepare(len,tmp);
   if VariantSave(Value,buf)=nil then
-    raise ESynException.CreateUTF8('%.Write(VType=%) VariantSave=nil',
-      [self,TVarData(Value).VType]);
+    raise ESynException.CreateUTF8('%.Write(VType=%) VariantSave=nil',[self,vt]);
   DirectWriteFlush(len,tmp);
 end;
 
@@ -64642,7 +64706,7 @@ var DV: TDocVariantData absolute DocVariant;
     v: variant;
     intvalues: TRawUTF8Interning;
 begin
-  if DV.VType<>word(DocVariantVType) then
+  if integer(DV.VType)<>DocVariantVType then
     TDocVariant.New(DocVariant,JSON_OPTIONS_NAMEVALUE[ExtendedJson]);
   if ChangedProps<>nil then
     TDocVariant.New(ChangedProps^,DV.Options);
