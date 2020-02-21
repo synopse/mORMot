@@ -6046,8 +6046,11 @@ type
     // - use internaly FindHashedForAdding method
     // - this version will set the field content with the unique value
     // - returns a pointer to the newly added element (to set other fields)
-    function AddUniqueName(const aName: RawUTF8;
-      const ExceptionMsg: RawUTF8; const ExceptionArgs: array of const): pointer;
+    function AddUniqueName(const aName: RawUTF8; const ExceptionMsg: RawUTF8;
+      const ExceptionArgs: array of const; aNewIndex: PInteger=nil): pointer; overload;
+    /// ensure a given element name is unique, then add it to the array
+    // - just a wrapper to AddUniqueName(aName,'',[],aNewIndex)
+    function AddUniqueName(const aName: RawUTF8; aNewIndex: PInteger=nil): pointer; overload;
     /// search for a given element name, make it unique, and add it to the array
     // - expected element layout is to have a RawUTF8 field at first position
     // - the aName is searched (using hashing) to be unique, and if not the case,
@@ -51294,8 +51297,7 @@ end;
 
 function TDynArrayLoadFrom.CheckHash: boolean;
 begin
-  result := (Position<>nil) and
-     (Hash32(@Hash[1],Position-PAnsiChar(@Hash[1]))=Hash[0]);
+  result := (Position<>nil) and (Hash32(@Hash[1],Position-PAnsiChar(@Hash[1]))=Hash[0]);
 end;
 
 
@@ -51518,8 +51520,8 @@ begin
 end;
 
 const // primes reduce memory consumption and enhance distribution
-  _PRIMES: array[0..38{$ifndef CPU32DELPHI}+13{$endif}] of integer = (
-    {$ifndef CPU32DELPHI} 251, 499, 797, 1259, 2011, 3203, 5087, 8089,
+  _PRIMES: array[0..38{$ifndef CPU32DELPHI}+15{$endif}] of integer = (
+    {$ifndef CPU32DELPHI} 31, 127, 251, 499, 797, 1259, 2011, 3203, 5087, 8089,
     12853, 20399, 81649, 129607, 205759, {$endif}
     // following HASH_PO2=2^18=262144 for Delphi Win32
     326617, 411527, 518509, 653267, 823117, 1037059, 1306601, 1646237,
@@ -52191,7 +52193,7 @@ function TDynArrayHashed.FindHashedForAdding(const Elem; out wasAdded: boolean;
   aHashCode: cardinal; noAddEntry: boolean): integer;
 begin
   result := fHash.FindBeforeAdd(@Elem,wasAdded,aHashCode);
-  if wasAdded then
+  if wasAdded and not noAddEntry then
     SetCount(result+1); // reserve space for a void element in array
 end;
 
@@ -52216,13 +52218,20 @@ begin
   PRawUTF8(result)^ := aName; // store unique name at 1st elem position
 end;
 
+function TDynArrayHashed.AddUniqueName(const aName: RawUTF8; aNewIndex: PInteger): pointer;
+begin
+  result := AddUniqueName(aName,'',[],aNewIndex);
+end;
+
 function TDynArrayHashed.AddUniqueName(const aName: RawUTF8;
-  const ExceptionMsg: RawUTF8; const ExceptionArgs: array of const): pointer;
+  const ExceptionMsg: RawUTF8; const ExceptionArgs: array of const; aNewIndex: PInteger): pointer;
 var ndx: integer;
     added: boolean;
 begin
   ndx := FindHashedForAdding(aName,added);
   if added then begin
+    if aNewIndex<>nil then
+      aNewIndex^ := ndx;
     result := PAnsiChar(Value^)+cardinal(ndx)*ElemSize;
     PRawUTF8(result)^ := aName; // store unique name at 1st elem position
   end else
@@ -53859,7 +53868,7 @@ begin
     if Value.InheritsFrom(TRawUTF8List) then
     with TRawUTF8List(Value) do begin
       self.Add('[');
-      for i := 0 to Count-1 do begin
+      for i := 0 to fCount-1 do begin
         self.Add('"');
         self.AddJSONEscape(pointer(fList[i]));
         self.Add('"',',');
