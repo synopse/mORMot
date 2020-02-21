@@ -4731,14 +4731,14 @@ type
   // - you should better inherit from this class, to give a custom name and
   // constructor, or alter the default behavior
   // - will maintain a list of TRawUTF8ObjectCache instances
-  TRawUTF8ObjectCacheList = class(TRawUTF8ListHashedLocked)
+  TRawUTF8ObjectCacheList = class(TRawUTF8List)
   protected
     fSettings: TRawUTF8ObjectCacheSettings;
     fLog: TSynLogFamily;
     fLogEvent: TSynLogInfo;
     fClass: TRawUTF8ObjectCacheClass;
     fNextPurgeTix: Int64;
-    fPurgeForceList: TRawUTF8ListHashedLocked;
+    fPurgeForceList: TRawUTF8List;
     fOnKeyResolve: TOnKeyResolve;
     procedure DoPurge; virtual;
     // returns fClass.Create by default: inherited classes may add custom check
@@ -13251,6 +13251,18 @@ type
   /// class-reference type (metaclass) of a TServiceFactoryClient kind
   TServiceFactoryClientClass = class of TServiceFactoryClient;
 
+  /// used to lookup one service in a global list of interface-based services
+  TServiceContainerInterface = record
+    /// one 'service' item, as set at URI, e.g. 'Calculator'
+    InterfaceName: RawUTF8;
+    /// the associated service provider
+    Service: TServiceFactory;
+  end;
+  /// pointer to one  lookup in a global list of interface-based services
+  PServiceContainerInterface = ^TServiceContainerInterface;
+  /// used to store all s in a global list of interface-based services
+  TServiceContainerInterfaces = array of TServiceContainerInterface;
+
   /// used to lookup one method in a global list of interface-based services
   TServiceContainerInterfaceMethod = record
     /// one 'service.method' item, as set at URI
@@ -13263,10 +13275,8 @@ type
     // - then points to InterfaceService.Interface.Methods[InterfaceMethodIndex-3]
     InterfaceMethodIndex: integer;
   end;
-
   /// pointer to one method lookup in a global list of interface-based services
   PServiceContainerInterfaceMethod = ^TServiceContainerInterfaceMethod;
-
   /// used to store all methods in a global list of interface-based services
   TServiceContainerInterfaceMethods = array of TServiceContainerInterfaceMethod;
 
@@ -13280,12 +13290,12 @@ type
   TServiceContainer = class(TInterfaceResolverInjected)
   protected
     fRest: TSQLRest;
-    // list of service names ['Calculator',...]
-    // - Objects[] = TServiceFactory instance
-    fList: TRawUTF8ListHashed;
+    // list of services ['Calculator',...]
+    fInterface: TServiceContainerInterfaces;
+    fInterfaces: TDynArrayHashed;
     // list of service.method ['Calculator.Add','Calculator.Multiply',...]
-    fListInterfaceMethod: TServiceContainerInterfaceMethods;
-    fListInterfaceMethods: TDynArrayHashed;
+    fInterfaceMethod: TServiceContainerInterfaceMethods;
+    fInterfaceMethods: TDynArrayHashed;
     fExpectMangledURI: boolean;
     fServicesFactoryClients: TServiceFactoryClientClass;
     procedure SetExpectMangledURI(aValue: Boolean);
@@ -13307,7 +13317,7 @@ type
     // - TSQLRest.Services.Release will call FreeAndNil(fServices)
     procedure Release;
     /// return the number of registered service interfaces
-    function Count: integer;
+    function Count: integer; {$ifdef HASINLINE}inline;{$endif}
     /// method called on the client side to register a service via its interface(s)
     // - will add a TServiceFactoryClient instance to the internal list
     // - is called e.g. by TSQLRestClientURI.ServiceRegister or even by
@@ -13328,8 +13338,7 @@ type
       const aContractExpected: RawUTF8=''): TServiceFactoryClient; overload;
     /// retrieve a service provider from its index in the list
     // - returns nil if out of range index
-    function Index(aIndex: integer): TServiceFactory; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    function Index(aIndex: integer): TServiceFactory; overload; {$ifdef HASINLINE}inline;{$endif}
     /// retrieve a service provider from its GUID / Interface type
     // - you shall have registered the interface by a previous call to
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...])
@@ -22500,15 +22509,18 @@ begin
 end;
 
 function TSQLPropInfoRTTIInt32.CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt;
+var A,B: integer;
 begin
   if Item1=Item2 then
     result := 0 else
   if Item1=nil then
     result := -1 else
   if Item2=nil then
-    result := 1 else
-    result := {$ifdef HASINLINE}CompareInteger{$else}SortDynArrayInteger{$endif}(
-      fPropInfo.GetOrdProp(Item1),fPropInfo.GetOrdProp(Item2));
+    result := 1 else begin
+    A := fPropInfo.GetOrdProp(Item1);
+    B := fPropInfo.GetOrdProp(Item2);
+    result := {$ifdef HASINLINE}CompareInteger{$else}SortDynArrayInteger{$endif}(A,B);
+  end;
 end;
 
 function TSQLPropInfoRTTIInt32.SetBinary(Instance: TObject; P,PEnd: PAnsiChar): PAnsiChar;
@@ -42624,9 +42636,9 @@ var i: integer;
 begin
   if (Table=nil) and (MethodIndex<0) and (URI<>'') and (Server.Services<>nil) then begin
     // check URI as '/Model/Interface.Method[/ClientDrivenID]'
-    i := Server.Services.fListInterfaceMethods.FindHashed(URI);
+    i := Server.Services.fInterfaceMethods.FindHashed(URI);
     if i>=0 then // no specific message: it may be a valid request
-      with Server.Services.fListInterfaceMethod[i] do begin
+      with Server.Services.fInterfaceMethod[i] do begin
         Service := TServiceFactoryServer(InterfaceService);
         ServiceMethodIndex := InterfaceMethodIndex;
         fServiceListInterfaceMethodIndex := i;
@@ -42637,9 +42649,9 @@ begin
       end else
       if URIBlobFieldName<>'' then begin
         // check URI as '/Model/Interface/Method[/ClientDrivenID]''
-        i := Server.Services.fList.IndexOf(URI);
+        i := Server.Services.fInterfaces.FindHashed(URI);
         if i>=0 then begin // identified as a valid JSON-RPC service
-          Service := TServiceFactoryServer(Server.Services.fList.Objects[i]);
+          Service := TServiceFactoryServer(Server.Services.fInterface[i].Service);
           Split(URIBlobFieldName,'/',method,clientdrivenid);
           ServiceMethodIndex := Service.InterfaceFactory.FindMethodIndex(method);
           if ServiceMethodIndex<0 then
@@ -42747,9 +42759,9 @@ var i: integer;
 begin
   if (Table=nil) and (MethodIndex<0) and (URI<>'') and (Server.Services<>nil) then begin
     //  URI as '/Model/Interface'
-    i := Server.Services.fList.IndexOf(URI);
+    i := Server.Services.fInterfaces.FindHashed(URI);
     if i>=0 then // identified as a valid JSON-RPC service
-      Service := TServiceFactoryServer(Server.Services.fList.Objects[i]);
+      Service := TServiceFactoryServer(Server.Services.fInterface[i].Service);
   end; // ServiceMethodIndex will be retrieved from "method": in body
 end;
 
@@ -43190,7 +43202,7 @@ begin
           W.AddShort('],"interfaces":[');
           for i := 0 to high(fInterfaces) do
             if fInterfaces[i]<>nil then begin
-              W.Add('{"%":',[Services.fListInterfaceMethod[i].InterfaceDotMethodName]);
+              W.Add('{"%":',[Services.fInterfaceMethod[i].InterfaceDotMethodName]);
               fInterfaces[i].ComputeDetailsTo(W);
               W.Add('}',',');
             end;
@@ -43367,7 +43379,7 @@ begin
       count := 0;
       if Ctxt.Session>CONST_AUTHENTICATION_NOT_USED then
         for i := 0 to Services.Count-1 do
-          inc(count,TServiceFactoryServer(Services.fList.Objects[i]).
+          inc(count,TServiceFactoryServer(Services.fInterface[i].Service).
             RenewSession(Ctxt.Session));
       InternalLog('Renew % authenticated session % from %: count=%',
         [Model.Root,Ctxt.Session,Ctxt.RemoteIPNotLocal,count],sllUserAuth);
@@ -43767,7 +43779,7 @@ begin
   if Services<>nil then begin
     Inst.InstanceID := PtrUInt(id);
     for i := 0 to Services.Count-1 do
-      with TServiceFactoryServer(Services.fList.Objects[i]) do
+      with TServiceFactoryServer(Services.fInterface[i].Service) do
       if InstanceCreation=sicPerThread then
         InternalInstanceRetrieve(Inst,ord(imFree),0);
   end;
@@ -52511,7 +52523,7 @@ begin
       end;
 {$endif}
     oUtfs: begin
-      UtfP := Utf.ListPtr;
+      UtfP := Utf.TextPtr;
       for c := 0 to Utf.Count-1 do begin
         HR;
         Add('"');
@@ -54353,25 +54365,24 @@ function TServiceContainer.Count: integer;
 begin
   if self=nil then
     result := 0 else
-    result := fList.Count;
+    result := length(fInterface);
 end;
 
 constructor TServiceContainer.Create(aRest: TSQLRest);
 begin
   fRest := aRest;
-  fList := TRawUTF8ListHashed.Create;
-  fList.CaseSensitive := false;
-  fListInterfaceMethods.InitSpecific(TypeInfo(TServiceContainerInterfaceMethods),
-    fListInterfaceMethod,djRawUTF8,nil,true);
+  fInterfaces.InitSpecific(TypeInfo(TServiceContainerInterfaces),
+    fInterface,djRawUTF8,nil,{caseinsensitive=}true);
+  fInterfaceMethods.InitSpecific(TypeInfo(TServiceContainerInterfaceMethods),
+    fInterfaceMethod,djRawUTF8,nil,{caseinsensitive=}true);
   fServicesFactoryClients := TServiceFactoryClient;
 end;
 
 destructor TServiceContainer.Destroy;
-var i: integer;
+var i: PtrInt;
 begin
-  for i := 0 to fList.Count-1 do
-    fList.Objects[i].Free;
-  fList.Free;
+  for i := 0 to high(fInterface) do
+    fInterface[i].Service.Free;
   inherited;
 end;
 
@@ -54384,12 +54395,11 @@ end;
 function TServiceContainer.AddServiceInternal(aService: TServiceFactory): integer;
 var MethodIndex: integer;
   procedure AddOne(const aInterfaceDotMethodName: RawUTF8);
+  var p: PServiceContainerInterfaceMethod;
   begin
-    with PServiceContainerInterfaceMethod(fListInterfaceMethods.AddUniqueName(
-       aInterfaceDotMethodName,'',[]))^ do begin
-      InterfaceService := aService;
-      InterfaceMethodIndex := MethodIndex;
-    end;
+    p := fInterfaceMethods.AddUniqueName(aInterfaceDotMethodName);
+    p^.InterfaceService := aService;
+    p^.InterfaceMethodIndex := MethodIndex;
     inc(MethodIndex);
   end;
 var aURI: RawUTF8;
@@ -54398,20 +54408,18 @@ var aURI: RawUTF8;
 begin
   if (self=nil) or (aService=nil) then
     result := 0 else
-  with aService do begin
-    // add service factory
-    if ExpectMangledURI then
-      aURI := fInterfaceMangledURI else
-      aURI := fInterfaceURI;
-    result := fList.AddObject(aURI,aService);
-    // add associated methods
-    aURI := aURI+'.';
-    MethodIndex := 0;
-    for internal := Low(TServiceInternalMethod) to High(TServiceInternalMethod) do
-      AddOne(aURI+SERVICE_PSEUDO_METHOD[internal]);
-    for m := 0 to fInterface.fMethodsCount-1 do
-      AddOne(aURI+fInterface.fMethods[m].URI);
-  end;
+  // add service factory
+  if ExpectMangledURI then
+    aURI := aService.fInterfaceMangledURI else
+    aURI := aService.fInterfaceURI;
+  PServiceContainerInterface(fInterfaces.AddUniqueName(aURI,@result))^.Service := aService;
+  // add associated methods
+  aURI := aURI+'.';
+  MethodIndex := 0;
+  for internal := Low(TServiceInternalMethod) to High(TServiceInternalMethod) do
+    AddOne(aURI+SERVICE_PSEUDO_METHOD[internal]);
+  for m := 0 to aService.fInterface.fMethodsCount-1 do
+    AddOne(aURI+aService.fInterface.fMethods[m].URI);
 end;
 
 procedure TServiceContainer.CheckInterface(const aInterfaces: array of PTypeInfo);
@@ -54430,22 +54438,21 @@ begin
 end;
 
 procedure TServiceContainer.SetExpectMangledURI(aValue: Boolean);
-var f: Integer;
-    Fac: array of TServiceFactory;
+var i: Integer;
+    toregisteragain: TServiceContainerInterfaces;
 begin
   if aValue=fExpectMangledURI then
     exit;
   fExpectMangledURI := aValue;
-  fList.CaseSensitive := aValue;
-  SetLength(Fac,fList.Count);
-  for f := 0 to fList.Count-1 do
-    Fac[f] := fList.Objects[f] as TServiceFactory;
-  fList.Clear;
-  fListInterfaceMethod := nil;
-  fListInterfaceMethods.InitSpecific(TypeInfo(TServiceContainerInterfaceMethods),
-    fListInterfaceMethod,djRawUTF8,nil,not aValue);
-  for f := 0 to High(Fac) do
-    AddServiceInternal(Fac[f]);
+  toregisteragain := fInterface; // same services, but other URIs
+  fInterface := nil;
+  fInterfaces.InitSpecific(TypeInfo(TServiceContainerInterfaces),
+    fInterface,djRawUTF8,nil,{caseinsensitive=}not aValue);
+  fInterfaceMethod := nil;
+  fInterfaceMethods.InitSpecific(TypeInfo(TServiceContainerInterfaceMethods),
+    fInterfaceMethod,djRawUTF8,nil,not aValue);
+  for i := 0 to high(toregisteragain) do
+    AddServiceInternal(toregisteragain[i].Service);
 end;
 
 procedure TServiceContainer.SetInterfaceMethodBits(MethodNamesCSV: PUTF8Char;
@@ -54454,24 +54461,24 @@ var i,n: integer;
     method: RawUTF8;
 begin
   FillCharFast(bits,SizeOf(bits),0);
-  n := length(fListInterfaceMethod);
+  n := length(fInterfaceMethod);
   if n>SizeOf(bits) shl 3 then
     raise EServiceException.CreateUTF8('%.SetInterfaceMethodBits: n=%',[self,n]);
   if IncludePseudoMethods then
     for i := 0 to n-1 do
-      if fListInterfaceMethod[i].InterfaceMethodIndex<SERVICE_PSEUDO_METHOD_COUNT then
+      if fInterfaceMethod[i].InterfaceMethodIndex<SERVICE_PSEUDO_METHOD_COUNT then
         include(bits,i);
   while MethodNamesCSV<>nil do begin
     GetNextItem(MethodNamesCSV,',',method);
     if PosExChar('.',method)=0 then begin
       for i := 0 to n-1 do
-      with fListInterfaceMethod[i] do // O(n) search is fast enough here
+      with fInterfaceMethod[i] do // O(n) search is fast enough here
         if (InterfaceMethodIndex>=SERVICE_PSEUDO_METHOD_COUNT) and
            IdemPropNameU(method,InterfaceService.fInterface.
             fMethods[InterfaceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT].URI) then
           include(bits,i);
     end else begin
-      i := fListInterfaceMethods.FindHashed(method); // O(1) search
+      i := fInterfaceMethods.FindHashed(method); // O(1) search
       if i>=0 then
         include(bits,i);
     end;
@@ -54480,9 +54487,9 @@ end;
 
 function TServiceContainer.GetMethodName(ListInterfaceMethodIndex: integer): RawUTF8;
 begin
-  if cardinal(ListInterfaceMethodIndex)>=cardinal(length(fListInterfaceMethod)) then
+  if cardinal(ListInterfaceMethodIndex)>=cardinal(length(fInterfaceMethod)) then
     result := '' else
-    with fListInterfaceMethod[ListInterfaceMethodIndex] do
+    with fInterfaceMethod[ListInterfaceMethodIndex] do
       result := InterfaceService.fInterface.GetMethodName(InterfaceMethodIndex);
 end;
 
@@ -54490,77 +54497,73 @@ function TServiceContainer.GetService(const aURI: RawUTF8): TServiceFactory;
 var i: Integer;
 begin
   if (self<>nil) and (aURI<>'') then begin
-    i := fList.IndexOf(aURI);
+    i := fInterfaces.FindHashed(aURI);
     if i>=0 then
-      result := TServiceFactory(fList.Objects[i]) else
+      result := fInterface[i].Service else
       result := nil;
   end else
     result := nil;
 end;
 
 function TServiceContainer.Info(aTypeInfo: PTypeInfo): TServiceFactory;
-var i: Integer;
-    Obj: PPointerArray;
+var i: PtrInt;
 begin
-  if self<>nil then begin
-    Obj := fList.ObjectPtr;
-    for i := 0 to fList.Count-1 do begin
-      result := Obj[i];
-      if result.fInterface.fInterfaceTypeInfo=aTypeInfo then
+  if self<>nil then
+    for i := 0 to high(fInterface) do
+      if fInterface[i].Service.fInterface.fInterfaceTypeInfo=aTypeInfo then begin
+        result := fInterface[i].Service;
         exit;
-    end;
-  end;
+      end;
   result := nil;
 end;
 
 function TServiceContainer.Info(const aGUID: TGUID): TServiceFactory;
-var i: Integer;
-    Obj: PPointerArray;
+var i: PtrInt;
 begin
-  if self<>nil then begin
-    Obj := fList.ObjectPtr;
-    for i := 0 to fList.Count-1 do begin
-      result := Obj[i];
-      if IsEqualGUID(result.fInterface.fInterfaceIID,aGUID) then
+  if self<>nil then
+    for i := 0 to high(fInterface) do
+      if IsEqualGUID(fInterface[i].Service.fInterface.fInterfaceIID,aGUID) then begin
+        result := fInterface[i].Service;
         exit;
-    end;
-  end;
+      end;
   result := nil;
 end;
 
 procedure TServiceContainer.SetGUIDs(out Services: TGUIDDynArray);
-var i: Integer;
+var i,n: PtrInt;
 begin
   if self=nil then
     exit;
-  SetLength(Services,fList.Count);
-  for i := 0 to fList.Count-1 do
-    Services[i] := TServiceFactory(fList.ObjectPtr[i]).fInterface.fInterfaceIID;
+  n := length(fInterface);
+  SetLength(Services,n);
+  for i := 0 to n-1 do
+    Services[i] := fInterface[i].Service.fInterface.fInterfaceIID;
 end;
 
 procedure TServiceContainer.SetInterfaceNames(out Names: TRawUTF8DynArray);
-var i: Integer;
+var i,n: PtrInt;
 begin
   if self=nil then
     exit;
-  SetLength(Names,fList.Count);
-  for i := 0 to fList.Count-1 do
-    Names[i] :=  TServiceFactory(fList.ObjectPtr[i]).fInterfaceURI;
+  n := length(fInterface);
+  SetLength(Names,n);
+  for i := 0 to n-1 do
+    Names[i] := fInterface[i].Service.fInterface.fInterfaceURI;
 end;
 
 function TServiceContainer.AsJson: RawJSON;
 var WR: TTextWriter;
-    i: integer;
+    i: PtrInt;
     temp: TTextWriterStackBuffer;
 begin
   result := '';
-  if (self=nil) or (fList.Count=0) then
+  if (self=nil) or (fInterface=nil) then
     exit;
   WR := TJSONSerializer.CreateOwnedStream(temp);
   try
     WR.Add('[');
-    for i := 0 to fList.Count-1 do begin
-      WR.AddString(TServiceFactory(fList.ObjectPtr[i]).Contract);
+    for i := 0 to high(fInterface) do begin
+      WR.AddString(fInterface[i].Service.Contract);
       WR.Add(',');
     end;
     WR.CancelLastComma;
@@ -54582,9 +54585,9 @@ end;
 
 function TServiceContainer.Index(aIndex: integer): TServiceFactory;
 begin
-  if Self=nil then
+  if (self=nil) or (cardinal(aIndex)>cardinal(high(fInterface))) then
     result := nil else
-    result := TServiceFactory(fList.Objects[aIndex]);
+    result := fInterface[aIndex].Service;
 end;
 
 function TServiceContainer.CallBackUnRegister(const Callback: IInvokable): boolean;
@@ -58799,8 +58802,8 @@ var i,j: Integer;
     fact: TServiceFactoryServer;
     inst: TServiceFactoryServerInstance;
 begin
-  for i := 0 to Count-1 do begin
-    fact := TServiceFactoryServer(fList.Objects[i]);
+  for i := 0 to high(fInterface) do begin
+    fact := TServiceFactoryServer(fInterface[i].Service);
     if fact.fInstanceCount>0 then
     case fact.InstanceCreation of
     sicPerSession: begin
@@ -59064,22 +59067,21 @@ begin
   if somemethods then
     SetInterfaceMethodBits(pointer(aExcludedMethodNamesCSV),true,excluded) else
     FillcharFast(methods,SizeOf(methods),255);
-  n := fListInterfaceMethods.Count;
+  n := length(fInterfaceMethod);
   i := 0;
   while i<n do begin
-    fact := fListInterfaceMethod[i].InterfaceService;
+    fact := fInterfaceMethod[i].InterfaceService;
     if somemethods then begin
       FillcharFast(methods,SizeOf(methods),0);
       somemethods := false;
     end;
     repeat
       if (aExcludedMethodNamesCSV<>'') and not (i in excluded) then begin
-        include(methods,fListInterfaceMethod[i].
-          InterfaceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT);
+        include(methods,fInterfaceMethod[i].InterfaceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT);
         somemethods := true;
       end;
       inc(i);
-    until (i>=n) or (fListInterfaceMethod[i].InterfaceService<>fact);
+    until (i>=n) or (fInterfaceMethod[i].InterfaceService<>fact);
     if (aExcludedMethodNamesCSV='') or somemethods then
       TServiceFactoryServer(fact).SetServiceLogByIndex(methods,aLogRest,aLogClass);
   end;
@@ -60057,14 +60059,14 @@ begin
             EnterCriticalSection(fInstanceLock);
             try
               if Ctxt.fSession.fInterfaces=nil then
-                SetLength(Ctxt.fSession.fInterfaces,length(Rest.Services.fListInterfaceMethod));
+                SetLength(Ctxt.fSession.fInterfaces,length(Rest.Services.fInterfaceMethod));
             finally
               LeaveCriticalSection(fInstanceLock);
             end;
           end;
           m := Ctxt.fServiceListInterfaceMethodIndex;
           if m<0 then
-            m := Rest.Services.fListInterfaceMethods.FindHashed(
+            m := Rest.Services.fInterfaceMethods.FindHashed(
               PServiceMethod(Ctxt.ServiceMethod)^.InterfaceDotMethodName);
           if m>=0 then
           with Ctxt.fSession do begin
@@ -61095,7 +61097,7 @@ constructor TRawUTF8ObjectCacheList.Create(aClass: TRawUTF8ObjectCacheClass;
   aSettings: TRawUTF8ObjectCacheSettings; aLog: TSynLogFamily; aLogEvent: TSynLogInfo;
   const aOnKeyResolve: TOnKeyResolve);
 begin
-  inherited Create(true);
+  inherited Create([fObjectsOwned,fNoDuplicate,fCaseSensitive]);
   fClass := aClass;
   fSettings := aSettings;
   if (fClass = nil) or (fClass = TRawUTF8ObjectCache) or (fSettings = nil) then
@@ -61105,7 +61107,7 @@ begin
   fLog := aLog;
   fLogEvent := aLogEvent;
   fOnKeyResolve := aOnKeyResolve;
-  fPurgeForceList := TRawUTF8ListHashedLocked.Create;
+  fPurgeForceList := TRawUTF8List.Create([fCaseSensitive]);
 end;
 
 destructor TRawUTF8ObjectCacheList.Destroy;
@@ -61144,8 +61146,16 @@ begin
 end;
 
 procedure TRawUTF8ObjectCacheList.AddToPurge(const Key: RawUTF8);
+var i: PtrInt;
 begin
-  fPurgeForceList.AddIfNotExisting(Key);
+  fSafe.Lock;
+  try
+    i := IndexOf(Key);
+    if i>=0 then
+      fPurgeForceList.Add(Key);
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 procedure TRawUTF8ObjectCacheList.ForceCacheClear;
@@ -61176,43 +61186,43 @@ end;
 
 procedure TRawUTF8ObjectCacheList.DoPurge;
 var tix: Int64;
-    i: integer;
+    i,n: integer;
     purged: RawUTF8;
-    tryforcelist: boolean;
     cache: TRawUTF8ObjectCache;
     {$ifdef WITHLOG}
     log: ISynLog; // for Enter auto-leave to work with FPC
     {$endif}
-  procedure InternalPurge;
-  begin
-    {$ifdef WITHLOG}
-    if log = nil then
-      log := fLog.SynLog.Enter('DoPurge(%)', [fClass], self);
-    {$endif}
-    cache.CacheClear;
-    purged := purged + ' ' + cache.fKey;
+  procedure InternalPurge(nochecktimeout: boolean);
+  begin // test again the timeout after acquiring the TRawUTF8ObjectCache lock
+    try
+      cache.Safe.Lock;
+      if nochecktimeout or ((cache.fTimeoutTix > 0) and (tix > cache.fTimeoutTix)) then begin
+        {$ifdef WITHLOG}
+        if log = nil then
+          log := fLog.SynLog.Enter('DoPurge(%)', [fClass], self);
+        {$endif}
+        cache.CacheClear;
+        purged := purged + ' ' + cache.fKey;
+      end;
+    finally
+      cache.Safe.UnLock;
+    end;
   end;
 begin // called within fSafe.Lock
-  tryforcelist := fPurgeForceList.Count > 0;
   tix := GetTickCount64;
   try
+    n := fPurgeForceList.Count;
+    if n > 0 then begin
+      for i := 0 to n - 1 do begin
+        cache := GetObjectFrom(fPurgeForceList.Strings[i]);
+        InternalPurge(true);
+      end;
+      fPurgeForceList.Clear;
+    end;
     for i := 0 to fCount - 1 do begin
       cache := TRawUTF8ObjectCache(fObjects[i]);
-      if tryforcelist and (fPurgeForceList.Delete(cache.fKey) >= 0) then
-      try
-        cache.Safe.Lock;
-        InternalPurge;
-      finally
-        cache.Safe.UnLock;
-      end else
       if (cache.fTimeoutTix > 0) and (tix > cache.fTimeoutTix) then
-        try // test again the timeout after acquiring the TRawUTF8ObjectCache lock
-          cache.Safe.Lock;
-          if (cache.fTimeoutTix > 0) and (tix > cache.fTimeoutTix) then
-            InternalPurge;
-        finally
-          cache.Safe.UnLock;
-        end;
+        InternalPurge({checktimeout=}true);
     end;
     {$ifdef WITHLOG}
     if log <> nil then
@@ -61225,8 +61235,6 @@ end;
 
 function TRawUTF8ObjectCacheList.GetLocked(const Key: RawUTF8;
   out cache: TRawUTF8ObjectCache; onlyexisting: boolean): boolean;
-var
-  added: boolean;
 begin
   result := false;
   if Key = '' then
@@ -61236,7 +61244,7 @@ begin
     if ((fNextPurgeTix <> 0) and (GetTickCount64 > fNextPurgeTix)) or
        (fPurgeForceList.Count > 0) then
       DoPurge;  // inline TryPurge within the locked list
-    cache := TRawUTF8ObjectCache(GetObjectByName(Key));
+    cache := GetObjectFrom(Key);
     if cache = nil then begin
       if onlyexisting then begin
         Log('GetLocked(%): onlyexisting=true -> no new %', [Key, fClass]);
@@ -61247,11 +61255,8 @@ begin
         Log('GetLocked: Invalid key - NewObjectCache(%) returned no %', [Key, fClass]);
         exit;
       end;
-      AddObjectIfNotExisting(Key, cache, @added);
-      if added then
-        Log('GetLocked: Added %[%] - count=%', [fClass, Key, fCount])
-      else
-        raise ESynException.CreateUTF8('%.GetLocked(%) new %', [self, Key, cache]);
+      AddObjectUnique(Key,@cache);
+      Log('GetLocked: Added %[%] - count=%', [fClass, Key, fCount])
     end
     else if cache.fTimeOutTix = 0 then
       Log('GetLocked: Using blank %[%]', [fClass, Key])
