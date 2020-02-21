@@ -1739,7 +1739,7 @@ type
     fTransactionCount: integer;
     fServerTimestampOffset: TDateTime;
     fServerTimestampAtConnection: TDateTime;
-    fCache: TRawUTF8ListHashed;
+    fCache: TRawUTF8List;
     fOnProcess: TOnSQLDBProcess;
     fTotalConnectionCount: integer;
     fInternalProcessActive: integer;
@@ -4146,7 +4146,7 @@ begin
 end;
 
 procedure TSQLDBConnection.Disconnect;
-var i: integer;
+var i: PtrInt;
     Obj: PPointerArray;
 begin
   InternalProcess(speDisconnected);
@@ -4250,9 +4250,11 @@ var Stmt: TSQLDBStatement;
         Stmt.Prepare(aSQL,ExpectResults);
         if ToCache then begin
           if fCache=nil then
-            fCache := TRawUTF8ListHashed.Create(true);
-          fCache.AddObject(cachedSQL,Stmt);
-          Stmt._AddRef;
+            fCache := TRawUTF8List.Create([fObjectsOwned,fNoDuplicate,fCaseSensitive]);
+          if fCache.AddObject(cachedSQL,Stmt)>=0 then
+            Stmt._AddRef else // will be owned by fCache.Objects[]
+            SynDBLog.Add.Log(sllWarning,'NewStatementPrepared: unexpected '+
+              'cache duplicate for %',[Stmt.SQLWithInlinedParams],self);
         end;
         result := Stmt;
       finally
@@ -4284,7 +4286,7 @@ begin
     cachedSQL := aSQL;
     ndx := fCache.IndexOf(cachedSQL);
     if ndx>=0 then begin
-      Stmt := fCache.Objects[ndx] as TSQLDBStatement;
+      Stmt := fCache.Objects[ndx];
       if Stmt.RefCount=1 then begin // ensure statement is not currently in use
         Stmt.Reset;
         result := Stmt;
@@ -4295,7 +4297,7 @@ begin
           cachedSQL := aSQL+RawUTF8(AnsiChar(altern)); // safe SQL duplicate
           ndx := fCache.IndexOf(cachedSQL);
           if ndx>=0 then begin
-            Stmt := fCache.Objects[ndx] as TSQLDBStatement;
+            Stmt := fCache.Objects[ndx];
             if Stmt.RefCount=1 then begin
               Stmt.Reset;
               result := Stmt;

@@ -114,7 +114,7 @@ type
   TRTSPOverHTTPServer = class(TAsynchServer)
   protected
     fRtspServer, fRtspPort: SockString;
-    fPendingGet: TRawUTF8ListLocked;
+    fPendingGet: TRawUTF8List;
     function GetHttpPort: SockString;
     // creates TPostConnection and TRtspConnection instances for a given stream
     function ConnectionCreate(aSocket: TSocket; const aRemoteIp: RawUTF8;
@@ -214,7 +214,7 @@ begin
   fLog := aLog;
   fRtspServer := aRtspServer;
   fRtspPort := aRtspPort;
-  fPendingGet := TRawUTF8ListLocked.Create(true);
+  fPendingGet := TRawUTF8List.Create([fObjectsOwned,fCaseSensitive]);
   inherited Create(aHttpPort, aOnStart, aOnStop, TPostConnection,
     'rtsp/http', aLog, aOptions);
 end;
@@ -247,7 +247,7 @@ var
   sock, get, old: TProxySocket;
   cookie: RawUTF8;
   rtsp: TSocket;
-  i: integer;
+  i, found: integer;
   postconn: TPostConnection;
   rtspconn: TRtspConnection;
   now: cardinal;
@@ -277,6 +277,7 @@ begin
           exit;
         fPendingGet.Safe.Lock;
         try
+          found := -1;
           now := SynCommons.GetTickCount64 shr 10;
           for i := fPendingGet.Count - 1 downto 0 do begin
             old := fPendingGet.ObjectPtr[i];
@@ -284,12 +285,13 @@ begin
               if log<>nil then
                 log.Log(sllTrace, 'ConnectionCreate deletes deprecated %', [old], self);
               fPendingGet.Delete(i);
-            end;
+            end
+            else if fPendingGet[i]=cookie then
+              found := i;
           end;
-          i := fPendingGet.IndexOf(cookie);
           if IdemPropNameU(sock.Method, 'GET') then begin
-            if i >= 0 then
-              PendingDelete(i, 'duplicated')
+            if found >= 0 then
+              PendingDelete(found, 'duplicated')
             else begin
               sock.Write(FormatUTF8('HTTP/1.0 200 OK'#13#10 +
                 'Server: % %'#13#10 +
@@ -307,15 +309,15 @@ begin
             end;
           end
           else if IdemPropNameU(sock.Method, 'POST') then begin
-            if i < 0 then begin
+            if found < 0 then begin
               if log<>nil then
                 log.Log(sllDebug, 'ConnectionCreate rejected on unknonwn %', [sock], self)
             end else if not IdemPropNameU(sock.ContentType, RTSP_MIME) then
-              PendingDelete(i, sock.ContentType)
+              PendingDelete(found, sock.ContentType)
             else begin
-              get := fPendingGet.Objects[i] as TProxySocket;
-              fPendingGet.Objects[i] := nil; // will be owned by rtspinstance
-              fPendingGet.Delete(i);
+              get := fPendingGet.Objects[found];
+              fPendingGet.Objects[found] := nil; // will be owned by rtspinstance
+              fPendingGet.Delete(found);
               sock.Sock := -1; // disable Close on sock.Free -> handled in pool
             end;
           end;

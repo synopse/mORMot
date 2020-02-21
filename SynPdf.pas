@@ -5556,9 +5556,9 @@ begin
   Result:= StrToIntDef(Buffer, GetACP);
 end;
 
-constructor TPdfDocument.Create(AUseOutlines: Boolean=false; ACodePage: integer=0;
-  APDFA1: boolean=false{$ifdef USE_PDFSECURITY}; AEncryption: TPdfEncryption=nil{$endif});
-var LFont: TLogFontW; // either TLogFontA or TLogFontW idem as TRawUTF8List
+constructor TPdfDocument.Create(AUseOutlines: Boolean; ACodePage: integer;
+  APDFA1: boolean{$ifdef USE_PDFSECURITY}; AEncryption: TPdfEncryption{$endif});
+var LFont: TLogFontW; // TLogFontW to add to FTrueTypeFonts array as UTF-8
     i: integer;
 begin
   fPDFA1 := APDFA1;
@@ -5582,7 +5582,7 @@ begin
   EnumFontFamiliesExW(FDC, LFont, @EnumFontsProcW, PtrInt(@FTrueTypeFonts), 0);
   QuickSortRawUTF8(FTrueTypeFonts,length(FTrueTypeFonts),nil,@StrIComp);
   FCompressionMethod := cmFlateDecode; // deflate by default
-  fBookMarks := TRawUTF8List.Create;
+  fBookMarks := TRawUTF8List.Create([fCaseSensitive,fNoDuplicate]);
   fMissingBookmarks := TRawUTF8List.Create;
   FUseOutlines := AUseOutlines;
   fUseFontFallBack := true;
@@ -5768,8 +5768,7 @@ function TPdfDocument.CreateLink(const ARect: TPdfRect; const aBookmarkName: Raw
 var aDest: TPdfDestination;
 begin
   result := CreateAnnotation(asLink,ARect,BorderStyle,BorderWidth);
-  with fBookmarks do
-    aDest := TPdfDestination(Objects[IndexOf(aBookmarkName)]);
+  aDest := fBookmarks.GetObjectFrom(aBookmarkName);
   if aDest=nil then
     fMissingBookmarks.AddObject(aBookmarkName,result) else
     result.AddItem('Dest',aDest.GetValue);
@@ -5808,11 +5807,11 @@ begin
   aDest.Top := Round(TopPosition);
   fBookMarks.AddObject(aBookmarkName,aDest);
   with fMissingBookmarks do
-  for i := Count-1 downto 0 do
-    if Get(i)=aBookmarkName then begin
-      TPdfDictionary(Objects[i]).AddItem('Dest',aDest.GetValue);
-      Delete(i);
-    end;
+    for i := Count-1 downto 0 do
+      if Strings[i]=aBookmarkName then begin
+        TPdfDictionary(Objects[i]).AddItem('Dest',aDest.GetValue);
+        Delete(i);
+      end;
 end;
 
 procedure TPdfDocument.NewDoc;
@@ -6210,7 +6209,7 @@ end;
 function TPdfDocument.GetEmbeddedTTFIgnore: TRawUTF8List;
 begin
   if fEmbeddedTTFIgnore=nil then
-    fEmbeddedTTFIgnore := TRawUTF8List.Create;
+    fEmbeddedTTFIgnore := TRawUTF8List.Create([fCaseSensitive,fNoDuplicate]);
   result := fEmbeddedTTFIgnore;
 end;
 

@@ -219,7 +219,7 @@ type
   // - you may also define "internal" partials, e.g. {{<foo}}This is foo{{/foo}}
   TSynMustachePartials = class
   protected
-    fList: TRawUTF8ListHashed;
+    fList: TRawUTF8List;
     fOwned: boolean;
     function GetPartial(const PartialName: RawUTF8): TSynMustache;
   public
@@ -250,7 +250,7 @@ type
     /// delete the partials
     destructor Destroy; override;
     /// low-level access to the internal partials list
-    property List: TRawUTF8ListHashed read fList;
+    property List: TRawUTF8List read fList;
   end;
 
   /// stores one {{mustache}} pre-rendered template
@@ -462,7 +462,7 @@ type
     procedure Parse(P,PEnd: PUTF8Char);
   end;
 
-  TSynMustacheCache = class(TRawUTF8ListHashedLocked)
+  TSynMustacheCache = class(TRawUTF8List)
   public
     function Parse(const aTemplate: RawUTF8): TSynMustache;
     function UnParse(const aTemplate: RawUTF8): boolean;
@@ -698,38 +698,17 @@ end;
 { TSynMustacheCache }
 
 function TSynMustacheCache.Parse(const aTemplate: RawUTF8): TSynMustache;
-var i: integer;
 begin
-  fSafe.Lock;
-  try
-    i := IndexOf(aTemplate); // fast instance retrieval from shared cache
-    if i>=0 then begin
-      result := TSynMustache(Objects[i]);
-      exit;
-    end;
+  result := GetObjectFrom(aTemplate);
+  if result=nil then begin
     result := TSynMustache.Create(aTemplate);
-    AddObject(aTemplate,result);
-  finally
-    fSafe.UnLock;
+    AddObjectUnique(aTemplate,@result);
   end;
 end;
 
 function TSynMustacheCache.UnParse(const aTemplate: RawUTF8): boolean;
-var i: integer;
 begin
-  result := false;
-  if self=nil then
-    exit;
-  fSafe.Lock;
-  try
-    i := IndexOf(aTemplate);
-    if i>=0 then begin
-      Delete(i);
-      result := true;
-    end;
-  finally
-    fSafe.UnLock;
-  end;
+  result := Delete(aTemplate)>=0;
 end;
 
 
@@ -738,7 +717,8 @@ end;
 class function TSynMustache.Parse(const aTemplate: RawUTF8): TSynMustache;
 begin
   if SynMustacheCache=nil then
-    GarbageCollectorFreeAndNil(SynMustacheCache,TSynMustacheCache.Create(true));
+    GarbageCollectorFreeAndNil(SynMustacheCache,
+      TSynMustacheCache.Create([fObjectsOwned,fNoDuplicate,fCaseSensitive]));
   result := SynMustacheCache.Parse(aTemplate);
 end;
 
@@ -1439,11 +1419,25 @@ end;
 
 { TSynMustachePartials }
 
+constructor TSynMustachePartials.Create;
+begin
+  fList := TRawUTF8List.Create([fNoDuplicate,fCaseSensitive]);
+end;
+
+constructor TSynMustachePartials.CreateOwned(const NameTemplatePairs: array of RawUTF8);
+var A: integer;
+begin
+  Create;
+  fOwned := true;
+  for A := 0 to high(NameTemplatePairs) div 2 do
+    Add(NameTemplatePairs[A*2],NameTemplatePairs[A*2+1]);
+end;
+
 function TSynMustachePartials.Add(const aName, aTemplate: RawUTF8): TSynMustache;
 begin
   result := TSynMustache.Parse(aTemplate);
-  if result<>nil then
-    fList.AddObject(aName,result);
+  if (result<>nil) and (fList.AddObject(aName,result)<0) then
+    raise ESynMustache.CreateUTF8('%.Add(%) duplicated name',[self,aName]);
 end;
 
 function TSynMustachePartials.Add(const aName: RawUTF8;
@@ -1461,23 +1455,7 @@ begin
     result := -1;
 end;
 
-constructor TSynMustachePartials.Create;
-begin
-  fList := TRawUTF8ListHashed.Create(false);
-end;
-
-constructor TSynMustachePartials.CreateOwned(
-  const NameTemplatePairs: array of RawUTF8);
-var A: integer;
-begin
-  Create;
-  fOwned := true;
-  for A := 0 to high(NameTemplatePairs) div 2 do
-    Add(NameTemplatePairs[A*2],NameTemplatePairs[A*2+1]);
-end;
-
-class function TSynMustachePartials.CreateOwned(
-  const Partials: variant): TSynMustachePartials;
+class function TSynMustachePartials.CreateOwned(const Partials: variant): TSynMustachePartials;
 var p: integer;
 begin
   result := nil;

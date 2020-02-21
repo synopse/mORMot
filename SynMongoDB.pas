@@ -1909,7 +1909,7 @@ type
   TMongoClient = class
   protected
     fConnectionString: RawUTF8;
-    fDatabases: TRawUTF8ListHashed;
+    fDatabases: TRawUTF8List;
     fConnections: TMongoConnectionDynArray;
     fReadPreference: TMongoClientReplicaSetReadPreference;
     fWriteConcern: TMongoClientWriteConcern;
@@ -2053,7 +2053,7 @@ type
   protected
     fClient: TMongoClient;
     fName: RawUTF8;
-    fCollections: TRawUTF8ListHashed;
+    fCollections: TRawUTF8List;
     function GetCollection(const Name: RawUTF8): TMongoCollection;
     function GetCollectionOrCreate(const Name: RawUTF8): TMongoCollection;
     function GetCollectionOrNil(const Name: RawUTF8): TMongoCollection;
@@ -5649,7 +5649,7 @@ begin
       fConnectionString := FormatUTF8('%,%:%',[fConnectionString,secHost[i],Port]);
     end;
   end;
-  fDatabases := TRawUTF8ListHashed.Create(true);
+  fDatabases := TRawUTF8List.Create([fObjectsOwned,fNoDuplicate,fCaseSensitive]);
 end;
 
 destructor TMongoClient.Destroy;
@@ -5735,14 +5735,14 @@ function TMongoClient.Open(const DatabaseName: RawUTF8): TMongoDatabase;
 begin
   if self=nil then
     result := nil else begin
-    result := TMongoDatabase(fDatabases.GetObjectByName(DatabaseName));
+    result := fDatabases.GetObjectFrom(DatabaseName);
     if result=nil then begin // not already opened -> try now from primary host
       if not fConnections[0].Opened then begin
         fConnections[0].Open;
         AfterOpen;
       end;
       result := TMongoDatabase.Create(Self,DatabaseName);
-      fDatabases.AddObject(DatabaseName,result);
+      fDatabases.AddObjectUnique(DatabaseName,@result);
     end;
   end;
 end;
@@ -5758,7 +5758,7 @@ var digest: RawByteString;
 begin
   if (self=nil) or (DatabaseName='') or (UserName='') or (PassWord='') then
     raise EMongoException.CreateUTF8('Invalid %.OpenAuth("%") call',[self,DatabaseName]);
-  result := TMongoDatabase(fDatabases.GetObjectByName(DatabaseName));
+  result := fDatabases.GetObjectFrom(DatabaseName);
   if result=nil then  // not already opened -> try now from primary host
   try // note: authentication works on a single database per socket connection
     if not fConnections[0].Opened then
@@ -5779,7 +5779,7 @@ begin
       raise;
     end;
     result := TMongoDatabase.Create(Self,DatabaseName);
-    fDatabases.AddObject(DatabaseName,result);
+    fDatabases.AddObjectUnique(DatabaseName,@result);
   finally
     FillZero(digest);
   end;
@@ -5954,11 +5954,12 @@ constructor TMongoDatabase.Create(aClient: TMongoClient;
 var colls: TBSONIterator;
     full,db,coll: RawUTF8;
     resp,batch: variant;
+    mc: TMongoCollection;
     ndx: Integer;
 begin
   fClient := aClient;
   fName := aDatabaseName;
-  fCollections := TRawUTF8ListHashed.Create(true);
+  fCollections := TRawUTF8List.Create([fObjectsOwned,fNoDuplicate,fCaseSensitive]);
   if fClient.ServerBuildInfoNumber<3000000 then begin
     if colls.Init(Client.Connections[0].GetBSONAndFree(TMongoRequestQuery.Create(
       aDatabaseName+'.system.namespaces',null,'name',maxInt))) then
@@ -5971,7 +5972,8 @@ begin
           raise EMongoConnectionException.CreateUTF8(
             '%.Create: invalid [%] collection name for DB [%]',
             [self,full,aDatabaseName],Client.Connections[0]);
-        fCollections.AddObject(coll,TMongoCollection.Create(self,coll));
+        mc := TMongoCollection.Create(self,coll);
+        fCollections.AddObjectUnique(coll,@mc);
       end;
     end;
   end else begin
@@ -5979,8 +5981,10 @@ begin
     if _Safe(resp)^.GetValueByPath('cursor.firstBatch',batch) then
       with _Safe(batch)^ do
       for ndx := 0 to Count-1 do
-        if _Safe(Values[ndx]).GetAsRawUTF8('name',coll) then
-          fCollections.AddObject(coll,TMongoCollection.Create(self,coll));
+        if _Safe(Values[ndx]).GetAsRawUTF8('name',coll) then begin
+          mc := TMongoCollection.Create(self,coll);
+          fCollections.AddObjectUnique(coll,@mc);
+        end;
   end;
 end;
 
@@ -6026,7 +6030,7 @@ begin
   if result=nil then
     if self<>nil then begin
       result := TMongoCollection.Create(self,Name);
-      fCollections.AddObject(Name,result);
+      fCollections.AddObjectUnique(Name,@result);
     end;
 end;
 
@@ -6034,7 +6038,7 @@ function TMongoDatabase.GetCollectionOrNil(const Name: RawUTF8): TMongoCollectio
 begin
   if self=nil then
     result := nil else
-    result := TMongoCollection(fCollections.GetObjectByName(Name));
+    result := fCollections.GetObjectFrom(Name);
 end;
 
 function TMongoDatabase.RunCommand(const command: variant;
@@ -6159,7 +6163,7 @@ begin
   result := fDatabase.RunCommand(BSONVariant('{drop:?}',[],[Name]),res);
   Database.Client.Log.Log(sllTrace,'Drop("%")->%',[Name,res],self);
   if result='' then
-    Database.fCollections.Delete(fDatabase.fCollections.IndexOf(Name));
+    Database.fCollections.Delete(Name);
 end;
 
 procedure TMongoCollection.EnsureIndex(const Keys, Options: variant);
