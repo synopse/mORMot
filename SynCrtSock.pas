@@ -11886,7 +11886,7 @@ begin
     if IdemPChar(pointer(s),'ACCEPT-ENCODING:') then
       trimcopy(s,17,100,AcceptEncoding) else
     if IdemPChar(pointer(s),'CONTENT-ENCODING:') then
-      trimcopy(s,19,100,Encoding);
+      trimcopy(s,18,100,Encoding);
   end;
   Data := fOut.Data;
 end;
