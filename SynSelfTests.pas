@@ -1545,10 +1545,12 @@ begin
   TestPopCnt('pas');
   GetBitsCountPtrInt := @GetBitsCountPas; // x86/x86_64 assembly
   TestPopCnt('asm');
+  {$ifndef ABSOLUTEPASCAL}
   if cfPOPCNT in CpuFeatures then begin
     GetBitsCountPtrInt := @GetBitsCountSSE42;
     TestPopCnt('sse4.2');
   end;
+  {$endif ABSOLUTEPASCAL}
   {$else}
   TestPopCnt('pas');
   {$endif CPUINTEL}
@@ -2928,6 +2930,12 @@ begin
   result := true;
 end;
 
+{$ifndef ABSOLUTEPASCAL}
+{$ifdef CPUX64} // will define its own self-dispatched SSE2/AVX functions
+  {$define HASCPUIDX64}
+{$endif}
+{$endif}
+
 procedure TTestLowLevelCommon.CustomRTL;
 // note: FPC uses the RTL for FillCharFast/MoveFast
 var buf: RawByteString;
@@ -2937,6 +2945,7 @@ var buf: RawByteString;
        timer: TPrecisionTimer;
        P: PByteArray;
        msg: string;
+       cpu: RawUTF8;
        elapsed: Int64;
    begin
      // first validate FillCharFast
@@ -2972,22 +2981,17 @@ var buf: RawByteString;
          inc(len,777+len shr 4);
      until len>=length(buf);
      timer.Stop;
+     {$ifdef HASCPUIDX64}
+     cpu := GetSetName(TypeInfo(TX64CpuFeatures),CPUIDX64);
+     {$endif}
      if rtl then
        msg := 'FillChar' else
-       {$ifdef CPUX64}
-       FormatString('FillCharFast [%]',[GetSetName(TypeInfo(TX64CpuFeatures),CPUIDX64)],msg);
-       {$else}
-       msg := 'FillCharFast';
-       {$endif}
+       FormatString('FillCharFast [%]',[cpu],msg);
      NotifyTestSpeed(msg,1,filled,@timer);
      // validates overlapping forward Move/MoveFast
      if rtl then
        msg := 'Move' else
-       {$ifdef CPUX64}
-       FormatString('MoveFast [%]',[GetSetName(TypeInfo(TX64CpuFeatures),CPUIDX64)],msg);
-       {$else}
-       msg := 'MoveFast';
-       {$endif}
+       FormatString('MoveFast [%]',[cpu],msg);
      P := pointer(buf);
      for i := 0 to length(buf)-1 do
        P[i] := i; // fills with 0,1,2,...
@@ -3051,11 +3055,11 @@ var buf: RawByteString;
        end;
      checkEqual(Hash32(buf),1646145792);
    end;
-{$ifdef CPUX64} var cpu: TX64CpuFeatures; {$endif}
+{$ifdef HASCPUIDX64} var cpu: TX64CpuFeatures; {$endif}
 begin
   SetLength(buf,16 shl 20); // 16MB
   Validate({rtl=}true);
-  {$ifdef CPUX64} // activate and validate the available SSE2 + AVX branches
+  {$ifdef HASCPUIDX64} // activate and validate SSE2 + AVX branches
   cpu := CPUIDX64;
   CPUIDX64 := []; // default SSE2 128-bit process
   Validate;
@@ -3067,7 +3071,7 @@ begin
   {$endif FPC}
   CPUIDX64 := cpu; // there is no AVX2 move/fillchar (still 256-bit wide)
   if (cpu<>[]) and (cpu<>[cpuAvx]) and (cpu<>[cpuAvx,cpuAvx2]) then
-  {$endif CPUX64}
+  {$endif HASCPUIDX64}
     Validate;
 end;
 {$endif CPUINTEL}

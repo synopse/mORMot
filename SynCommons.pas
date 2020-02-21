@@ -2294,11 +2294,11 @@ function strspnsse42(s,accept: pointer): integer;
 // - could be used instead of strcspn() when you are confident about your
 // s/reject input buffers, checking if cfSSE42 in CpuFeatures
 function strcspnsse42(s,reject: pointer): integer;
-{$endif ABSOLUTEPASCAL}
 
 /// SSE 4.2 version of GetBitsCountPtrInt()
 // - defined just for regression tests - call GetBitsCountPtrInt() instead
 function GetBitsCountSSE42(value: PtrInt): PtrInt;
+{$endif ABSOLUTEPASCAL}
 {$endif CPUINTEL}
 
 /// use our fast version of StrIComp(), to be used with PUTF8Char/PAnsiChar
@@ -2318,15 +2318,27 @@ function StrLenPas(S: pointer): PtrInt;
 // files - call explicitely StrLenSSE42() if you are confident on your input
 var StrLen: function(S: pointer): PtrInt = StrLenPas;
 
+{$ifdef ABSOLUTEPASCAL}
+var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) = FillChar;
+var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
+{$else}
+{$ifdef CPUX64} // will define its own self-dispatched SSE2/AVX functions
+type
+  /// cpuERMS is slightly slower than cpuAVX so is not available by default
+  TX64CpuFeatures = set of(cpuAVX, cpuAVX2 {$ifdef WITH_ERMS}, cpuERMS{$endif});
+var
+  /// internal flags used by FillCharFast - easier from asm that CpuFeatures
+  CPUIDX64: TX64CpuFeatures;
+procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
+procedure MoveFast(const src; var dst; cnt: PtrInt);
+{$else}
+
 /// our fast version of FillChar()
 // - on Intel i386/x86_64, will use fast SSE2/ERMS instructions (if available),
 // or optimized X87 assembly implementation for older CPUs
 // - on non-Intel CPUs, it will fallback to the default RTL FillChar()
 // - note: Delphi x86_64 is far from efficient: even ERMS was wrongly
 // introduced in latest updates
-{$ifdef CPUX64}
-procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
-{$else}
 var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte);
 {$endif CPUX64}
 
@@ -2334,9 +2346,6 @@ var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte);
 // - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available),
 // or optimized X87 assembly implementation for older CPUs
 // - on non-Intel CPUs, it will fallback to the default RTL Move()
-{$ifdef CPUX64}
-procedure MoveFast(const src; var dst; cnt: PtrInt);
-{$else}
 var MoveFast: procedure(const Source; var Dest; Count: PtrInt);
 {$endif CPUX64}
 
@@ -5849,10 +5858,12 @@ type
     FindCollisions: cardinal;
     {$endif}
     /// initialize the hash table for a given dynamic array storage
+    // - you can call this method several times, e.g. if aCaseInsensitive changed
     procedure Init(aDynArray: PDynArray; aHashElement: TDynArrayHashOne;
      aEventHash: TEventDynArrayHashOne; aHasher: THasher; aCompare: TDynArraySortCompare;
      aEventCompare: TEventDynArraySortCompare; aCaseInsensitive: boolean);
     /// initialize a known hash table for a given dynamic array storage
+    // - you can call this method several times, e.g. if aCaseInsensitive changed
     procedure InitSpecific(aDynArray: PDynArray; aKind: TDynArrayKind; aCaseInsensitive: boolean);
     /// allow custom hashing via a method event
     procedure SetEventHash(const event: TEventDynArrayHashOne);
@@ -6093,6 +6104,7 @@ type
     // manual Scan() is called 64 times
     property HashCountTrigger: integer read fHash.CountTrigger write fHash.CountTrigger;
     /// access to the internal hash table
+    // - you can call e.g. Hasher.Clear to invalidate the whole hash table
     property Hasher: TDynArrayHasher read fHash;
   end;
 
@@ -7629,6 +7641,7 @@ function HashPointer(const Elem; Hasher: THasher): cardinal;
 var
   /// helper array to get the comparison function corresponding to a given
   // standard array type
+  // - e.g. as DYNARRAY_SORTFIRSTFIELD[CaseInSensitive,djRawUTF8]
   // - not to be used as such, but e.g. when inlining TDynArray methods
   DYNARRAY_SORTFIRSTFIELD: array[boolean,TDynArrayKind] of TDynArraySortCompare = (
     (nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayWord,
@@ -7652,6 +7665,7 @@ var
 
   /// helper array to get the hashing function corresponding to a given
   // standard array type
+  // - e.g. as DYNARRAY_HASHFIRSTFIELD[CaseInSensitive,djRawUTF8]
   // - not to be used as such, but e.g. when inlining TDynArray methods
   DYNARRAY_HASHFIRSTFIELD: array[boolean,TDynArrayKind] of TDynArrayHashOne = (
     (nil, HashByte, HashByte, HashWord, HashInteger,
@@ -12381,15 +12395,6 @@ var
   /// the available CPU features, as recognized at program startup
   CpuFeatures: TIntelCpuFeatures;
 
-{$ifdef CPUX64}
-type
-  /// cpuERMS is slightly slower than cpuAVX so is not available by default
-  TX64CpuFeatures = set of(cpuAVX, cpuAVX2 {$ifdef WITH_ERMS}, cpuERMS{$endif});
-var
-  /// internal flags used by FillCharFast - easier from asm that CpuFeatures
-  CPUIDX64: TX64CpuFeatures;
-{$endif CPUX64}
-
 /// compute CRC32C checksum on the supplied buffer using SSE 4.2
 // - use Intel Streaming SIMD Extensions 4.2 hardware accelerated instruction
 // - SSE 4.2 shall be available on the processor (i.e. cfSSE42 in CpuFeatures)
@@ -12478,7 +12483,7 @@ function GetBitsCountPas(value: PtrInt): PtrInt;
 // - the PopCnt() intrinsic under FPC doesn't have any fallback on older CPUs,
 // and default implementation is 5 times slower than our GetBitsCountPas() on x64
 // - this redirected function will use fast SSE4.2 popcnt opcode, if available
-var GetBitsCountPtrInt: function(value: PtrInt): PtrInt;
+var GetBitsCountPtrInt: function(value: PtrInt): PtrInt = GetBitsCountPas;
 
 const
   /// constant array used by GetAllBits() function (when inlined)
@@ -17430,7 +17435,7 @@ function StreamSynLZComputeLen(P: PAnsiChar; Len, aMagic: cardinal): integer;
 // (if was appended to an existing data - e.g. a .mab at the end of a .exe)
 function StreamUnSynLZ(const Source: TFileName; Magic: cardinal): TMemoryStream; overload;
 
-/// compress a file content using the SynLZ algorithm a file content
+/// compress a file content using the SynLZ algorithm
 // - source file is split into 128 MB blocks for fast in-memory compression of
 // any file size
 // - you should specify a Magic number to be used to identify the compressed
@@ -35658,6 +35663,7 @@ asm .noframe // ecx=param, rdx=Registers (Linux: edi,rsi)
         mov     rbx, r10
 end;
 
+{$ifndef ABSOLUTEPASCAL}
 const
   CMP_RANGES = $44; // see https://msdn.microsoft.com/en-us/library/bb531425
   _UpperCopy255BufSSE42: array[0..31] of AnsiChar =
@@ -35716,6 +35722,77 @@ asm .noframe // rcx=dest, rdx=source, r8=len (Linux: rdi,rsi,rdx)
        dec     rdx
        jnz     @s
 end;
+
+{$ifdef HASAESNI}
+const
+  EQUAL_EACH = 8;   // see https://msdn.microsoft.com/en-us/library/bb531463
+  NEGATIVE_POLARITY = 16;
+
+function StrLenSSE42(S: pointer): PtrInt;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        xor     rax, rax
+        mov     rdx, S
+        test    S, S
+        jz      @null
+        xor     rcx, rcx
+        pxor    xmm0, xmm0
+        pcmpistri xmm0, [rdx], EQUAL_EACH // result in ecx
+        jnz     @L
+        mov     eax, ecx
+@null:  ret
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@L:     add     rax, 16   // add before comparison flag
+        pcmpistri xmm0, [rdx + rax], EQUAL_EACH // result in ecx
+        jnz     @L
+        add     rax, rcx
+end;
+
+function StrCompSSE42(Str1, Str2: pointer): PtrInt;
+{$ifdef FPC}nostackframe; assembler; asm {$else}
+asm .noframe // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
+{$endif FPC}
+      {$ifdef win64}
+      mov       rax, rcx
+      test      rcx, rdx
+      {$else}
+      mov       rax, rdi
+      mov       rdx, rsi
+      test      rdi, rsi  // is one of Str1/Str2 nil ?
+      {$endif}
+      jz        @n
+@ok:  sub       rax, rdx
+      xor       rcx, rcx
+      movdqu    xmm0, dqword [rdx]
+      pcmpistri xmm0, dqword [rdx + rax], EQUAL_EACH + NEGATIVE_POLARITY // result in rcx
+      ja        @1
+      jc        @2
+      xor       rax, rax
+      ret
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@1:   add       rdx, 16
+      movdqu    xmm0, dqword [rdx]
+      pcmpistri xmm0, dqword [rdx + rax], EQUAL_EACH + NEGATIVE_POLARITY
+      ja        @1
+      jc        @2
+@0:   xor       rax, rax // Str1=Str2
+      ret
+@n:   cmp       rax, rdx
+      je        @0
+      test      rax, rax  // Str1='' ?
+      jz        @max
+      test      rdx, rdx  // Str2='' ?
+      jnz       @ok
+      mov       rax, 1
+      ret
+@max: dec       rax  // returns -1
+      ret
+@2:   add       rax, rdx
+      movzx     rax, byte ptr [rax + rcx]
+      movzx     rdx, byte ptr [rdx + rcx]
+      sub       rax, rdx
+end;
+{$endif HASAESNI}
+{$endif ABSOLUTEPASCAL}
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
@@ -35807,75 +35884,6 @@ asm .noframe // rcx=S (Linux: rdi)
 @null:
 end;
 
-const
-  EQUAL_EACH = 8;   // see https://msdn.microsoft.com/en-us/library/bb531463
-  NEGATIVE_POLARITY = 16;
-
-{$ifdef HASAESNI}
-function StrLenSSE42(S: pointer): PtrInt;
-{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        xor     rax, rax
-        mov     rdx, S
-        test    S, S
-        jz      @null
-        xor     rcx, rcx
-        pxor    xmm0, xmm0
-        pcmpistri xmm0, [rdx], EQUAL_EACH // result in ecx
-        jnz     @L
-        mov     eax, ecx
-@null:  ret
-{$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@L:     add     rax, 16   // add before comparison flag
-        pcmpistri xmm0, [rdx + rax], EQUAL_EACH // result in ecx
-        jnz     @L
-        add     rax, rcx
-end;
-
-function StrCompSSE42(Str1, Str2: pointer): PtrInt;
-{$ifdef FPC}nostackframe; assembler; asm {$else}
-asm .noframe // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
-{$endif FPC}
-      {$ifdef win64}
-      mov       rax, rcx
-      test      rcx, rdx
-      {$else}
-      mov       rax, rdi
-      mov       rdx, rsi
-      test      rdi, rsi  // is one of Str1/Str2 nil ?
-      {$endif}
-      jz        @n
-@ok:  sub       rax, rdx
-      xor       rcx, rcx
-      movdqu    xmm0, dqword [rdx]
-      pcmpistri xmm0, dqword [rdx + rax], EQUAL_EACH + NEGATIVE_POLARITY // result in rcx
-      ja        @1
-      jc        @2
-      xor       rax, rax
-      ret
-{$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@1:   add       rdx, 16
-      movdqu    xmm0, dqword [rdx]
-      pcmpistri xmm0, dqword [rdx + rax], EQUAL_EACH + NEGATIVE_POLARITY
-      ja        @1
-      jc        @2
-@0:   xor       rax, rax // Str1=Str2
-      ret
-@n:   cmp       rax, rdx
-      je        @0
-      test      rax, rax  // Str1='' ?
-      jz        @max
-      test      rdx, rdx  // Str2='' ?
-      jnz       @ok
-      mov       rax, 1
-      ret
-@max: dec       rax  // returns -1
-      ret
-@2:   add       rax, rdx
-      movzx     rax, byte ptr [rax + rcx]
-      movzx     rdx, byte ptr [rdx + rcx]
-      sub       rax, rdx
-end;
-{$endif HASAESNI}
 {$endif CPU64}
 {$endif CPUINTEL}
 
@@ -36494,6 +36502,7 @@ end;
 {$endif CPUX86}
 {$endif CPUX64}
 
+{$ifndef ABSOLUTEPASCAL}
 {$ifdef CPUX64}
 const
   // non-temporal writes should bypass the cache when the size is bigger than
@@ -36855,6 +36864,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
 {$endif FPC}
 end;
 {$endif CPUX64}
+{$endif ABSOLUTEPASCAL}
 
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
 var i,len: integer;
@@ -38831,11 +38841,9 @@ end;
 {$endif}
 
 {$ifdef CPUINTEL} /// NIST SP 800-90A compliant RDRAND Intel x86/x64 opcode
-function RdRand32: cardinal;
-{$ifdef CPU64}{$ifdef FPC}nostackframe; assembler; asm{$else}
-asm .noframe {$endif FPC} {$else}
-{$ifdef FPC}nostackframe; assembler;{$endif} asm
-{$endif}
+function RdRand32: cardinal; {$ifdef CPU64}
+{$ifdef FPC}nostackframe; assembler; asm{$else} asm .noframe {$endif FPC} {$else}
+{$ifdef FPC}nostackframe; assembler;{$endif} asm {$endif}
   // rdrand eax: same opcodes for x86 and x64
   db $0f, $c7, $f0
   // returns in eax, ignore carry flag (eax=0 won't hurt)
@@ -64903,6 +64911,15 @@ begin
 end;
 
 {$ifdef CPUINTEL}
+function IsXmmYmmOSEnabled: boolean; assembler;
+asm // see https://software.intel.com/en-us/blogs/2011/04/14/is-avx-enabled
+        xor     ecx, ecx  // specify control register XCR0 = XFEATURE_ENABLED_MASK
+        db  $0f, $01, $d0 // XGETBV reads XCR (extended control register) into EDX:EAX
+        and     eax, 6    // check OS has enabled both XMM (bit 1) and YMM (bit 2)
+        cmp     al, 6
+        sete    al
+end;
+
 procedure TestIntelCpuFeatures;
 var regs: TRegisters;
     c: cardinal;
@@ -64921,17 +64938,22 @@ begin
   // may be needed on Darwin x64 (as reported by alf)
   Exclude(CpuFeatures, cfSSE42);
   Exclude(CpuFeatures, cfAESNI);
-  {$endif}
+  {$endif DISABLE_SSE42}
+  if not(cfOSXS in CpuFeatures) or not IsXmmYmmOSEnabled then
+    CpuFeatures := CpuFeatures-[cfAVX,cfAVX2,cfFMA];
+  {$ifndef ABSOLUTEPASCAL}
   {$ifdef CPUX64}
   {$ifdef WITH_ERMS}
   if cfERMS in CpuFeatures then // actually slower than our AVX code -> disabled
     include(CPUIDX64,cpuERMS);
   {$endif WITH_ERMS}
-  if cfAVX in CpuFeatures then
+  if cfAVX in CpuFeatures then begin
     include(CPUIDX64,cpuAVX);
   if cfAVX2 in CpuFeatures then
     include(CPUIDX64,cpuAVX2);
+  end;
   {$endif CPUX64}
+  {$endif ABSOLUTEPASCAL}
   // validate accuracy of most used HW opcodes
   if cfRAND in CpuFeatures then
     try
@@ -65089,7 +65111,6 @@ begin
   end;
   UpperCopy255Buf := @UpperCopy255BufPas;
   DefaultHasher := @xxHash32; // faster than crc32cfast for small content
-  GetBitsCountPtrInt := @GetBitsCountPas;
   {$ifndef ABSOLUTEPASCAL}
   {$ifdef CPUINTEL}
   {$ifdef FPC} // done in InitRedirectCode for Delphi
@@ -65205,7 +65226,7 @@ initialization
   TTextWriter.RegisterCustomJSONSerializerFromText([
     TypeInfo(TFindFilesDynArray),
      'Name:string Attr:Integer Size:Int64 Timestamp:TDateTime']);
-  // some type definition assertions
+  // some paranoid cross-platform/cross-compiler assertions
   {$ifndef NOVARIANTS}
   Assert(SizeOf(TDocVariantData)=SizeOf(TVarData));
   DocVariantType := TDocVariant(SynRegisterCustomVariantType(TDocVariant));
@@ -65224,8 +65245,8 @@ initialization
   {$ifdef MSWINDOWS}
   {$ifndef CPU64}
   Assert(SizeOf(TFileTime)=SizeOf(Int64)); // see e.g. FileTimeToInt64
-  {$endif}
-  {$endif}
+  {$endif CPU64}
+  {$endif MSWINDOWS}
 
 finalization
   GarbageCollectorFree;
