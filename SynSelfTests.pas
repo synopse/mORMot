@@ -1885,14 +1885,14 @@ end;
 
 procedure TTestLowLevelCommon._TRawUTF8List;
 const MAX=20000;
-var i: integer;
+var i,n: integer;
     L: TRawUTF8List;
     C: TComponent;
     Rec: TSynFilterOrValidate;
     s: RawUTF8;
 begin
-  L := TRawUTF8List.Create(true);
-  try
+  L := TRawUTF8List.Create([fObjectsOwned]);
+  try // no hash table involved
     for i := 0 to MAX do begin
       C := TComponent.Create(nil);
       C.Tag := i;
@@ -1903,37 +1903,53 @@ begin
       Check(GetInteger(Pointer(L[i]))=i);
     for i := 0 to MAX do
       Check(TComponent(L.Objects[i]).Tag=i);
+    Check(L.IndexOf('')<0);
+    Check(L.IndexOf('5')=5);
+    Check(L.IndexOf('999')=999);
     for i := MAX downto 0 do
       if i and 1=0 then
-        L.Delete(i);
+        L.Delete(i); // delete half the array
     Check(L.Count=MAX div 2);
     for i := 0 to L.Count-1 do
       Check(GetInteger(Pointer(L[i]))=TComponent(L.Objects[i]).Tag);
+    Check(L.IndexOf('5')=2);
+    Check(L.IndexOf('6')<0);
   finally
     L.Free;
   end;
-  L := TRawUTF8ListHashed.Create(true);
-  try
+  L := TRawUTF8List.Create([fObjectsOwned,fNoDuplicate,fCaseSensitive]);
+  try // with hash table
     for i := 1 to MAX do begin
      Rec := TSynFilterOrValidate.create;
      Rec.Parameters := Int32ToUTF8(i);
-     L.AddObjectIfNotExisting(Rec.Parameters,Rec);
+     Check(L.AddObject(Rec.Parameters,Rec)=i-1);
+     Check(L.IndexOf(Rec.Parameters)=i-1);
     end;
     Check(L.IndexOf('')<0);
     Check(L.IndexOf('abcd')<0);
+    Check(L.Count=MAX);
+    n := 0;
     for i := 1 to MAX do begin
       UInt32ToUTF8(i,s);
-      Check(L.IndexOf(s)=i-1);
-      Check(TSynFilterOrValidate(L.Objects[i-1]).Parameters=s);
+      Check(L.IndexOf(s)=n);
+      Check(TSynFilterOrValidate(L.Objects[n]).Parameters=s);
+      if i and 127=0 then
+        Check(L.Delete(s)=n) else
+        inc(n);
+    end;
+    Check(L.Count=n);
+    for i := 1 to MAX do begin
+      UInt32ToUTF8(i,s);
+      Check((L.IndexOf(s)>=0)=(i and 127<>0));
     end;
     L.SaveToFile('utf8list.txt');
     L.Clear;
     Check(L.Count=0);
     L.LoadFromFile('utf8list.txt');
-    Check(L.Count=MAX);
+    Check(L.Count=n);
     for i := 1 to MAX do begin
       UInt32ToUTF8(i,s);
-      Check(L.IndexOf(s)=i-1);
+      Check((L.IndexOf(s)>=0)=(i and 127<>0));
     end;
     DeleteFile('utf8list.txt');
   finally
@@ -12165,7 +12181,7 @@ begin
   Check(clo+chi=2000);
   Check(dlo+dhi=4000);
   Check(elo+ehi=4000);
-  CheckUTF8((clo>=950) and (clo<=1050),'Random32 distribution clo=%',[clo]);
+  CheckUTF8((clo>=945) and (clo<=1055),'Random32 distribution clo=%',[clo]);
   CheckUTF8((dlo>=1900) and (dlo<=2100),'RandomDouble distribution dlo=%',[dlo]);
   CheckUTF8((elo>=1900) and (elo<=2100),'RandomExt distribution elo=%',[elo]);
   s1 := TAESPRNG.Main.FillRandom(100);
