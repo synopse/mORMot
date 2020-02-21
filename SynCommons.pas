@@ -36229,9 +36229,9 @@ asm // eax=crc, edx=buf, ecx=len
         jz      @0
         test    edx, edx
         jz      @0
-@3:     test    edx, 3
-        jz      @8 // align to 4 bytes boundary
-        {$ifdef FPC_OR_UNICODE}
+        jmp     @align
+        db      $8D, $0B4, $26, $00, $00, $00, $00 // manual @by8 align 16
+@a:     {$ifdef FPC}
         crc32   eax, byte ptr[edx]
         {$else}
         db      $F2, $0F, $38, $F0, $02
@@ -36239,12 +36239,38 @@ asm // eax=crc, edx=buf, ecx=len
         inc     edx
         dec     ecx
         jz      @0
-        test    edx, 3
-        jnz     @3
-@8:     push    ecx
+@align: test    dl, 3
+        jnz     @a
+        push    ecx
         shr     ecx, 3
+        jnz     @by8
+@rem:   pop     ecx
+        test    cl, 4
+        jz      @4
+        {$ifdef FPC}
+        crc32   eax, dword ptr[edx]
+        {$else}
+        db      $F2, $0F, $38, $F1, $02
+        {$endif}
+        add     edx, 4
+@4:     test    cl, 2
         jz      @2
-@1:     {$ifdef FPC_OR_UNICODE}
+        {$ifdef FPC}
+        crc32   eax, word ptr[edx]
+        {$else}
+        db      $66, $F2, $0F, $38, $F1, $02
+        {$endif}
+        add     edx, 2
+@2:     test    cl, 1
+        jz      @0
+        {$ifdef FPC}
+        crc32   eax, byte ptr[edx]
+        {$else}
+        db      $F2, $0F, $38, $F0, $02
+        {$endif}
+@0:     not     eax
+        ret
+@by8:   {$ifdef FPC}
         crc32   eax, dword ptr[edx]
         crc32   eax, dword ptr[edx + 4]
         {$else}
@@ -36253,38 +36279,8 @@ asm // eax=crc, edx=buf, ecx=len
         {$endif}
         add     edx, 8
         dec     ecx
-        jnz     @1
-@2:     pop     ecx
-        and     ecx, 7
-        jz      @0
-        cmp     ecx, 4
-        jb      @4
-        {$ifdef FPC_OR_UNICODE}
-        crc32   eax, dword ptr[edx]
-        {$else}
-        db      $F2, $0F, $38, $F1, $02
-        {$endif}
-        add     edx, 4
-        sub     ecx, 4
-        jz      @0
-@4:     {$ifdef FPC_OR_UNICODE}
-        crc32   eax, byte ptr[edx]
-        dec     ecx
-        jz      @0
-        crc32   eax, byte ptr[edx + 1]
-        dec     ecx
-        jz      @0
-        crc32   eax, byte ptr[edx + 2]
-        {$else}
-        db      $F2, $0F, $38, $F0, $02
-        dec     ecx
-        jz      @0
-        db      $F2, $0F, $38, $F0, $42, $01
-        dec     ecx
-        jz      @0
-        db      $F2, $0F, $38, $F0, $42, $02
-        {$endif}
-@0:     not     eax
+        jnz     @by8
+        jmp     @rem
 end;
 {$endif CPUX86}
 
