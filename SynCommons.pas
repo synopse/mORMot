@@ -3457,18 +3457,26 @@ function IsRawUTF8DynArray(typeinfo: pointer): boolean;
 /// append one or several values to a local "array of const" variable
 procedure AddArrayOfConst(var Dest: TTVarRecDynArray; const Values: array of const);
 
+/// low-level efficient search of Value in Values[]
+// - CaseSensitive=false will use StrICmp() for A..Z / a..z equivalence
+function FindRawUTF8(Values: PRawUTF8; const Value: RawUTF8; ValuesCount: integer;
+  CaseSensitive: boolean): integer; overload;
+
 /// return the index of Value in Values[], -1 if not found
+// - CaseSensitive=false will use StrICmp() for A..Z / a..z equivalence
 function FindRawUTF8(const Values: TRawUTF8DynArray; const Value: RawUTF8;
   CaseSensitive: boolean=true): integer; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// return the index of Value in Values[], -1 if not found
-// - can optionally call IdemPropNameU() for property matching
-function FindRawUTF8(const Values: TRawUTF8DynArray; ValuesCount: integer;
-  const Value: RawUTF8; SearchPropName: boolean): integer; overload;
-
-/// return the index of Value in Values[], -1 if not found
+// - CaseSensitive=false will use StrICmp() for A..Z / a..z equivalence
 function FindRawUTF8(const Values: array of RawUTF8; const Value: RawUTF8;
   CaseSensitive: boolean=true): integer; overload;
+
+/// return the index of Value in Values[], -1 if not found
+// - SearchPropName will optionally use IdemPropNameU() for property matching
+function FindRawUTF8(const Values: TRawUTF8DynArray; ValuesCount: integer;
+  const Value: RawUTF8; SearchPropName: boolean): integer; overload;
 
 /// return the index of Value in Values[], -1 if not found
 // - here name search would use fast IdemPropNameU() function
@@ -29805,32 +29813,35 @@ begin
   Sum := t;
 end;
 
+function FindRawUTF8(Values: PRawUTF8; const Value: RawUTF8; ValuesCount: integer;
+  CaseSensitive: boolean): integer;
+begin
+  if Values<>nil then
+    if CaseSensitive then begin
+      for result := 0 to ValuesCount-1 do
+        if Values^=Value then
+          exit else
+          inc(Values);
+    end else
+      for result := 0 to ValuesCount-1 do
+        if StrIComp(pointer(Values^),pointer(Value))=0 then
+          exit else
+          inc(Values);
+  result := -1;
+end;
+
 function FindRawUTF8(const Values: TRawUTF8DynArray; const Value: RawUTF8;
   CaseSensitive: boolean): integer;
 begin
-  if CaseSensitive then begin
-    for result := 0 to length(Values)-1 do
-      if Values[result]=Value then
-        exit;
-  end else
-    for result := 0 to length(Values)-1 do
-      if UTF8IComp(pointer(Values[result]),pointer(Value))=0 then
-        exit;
-  result := -1;
+  result := FindRawUTF8(pointer(Values),Value,length(Values),CaseSensitive);
 end;
 
 function FindRawUTF8(const Values: array of RawUTF8; const Value: RawUTF8;
   CaseSensitive: boolean): integer;
 begin
-  if CaseSensitive then begin
-    for result := 0 to high(Values) do
-      if Values[result]=Value then
-        exit;
-  end else
-    for result := 0 to high(Values) do
-      if UTF8IComp(pointer(Values[result]),pointer(Value))=0 then
-        exit;
-  result := -1;
+  result := high(Values);
+  if result>=0 then
+    result := FindRawUTF8(@Values[0],Value,result,CaseSensitive);
 end;
 
 function FindRawUTF8(const Values: TRawUTF8DynArray; ValuesCount: integer;
