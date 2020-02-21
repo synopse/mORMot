@@ -63,7 +63,8 @@ uses
   Classes,
   ComCtrls,
   Controls,
-  SynCommons;
+  SynCommons,
+  SynTable;
 
 type
   ESynJSONTreeView = class(ESynException);
