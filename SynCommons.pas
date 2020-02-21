@@ -2340,14 +2340,15 @@ procedure MoveFast(const src; var dst; cnt: PtrInt);
 // - note: Delphi x86_64 is far from efficient: even ERMS was wrongly
 // introduced in latest updates
 var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte);
-{$endif CPUX64}
 
 /// our fast version of move()
 // - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available),
 // or optimized X87 assembly implementation for older CPUs
 // - on non-Intel CPUs, it will fallback to the default RTL Move()
 var MoveFast: procedure(const Source; var Dest; Count: PtrInt);
+
 {$endif CPUX64}
+{$endif ABSOLUTEPASCAL}
 
 /// an alternative Move() function tuned for small unaligned counts
 // - warning: expects Count>0 and Source/Dest not nil
@@ -11953,39 +11954,23 @@ function UInt2DigitsToShortFast(Value: byte): TShort4;
 // - this version is not optimized for speed, but for correctness
 function crc16(Data: PAnsiChar; Len: integer): cardinal;
 
-// our custom hash/checksum function, specialized for Text comparison
-// - it is a checksum algorithm, not a hash function: has less colision than
-// Adler32 for short strings, but more than xxhash32 or crc32/crc32c
-// - written in simple plain pascal, with no L1 CPU cache pollution
-// - overloaded version for direct binary content hashing
-// - crc32c() has less collision - but is faster only on a SSE4.2 x86_64 CPU;
-// some numbers on FPC/Linux64, with a SSE4.2 enabled CPU:
-// $ -- 8 bytes buffers
-// $ crc32c 8B in 12us i.e. 41,666,666/s, aver. 0us, 317.8 MB/s
-// $ xxhash32 8B in 10us i.e. 50,000,000/s, aver. 0us, 381.4 MB/s
-// $ hash32 8B in 9us i.e. 55,555,555/s, aver. 0us, 423.8 MB/s
-// $ -- 50 bytes buffers
-// $ crc32c 50B in 11us i.e. 45,454,545/s, aver. 0us, 2.1 GB/s
-// $ xxhash32 50B in 14us i.e. 35,714,285/s, aver. 0us, 1.6 GB/s
-// $ hash32 50B in 10us i.e. 50,000,000/s, aver. 0us, 2.3 GB/s
-// $ -- 100 bytes buffers
-// $ crc32c 100B in 12us i.e. 41,666,666/s, aver. 0us, 3.8 GB/s
-// $ xxhash32 100B in 19us i.e. 26,315,789/s, aver. 0us, 2.4 GB/s
-// $ hash32 100B in 13us i.e. 38,461,538/s, aver. 0us, 3.5 GB/s
-// $ -- 1000 bytes buffers
-// $ crc32c 0.9KB in 37us i.e. 13,513,513/s, aver. 0us, 12.5 GB/s
-// $ xxhash32 0.9KB in 96us i.e. 5,208,333/s, aver. 0us, 4.8 GB/s
-// $ hash32 0.9KB in 62us i.e. 8,064,516/s, aver. 0us, 7.5 GB/s
-// $ -- 10000 bytes buffers
-// $ crc32c 9.7KB in 282us i.e. 1,773,049/s, aver. 0us, 16.5 GB/s
-// $ xxhash32 9.7KB in 927us i.e. 539,374/s, aver. 1us, 5 GB/s
-// $ hash32 9.7KB in 487us i.e. 1,026,694/s, aver. 0us, 9.5 GB/s
+// our custom efficient 32-bit hash/checksum function
+// - a Fletcher-like checksum algorithm, not a hash function: has less colisions
+// than Adler32 for short strings, but more than xxhash32 or crc32/crc32c
+// - written in simple plain pascal, with no L1 CPU cache pollution, but we
+// also provide optimized x86/x64 assembly versions, since the algorithm is used
+// heavily e.g. for TDynArray binary serialization, TSQLRestStorageInMemory
+// binary persistence, or CompressSynLZ/StreamSynLZ/FileSynLZ
+// - some numbers on Linux x86_64:
+// $ 2500 hash32 in 707us i.e. 3536067/s or 7.3 GB/s
+// $ 2500 xxhash32 in 1.34ms i.e. 1861504/s or 3.8 GB/s
+// $ 2500 crc32c in 943us i.e. 2651113/s or 5.5 GB/s  (SSE4.2 disabled)
+// $ 2500 crc32c in 387us i.e. 6459948/s or 13.4 GB/s (SSE4.2 enabled)
 function Hash32(Data: PCardinalArray; Len: integer): cardinal; overload;
 
-// our custom hash/checsum function, specialized for Text comparison
-// - it is a checksum algorithm, not a hash function: has less colision than
-// Adler32 for short strings, but more than xxhash32 or crc32/crc32c
-// - is faster than CRC32 or Adler32, since uses DQWord (128-bit) aligned read
+// our custom efficient 32-bit hash/checksum function
+// - a Fletcher-like checksum algorithm, not a hash function: has less colisions
+// than Adler32 for short strings, but more than xxhash32 or crc32/crc32c
 // - overloaded function using RawByteString for binary content hashing,
 // whatever the codepage is
 function Hash32(const Text: RawByteString): cardinal; overload;
@@ -17437,12 +17422,13 @@ function StreamUnSynLZ(const Source: TFileName; Magic: cardinal): TMemoryStream;
 
 /// compress a file content using the SynLZ algorithm
 // - source file is split into 128 MB blocks for fast in-memory compression of
-// any file size
+// any file size, then SynLZ compressed and including a Hash32 checksum
+// - it is not compatible with StreamSynLZ format, which has no 128 MB chunking
 // - you should specify a Magic number to be used to identify the compressed
 // file format
 function FileSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
 
-/// compress a file content using the SynLZ algorithm a file content
+/// uncompress a file previoulsy compressed via FileSynLZ(
 // - you should specify a Magic number to be used to identify the compressed
 // file format
 function FileUnSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
@@ -35264,6 +35250,65 @@ begin
 end;
 
 function Hash32(Data: PCardinalArray; Len: integer): cardinal;
+{$ifdef CPUX64} {$ifdef FPC}nostackframe; assembler;
+asm {$else} asm .noframe {$endif} // rcx/rdi=Data edx/esi=Len
+        xor     eax, eax
+        xor     r9d, r9d
+        test    Data, Data
+        jz      @z
+        {$ifdef win64}
+        mov     r8, rdx
+        shr     r8, 4
+        {$else}
+        mov     edx, esi
+        shr     esi, 4
+        {$endif}
+        jz      @by4
+@by16:  add     eax, dword ptr[Data]
+        add     r9d, eax
+        add     eax, dword ptr[Data+4]
+        add     r9d, eax
+        add     eax, dword ptr[Data+8]
+        add     r9d, eax
+        add     eax, dword ptr[Data+12]
+        add     r9d, eax
+        add     Data, 16
+        {$ifdef win64}
+        dec     r8d
+        {$else}
+        dec     esi
+        {$endif}
+        jnz     @by16
+@by4:   mov     dh, dl
+        and     dl, 15
+        jz      @0
+        shr     dl, 2
+        jz      @rem
+@4:     add     eax, dword ptr[Data]
+        add     r9d, eax
+        add     Data, 4
+        dec     dl
+        jnz     @4
+@rem:   and     dh, 3
+        jz      @0
+        dec     dh
+        jz      @1
+        dec     dh
+        jz      @2
+        mov     ecx, dword ptr[Data]
+        and     ecx, $ffffff
+        jmp     @e
+@2:     movzx   ecx, word ptr[Data]
+        jmp     @e
+@1:     movzx   ecx, byte ptr[Data]
+@e:     add     eax, ecx
+@0:     add     r9d, eax
+        shl     r9d, 16
+        xor     eax, r9d
+@z:
+end;
+{$else}
+{$ifdef PUREPASCAL}
 var s1,s2: cardinal;
     i: integer;
 begin
@@ -35296,6 +35341,61 @@ begin
   end else
     result := 0;
 end;
+{$else}
+asm  // eax=Data edx=Len
+        push    esi
+        push    edi
+        mov     cl, dl
+        mov     ch, dl
+        xor     esi, esi
+        xor     edi, edi
+        test    eax, eax
+        jz      @z
+        shr     edx, 4
+        jz      @by4
+        nop  
+@by16:  add     esi, dword ptr[eax]
+        add     edi, esi
+        add     esi, dword ptr[eax+4]
+        add     edi, esi
+        add     esi, dword ptr[eax+8]
+        add     edi, esi
+        add     esi, dword ptr[eax+12]
+        add     edi, esi
+        add     eax, 16
+        dec     edx
+        jnz     @by16
+@by4:   and     cl, 15
+        jz      @0
+        shr     cl, 2
+        jz      @rem
+@4:     add     esi, dword ptr[eax]
+        add     edi, esi
+        add     eax, 4
+        dec     cl
+        jnz     @4
+@rem:   and     ch, 3
+        jz      @0
+        dec     ch
+        jz      @1
+        dec     ch
+        jz      @2
+        mov     eax, dword ptr[eax]
+        and     eax, $ffffff
+        jmp     @e
+@2:     movzx   eax, word ptr[eax]
+        jmp     @e
+@1:     movzx   eax, byte ptr[eax]
+@e:     add     esi, eax
+@0:     add     edi, esi
+        mov     eax, esi
+        shl     edi, 16
+        xor     eax, edi
+@z:     pop     edi
+        pop     esi
+end;
+{$endif PUREPASCAL}
+{$endif CPUX64}
 
 procedure OrMemory(Dest,Source: PByteArray; size: PtrInt);
 begin

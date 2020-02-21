@@ -3793,6 +3793,29 @@ begin
   result := not result;
 end;
 
+function Hash32Reference(Data: PCardinal; Len: integer): cardinal;
+var s1,s2: cardinal;
+    i: integer;
+begin
+  if Data<>nil then begin
+    s1 := 0;
+    s2 := 0;
+    for i := 1 to Len shr 2 do begin // 4 bytes (DWORD) by loop
+      inc(s1,Data^);
+      inc(s2,s1);
+      inc(Data);
+    end;
+    case Len and 3 of // remaining 0..3 bytes
+    1: inc(s1,PByte(Data)^);
+    2: inc(s1,PWord(Data)^);
+    3: inc(s1,PWord(Data)^ or (PByteArray(Data)^[2] shl 16));
+    end;
+    inc(s2,s1);
+    result := s1 xor (s2 shl 16);
+  end else
+    result := 0;
+end;
+
 {$ifndef FPC} // RolDWord is an intrinsic function under FPC :)
 function RolDWord(value: cardinal; count: integer): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
@@ -4406,6 +4429,7 @@ begin
   for i := 0 to 10000 do begin
     j := i shr 6; // circumvent weird FPC code generation bug in -O2 mode
     s := RandomString(j);
+    Check(hash32(s)=Hash32Reference(pointer(s),length(s)));
     Check(kr32(0,pointer(s),length(s))=kr32reference(pointer(s),length(s)));
     Check(fnv32(0,pointer(s),length(s))=fnv32reference(0,pointer(s),length(s)));
     crc := crc32creference(0,pointer(s),length(s));
