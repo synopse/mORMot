@@ -314,6 +314,9 @@
   {$ifdef LINUX}
      {$undef FORCE_STRSSE42}  // avoid fatal SIGABRT/SIGSEGV on POSIX systems
      {$define FPCLINUX}
+     {$ifdef CPUX64}
+       {$define CPUX64LINUX}  // e.g. for tuned server-side asm
+     {$endif CPUX64}
   {$endif}
   {$ifdef FPC_PIC}
     {$define PUREPASCAL} // most asm code is not PIC-safe with global constants
