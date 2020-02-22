@@ -18,6 +18,7 @@ MinGW build 1.1.1c
 - `OpenSSL THmac`: hi-level Class
 - `Syn`: SynCrypto implementation
 
+```
 HMAC SHA256
 Data length 8
         OpenSSL md    698812 op/sec
@@ -61,10 +62,12 @@ Data length 1000
 Data length 10000
         OpenSSL THash 49455 op/sec
         Syn SHA256    37049 op/sec
+```
 
 ## Linux
 OpenSSL 1.1.1  11 Sep 2018
 
+```
 HMAC SHA256
 Data length 8
     OpenSSL md    717875 op/sec
@@ -108,3 +111,4 @@ Data length 1000
 Data length 10000
     OpenSSL THash 41251 op/sec
     Syn SHA256    35363 op/sec
+```
