@@ -9446,8 +9446,8 @@ type
   /// TStringList-class optimized to work with our native UTF-8 string type
   // - can optionally store associated some TObject instances
   // - high-level methods of this class are thread-safe
-  // - if aNoDuplicate is defined, an internal hash table will perform IndexOf()
-  // in O(1) linear way
+  // - if fNoDuplicate flag is defined, an internal hash table will be
+  // maintained to perform IndexOf() lookups in O(1) linear way
   TRawUTF8List = class
   protected
     fCount: PtrInt;
@@ -9489,32 +9489,34 @@ type
     // - you can unset fCaseSensitive to let the UTF-8 lookup be case-insensitive
     constructor Create(aFlags: TRawUTF8ListFlags=[fCaseSensitive]); overload;
     /// backward compatiliby overloaded constructor
+    // - please rather use the overloaded Create(TRawUTF8ListFlags)
     constructor Create(aOwnObjects: boolean; aNoDuplicate: boolean=false;
       aCaseSensitive: boolean=true); overload;
     /// finalize the internal objects stored
-    // - if instance was created with aOwnObjects=true
+    // - if instance was created with fOwnObjects flag
     destructor Destroy; override;
     /// get a stored Object item by its associated UTF-8 text
     // - returns nil and raise no exception if aText doesn't exist
     // - thread-safe method, unless returned TObject is deleted in the background
     function GetObjectFrom(const aText: RawUTF8): pointer;
     /// store a new RawUTF8 item
-    // - NoDuplicate=false always add the supplied value
-    // - if NoDuplicate=true and aText already exists, returns -1 unless
-    // aRaiseExceptionIfExisting is forced
-    // - thread-safe method, using an internal Hash Table to speedup IndexOf()
+    // - without the fNoDuplicate flag, it will always add the supplied value
+    // - if fNoDuplicate was set and aText already exists (using the internal
+    // hash table), it will return -1 unless aRaiseExceptionIfExisting is forced
+    // - thread-safe method
     function Add(const aText: RawUTF8; aRaiseExceptionIfExisting: boolean=false): PtrInt; {$ifdef HASINLINE}inline;{$endif}
     /// store a new RawUTF8 item, and its associated TObject
-    // - NoDuplicate=false always add the supplied values
-    // - if NoDuplicate=true and aText already exists, returns -1 unless
-    // aRaiseExceptionIfExisting is forced - optionally freeing the supplied
-    // aObject if aFreeAndReturnExistingObject is set, in which the existing
-    // Objects[] is copied (see AddObjectUnique as a convenient wrapper around
-    // this behavior)
-    // - thread-safe method, using an internal Hash Table to speedup IndexOf()
+    // - without the fNoDuplicate flag, it will always add the supplied value
+    // - if fNoDuplicate was set and aText already exists (using the internal hash
+    // table), it will return -1 unless aRaiseExceptionIfExisting is forced;
+    // optionally freeing the supplied aObject if aFreeAndReturnExistingObject
+    // is true, in which pointer the existing Objects[] is copied (see
+    // AddObjectUnique as a convenient wrapper around this behavior)
+    // - thread-safe method
     function AddObject(const aText: RawUTF8; aObject: TObject;
       aRaiseExceptionIfExisting: boolean=false; aFreeAndReturnExistingObject: PPointer=nil): PtrInt;
     /// try to store a new RawUTF8 item and its associated TObject
+    // - fNoDuplicate should have been specified in the list flags
     // - if aText doesn't exist, will add the values
     // - if aText exist, will call aObjectToAddOrFree.Free and set the value
     // already stored in Objects[] into aObjectToAddOrFree - allowing dual
@@ -9535,35 +9537,35 @@ type
     /// delete a stored RawUTF8 item, and its associated TObject
     // - will search for the value using IndexOf(aText), and returns its index
     // - returns -1 if no entry was found and deleted
-    // - thread-safe method, using an internal Hash Table to speedup IndexOf()
+    // - thread-safe method, using the internal Hash Table if fNoDuplicate is set
     function Delete(const aText: RawUTF8): PtrInt; overload;
     /// delete a stored RawUTF8 item, and its associated TObject, from
     // a given Name when stored as 'Name=Value' pairs
     // - raise no exception in case of out of range supplied index
     // - thread-safe method, but not using the internal Hash Table
-    // - consider using TSynNameValue if you expect faster access
+    // - consider using TSynNameValue if you expect efficient name/value process
     function DeleteFromName(const Name: RawUTF8): PtrInt; virtual;
     /// find the index of a given Name when stored as 'Name=Value' pairs
     // - search on Name is case-insensitive with 'Name=Value' pairs
     // - this method is not thread-safe, and won't use the internal Hash Table
-    // - consider using TSynNameValue if you expect faster access
+    // - consider using TSynNameValue if you expect efficient name/value process
     function IndexOfName(const Name: RawUTF8): PtrInt;
     /// access to the Value of a given 'Name=Value' pair at a given position
     // - this method is not thread-safe
-    // - consider using TSynNameValue if you expect faster access
+    // - consider using TSynNameValue if you expect efficient name/value process
     function GetValueAt(Index: PtrInt): RawUTF8;
     /// retrieve Value from an existing Name=Value, then optinally delete the entry
     // - if Name is found, will fill Value with the stored content and return true
     // - if Name is not found, Value is not modified, and false is returned
     // - thread-safe method, but not using the internal Hash Table
-    // - consider using TSynNameValue if you expect faster access
+    // - consider using TSynNameValue if you expect efficient name/value process
     function UpdateValue(const Name: RawUTF8; var Value: RawUTF8; ThenDelete: boolean): boolean;
     /// retrieve and delete the first RawUTF8 item in the list
-    // - could be used as a FIFO
+    // - could be used as a FIFO, calling Add() as a "push" method
     // - thread-safe method
     function PopFirst(out aText: RawUTF8; aObject: PObject=nil): boolean;
     /// retrieve and delete the last RawUTF8 item in the list
-    // - could be used as a FILO
+    // - could be used as a FILO, calling Add() as a "push" method
     // - thread-safe method
     function PopLast(out aText: RawUTF8; aObject: PObject=nil): boolean;
     /// erase all stored RawUTF8 items
@@ -9571,16 +9573,23 @@ type
     // - thread-safe method, also clearing the internal Hash Table
     procedure Clear; virtual;
     /// find a RawUTF8 item in the stored Strings[] list
-    // - this search is case sensitive if CaseSensitive property is TRUE (which
+    // - this search is case sensitive if fCaseSensitive flag was set (which
     // is the default)
-    // - this method is not thread-safe, but uses the internal Hash Table
+    // - this method is not thread-safe since the internal list may change
+    // and the returned index may not be accurate any more
+    // - see also GetObjectFrom()
+    // - uses the internal Hash Table if fNoDuplicate was set
     function IndexOf(const aText: RawUTF8): PtrInt;
     /// find a TObject item index in the stored Objects[] list
-    // - this method is not thread-safe, and won't use the internal Hash Table
+    // - this method is not thread-safe since the internal list may change
+    // and the returned index may not be accurate any more
+    // - aObject lookup won't use the internal Hash Table
     function IndexOfObject(aObject: TObject): PtrInt;
     /// search for any RawUTF8 item containing some text
     // - uses PosEx() on the stored lines
-    // - this method is thread-safe, and won't use the internal Hash Table
+    // - this method is not thread-safe since the internal list may change
+    // and the returned index may not be accurate any more
+    // - by design, aText lookup can't use the internal Hash Table
     function Contains(const aText: RawUTF8; aFirstIndex: integer=0): PtrInt;
     /// retrieve the all lines, separated by the supplied delimiter
     // - this method is thread-safe
@@ -9609,7 +9618,7 @@ type
     /// return the count of stored RawUTF8
     // - reading this property is not thread-safe, since size may change
     property Count: PtrInt read GetCount;
-    /// set or retrivee the current memory capacity of the RawUTF8 list
+    /// set or retrieve the current memory capacity of the RawUTF8 list
     // - reading this property is not thread-safe, since size may change
     property Capacity: PtrInt read GetCapacity write SetCapacity;
     /// set if IndexOf() shall be case sensitive or not
@@ -9633,16 +9642,16 @@ type
     property Objects[Index: PtrInt]: pointer read GetObject write PutObject;
     /// retrieve the corresponding Name when stored as 'Name=Value' pairs
     // - reading this property is not thread-safe, since content may change
-    // - consider using TSynNameValue if you expect faster access
+    // - consider TSynNameValue if you expect more efficient name/value process
     property Names[Index: PtrInt]: RawUTF8 read GetName;
     /// access to the corresponding 'Name=Value' pairs
     // - search on Name is case-insensitive with 'Name=Value' pairs
     // - reading this property is thread-safe, but won't use the hash table
-    // - consider using TSynNameValue if you expect faster access
+    // - consider TSynNameValue if you expect more efficient name/value process
     property Values[const Name: RawUTF8]: RawUTF8 read GetValue write SetValue;
     /// the char separator between 'Name=Value' pairs
     // - equals '=' by default
-    // - consider using TSynNameValue if you expect faster access
+    // - consider TSynNameValue if you expect more efficient name/value process
     property NameValueSep: AnsiChar read fNameValueSep write fNameValueSep;
     /// set or retrieve all items as text lines
     // - lines are separated by #13#10 (CRLF) by default; use GetText and
@@ -9658,6 +9667,7 @@ type
     // - reading this property is not thread-safe, since content may change
     property ObjectPtr: PPointerArray read GetObjectPtr;
     /// direct access to the TRawUTF8DynArray items dynamic array wrapper
+    // - using this property is not thread-safe, since content may change
     property ValuesArray: TDynArrayHashed read fValues;
     /// access to the locking methods of this instance
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
@@ -9868,8 +9878,8 @@ type
   TSynDictionaryCanDeleteEvent = function(const aKey, aValue; aIndex: integer): boolean of object;
 
   /// thread-safe dictionary to store some values from associated keys
-  // - will maintain a dynamic array of values, associated with a hashed dynamic
-  // array for the keys, so that setting or retrieving values would be O(1)
+  // - will maintain a dynamic array of values, associated with a hash table
+  // for the keys, so that setting or retrieving values would be O(1)
   // - all process is protected by a TSynLocker, so will be thread-safe
   // - TDynArray is a wrapper which do not store anything, whereas this class
   // is able to store both keys and values, and provide convenient methods to
@@ -51513,7 +51523,7 @@ begin
         last := first;
       end;
   until false;
-  RaiseFatalCollision('Find hash',aHashCode);
+  RaiseFatalCollision('Find',aHashCode);
 end;
 
 function TDynArrayHasher.FindOrNew(aHashCode: cardinal; Elem: pointer;
@@ -51561,7 +51571,7 @@ begin
         last := first;
       end;
   until false;
-  RaiseFatalCollision('Find compared',aHashCode);
+  RaiseFatalCollision('FindOrNew',aHashCode);
 end;
 
 procedure TDynArrayHasher.HashAdd(aHashCode: cardinal; var result: integer);
@@ -51842,7 +51852,7 @@ end;
 
 procedure TDynArrayHasher.RaiseFatalCollision(const caller: RawUTF8;
   aHashCode: cardinal);
-begin
+begin // a dedicated sub-procedure reduces code size
   raise ESynException.CreateUTF8('TDynArrayHasher.% fatal collision: '+
     'aHashCode=% HashTableSize=% Count=% Capacity=% ArrayType=% KnownType=%',
     [caller,CardinalToHexShort(aHashCode),HashTableSize,DynArray^.Count,
@@ -59683,7 +59693,8 @@ begin
       if aObject<>nil then
         fObjects[result] := aObject;
     end;
-    Changed;
+    if Assigned(fOnChange) then
+      Changed;
   finally
     fSafe.UnLock;
   end;
@@ -59692,8 +59703,9 @@ end;
 procedure TRawUTF8List.AddObjectUnique(const aText: RawUTF8;
   aObjectToAddOrFree: PPointer);
 begin
-  AddObject(aText,aObjectToAddOrFree^,{raiseexc=}false,
-    {freeandreturnexisting=}aObjectToAddOrFree);
+  if fNoDuplicate in fFlags then
+    AddObject(aText,aObjectToAddOrFree^,{raiseexc=}false,
+      {freeandreturnexisting=}aObjectToAddOrFree);
 end;
 
 procedure TRawUTF8List.AddRawUTF8List(List: TRawUTF8List);
@@ -59755,7 +59767,8 @@ begin // caller ensured Index is correct
       MoveFast(fObjects[Index+1],fObjects[Index],(fCount-Index)*SizeOf(pointer));
     fObjects[fCount] := nil;
   end;
-  Changed;
+  if Assigned(fOnChange) then
+    Changed;
 end;
 
 procedure TRawUTF8List.Delete(Index: PtrInt);
@@ -59991,17 +60004,29 @@ end;
 
 function TRawUTF8List.IndexOfObject(aObject: TObject): PtrInt;
 begin
-  if (self<>nil) and (fObjects<>nil) then
-    result := PtrUIntScanIndex(pointer(fObjects),fCount,PtrUInt(aObject)) else
-    result := -1;
+  if (self<>nil) and (fObjects<>nil) then begin
+    fSafe.Lock;
+    try
+      result := PtrUIntScanIndex(pointer(fObjects),fCount,PtrUInt(aObject)) else
+        result := -1;
+    finally
+      fSafe.UnLock;
+    end;
+  end;
 end;
 
 function TRawUTF8List.Contains(const aText: RawUTF8; aFirstIndex: integer): PtrInt;
 begin
-  if self<>nil then
-    for result := aFirstIndex to fCount-1 do
-      if PosEx(aText,fValue[result])>0 then
-        exit;
+  if self<>nil then begin
+    fSafe.Lock;
+    try
+      for result := aFirstIndex to fCount-1 do
+        if PosEx(aText,fValue[result])>0 then
+          exit;
+    finally
+      fSafe.UnLock;
+    end;
+  end;
   result := -1;
 end;
 
@@ -60015,7 +60040,8 @@ procedure TRawUTF8List.Put(Index: PtrInt; const Value: RawUTF8);
 begin
   if (self<>nil) and (PtrUInt(Index)<PtrUInt(fCount)) then begin
     fValue[Index] := Value;
-    Changed;
+    if Assigned(fOnChange) then
+      Changed;
   end;
 end;
 
@@ -60025,7 +60051,8 @@ begin
     if fObjects=nil then
       SetLength(fObjects,Length(fValue));
     fObjects[Index] := Value;
-    Changed;
+    if Assigned(fOnChange) then
+      Changed;
   end;
 end;
 
