@@ -607,17 +607,28 @@ end;
 
 const
   {$ifdef MSWINDOWS}
-  LIBSSL_NAME = 'ssleay32.dll';
-  LIBCRYPTO_NAME = 'libeay32.dll';
+   {$ifdef OPENSSL1.1}
+      // see https://wiki.openssl.org/index.php/Binaries for precompiled binaries
+      {$ifdef CPU64}
+        LIBSSL_NAME = 'libssl-1_1-x64.dll';
+        LIBCRYPTO_NAME = 'libcrypto-1_1-x64.dll';
+      {$else}
+        LIBSSL_NAME = 'libcrypto-1_1.dll';
+        LIBCRYPTO_NAME = 'libcrypto-1_1.dll';
+      {$endif}
+    {$else}
+    LIBSSL_NAME = 'ssleay32.dll';
+    LIBCRYPTO_NAME = 'libeay32.dll';
+    {$endif}
   {$else}
-    //{$ifdef OPENSSL1.1}
-    LIBSSL_NAME = 'libssl.so.1.1';
-    LIBCRYPTO_NAME = 'libcrypto.so.1.1';
-    //{$else]
-    //LIBSSL_NAME = 'libssl.so.1.0.0';
-    //LIBCRYPTO_NAME = 'libcrypto.so.1.0.0';
-    //{$endif}
-  {$endif}
+    {$ifdef OPENSSL1.1}
+      LIBSSL_NAME = 'libssl.so.1.1';
+      LIBCRYPTO_NAME = 'libcrypto.so.1.1';
+    {$else}
+      LIBSSL_NAME = 'libssl.so.1.0.0';
+      LIBCRYPTO_NAME = 'libcrypto.so.1.0.0';
+    {$endif OPENSSL1.1}
+  {$endif MSWINDOWS}
 
   LIBCRYPTO_ENTRIES: array[0..{$ifdef OPENSSL1.1}59{$else}63{$endif}] of PChar = (
     'ERR_remove_state', 'ERR_error_string_n', 'ERR_get_error',

@@ -84,46 +84,50 @@ var
 const
   CNT=10000;
   SIZ: array[0..4] of integer = (8, 50, 100, 1000, 10000);
+  SECRET = 'secret string';
 
 begin
-  writeln('Hello!');
-  THash.hash('sha256', 'sss');
   O := OpenSSL;
   sha256md := O.EVP_get_digestbyname('SHA256');
+  WriteLn('HMAC SHA256');
   for k := 0 to 4 do begin
     data := TSynTestCase.RandomString(SIZ[k]);
-    //hmac
+    Writeln('Data length ', SIZ[k]);
+
     T.Start;
     for i := 1 to CNT do
       HMAC('SHA256', 'secret', data);
-    Writeln('OpenSSL hmac SHA256 for   ', siz[k], ' - ', T.PerSec(CNT), ' op/sec');
+    Writeln(#9'OpenSSL md    ', T.PerSec(CNT), ' op/sec');
 
     T.Start;
     for i := 1 to CNT do
-      HashSha256('secret', data);
-    Writeln('OpenSSL hmac SHA256 md fo ', siz[k], ' - ', T.PerSec(CNT), ' op/sec');
+      HashSha256(SECRET, data);
+    Writeln(#9'OpenSSL nomd  ', T.PerSec(CNT), ' op/sec');
 
     T.Start;
     for i := 1 to CNT do
-      THmac.hmac('sha256', 'secret', data);
-    Writeln('THmac        SHA256 md fo ', siz[k], ' - ', T.PerSec(CNT), ' op/sec');
+      THmac.hmac('sha256', SECRET, data);
+    Writeln(#9'OpenSSL THmac ', T.PerSec(CNT), ' op/sec');
 
     T.Start;
     for i := 1 to CNT do
-      Hash256Syn('secret', data);
-    Writeln('SynCrypto hmac SHA256 for ', siz[k], ' - ', T.PerSec(CNT), ' op/sec');
+      Hash256Syn(SECRET, data);
+    Writeln(#9'Syn           ', T.PerSec(CNT), ' op/sec');
+  end;
 
-    // hash
+  WriteLn(#10'hash SHA256');
+  for k := 0 to 4 do begin
+    data := TSynTestCase.RandomString(SIZ[k]);
+    Writeln('Data length ', SIZ[k]);
     T.Start;
     for i := 1 to CNT do
       THash.hash('sha256', data);
-    Writeln('THash     SHA256 ', siz[k], ' - ', T.PerSec(CNT), ' op/sec');
+    Writeln(#9'OpenSSL THash ', T.PerSec(CNT), ' op/sec');
 
     T.Start;
     for i := 1 to CNT do
       SHA256(data);
-    Writeln('SynCrypto SHA256 ', siz[k], ' - ', T.PerSec(CNT), ' op/sec');
-    writeln();
+    Writeln(#9'Syn SHA256    ', T.PerSec(CNT), ' op/sec');
   end;
 
   Writeln('hmac("SHA256", "secret", "data")= ', HMAC('SHA3-224', 'secret', data));
