@@ -60007,12 +60007,12 @@ begin
   if (self<>nil) and (fObjects<>nil) then begin
     fSafe.Lock;
     try
-      result := PtrUIntScanIndex(pointer(fObjects),fCount,PtrUInt(aObject)) else
-        result := -1;
+      result := PtrUIntScanIndex(pointer(fObjects),fCount,PtrUInt(aObject));
     finally
       fSafe.UnLock;
-    end;
-  end;
+    end
+  end else
+    result := -1;
 end;
 
 function TRawUTF8List.Contains(const aText: RawUTF8; aFirstIndex: integer): PtrInt;
