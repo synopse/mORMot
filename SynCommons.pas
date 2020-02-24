@@ -11939,7 +11939,7 @@ function fnv32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 function xxHash32(crc: cardinal; P: PAnsiChar; len: integer): cardinal;
 
 type
-  TCrc32tab = array[0..{$ifdef PUREPASCAL}3{$else}7{$endif},byte] of cardinal;
+  TCrc32tab = array[0..7,byte] of cardinal;
   PCrc32tab = ^TCrc32tab;
 
 var
@@ -11951,8 +11951,9 @@ var
   // TSynUniqueIdentifierGenerator as 1KB master/reference key tables
   crc32ctab: TCrc32tab;
 
-/// compute CRC32C checksum on the supplied buffer using x86/x64 code
+/// compute CRC32C checksum on the supplied buffer on processor-neutral code
 // - result is compatible with SSE 4.2 based hardware accelerated instruction
+// - will use fast x86/x64 asm or efficient pure pascal implementation on ARM
 // - result is not compatible with zlib's crc32() - not the same polynom
 // - crc32cfast() is 1.7 GB/s, crc32csse42() is 4.3 GB/s
 // - you should use crc32c() function instead of crc32cfast() or crc32csse42()
@@ -24953,8 +24954,9 @@ begin
 end;
 
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+{$ifdef ABSOLUTEPASCALORNOTINTEL}
 var tab: ^TCrc32tab;
-begin
+begin // on ARM, we use slicing-by-4 to avoid polluting smaller L1 cache
   tab := @crc32ctab;
   result := not crc;
   if (buf<>nil) and (len>0) then begin
@@ -24983,6 +24985,85 @@ begin
   end;
   result := not result;
 end;
+{$else}
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        {$ifndef win64}
+        mov     r8d, len
+        {$endif}
+        mov     eax, crc
+        xor     ecx, ecx
+        test    buf, buf // buf=rdx/rsi len=r8
+        jz      @z
+        neg     r8
+        jz      @z
+        not     eax
+        lea     r9, [rip + crc32ctab]
+        cmp     r8, -8
+        jb      @head
+@sml:   mov     cl, byte ptr[buf]
+        inc     buf
+        xor     cl, al
+        shr     eax, 8
+        xor     eax, dword ptr[rcx * 4 + r9]
+        inc     r8
+        jnz     @sml
+@0:     not     eax
+@z:     ret
+@head:  test    buf, 7
+        jz      @align
+        mov     cl, byte ptr[buf]
+        inc     buf
+        xor     cl, al
+        shr     eax, 8
+        xor     eax, dword ptr[rcx * 4 + r9]
+        inc     r8
+        jnz     @head
+        not     eax
+        ret
+@align: sub     buf, r8
+        add     r8, 8
+        jg      @done
+        xor     r11, r11
+@by8:   mov     r10d, eax
+        mov     rcx, qword ptr[buf + r8 - 8]
+        xor     r10d, ecx
+        shr     rcx, 32
+        mov     r11b, cl
+        shr     ecx, 8
+        mov     eax, dword ptr[r11 * 4 + r9 + 1024 * 3]
+        mov     r11b, cl
+        shr     ecx, 8
+        xor     eax, dword ptr[r11 * 4 + r9 + 1024 * 2]
+        mov     r11b, cl
+        shr     ecx, 8
+        xor     eax, dword ptr[r11 * 4 + r9 + 1024 * 1]
+        mov     r11b, cl
+        xor     eax, dword ptr[r11 * 4 + r9 + 1024 * 0]
+        mov     ecx, r10d
+        mov     r11b, cl
+        shr     ecx, 8
+        xor     eax, dword ptr[r11 * 4 + r9 + 1024 * 7]
+        mov     r11b, cl
+        shr     ecx, 8
+        xor     eax, dword ptr[r11 * 4 + r9 + 1024 * 6]
+        mov     r11b, cl
+        shr     ecx, 8
+        xor     eax, dword ptr[r11 * 4 + r9 + 1024 * 5]
+        mov     r11b, cl
+        xor     eax, dword ptr[r11 * 4 + r9 + 1024 * 4]
+        add     r8, 8
+        jle     @by8
+@done:  sub     r8, 8
+        jge     @e
+@tail:  mov     cl, byte ptr[buf + r8]
+        xor     cl, al
+        shr     eax, 8
+        xor     eax, dword ptr[rcx * 4 + r9]
+        inc     r8
+        jnz     @tail
+@e:     not     eax
+end;
+{$endif ABSOLUTEPASCALORNOTINTEL}
 
 function ToVarInt32(Value: PtrInt; Dest: PByte): PByte;
 begin // 0=0,1=1,2=-1,3=2,4=-2...
@@ -26029,95 +26110,73 @@ asm // Delphi is not efficient about compiling above pascal code
 end;
 
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
-asm     // adapted from fast Aleksandr Sharahov version
+asm  // adapted from Aleksandr Sharahov code and Maxim Masiutin remarks
         test    edx, edx
-        jz      @ret
+        jz      @z
         neg     ecx
-        jz      @ret
+        jz      @z
         not     eax
         push    ebx
+        push    ebp
+        lea     ebp, [crc32ctab]
 @head:  test    dl, 3
-        jz      @aligned
-        movzx   ebx, byte[edx]
+        jz      @align
+        movzx   ebx, byte ptr[edx]
         inc     edx
         xor     bl, al
         shr     eax, 8
-        xor     eax, dword ptr[ebx * 4 + crc32ctab]
+        xor     eax, dword ptr[ebx * 4 + ebp]
         inc     ecx
         jnz     @head
+        pop     ebp
         pop     ebx
         not     eax
-        ret
-@ret:   rep     ret
-@aligned:
-        sub     edx, ecx
+@z:     ret
+@align: sub     edx, ecx
         add     ecx, 8
-        jg      @bodydone
+        jg      @done
         push    esi
         push    edi
         mov     edi, edx
-        mov     edx, eax
-@bodyloop:
+@by8:   mov     edx, eax
         mov     ebx, [edi + ecx - 4]
         xor     edx, [edi + ecx - 8]
         movzx   esi, bl
-        mov     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 3]
+        mov     eax, dword ptr[esi * 4 + ebp + 1024 * 3]
         movzx   esi, bh
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 2]
+        xor     eax, dword ptr[esi * 4 + ebp + 1024 * 2]
         shr     ebx, 16
         movzx   esi, bl
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 1]
+        xor     eax, dword ptr[esi * 4 + ebp + 1024 * 1]
         movzx   esi, bh
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 0]
+        xor     eax, dword ptr[esi * 4 + ebp + 1024 * 0]
         movzx   esi, dl
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 7]
+        xor     eax, dword ptr[esi * 4 + ebp + 1024 * 7]
         movzx   esi, dh
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 6]
+        xor     eax, dword ptr[esi * 4 + ebp + 1024 * 6]
         shr     edx, 16
         movzx   esi, dl
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 5]
+        xor     eax, dword ptr[esi * 4 + ebp + 1024 * 5]
         movzx   esi, dh
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 4]
+        xor     eax, dword ptr[esi * 4 + ebp + 1024 * 4]
         add     ecx, 8
-        jg      @done
-        mov     ebx, [edi + ecx - 4]
-        xor     eax, [edi + ecx - 8]
-        movzx   esi, bl
-        mov     edx, dword ptr[esi * 4 + crc32ctab + 1024 * 3]
-        movzx   esi, bh
-        xor     edx, dword ptr[esi * 4 + crc32ctab + 1024 * 2]
-        shr     ebx, 16
-        movzx   esi, bl
-        xor     edx, dword ptr[esi * 4 + crc32ctab + 1024 * 1]
-        movzx   esi, bh
-        xor     edx, dword ptr[esi * 4 + crc32ctab + 1024 * 0]
-        movzx   esi, al
-        xor     edx, dword ptr[esi * 4 + crc32ctab + 1024 * 7]
-        movzx   esi, ah
-        xor     edx, dword ptr[esi * 4 + crc32ctab + 1024 * 6]
-        shr     eax, 16
-        movzx   esi, al
-        xor     edx, dword ptr[esi * 4 + crc32ctab + 1024 * 5]
-        movzx   esi, ah
-        xor     edx, dword ptr[esi * 4 + crc32ctab + 1024 * 4]
-        add     ecx, 8
-        jle     @bodyloop
-        mov     eax, edx
-@done:  mov     edx, edi
+        jle     @by8
+        mov     edx, edi
         pop     edi
         pop     esi
-@bodydone:
-        sub     ecx, 8
+@done:  sub     ecx, 8
         jl      @tail
+        pop     ebp
         pop     ebx
         not     eax
         ret
 @tail:  movzx   ebx, byte[edx + ecx]
         xor     bl, al
         shr     eax, 8
-        xor     eax, dword ptr[ebx * 4 + crc32ctab]
+        xor     eax, dword ptr[ebx * 4 + ebp]
         inc     ecx
         jnz     @tail
+@e:     pop     ebp
         pop     ebx
         not     eax
 end;
@@ -35972,7 +36031,7 @@ begin
           mov     rax, data128
           mov     rdx, crc128
           mov     ecx, count
-          mov     r8d, dword ptr [rdx]
+          mov     r8d, dword ptr [rdx] // we can't use qword ptr here
           mov     r9d, dword ptr [rdx + 4]
           mov     r10d, dword ptr [rdx + 8]
           mov     r11d, dword ptr [rdx + 12]
@@ -36003,15 +36062,9 @@ end;
 {$ifdef CPUINTEL}
 function crc32cBy4SSE42(crc, value: cardinal): cardinal;
 {$ifdef CPU64} {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm .noframe // rcx=crc, rdx=value(Linux: rdi,rsi)
-{$endif FPC}
-        {$ifdef Linux}
-        mov     eax, edi
-        crc32   eax, esi
-        {$else}
-        mov     eax, ecx
-        crc32   eax, edx
-        {$endif}
+asm .noframe {$endif FPC}
+        mov     eax, crc
+        crc32   eax, value
 end;
 {$else} {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=crc, edx=value
@@ -36027,33 +36080,18 @@ procedure crcblockSSE42(crc128, data128: PBlock128);
 {$ifdef CPU64} {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm .noframe // rcx=crc128, rdx=data128 (Linux: rdi,rsi)
 {$endif FPC}
-        {$ifdef Linux}
-        mov     eax, dword ptr[rdi]
-        mov     r8d, dword ptr[rdi + 4]
-        mov     r9d, dword ptr[rdi + 8]
-        mov     r10d, dword ptr[rdi + 12]
-        crc32   eax, dword ptr[rsi]
-        crc32   r8d, dword ptr[rsi + 4]
-        crc32   r9d, dword ptr[rsi + 8]
-        crc32   r10d, dword ptr[rsi + 12]
-        mov     dword ptr[rdi], eax
-        mov     dword ptr[rdi + 4], r8d
-        mov     dword ptr[rdi + 8], r9d
-        mov     dword ptr[rdi + 12], r10d
-        {$else}
-        mov     eax, dword ptr[rcx]
-        mov     r8d, dword ptr[rcx + 4]
-        mov     r9d, dword ptr[rcx + 8]
-        mov     r10d, dword ptr[rcx + 12]
-        crc32   eax, dword ptr[rdx]
-        crc32   r8d, dword ptr[rdx + 4]
-        crc32   r9d, dword ptr[rdx + 8]
-        crc32   r10d, dword ptr[rdx + 12]
-        mov     dword ptr[rcx], eax
-        mov     dword ptr[rcx + 4], r8d
-        mov     dword ptr[rcx + 8], r9d
-        mov     dword ptr[rcx + 12], r10d
-        {$endif Linux}
+        mov     eax, dword ptr[crc128] // we can't use two qword ptr here
+        mov     r8d, dword ptr[crc128 + 4]
+        mov     r9d, dword ptr[crc128 + 8]
+        mov     r10d, dword ptr[crc128 + 12]
+        crc32   eax, dword ptr[data128]
+        crc32   r8d, dword ptr[data128 + 4]
+        crc32   r9d, dword ptr[data128 + 8]
+        crc32   r10d, dword ptr[data128 + 12]
+        mov     dword ptr[crc128], eax
+        mov     dword ptr[crc128 + 4], r8d
+        mov     dword ptr[crc128 + 8], r9d
+        mov     dword ptr[crc128 + 12], r10d
 end;
 {$else} {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=crc128, edx=data128

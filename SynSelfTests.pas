@@ -3939,6 +3939,7 @@ var i,j: integer;
     Timer: TPrecisionTimer;
     c1,c2: cardinal;
     crc1,crc2: THash128;
+    crcs: THash512Rec;
     digest: THash256;
     tmp: RawByteString;
     hmac32: THMAC_CRC32C;
@@ -3983,6 +3984,19 @@ begin
   check(not IsZero(crc1));
   check(IsEqual(crc1,crc2));
   {$endif}
+  for i := 0 to high(crcs.b) do
+    crcs.b[i] := i;
+  for j := 1 to 4 do begin
+    FillZero(crc2);
+    crcblockreference(@crc2,@crcs.h0);
+    if j>1 then crcblockreference(@crc2,@crcs.h1);
+    if j>2 then crcblockreference(@crc2,@crcs.h2);
+    if j>3 then crcblockreference(@crc2,@crcs.h3);
+    FillZero(crc1);
+    crcblocks(@crc1,@crcs.h0,j);
+    check(not IsZero(crc1));
+    check(IsEqual(crc1,crc2),'crcblocks4');
+  end;
   for i := 0 to 50000 do begin
     FillZero(crc1);
     crcblock(@crc1,@digest);
@@ -12181,7 +12195,7 @@ begin
   Check(clo+chi=2000);
   Check(dlo+dhi=4000);
   Check(elo+ehi=4000);
-  CheckUTF8((clo>=945) and (clo<=1055),'Random32 distribution clo=%',[clo]);
+  CheckUTF8((clo>=900) and (clo<=1100),'Random32 distribution clo=%',[clo]);
   CheckUTF8((dlo>=1900) and (dlo<=2100),'RandomDouble distribution dlo=%',[dlo]);
   CheckUTF8((elo>=1900) and (elo<=2100),'RandomExt distribution elo=%',[elo]);
   s1 := TAESPRNG.Main.FillRandom(100);

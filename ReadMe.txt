@@ -51,6 +51,7 @@ Contributors
   Marius Maximus (mariuszekpl)
   Martin Eckes
   Martin Suer
+  Maxim Masiutin
   Mazinsw
   MChaos
   Miab3
