@@ -27591,7 +27591,7 @@ asm
 end;
 function InterlockedDecrement(var I: Integer): Integer;
 asm
-        mov     edx, -1
+        or      edx, -1
         xchg    eax, edx
    lock xadd    [edx], eax
         dec     eax
@@ -32301,6 +32301,28 @@ begin
 end;
 
 function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
+{$ifdef CPUX64} // P=rdx/rdi R=rcx/rsi Value=r8d/edx
+{$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
+        xor     r9, r9  // r9=L rax=result
+        test    R, R
+        jl      @ko
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+@s:     lea     rax, [r9 + R]
+        shr     rax, 1
+        cmp     Value, dword ptr[P + rax * 4]
+        jl      @gt
+        je      @ok
+        lea     r9, qword ptr[rax + 1]
+        cmp     r9, R
+        jle     @s
+        jmp     @ko
+@gt:    lea     R, qword ptr[rax - 1]
+        cmp     r9, R
+        jle     @s
+@ko:    or      rax, -1
+@ok:
+end;
+{$else}
 var L: PtrInt;
     cmp: integer;
 begin
@@ -32324,6 +32346,8 @@ begin
     until false;
   result := -1
 end;
+{$endif CPUX64}
+
 
 function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): PtrInt;
 begin
@@ -32331,6 +32355,28 @@ begin
 end;
 
 function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt;
+{$ifdef CPUX64} // P=rdx/rdi R=rcx/rsi Value=r8d/edx
+{$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
+        xor     r9, r9  // r9=L rax=result
+        test    R, R
+        jl      @ko
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+@s:     lea     rax, [r9 + R]
+        shr     rax, 1
+        cmp     Value, qword ptr[P + rax * 8]
+        jl      @gt
+        je      @ok
+        lea     r9, qword ptr[rax + 1]
+        cmp     r9, R
+        jle     @s
+        jmp     @ko
+@gt:    lea     R, qword ptr[rax - 1]
+        cmp     r9, R
+        jle     @s
+@ko:    or      rax, -1
+@ok:
+end;
+{$else}
 var L: PtrInt;
     {$ifdef CPUX86}
     cmp: Integer;
@@ -32367,6 +32413,7 @@ begin
     until false;
   result := -1
 end;
+{$endif CPUX64}
 
 function FastFindQWordSorted(P: PQWordArray; R: PtrInt; const Value: QWord): PtrInt;
 var L: PtrInt;
@@ -40871,6 +40918,29 @@ begin
 end;
 
 function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
+{$ifdef CPUX64} // P=rdx/rdi R=rcx/rsi Value=r8w/dx
+{$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
+        xor     r9, r9  // r9=L rax=result
+        test    R, R
+        jl      @ko
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+@s:     lea     rax, [r9 + R]
+        shr     rax, 1
+        movzx   r10d, word ptr[P + rax * 2]
+        cmp     Value, r10w
+        jl      @gt
+        je      @ok
+        lea     r9, qword ptr[rax + 1]
+        cmp     r9, R
+        jle     @s
+        jmp     @ko
+@gt:    lea     R, qword ptr[rax - 1]
+        cmp     r9, R
+        jle     @s
+@ko:    or      rax, -1
+@ok:
+end;
+{$else}
 var L: PtrInt;
     cmp: integer;
 begin
@@ -40894,6 +40964,7 @@ begin
     until false;
   result := -1
 end;
+{$endif CPUX64}
 
 function TSortedWordArray.Add(aValue: Word): PtrInt;
 begin
