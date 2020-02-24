@@ -448,7 +448,7 @@ type
     constructor Create(aTimeOut: PtrInt=10000); reintroduce; virtual;
     /// connect to aServer:aPort
     // - you may ask for a TLS secured client connection (only available under
-    // Windows by now, using the SChannel API - and not fully tested)
+    // Windows by now, using the SChannel API)
     constructor Open(const aServer, aPort: SockString; aLayer: TCrtSocketLayer=cslTCP;
       aTimeOut: cardinal=10000; aTLS: boolean=false);
     /// bind to a Port
@@ -460,7 +460,7 @@ type
     /// low-level internal method called by Open() and Bind() constructors
     // - raise an ECrtSocket exception on error
     // - you may ask for a TLS secured client connection (only available under
-    // Windows by now, using the SChannel API - and not fully tested)
+    // Windows by now, using the SChannel API)
     procedure OpenBind(const aServer, aPort: SockString; doBind: boolean;
       aSock: integer=-1; aLayer: TCrtSocketLayer=cslTCP; aTLS: boolean=false);
     /// initialize SockIn for receiving with read[ln](SockIn^,...)

@@ -5900,7 +5900,8 @@ type
     // - returns the number of duplicated values found
     function ReHash(forced, forceGrow: boolean): integer;
     /// compute the hash of a given item
-    function HashOne(Elem: pointer): cardinal; {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 -> C1632
+    function HashOne(Elem: pointer): cardinal;
+       {$ifdef FPC_OR_DELPHIXE}inline;{$endif} // Delphi 2007=C1632, 2010=C1872
     /// retrieve the low-level hash of a given item
     function GetHashFromIndex(aIndex: PtrInt): cardinal;
   end;
@@ -25753,7 +25754,7 @@ asm // warning: may read up to 15 bytes beyond the string itself
       jz        @n
 @ok:  sub       eax, edx
       {$ifdef HASAESNI}
-      movdqu    xmm0, dqword [edx]
+      movups    xmm0, dqword [edx]
       pcmpistri xmm0, dqword [edx + eax], EQUAL_EACH + NEGATIVE_POLARITY // result in ecx
       {$else}
       db $F3,$0F,$6F,$02
@@ -25765,7 +25766,7 @@ asm // warning: may read up to 15 bytes beyond the string itself
       ret
 @1:   add       edx, 16
       {$ifdef HASAESNI}
-      movdqu    xmm0, dqword [edx]
+      movups    xmm0, dqword [edx]
       pcmpistri xmm0, dqword [edx + eax], EQUAL_EACH + NEGATIVE_POLARITY // result in ecx
       {$else}
       db $F3,$0F,$6F,$02
@@ -25801,7 +25802,7 @@ asm // warning: may read up to 15 bytes beyond the string itself
 @ok:  sub       eax, edx
       jz        @0
       {$ifdef HASAESNI}
-      movdqu    xmm0, dqword [edx] // result in ecx
+      movups    xmm0, dqword [edx] // result in ecx
       pcmpistri xmm0, dqword [edx+eax], EQUAL_EACH + NEGATIVE_POLARITY
       {$else}
       db $F3,$0F,$6F,$02
@@ -25813,7 +25814,7 @@ asm // warning: may read up to 15 bytes beyond the string itself
       ret
 @1:   add       edx, 16
       {$ifdef HASAESNI}
-      movdqu    xmm0, dqword [edx] // result in ecx
+      movups    xmm0, dqword [edx] // result in ecx
       pcmpistri xmm0, dqword [edx+eax], EQUAL_EACH + NEGATIVE_POLARITY
       {$else}
       db $F3,$0F,$6F,$02
@@ -26129,12 +26130,12 @@ function UpperCopy255BufSSE42(dest: PAnsiChar; source: PUTF8Char; sourceLen: Ptr
 asm // eax=dest edx=source ecx=sourceLen
        test    ecx,ecx
        jz      @z
-       movdqu  xmm1, dqword ptr [@az]
-       movdqu  xmm3, dqword ptr [@bits]
+       movups  xmm1, dqword ptr [@az]
+       movups  xmm3, dqword ptr [@bits]
        cmp     ecx, 16
        ja      @big
        // optimize the common case of sourceLen<=16
-       movdqu  xmm2, [edx]
+       movups  xmm2, [edx]
        {$ifdef HASAESNI}
        pcmpistrm xmm1, xmm2, CMP_RANGES // find in range a-z, return mask in xmm0
        {$else}
@@ -26142,7 +26143,7 @@ asm // eax=dest edx=source ecx=sourceLen
        {$endif}
        pand    xmm0, xmm3
        pxor    xmm2, xmm0
-       movdqu  [eax], xmm2
+       movups  [eax], xmm2
        add     eax, ecx
 @z:    ret
 @big:  push    eax
@@ -26153,7 +26154,7 @@ asm // eax=dest edx=source ecx=sourceLen
        shr     ecx, 4
        sub     edx, eax
        inc     ecx
-@s:    movdqu  xmm2, [edx+eax]
+@s:    movups  xmm2, [edx+eax]
        {$ifdef HASAESNI}
        pcmpistrm xmm1, xmm2, CMP_RANGES
        {$else}
@@ -26161,7 +26162,7 @@ asm // eax=dest edx=source ecx=sourceLen
        {$endif}
        pand    xmm0, xmm3
        pxor    xmm2, xmm0
-       movdqu  [eax], xmm2
+       movups  [eax], xmm2
        add     eax, 16
        dec     ecx
        jnz     @s
@@ -26759,8 +26760,8 @@ asm .noframe // rcx=s, rdx=reject (Linux: rdi,rsi)
         mov     rsi, rdx
 {$endif}mov     r8,  rsi
         xor     ecx, ecx
-@1:     movdqu  xmm2, [rdi]
-        movdqu  xmm1, [rsi]
+@1:     movups  xmm2, [rdi]
+        movups  xmm1, [rsi]
         {$ifdef HASAESNI}
         pcmpistrm xmm1, xmm2, $30 //  find in set, invert valid bits, return bit mask in xmm0
         {$else}
@@ -26782,7 +26783,7 @@ asm .noframe // rcx=s, rdx=reject (Linux: rdi,rsi)
 {$endif}ret
 @4:     and     eax, edx // accumulate matches
 @5:     add     rsi, 16  // the set is more than 16 bytes
-        movdqu  xmm1, [rsi]
+        movups  xmm1, [rsi]
         {$ifdef HASAESNI}
         pcmpistrm xmm1, xmm2, $30
         {$else}
@@ -26809,8 +26810,8 @@ asm .noframe // rcx=s, rdx=accept (Linux: rdi,rsi)
         mov     rsi, rdx
 {$endif}mov     r8,  rsi
         xor     ecx, ecx
-@1:     movdqu  xmm2, [rdi]
-        movdqu  xmm1, [rsi]
+@1:     movups  xmm2, [rdi]
+        movups  xmm1, [rsi]
         {$ifdef HASAESNI}
         pcmpistrm xmm1, xmm2, $00 //  find in set, return bit mask in xmm0
         {$else}
@@ -26832,7 +26833,7 @@ asm .noframe // rcx=s, rdx=accept (Linux: rdi,rsi)
 {$endif}ret
 @4:     or      eax, edx // accumulate matches
 @5:     add     rsi, 16  // the set is more than 16 bytes
-        movdqu  xmm1, [rsi]
+        movups  xmm1, [rsi]
         {$ifdef HASAESNI}
         pcmpistrm xmm1, xmm2, $00
         {$else}
@@ -26860,8 +26861,8 @@ asm // eax=s, edx=reject
         mov     ebx,  esi
         xor     ecx, ecx
 @1:     {$ifdef HASAESNI}
-        movdqu  xmm2, dqword [edi]
-        movdqu  xmm1, dqword [esi]
+        movups  xmm2, dqword [edi]
+        movups  xmm1, dqword [esi]
         pcmpistrm xmm1, xmm2, $30 //  find in set, invert valid bits, return bit mask in xmm0
         movd    eax, xmm0
         {$else}
@@ -26886,7 +26887,7 @@ asm // eax=s, edx=reject
 @4:     and     eax, edx  // accumulate matches
 @5:     add     esi, 16   // the set is more than 16 bytes
         {$ifdef HASAESNI}
-        movdqu  xmm1, [esi]
+        movups  xmm1, [esi]
         pcmpistrm xmm1, xmm2, $30
         movd    edx, xmm0
         {$else}
@@ -26913,8 +26914,8 @@ asm // eax=s, edx=accept
         mov     ebx,  esi
         xor     ecx, ecx
 @1:     {$ifdef HASAESNI}
-        movdqu  xmm2, dqword [edi]
-        movdqu  xmm1, dqword [esi]
+        movups  xmm2, dqword [edi]
+        movups  xmm1, dqword [esi]
         pcmpistrm xmm1, xmm2, $00 //  find in set, return bit mask in xmm0
         movd    eax, xmm0
         {$else}
@@ -26939,7 +26940,7 @@ asm // eax=s, edx=accept
 @4:     or      eax, edx // accumulate matches
 @5:     add     esi, 16  // the set is more than 16 bytes
         {$ifdef HASAESNI}
-        movdqu  xmm1, [esi]
+        movups  xmm1, [esi]
         pcmpistrm xmm1, xmm2, $00
         movd    edx, xmm0
         {$else}
@@ -26967,7 +26968,7 @@ asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
         and     ecx, 15             // lower 4 bits indicate misalignment
         and     eax, -16            // align pointer by 16
         // will never read outside a memory page boundary, so won't trigger GPF
-        movdqa  xmm1, [eax]         // read from nearest preceding boundary
+        movaps  xmm1, [eax]         // read from nearest preceding boundary
         pcmpeqb xmm1, xmm0          // compare 16 bytes with zero
         pmovmskb edx, xmm1          // get one bit for each byte result
         shr     edx, cl             // shift out false bits
@@ -26976,7 +26977,7 @@ asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
         jnz     @A200               // found
         // Main loop, search 16 bytes at a time
 @A100:  add     eax, 10H            // increment pointer by 16
-        movdqa  xmm1, [eax]         // read 16 bytes aligned
+        movaps  xmm1, [eax]         // read 16 bytes aligned
         pcmpeqb xmm1, xmm0          // compare 16 bytes with zero
         pmovmskb edx, xmm1          // get one bit for each byte result
         bsf     edx, edx            // find first 1-bit
@@ -33749,12 +33750,12 @@ function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
         sub     r8, rdi // rdi=Text, rsi=TextEnd, r8=TextLen
         jz      @fail
         mov     ecx, edi
-        movdqa  xmm0, [rip + @for10]
-        movdqa  xmm1, [rip + @for13]
+        movaps  xmm0, [rip + @for10]
+        movaps  xmm1, [rip + @for13]
         and     rdi, -16 // check first aligned 16 bytes
         and     ecx, 15  // lower cl 4 bits indicate misalignment
-        movdqa  xmm2, [rdi]
-        movdqa  xmm3, xmm2
+        movaps  xmm2, [rdi]
+        movaps  xmm3, xmm2
         pcmpeqb xmm2, xmm0
         pcmpeqb xmm3, xmm1
         por     xmm3, xmm2
@@ -33781,8 +33782,8 @@ function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
         dq      $0a0a0a0a0a0a0a0a
 @for13: dq      $0d0d0d0d0d0d0d0d
         dq      $0d0d0d0d0d0d0d0d
-@by16:  movdqa  xmm2, [rdi + rsi] // check 16 bytes per loop
-        movdqa  xmm3, xmm2
+@by16:  movaps  xmm2, [rdi + rsi] // check 16 bytes per loop
+        movaps  xmm3, xmm2
         pcmpeqb xmm2, xmm0
         pcmpeqb xmm3, xmm1
         por     xmm3, xmm2
@@ -35733,12 +35734,12 @@ asm .noframe // rcx=dest, rdx=source, r8=len (Linux: rdi,rsi,rdx)
        lea     rcx, [rip + _UpperCopy255BufSSE42]
        test    rdx, rdx
        jz      @z
-       movdqu  xmm1, dqword ptr [rcx]
-       movdqu  xmm3, dqword ptr [rcx + 16]
+       movups  xmm1, dqword ptr [rcx]
+       movups  xmm3, dqword ptr [rcx + 16]
        cmp     rdx, 16
        ja      @big
        // optimize the common case of sourceLen<=16
-       movdqu  xmm2, [r9]
+       movups  xmm2, [r9]
        {$ifdef HASAESNI}
        pcmpistrm xmm1, xmm2, CMP_RANGES // find in range a-z, return mask in xmm0
        {$else}
@@ -35746,7 +35747,7 @@ asm .noframe // rcx=dest, rdx=source, r8=len (Linux: rdi,rsi,rdx)
        {$endif}
        pand    xmm0, xmm3
        pxor    xmm2, xmm0
-       movdqu  [rax], xmm2
+       movups  [rax], xmm2
        add     rax, rdx
 @z:    ret
 @big:  mov     rcx, rax
@@ -35758,7 +35759,7 @@ asm .noframe // rcx=dest, rdx=source, r8=len (Linux: rdi,rsi,rdx)
        sub     r9, rcx
        add     rdx, 1
 {$ifdef FPC} align 16 {$else} .align 16{$endif}
-@s:    movdqu  xmm2, [r9 + rcx]
+@s:    movups  xmm2, [r9 + rcx]
        {$ifdef HASAESNI}
        pcmpistrm xmm1, xmm2, CMP_RANGES
        {$else}
@@ -35766,7 +35767,7 @@ asm .noframe // rcx=dest, rdx=source, r8=len (Linux: rdi,rsi,rdx)
        {$endif}
        pand    xmm0, xmm3
        pxor    xmm2, xmm0
-       movdqu  [rcx], xmm2
+       movups  [rcx], xmm2
        add     rcx, 16
        dec     rdx
        jnz     @s
@@ -35811,7 +35812,7 @@ asm .noframe // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
       jz        @n
 @ok:  sub       rax, rdx
       xor       rcx, rcx
-      movdqu    xmm0, dqword [rdx]
+      movups    xmm0, dqword [rdx]
       pcmpistri xmm0, dqword [rdx + rax], EQUAL_EACH + NEGATIVE_POLARITY // result in rcx
       ja        @1
       jc        @2
@@ -35819,7 +35820,7 @@ asm .noframe // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
       ret
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @1:   add       rdx, 16
-      movdqu    xmm0, dqword [rdx]
+      movups    xmm0, dqword [rdx]
       pcmpistri xmm0, dqword [rdx + rax], EQUAL_EACH + NEGATIVE_POLARITY
       ja        @1
       jc        @2
@@ -35905,7 +35906,7 @@ asm .noframe // rcx=S (Linux: rdi)
         and     ecx, 15              // lower 4 bits indicate misalignment
         and     rax, -16             // align pointer by 16
         // will never read outside a memory page boundary, so won't trigger GPF
-        movdqa  xmm1, [rax]          // read from nearest preceding boundary
+        movaps  xmm1, [rax]          // read from nearest preceding boundary
         pcmpeqb xmm1, xmm0           // compare 16 bytes with zero
         pmovmskb edx, xmm1           // get one bit for each byte result
         shr     edx, cl              // shift out false bits
@@ -35915,7 +35916,7 @@ asm .noframe // rcx=S (Linux: rdi)
         // Main loop, search 16 bytes at a time
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @L1:    add     rax, 10H             // increment pointer by 16
-        movdqa  xmm1, [rax]          // read 16 bytes aligned
+        movaps  xmm1, [rax]          // read 16 bytes aligned
         pcmpeqb xmm1, xmm0           // compare 16 bytes with zero
         pmovmskb edx, xmm1           // get one bit for each byte result
         bsf     edx, edx             // find first 1-bit
@@ -36643,10 +36644,10 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         test    byte ptr[rip+CPUIDX64], 1 shl cpuAVX
         jnz     @fwdavx
         {$endif FPC}
-@fsse2: movdqu  xmm2, oword ptr[src]  // first 16
+@fsse2: movups  xmm2, oword ptr[src]  // first 16
         lea     src, [src + rax - 16]
         lea     rax, [rax + dst - 16]
-        movdqu  xmm1, oword ptr[src]  // last 16
+        movups  xmm1, oword ptr[src]  // last 16
         mov     r10, rax
         neg     rax
         and     dst,  -16  // 16-byte aligned writes
@@ -36654,15 +36655,15 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         cmp     r8, CPUCACHEX64
         ja      @fwdnv  // bypass cache for cnt>512KB
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@fwd:   movdqu  xmm0, oword ptr[src + rax]  // regular loop
-        movdqa  [r10 + rax], xmm0
+@fwd:   movups  xmm0, oword ptr[src + rax]  // regular loop
+        movaps  [r10 + rax], xmm0
         add     rax, 16
         jl      @fwd
-@fwdend:movdqu  [r10], xmm1 // last 16
-        movdqu  [r9], xmm2  // first 16
+@fwdend:movups  [r10], xmm1 // last 16
+        movups  [r9], xmm2  // first 16
         ret
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@fwdnv: movdqu  xmm0, oword ptr[src + rax]  // non-temporal loop
+@fwdnv: movups  xmm0, oword ptr[src + rax]  // non-temporal loop
         movntdq [r10 + rax], xmm0
         add     rax, 16
         jl      @fwdnv
@@ -36715,26 +36716,26 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         {$endif FPC}
 @bsse2: sub     rax, 16
         mov     r9, rax
-        movdqu  xmm2, oword ptr[src + rax]  // last 16
-        movdqu  xmm1, oword ptr[src]        // first 16
+        movups  xmm2, oword ptr[src + rax]  // last 16
+        movups  xmm1, oword ptr[src]        // first 16
         add     rax, dst
         and     rax, -16  // 16-byte aligned writes
         sub     rax, dst
         cmp     r8, CPUCACHEX64
         ja      @bwdnv    // bypass cache for cnt>512KB
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@bwd:   movdqu  xmm0, oword ptr[src + rax]  // regular loop
-        movdqa  oword ptr[dst + rax], xmm0
+@bwd:   movups  xmm0, oword ptr[src + rax]  // regular loop
+        movaps  oword ptr[dst + rax], xmm0
         sub     rax, 16
         jg      @bwd
-@bwdend:movdqu  oword ptr[dst], xmm1       // first 16
-        movdqu  oword ptr[dst + r9], xmm2  // last 16
+@bwdend:movups  oword ptr[dst], xmm1       // first 16
+        movups  oword ptr[dst + r9], xmm2  // last 16
         ret
 @01:    mov     al, byte ptr[src]
         mov     byte ptr[dst], al
         ret
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@bwdnv: movdqu  xmm0, oword ptr[src + rax]  // non-temporal loop
+@bwdnv: movups  xmm0, oword ptr[src + rax]  // non-temporal loop
         movntdq oword ptr[dst + rax], xmm0
         sub     rax, 16
         jg      @bwdnv
@@ -36846,7 +36847,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         cmp     r10, CPUCACHEX64
         ja      @nv  // bypass cache for cnt>512KB
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@reg:   movdqa  oword ptr[rdx+dst], xmm0  // regular loop
+@reg:   movaps  oword ptr[rdx+dst], xmm0  // regular loop
         add     dst, 16
         jnz     @reg
 @last:  movups  oword ptr[r8-16], xmm0 // last unaligned 16 bytes
@@ -51649,14 +51650,14 @@ asm .noframe // rcx=P, edx=deleted, r8=count  (Linux: rdi,esi,rdx)
         // SSE2 process of 64 bytes (16 indexes) per loop iteration
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @sse2:  sub     r8, 16
-        movdqa  xmm1, dqword [rcx]  // 4 x 128-bit process = 4 x 4 integers
-        movdqa  xmm3, dqword [rcx + 16]
-        movdqa  xmm5, dqword [rcx + 32]
-        movdqa  xmm7, dqword [rcx + 48]
-        movdqa  xmm2, xmm1  // keep copy for paddd below
-        movdqa  xmm4, xmm3
-        movdqa  xmm6, xmm5
-        movdqa  xmm8, xmm7
+        movaps  xmm1, dqword [rcx]  // 4 x 128-bit process = 4 x 4 integers
+        movaps  xmm3, dqword [rcx + 16]
+        movaps  xmm5, dqword [rcx + 32]
+        movaps  xmm7, dqword [rcx + 48]
+        movaps  xmm2, xmm1  // keep copy for paddd below
+        movaps  xmm4, xmm3
+        movaps  xmm6, xmm5
+        movaps  xmm8, xmm7
         pcmpgtd xmm1, xmm0  // quad compare P[]>deleted -> -1, 0 otherwise
         pcmpgtd xmm3, xmm0
         pcmpgtd xmm5, xmm0
@@ -51665,10 +51666,10 @@ asm .noframe // rcx=P, edx=deleted, r8=count  (Linux: rdi,esi,rdx)
         paddd   xmm3, xmm4
         paddd   xmm5, xmm6
         paddd   xmm7, xmm8
-        movdqa  dqword [rcx], xmm1  // quad store back
-        movdqa  dqword [rcx + 16], xmm3
-        movdqa  dqword [rcx + 32], xmm5
-        movdqa  dqword [rcx + 48], xmm7
+        movaps  dqword [rcx], xmm1  // quad store back
+        movaps  dqword [rcx + 16], xmm3
+        movaps  dqword [rcx + 32], xmm5
+        movaps  dqword [rcx + 48], xmm7
         add     rcx, 64
         cmp     r8, 16
         jae     @sse2
@@ -60016,18 +60017,21 @@ begin
 end;
 
 function TRawUTF8List.Contains(const aText: RawUTF8; aFirstIndex: integer): PtrInt;
+var i: PtrInt; // use a temp variable to make oldest Delphi happy :(
 begin
+  result := -1;
   if self<>nil then begin
     fSafe.Lock;
     try
-      for result := aFirstIndex to fCount-1 do
-        if PosEx(aText,fValue[result])>0 then
+      for i := aFirstIndex to fCount-1 do
+        if PosEx(aText,fValue[result])>0 then begin
+          result := i;
           exit;
+        end;
     finally
       fSafe.UnLock;
     end;
   end;
-  result := -1;
 end;
 
 procedure TRawUTF8List.OnChangeHidden(Sender: TObject);

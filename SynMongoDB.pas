@@ -96,8 +96,9 @@ type
   TDecimal128Bits = record
     case integer of
     0: (lo, hi: QWord);
-    1: (b: array[0..15] of byte);
-    2: (c: array[0..3] of cardinal);
+    1: (l, h: Int64);
+    2: (b: array[0..15] of byte);
+    3: (c: array[0..3] of cardinal);
   end;
   /// points to a 128-bit decimal binary
   PDecimal128Bits = ^TDecimal128Bits;
@@ -6591,7 +6592,8 @@ begin
   result := r64;
 end;
 
-procedure append(var dest: PUTF8Char; var dig: PByte; digits: PtrInt); {$ifdef HASINLINE}inline;{$endif}
+procedure append(var dest: PUTF8Char; var dig: PByte; digits: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
 begin
   if digits>0 then
     repeat
@@ -6614,7 +6616,7 @@ var dest: PUTF8Char;
     _128: THash128Rec;
 begin
   dest := @Buffer;
-  if Int64(Bits.hi)<0 then begin
+  if Bits.h<0 then begin
     dest^ := '-';
     inc(dest);
   end;
