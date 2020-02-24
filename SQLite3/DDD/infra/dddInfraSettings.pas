@@ -747,7 +747,10 @@ begin
 end;
 
 var
-  TDDDAppSettingsAbstractFiles: TRawUTF8List;
+  TDDDAppSettingsAbstractFiles: array of record
+    FileName: RawUTF8;
+    SettingClass: TDDDAppSettingsAbstractClass;
+  end;
 
 constructor TDDDAppSettingsAbstract.Create(aStorage: TDDDAppSettingsStorageAbstract);
 begin
@@ -757,10 +760,12 @@ begin
   fStorage := aStorage;
   fStorage.SetOwner(self);
   if aStorage.InheritsFrom(TDDDAppSettingsStorageFile) then begin
-    if TDDDAppSettingsAbstractFiles=nil then
-      GarbageCollectorFreeAndNil(TDDDAppSettingsAbstractFiles,TRawUTF8List.Create);
-    TDDDAppSettingsAbstractFiles.AddObject(StringToUTF8(ExtractFileName(
-      TDDDAppSettingsStorageFile(aStorage).fSettingsJsonFileName)),pointer(ClassType));
+    SetLength(TDDDAppSettingsAbstractFiles,length(TDDDAppSettingsAbstractFiles)+1);
+    with TDDDAppSettingsAbstractFiles[high(TDDDAppSettingsAbstractFiles)] do begin
+      FileName := Split(StringToUTF8(ExtractFileName(TDDDAppSettingsStorageFile(aStorage).
+        fSettingsJsonFileName)),'.');
+      SettingClass := pointer(ClassType);
+    end;
   end;
 end;
 
@@ -791,19 +796,15 @@ class function TDDDAppSettingsAbstract.PasswordFields: RawUTF8;
     end;
   end;
 var i: integer;
-    fn: RawUTF8;
     res: TRawUTF8DynArray;
-    cl: TDDDAppSettingsAbstractClass;
 begin
   result := '';
-  if TDDDAppSettingsAbstractFiles<>nil then
-    for i := 0 to TDDDAppSettingsAbstractFiles.Count-1 do begin
-      fn := Split(TDDDAppSettingsAbstractFiles.Strings[i],'.');
-      cl := pointer(TDDDAppSettingsAbstractFiles.Objects[i]);
+  for i := 0 to high(TDDDAppSettingsAbstractFiles) do
+    with TDDDAppSettingsAbstractFiles[i] do begin
       res := nil;
-      InternalAdd('',cl,res);
+      InternalAdd('',SettingClass,res);
       if res<>nil then
-        result := FormatUTF8('%%=%'#13#10,[result,fn,RawUTF8ArrayToCSV(res)]);
+        result := FormatUTF8('%%=%'#13#10,[result,FileName,RawUTF8ArrayToCSV(res)]);
     end;
 end;
 

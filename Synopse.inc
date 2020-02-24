@@ -218,6 +218,7 @@
   {$define FPC_OR_PUREPASCAL}
   {$define FPC_OR_KYLIX}
   {$define FPC_OR_UNICODE}
+  {$define FPC_OR_DELPHIXE}
   {$define FPC_ENUMHASINNER}
 
   // $if FPC_FULLVERSION>20700 breaks Delphi 6-7 and SynProject :(
@@ -524,6 +525,7 @@
         {$endif NEWRTTINOTUSED}
       {$ifend}
       {$if CompilerVersion >= 22.0}
+        {$define FPC_OR_DELPHIXE} // Delphi 2007/2009/2010 inlining bugs
         {$define ISDELPHIXE}
       {$ifend}
       {$if CompilerVersion >= 23.0}
