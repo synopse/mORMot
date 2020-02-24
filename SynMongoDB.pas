@@ -86,7 +86,6 @@ uses
   SynLog;
 
 
-
 { ************ BSON (Binary JSON) process }
 
 type
@@ -958,7 +957,7 @@ function BSONFieldSelector(const FieldNamesCSV: RawUTF8): TBSONDocument; overloa
 // - will create the BSON binary without any temporary TDocVariant storage, by
 // calling JSONBufferToBSONDocument() on a temporary copy of the supplied JSON
 function BSON(const JSON: RawUTF8; kind: PBSONElementType=nil): TBSONDocument; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifndef ISDELPHI20092010}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// store some object content, supplied as (extended) JSON and parameters,
 // into BSON encoded binary
