@@ -14575,6 +14575,37 @@ function GetNumericVariantFromJSON(JSON: PUTF8Char; var Value: TVarData;
 function GetNextItemToVariant(var P: PUTF8Char; out Value: Variant;
   Sep: AnsiChar= ','; AllowDouble: boolean=true): boolean;
 
+/// retrieve a variant value from a JSON as per RFC 8259, RFC 7159, RFC 7158
+// - follows TTextWriter.AddVariant() format (calls GetVariantFromJSON)
+// - will instantiate either an Integer, Int64, currency, double or string value
+// (as RawUTF8), guessing the best numeric type according to the textual content,
+// and string in all other cases, except TryCustomVariants points to some options
+// (e.g. @JSON_OPTIONS[true] for fast instance) and input is a known object or
+// array, either encoded as strict-JSON (i.e. {..} or [..]), or with some
+// extended (e.g. BSON) syntax
+// - warning: the JSON buffer will be modified in-place during process - use
+// a temporary copy or the overloaded functions with RawUTF8 parameter
+// if you need to access it later
+procedure JSONToVariant(var Value: Variant; JSON: PUTF8Char;
+  Options: TDocVariantOptions=[dvoReturnNullForUnknownProperty];
+  AllowDouble: boolean=false); overload;
+//  {$ifdef HASINLINE}inline;{$endif}
+
+/// retrieve a variant value from a JSON as per RFC 8259, RFC 7159, RFC 7158
+// - follows TTextWriter.AddVariant() format (calls GetVariantFromJSON)
+// - will instantiate either an Integer, Int64, currency, double or string value
+// (as RawUTF8), guessing the best numeric type according to the textual content,
+// and string in all other cases, except TryCustomVariants points to some options
+// (e.g. @JSON_OPTIONS[true] for fast instance) and input is a known object or
+// array, either encoded as strict-JSON (i.e. {..} or [..]), or with some
+// extended (e.g. BSON) syntax
+// - this overloaded procedure will make a temporary copy before JSON parsing
+// and return the variant as result
+function JSONToVariant(const JSON: RawUTF8;
+  Options: TDocVariantOptions=[dvoReturnNullForUnknownProperty];
+  AllowDouble: boolean=false): variant; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// convert an UTF-8 encoded text buffer into a variant number or RawUTF8 varString
 // - first try with GetNumericVariantFromJSON(), then fallback to RawUTF8ToVariant
 procedure TextToVariant(const aValue: RawUTF8; AllowVarDouble: boolean;
@@ -46383,6 +46414,41 @@ dbl:  VDouble := GetExtended(JSON,err);
     end;
   end;
   result := false;
+end;
+
+procedure JSONToVariant(var Value: variant; JSON: PUTF8Char;
+  Options: TDocVariantOptions; AllowDouble: boolean);
+var wasString: boolean;
+    Val: PUTF8Char;
+begin
+  {$ifndef FPC}if TVarData(Value).VType and VTYPE_STATIC<>0 then{$endif}
+    VarClear(Value);
+  if (JSON=nil) or (JSON^=#0) then
+    exit;
+  if IdemPChar(JSON, 'NULL') then
+    TVarData(Value).VType := varNull
+  else begin
+    if AllowDouble then
+      Options := Options+[dvoAllowDoubleValue];
+    Val := JSON;
+    if TDocVariantData(Value).InitJSONInPlace(Val,Options)=nil then begin
+      VarClear(Value);
+      Val := GetJSONField(JSON,JSON,@wasString);
+      GetVariantFromJSON(Val,wasString,Value,nil,AllowDouble);
+    end;
+  end;
+end;
+
+function JSONToVariant(const JSON: RawUTF8; Options: TDocVariantOptions;
+  AllowDouble: boolean): variant;
+var tmp: TSynTempBuffer;
+begin
+  tmp.Init(JSON); // temp copy before in-place decoding
+  try
+    JsonToVariant(result,tmp.buf,Options,AllowDouble);
+  finally
+    tmp.Done;
+  end;
 end;
 
 procedure TextToVariant(const aValue: RawUTF8; AllowVarDouble: boolean;
