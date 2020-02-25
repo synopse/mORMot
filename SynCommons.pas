@@ -32306,20 +32306,19 @@ function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): Ptr
         xor     r9, r9  // r9=L rax=result
         test    R, R
         jl      @ko
+        lea     rax, [r9 + R]
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
-@s:     lea     rax, [r9 + R]
-        shr     rax, 1
+@s:     shr     rax, 1
+        lea     r10, qword ptr[rax - 1]  // efficient branchless binary search
+        lea     r11, qword ptr[rax + 1]
         cmp     Value, dword ptr[P + rax * 4]
-        jl      @gt
         je      @ok
-        lea     r9, qword ptr[rax + 1]
+        cmovl   R, r10
+        cmovg   r9, r11
+        lea     rax, [r9 + R]
         cmp     r9, R
         jle     @s
-        jmp     @ko
-@gt:    lea     R, qword ptr[rax - 1]
-        cmp     r9, R
-        jle     @s
-@ko:    or      rax, -1
+@ko:    mov     rax, -1
 @ok:
 end;
 {$else}
@@ -32360,20 +32359,19 @@ function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): Ptr
         xor     r9, r9  // r9=L rax=result
         test    R, R
         jl      @ko
+        lea     rax, [r9 + R]
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
-@s:     lea     rax, [r9 + R]
-        shr     rax, 1
+@s:     shr     rax, 1
+        lea     r10, qword ptr[rax - 1]  // efficient branchless binary search
+        lea     r11, qword ptr[rax + 1]
         cmp     Value, qword ptr[P + rax * 8]
-        jl      @gt
         je      @ok
-        lea     r9, qword ptr[rax + 1]
+        cmovl   R, r10
+        cmovg   r9, r11
+        lea     rax, [r9 + R]
         cmp     r9, R
         jle     @s
-        jmp     @ko
-@gt:    lea     R, qword ptr[rax - 1]
-        cmp     r9, R
-        jle     @s
-@ko:    or      rax, -1
+@ko:    mov     rax, -1
 @ok:
 end;
 {$else}
