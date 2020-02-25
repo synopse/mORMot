@@ -15,6 +15,10 @@ implementation
 
 uses
   SynZip,
+  {$ifndef OPENSSL1_1}
+  OPENSSL1_1 should be defined for SyNode
+  {$endif}
+  SynOpenSSL,
   {$IFDEF MSWINDOWS}
   Windows
   {$ELSE}
@@ -100,7 +104,7 @@ type
 
 function SyNodeBindingProc_consts(const aEngine: TSMEngine; const bindingNamespaceName: SynUnicode): jsval;
 var
-  obj, obj_fs, obj_zlib: PJSRootedObject;
+  obj, obj_fs, obj_zlib, obj_crypto: PJSRootedObject;
   jsv: jsval;
   cx: PJSContext;
 const
@@ -110,6 +114,7 @@ begin
   obj := cx.NewRootedObject(cx.NewObject(nil));
   obj_fs := cx.NewRootedObject(cx.NewObject(nil));
   obj_zlib := cx.NewRootedObject(cx.NewObject(nil));
+  obj_crypto := cx.NewRootedObject(cx.NewObject(nil));
   try
     // constansts.fs
     jsv.asInteger := F_OK; obj_fs.ptr.DefineProperty(cx, 'F_OK', jsv, attrs);
@@ -218,8 +223,14 @@ begin
     jsv.asInteger := Z_DEFAULT_LEVEL; obj_zlib.ptr.DefineProperty(cx, 'Z_DEFAULT_LEVEL', jsv, attrs);
 
     obj.ptr.DefineProperty(cx, 'zlib', obj_zlib.ptr.ToJSValue, attrs);
+
+    //crypto (partial)
+    obj_crypto.ptr.DefineProperty(cx, 'ENGINE_METHOD_ALL', jsval.Int32Value(ENGINE_METHOD_ALL), attrs);
+
+    obj.ptr.DefineProperty(cx, 'crypto', obj_crypto.ptr.ToJSValue, attrs);
     Result := obj.ptr.ToJSValue;
   finally
+    cx.FreeRootedObject(obj_crypto);
     cx.FreeRootedObject(obj_zlib);
     cx.FreeRootedObject(obj_fs);
     cx.FreeRootedObject(obj);

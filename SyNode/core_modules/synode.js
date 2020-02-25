@@ -7,6 +7,21 @@ const {coreModulesPath, runInThisContext, runInThisContextRes, _coreModulesInRes
 const {loadFile} = process.binding('fs');
 let Module;
 
+/**
+ * for compatibility with Nodejs 10x internal modules
+ * @param module
+ * @return {*}
+ */
+global.internalBinding = function internalBinding(module) {
+  return process.binding(module)
+}
+
+if (!Error.captureStackTrace) { //v8 has Error.captureStackTrace, SpinedMonkey - not
+  Error.prototype.captureStackTrace = function(err, func) {
+    // TODO - remove last level (this function) from stack, use func name
+    this.stack = (new Error()).stack
+  }
+}
 
 /**
 * @namespace process
@@ -146,13 +161,21 @@ function NativeModule(id) {
 }
 
 const NODE_CORE_MODULES = ['fs', 'util', 'path', 'assert', 'module', 'console', 'events','vm',
- 'net', 'os', 'punycode', 'querystring', 'timers', 'tty', 'url', 'child_process', 'http', 'https',
- 'crypto', 'zlib', 'dns', //fake modules
- 'buffer', 'string_decoder', 'internal/util', 'internal/module', 'stream', '_stream_readable', '_stream_writable', 
- 'internal/streams/BufferList', '_stream_duplex', '_stream_transform', '_stream_passthrough',
- 'internal/fs',
- 'internal/errors', 'internal/querystring',  
- 'polyfill/WindowTimer']; 
+  'net', 'os', 'punycode', 'querystring', 'timers', 'tty', 'url', 'child_process', 'http', 'https',
+  'crypto', 'zlib', 'dns', //fake modules
+  'buffer', 'string_decoder', 'internal/util', 'internal/module', 'stream', '_stream_readable', '_stream_writable',
+  'internal/streams/BufferList', '_stream_duplex', '_stream_transform', '_stream_passthrough',
+  'internal/fs',
+
+  'internal/validators',
+  'internal/crypto/certificate', 'internal/crypto/cipher', 'internal/crypto/diffiehellman', 'internal/crypto/hash',
+  'internal/crypto/keygen', 'internal/crypto/pbkdf2', 'internal/crypto/random', 'internal/crypto/scrypt',
+  'internal/crypto/sig', 'internal/crypto/util',
+  'internal/util/comparisons', 'internal/util/inspect', 'internal/util/inspector','internal/util/types',
+  'internal/streams/lazy_transform',
+
+  'internal/errors', 'internal/querystring',
+'polyfill/WindowTimer'];
 
 NativeModule._source = {};
 const PATH_DELIM = process.platform === 'win32' ? '\\' : '/'

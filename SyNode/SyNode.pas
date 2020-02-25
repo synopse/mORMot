@@ -530,7 +530,9 @@ uses
   SyNodeBinding_buffer,
   SyNodeBinding_util,
   SyNodeBinding_uv,
-  synodebinding_os;
+  synodebinding_os,
+  SyNodeBinding_crypto,
+  SyNodeBinding_config;
 
 var
   jsGlobal_opt: JSClassOps = (
