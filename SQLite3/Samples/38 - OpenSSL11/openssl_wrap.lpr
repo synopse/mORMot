@@ -83,14 +83,15 @@ var
   data: RawByteString;
 const
   CNT=10000;
-  SIZ: array[0..4] of integer = (8, 50, 100, 1000, 10000);
+  SIZ: array[0..5] of integer = (16, 64, 256, 1024, 8192, 16386);
   SECRET = 'secret string';
 
 begin
   O := OpenSSL;
+  // OpenSSL performance itself (singe core) can de measured using command "openssl speed -seconds 1 sha256"
   sha256md := O.EVP_get_digestbyname('SHA256');
   WriteLn('HMAC SHA256');
-  for k := 0 to 4 do begin
+  for k := 0 to length(SIZ)-1 do begin
     data := TSynTestCase.RandomString(SIZ[k]);
     Writeln('Data length ', SIZ[k]);
 
@@ -116,7 +117,7 @@ begin
   end;
 
   WriteLn(#10'hash SHA256');
-  for k := 0 to 4 do begin
+  for k := 0 to length(SIZ)-1 do begin
     data := TSynTestCase.RandomString(SIZ[k]);
     Writeln('Data length ', SIZ[k]);
     T.Start;
