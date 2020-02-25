@@ -4222,9 +4222,20 @@ function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Ch
 // - R is the last index of available entries in P^ (i.e. Count-1)
 // - string comparison is case-sensitive StrComp (so will work with any PAnsiChar)
 // - returns -1 if the specified Value was not found
-// - will use fast O(log(n)) binary search algorithm
+// - will use inlined binary search algorithm with optimized x86_64 branchless asm
+// - slightly faster than plain FastFindPUTF8CharSorted(P,R,Value,@StrComp)
 function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+
+/// retrieve the index where is located a PUTF8Char in a sorted uppercase PUTF8Char array
+// - P[] array is expected to be already uppercased
+// - searched Value is converted to uppercase before search via UpperCopy255Buf(),
+// so is expected to be short, i.e. length < 250
+// - R is the last index of available entries in P^ (i.e. Count-1)
+// - returns -1 if the specified Value was not found
+// - will use fast O(log(n)) binary search algorithm
+// - slightly faster than plain FastFindPUTF8CharSorted(P,R,Value,@StrIComp)
+function FastFindUpperPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt;
+  Value: PUTF8Char; ValueLen: PtrInt): PtrInt;
 
 /// retrieve the index where is located a PUTF8Char in a sorted PUTF8Char array
 // - R is the last index of available entries in P^ (i.e. Count-1)
@@ -12162,7 +12173,7 @@ function IsZero(const dig: THash128): boolean; overload;
 /// returns TRUE if all 16 bytes of both 128-bit buffers do match
 // - e.g. a MD5 digest, or an AES block
 // - this function is not sensitive to any timing attack, so is designed
-// for cryptographic purpose
+// for cryptographic purpose - and it is also branchless therefore fast
 function IsEqual(const A,B: THash128): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -24530,80 +24541,91 @@ begin
 end;
 
 function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
-var i: PtrInt; // very optimized code for speed
 begin
+  result := 0;
+  dec(Count,4);
   if P<>nil then begin
-    result := 0;
-    for i := 1 to Count shr 2 do // 4 DWORD by loop - aligned read
-      if P^[0]<>Value then
-      if P^[1]<>Value then
-      if P^[2]<>Value then
-      if P^[3]<>Value then begin
-        inc(PByte(P),SizeOf(P^[0])*4);
+    repeat
+      if result>Count then
+        break;
+      if P^[result]<>Value then
+      if P^[result+1]<>Value then
+      if P^[result+2]<>Value then
+      if P^[result+3]<>Value then begin
         inc(result,4);
-      end else begin
-        inc(result,3);
-        exit;
-      end else begin
-        inc(result,2);
-        exit;
-      end else begin
-        inc(result,1);
-        exit;
+        continue;
       end else
-        exit;
-    for i := 0 to (Count and 3)-1 do // last 0..3 DWORD
-      if P^[i]=Value then
+        inc(result,3) else
+        inc(result,2) else
+        inc(result);
+      exit;
+    until false;
+    inc(Count,4);
+    repeat
+      if result>=Count then
+        break;
+      if P^[result]=Value then
         exit else
         inc(result);
+    until false;
   end;
   result := -1;
 end;
 
 function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
-var i: PtrInt;
-begin // very optimized code
-  if P<>nil then begin
-    for i := 1 to Count shr 2 do      // 4 DWORD by loop - aligned read
-      if P^[0]<>Value then
-      if P^[1]<>Value then
-      if P^[2]<>Value then
-      if P^[3]=Value then begin
-        result := @P^[3];
-        exit;
-      end else
-        inc(PByte(P),SizeOf(P^[0])*4) else begin
-        result := @P^[2];
-        exit;
-      end else begin
-        result := @P^[1];
-        exit;
-      end else begin
-        result := pointer(P);
-        exit;
-      end;
-    for i := 0 to (Count and 3)-1 do  // last 0..3 DWORD
-      if P^[i]=Value then begin
-        result := @P^[i];
-        exit;
-      end;
-  end;
+begin
+  result := nil;
+  if P=nil then
+    exit;
+  Count := PtrInt(@P[Count-4]);
+  repeat
+    if PtrUInt(P)>PtrUInt(Count) then
+      break;
+    if P^[0]<>Value then
+    if P^[1]<>Value then
+    if P^[2]<>Value then
+    if P^[3]<>Value then begin
+      P := @P[4];
+      continue;
+    end else
+      result := @P[3] else
+      result := @P[2] else
+      result := @P[1] else
+      result := pointer(P);
+    exit;
+  until false;
+  inc(Count,4*SizeOf(Value));
+  result := pointer(P);
+  repeat
+    if PtrUInt(result)>=PtrUInt(Count) then
+      break;
+    if result^=Value then
+      exit else
+      inc(result);
+  until false;
   result := nil;
 end;
 
 function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): boolean;
-var i: PtrInt; // very optimized code for speed
 begin
   if P<>nil then begin
     result := true;
-    for i := 1 to (Count shr 2) do   // 4 DWORD by loop - aligned read
-      if (P^[0]=Value) or (P^[1]=Value) or
-         (P^[2]=Value) or (P^[3]=Value) then
-        exit else
-        inc(PByte(P),SizeOf(P^[0])*4);
-    for i := 0 to (Count and 3)-1 do // last 0..3 DWORD
-      if P^[i]=Value then
+    Count := PtrInt(@P[Count-4]);
+    repeat
+      if PtrUInt(P)>PtrUInt(Count) then
+        break;
+      if (P^[0]=Value) or (P^[1]=Value) or (P^[2]=Value) or (P^[3]=Value) then
         exit;
+      P := @P[4];
+    until false;
+    inc(Count,4*SizeOf(Value));
+    repeat
+      if PtrUInt(P)>=PtrUInt(Count) then
+        break;
+      if P^[0]=Value then
+        exit else
+        P := @P[1];
+    until false;
   end;
   result := false;
 end;
@@ -31232,50 +31254,60 @@ begin
 end;
 
 function Int64ScanExists(P: PInt64Array; Count: PtrInt; const Value: Int64): boolean;
-var i: PtrInt;
 begin
   if P<>nil then begin
     result := true;
-    for i := 1 to (Count shr 2) do   // 4 QWORD by loop - aligned read
-      if (P^[0]=Value) or (P^[1]=Value) or
-         (P^[2]=Value) or (P^[3]=Value) then
-        exit else
-        inc(PByte(P),SizeOf(P^[0])*4);
-    for i := 0 to (Count and 3)-1 do // last 0..3 QWORD
-      if P^[i]=Value then
+    Count := PtrInt(@P[Count-4]);
+    repeat
+      if PtrUInt(P)>PtrUInt(Count) then
+        break;
+      if (P^[0]=Value) or (P^[1]=Value) or (P^[2]=Value) or (P^[3]=Value) then
         exit;
+      P := @P[4];
+    until false;
+    inc(Count,4*SizeOf(Value));
+    repeat
+      if PtrUInt(P)>=PtrUInt(Count) then
+        break;
+      if P^[0]=Value then
+        exit else
+        P := @P[1];
+    until false;
   end;
   result := false;
 end;
 
 function Int64Scan(P: PInt64Array; Count: PtrInt; const Value: Int64): PInt64;
-var i: PtrInt;
 begin
-  if P<>nil then begin
-    for i := 1 to Count shr 2 do      // 4 QWORD by loop - aligned read
-      if P^[0]<>Value then
-      if P^[1]<>Value then
-      if P^[2]<>Value then
-      if P^[3]=Value then begin
-        result := @P^[3];
-        exit;
-      end else
-        inc(PByte(P),SizeOf(P^[0])*4) else begin
-        result := @P^[2];
-        exit;
-      end else begin
-        result := @P^[1];
-        exit;
-      end else begin
-        result := pointer(P);
-        exit;
-      end;
-    for i := 0 to (Count and 3)-1 do  // last 0..3 QWORD
-      if P^[i]=Value then begin
-        result := @P^[i];
-        exit;
-      end;
-  end;
+  result := nil;
+  if P=nil then
+    exit;
+  Count := PtrInt(@P[Count-4]);
+  repeat
+    if PtrUInt(P)>PtrUInt(Count) then
+      break;
+    if P^[0]<>Value then
+    if P^[1]<>Value then
+    if P^[2]<>Value then
+    if P^[3]<>Value then begin
+      P := @P[4];
+      continue;
+    end else
+      result := @P[3] else
+      result := @P[2] else
+      result := @P[1] else
+      result := pointer(P);
+    exit;
+  until false;
+  inc(Count,4*SizeOf(Value));
+  result := pointer(P);
+  repeat
+    if PtrUInt(result)>=PtrUInt(Count) then
+      break;
+    if result^=Value then
+      exit else
+      inc(result);
+  until false;
   result := nil;
 end;
 
@@ -31909,32 +31941,41 @@ begin
 end;
 
 function Int64ScanIndex(P: PInt64Array; Count: PtrInt; const Value: Int64): PtrInt;
-var i: PtrInt; // optimized code for speed
 begin
+  result := 0;
+  dec(Count,8);
   if P<>nil then begin
-    result := 0;
-    for i := 1 to Count shr 2 do // 4 PtrUInt by loop - aligned read
-      if P^[0]<>Value then
-      if P^[1]<>Value then
-      if P^[2]<>Value then
-      if P^[3]<>Value then begin
-        inc(PByte(P),SizeOf(P^[0])*4);
-        inc(result,4);
-      end else begin
-        inc(result,3);
-        exit;
-      end else begin
-        inc(result,2);
-        exit;
-      end else begin
-        inc(result,1);
-        exit;
+    repeat
+      if result>Count then
+        break;
+      if P^[result]<>Value then
+      if P^[result+1]<>Value then
+      if P^[result+2]<>Value then
+      if P^[result+3]<>Value then
+      if P^[result+4]<>Value then
+      if P^[result+5]<>Value then
+      if P^[result+6]<>Value then
+      if P^[result+7]<>Value then begin
+        inc(result,8);
+        continue;
       end else
-        exit;
-    for i := 0 to (Count and 3)-1 do // last 0..3 Int64
-      if P^[i]=Value then
+        inc(result,7) else
+        inc(result,6) else
+        inc(result,5) else
+        inc(result,4) else
+        inc(result,3) else
+        inc(result,2) else
+        inc(result);
+      exit;
+    until false;
+    inc(Count,8);
+    repeat
+      if result>=Count then
+        break;
+      if P^[result]=Value then
         exit else
         inc(result);
+    until false;
   end;
   result := -1;
 end;
@@ -31974,26 +32015,38 @@ asm // identical to IntegerScanIndex() asm stub
 end;
 {$endif HASINLINE}
 
-function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: Byte): integer;
+function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: Byte): PtrInt;
 begin
 {$ifdef FPC}
   result := IndexByte(P^,Count,Value); // will use fast FPC SSE version
 {$else}
-  for result := 0 to Count-1 do
-    if P^[result]=Value then
-      exit;
+  result := 0;
+  if P<>nil then
+    repeat
+      if result>=Count then
+        break;
+      if P^[result]=Value then
+        exit else
+        inc(result);
+    until false;
   result := -1;
 {$endif FPC}
 end;
 
-function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): integer;
+function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
 begin
 {$ifdef FPC}
   result := IndexWord(P^,Count,Value); // will use fast FPC SSE version
 {$else}
-  for result := 0 to Count-1 do
-    if P^[result]=Value then
-      exit;
+  result := 0;
+  if P<>nil then
+    repeat
+      if result>=Count then
+        break;
+      if P^[result]=Value then
+        exit else
+        inc(result);
+    until false;
   result := -1;
 {$endif FPC}
 end;
@@ -32022,7 +32075,7 @@ begin
         inc(PByte(P),ElemSize);
     result := -1;
   end;
-end;
+  end;
 end;
 
 function AnyScanExists(P,Elem: pointer; Count,ElemSize: PtrInt): boolean;
@@ -32342,7 +32395,7 @@ begin
 end;
 
 function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
-{$ifdef CPUX64} // P=rdx/rdi R=rcx/rsi Value=r8d/edx
+{$ifdef CPUX64} // P=rcx/rdi R=rdx/rsi Value=r8d/edx
 {$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
         xor     r9, r9  // r9=L rax=result
         test    R, R
@@ -32359,7 +32412,7 @@ function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): Ptr
         lea     rax, [r9 + R]
         cmp     r9, R
         jle     @s
-@ko:    mov     rax, -1
+@ko:    or      rax, -1
 @ok:
 end;
 {$else}
@@ -32395,7 +32448,7 @@ begin
 end;
 
 function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt;
-{$ifdef CPUX64} // P=rdx/rdi R=rcx/rsi Value=r8d/edx
+{$ifdef CPUX64} // P=rcx/rdi R=rdx/rsi Value=r8d/edx
 {$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
         xor     r9, r9  // r9=L rax=result
         test    R, R
@@ -32412,7 +32465,7 @@ function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): Ptr
         lea     rax, [r9 + R]
         cmp     r9, R
         jle     @s
-@ko:    mov     rax, -1
+@ko:    or      rax, -1
 @ok:
 end;
 {$else}
@@ -32435,7 +32488,7 @@ begin
         break;
       end;
       {$else} // circumvent Int64 comparison slowness
-      cmp := SortDynArrayInt64(P^[result],Value);
+      cmp := {$ifdef HASINLINE}CompareInt64{$else}SortDynArrayInt64{$endif}(P^[result],Value);
       if cmp=0 then
         exit else
       if cmp<0 then begin
@@ -36378,8 +36431,7 @@ end;
 function IsZero(const dig: THash128): boolean;
 var a: TPtrIntArray absolute dig;
 begin
-  result := (a[0]=0) and (a[1]=0)
-     {$ifndef CPU64} and (a[2]=0) and (a[3]=0){$endif};
+  result := a[0] or a[1] {$ifndef CPU64}or a[2] or a[3]{$endif} = 0;
 end;
 
 function IsEqual(const A,B: THash128): boolean;
@@ -36452,7 +36504,7 @@ end;
 function IsZero(const dig: THash160): boolean;
 var a: TIntegerArray absolute dig;
 begin
-  result := (a[0]=0) and (a[1]=0) and (a[2]=0) and (a[3]=0) and (a[4]=0);
+  result := a[0] or a[1] or a[2] or a[3] or a[4] = 0;
 end;
 
 function IsEqual(const A,B: THash160): boolean;
@@ -36489,9 +36541,8 @@ end;
 function IsZero(const dig: THash256): boolean;
 var a: TPtrIntArray absolute dig;
 begin
-  result := (a[0]=0) and (a[1]=0) and (a[2]=0) and (a[3]=0)
-     {$ifndef CPU64} and (a[4]=0) and (a[5]=0)
-                     and (a[6]=0) and (a[7]=0){$endif};
+  result := a[0] or a[1] or a[2] or a[3]
+     {$ifndef CPU64} or a[4] or a[5] or a[6] or a[7]{$endif} = 0;
 end;
 
 function IsEqual(const A,B: THash256): boolean;
@@ -36515,9 +36566,8 @@ end;
 function IsZero(const dig: THash384): boolean;
 var a: TPtrIntArray absolute dig;
 begin
-  result := (a[0]=0) and (a[1]=0) and (a[2]=0) and (a[3]=0) and (a[4]=0) and (a[5]=0)
-     {$ifndef CPU64} and (a[6]=0) and (a[7]=0) and (a[8]=0)
-                     and (a[9]=0) and (a[10]=0) and (a[11]=0){$endif};
+  result := a[0] or a[1] or a[2] or a[3] or a[4] or a[5]
+     {$ifndef CPU64} or a[6] or a[7] or a[8] or a[9] or a[10] or a[11] {$endif} = 0;
 end;
 
 function IsEqual(const A,B: THash384): boolean;
@@ -36545,10 +36595,8 @@ end;
 function IsZero(const dig: THash512): boolean;
 var a: TPtrIntArray absolute dig;
 begin
-  result := (a[0]=0) and (a[1]=0) and (a[2]=0) and (a[3]=0) and
-            (a[4]=0) and (a[5]=0) and (a[6]=0) and (a[7]=0)
-     {$ifndef CPU64} and (a[8]=0) and (a[9]=0) and (a[10]=0) and (a[11]=0) and
-            (a[12]=0) and (a[13]=0) and (a[14]=0) and (a[15]=0){$endif};
+  result := a[0] or a[1] or a[2] or a[3] or a[4] or a[5] or a[6] or a[7] {$ifndef CPU64}
+    or a[8] or a[9] or a[10] or a[11] or a[12] or a[13]  or a[14] or a[15] {$endif} = 0;
 end;
 
 function IsEqual(const A,B: THash512): boolean;
@@ -40148,8 +40196,111 @@ begin // fast O(log(n)) binary search
 end;
 
 function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt;
+{$ifdef CPUX64} // P=rcx/rdi R=rdx/rsi Value=r8/rdx
+{$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
+        {$ifdef win64}
+        push    rdi
+        mov     rdi, P  // P=rdi
+        {$endif}
+        push    r12
+        push    r13
+        xor     r9, r9  // L=r9
+        test    R, R
+        jl      @err
+        test    Value, Value
+        jz      @void
+        mov     cl, byte ptr[Value]  // to check first char (likely diverse)
+@s:     lea     rax, qword ptr[r9 + R]
+        shr     rax, 1
+        lea     r12, qword ptr[rax - 1]  // branchless main loop
+        lea     r13, qword ptr[rax + 1]
+        mov     r10, qword ptr[rdi + rax * 8]
+        test    r10, r10
+        jz      @lt
+        cmp     cl, byte ptr[r10]
+        je      @eq
+        cmovc   R, r12
+        cmovnc  r9, r13
+@nxt:   cmp     r9, R
+        jle     @s
+@err:   or      rax, -1
+@found: pop     r13
+        pop     r12
+        {$ifdef win64}
+        pop     rdi
+        {$endif}
+        ret
+@lt:    mov     r9, r13 // very unlikely P[rax]=nil
+        jmp     @nxt
+@eq:    mov     r11, Value
+@sub:   mov     cl, byte ptr[r10]
+        inc     r10
+        inc     r11
+        test    cl, cl
+        jz      @found
+        mov     cl, byte ptr[r11]
+        cmp     cl, byte ptr[r10]
+        je      @sub
+        mov     cl, byte ptr[Value]  // reset first char
+        cmovc   R, r12
+        cmovnc  r9, r13
+        cmp     r9, R
+        jle     @s
+        jmp     @err
+@void:  or      rax, -1
+        cmp     qword ptr[P], 0
+        cmove   rax, Value
+        jmp     @found
+end;
+{$else}
+var L: PtrInt;
+    c: byte;
+    piv,val: PByte;
+begin // fast O(log(n)) binary search using inlined StrCompFast()
+  if R>=0 then
+    if Value<>nil then begin
+      L := 0;
+      repeat
+        result := (L+R) shr 1;
+        piv := pointer(P^[result]);
+        if piv<>nil then begin
+          val := pointer(Value);
+          c := piv^;
+          if c=val^ then
+            repeat
+              if c=0 then
+                exit;  // StrComp(P^[result],Value)=0
+              inc(piv);
+              inc(val);
+              c := piv^;
+            until c<>val^;
+          if c>val^ then begin
+            R := result-1;  // StrComp(P^[result],Value)>0
+            if L<=R then
+              continue;
+            break;
+          end;
+        end;
+        L := result+1;  // StrComp(P^[result],Value)<0
+        if L<=R then
+          continue;
+        break;
+      until false;
+    end else
+    if P^[0]=nil then begin // '' should be in lowest P[] slot
+      result := 0;
+      exit;
+    end;
+  result := -1;
+end;
+{$endif CPUX64}
+
+function FastFindUpperPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt;
+  Value: PUTF8Char; ValueLen: PtrInt): PtrInt;
+var tmp: array[byte] of AnsiChar;
 begin
-  result := FastFindPUTF8CharSorted(P,R,Value,TUTF8Compare(@StrComp));
+  UpperCopy255Buf(@tmp,Value,ValueLen);
+  result := FastFindPUTF8CharSorted(P,R,@tmp);
 end;
 
 function FastFindIndexedPUTF8Char(P: PPUTF8CharArray; R: PtrInt;
@@ -40957,27 +41108,31 @@ begin
 end;
 
 function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
-{$ifdef CPUX64} // P=rdx/rdi R=rcx/rsi Value=r8w/dx
+{$ifdef CPUX64} // P=rcx/rdi R=rdx/rsi Value=r8w/dx
 {$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
+        {$ifdef win64}
+        push    rdi
+        mov     rdi, P  // rdi=P
+        {$endif}
         xor     r9, r9  // r9=L rax=result
         test    R, R
         jl      @ko
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @s:     lea     rax, [r9 + R]
         shr     rax, 1
-        movzx   r10d, word ptr[P + rax * 2]
-        cmp     Value, r10w
-        jl      @gt
+        lea     r10, qword ptr[rax - 1] // branchless loop
+        lea     r11, qword ptr[rax + 1]
+        movzx   ecx, word ptr[rdi + rax * 2]
+        cmp     cx, Value
         je      @ok
-        lea     r9, qword ptr[rax + 1]
+        cmovg   R, r10
+        cmovl   r9, r11
         cmp     r9, R
         jle     @s
-        jmp     @ko
-@gt:    lea     R, qword ptr[rax - 1]
-        cmp     r9, R
-        jle     @s
-@ko:    mov     rax, -1
-@ok:
+@ko:    or      rax, -1
+@ok:    {$ifdef win64}
+        pop     rdi
+        {$endif}
 end;
 {$else}
 var L: PtrInt;
@@ -47920,7 +48075,9 @@ begin
   if (integer(VType)<>DocVariantVType) or not(dvoIsObject in VOptions) or (VCount=0) then
     result := nil else begin
     if Assigned(aSortedCompare) then
-      ndx := FastFindPUTF8CharSorted(pointer(VName),VCount-1,pointer(aName),aSortedCompare) else
+      if @aSortedCompare=@StrComp then
+        ndx := FastFindPUTF8CharSorted(pointer(VName),VCount-1,pointer(aName)) else
+        ndx := FastFindPUTF8CharSorted(pointer(VName),VCount-1,pointer(aName),aSortedCompare) else
       ndx := FindRawUTF8(VName,VCount,aName,not(dvoNameCaseSensitive in VOptions));
     if ndx>=0 then
       result := @VValue[ndx] else
