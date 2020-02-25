@@ -4336,14 +4336,14 @@ function PtrUIntScanExists(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): boo
 // - Count is the number of Byte entries in P^
 // - return index of P^[index]=Value
 // - return -1 if Value was not found
-function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: Byte): integer;
+function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: Byte): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast search of an unsigned Word value position in a Word array
 // - Count is the number of Word entries in P^
 // - return index of P^[index]=Value
 // - return -1 if Value was not found
-function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): integer;
+function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast search of a binary value position in a fixed-size array
@@ -4351,6 +4351,10 @@ function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): integer;
 // - return index of P^[index]=Elem^, comparing ElemSize bytes
 // - return -1 if Value was not found
 function AnyScanIndex(P,Elem: pointer; Count,ElemSize: PtrInt): PtrInt;
+
+/// fast search of a binary value position in a fixed-size array
+// - Count is the number of entries in P^[]
+function AnyScanExists(P,Elem: pointer; Count,ElemSize: PtrInt): boolean;
 
 /// sort an Integer array, low values first
 procedure QuickSortInteger(ID: PIntegerArray; L, R: PtrInt); overload;
@@ -25198,7 +25202,7 @@ function SortDynArrayAnsiString(const A,B): integer;
 @1:     mov     eax, 1
         ret
 @ne:    jnc     @1
-@less:  or      eax, -1
+@less:  mov     eax, -1
 end; // note: SSE4.2 read up to 16 bytes after buffer, this version won't
 {$else}
 function SortDynArrayInteger(const A,B): integer;
@@ -25911,7 +25915,7 @@ asm // warning: may read up to 15 bytes beyond the string itself
       jz        @max
       test      edx, edx  // Str2='' ?
       jnz       @ok
-      or        eax, -1
+      mov       eax, -1
       ret
 @max: inc       eax
       ret
@@ -26401,7 +26405,7 @@ asm // Delphi x86 compiler is not efficient at compiling Int64 comparisons
         cmp     ecx, [edx]
         jz      @0
         jnb     @p
-@n:     or      eax, -1
+@n:     mov     eax, -1
         ret
 @0:     xor     eax, eax
         ret
@@ -26417,7 +26421,7 @@ asm // Delphi x86 compiler is not efficient, and oldest even incorrect
         cmp     ecx, [edx]
         jz      @0
 @nz:    jnb     @p
-        or      eax, -1
+        mov     eax, -1
         ret
 @0:     xor     eax, eax
         ret
@@ -26472,12 +26476,12 @@ asm // x86 version optimized for AnsiString/RawUTF8/RawByteString types
         cmp     [eax - 4], edx
         je      @0
 @no:    jnc     @1
-        or      eax, -1
+        mov     eax, -1
         ret
 @n0:    cmp     eax, [edx - 4]
         je      @0
         jnc     @1
-        or      eax, -1
+        mov     eax, -1
         ret
 @0:     xor     eax, eax
         ret
@@ -26503,7 +26507,7 @@ asm
         sahf
         jz      @0
 @nz:    jnb     @p
-        or      eax, -1
+        mov     eax, -1
         ret
 @0:     xor     eax, eax
         ret
@@ -26517,7 +26521,7 @@ asm
         sahf
         jz      @0
 @nz:    jnb     @p
-        or      eax, -1
+        mov     eax, -1
         ret
 @0:     xor     eax, eax
         ret
@@ -27591,7 +27595,7 @@ asm
 end;
 function InterlockedDecrement(var I: Integer): Integer;
 asm
-        or      edx, -1
+        mov     edx, -1
         xchg    eax, edx
    lock xadd    [edx], eax
         dec     eax
@@ -28022,7 +28026,7 @@ asm // fast 8 bits WinAnsi comparison using the NormToUpper[] array
 @z:     cmp     ebx, ecx // S1=S2?
         jz      @2b
         pop     ebx
-@4:     or      eax, -1 // return -1 (S1<S2)
+@4:     mov     eax, -1 // return -1 (S1<S2)
 end;
 {$endif PUREPASCAL}
 
@@ -32012,13 +32016,50 @@ begin
     end;
   else begin // generic binary comparison (fast with inlined CompareMemFixed)
     for result := 0 to Count-1 do
-      if CompareMemFixed(P,Elem,ElemSize) then
+      if (PInt64(P)^=PInt64(Elem)^) and
+         CompareMemSmall(PAnsiChar(P)+8,PAnsiChar(Elem)+8,ElemSize-8) then
         exit else
         inc(PByte(P),ElemSize);
     result := -1;
   end;
+end;
+end;
+
+function AnyScanExists(P,Elem: pointer; Count,ElemSize: PtrInt): boolean;
+begin
+  case ElemSize of
+    // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
+    1: result := ByteScanIndex(P,Count,PInteger(Elem)^)>=0;
+    2: result := WordScanIndex(P,Count,PInteger(Elem)^)>=0;
+    4: result := IntegerScanExists(P,Count,PInteger(Elem)^);
+    8: result := Int64ScanExists(P,Count,PInt64(Elem)^);
+    // small ElemSize version (<SizeOf(PtrInt))
+    3{$ifdef CPU64},5..7{$endif}: begin
+      result := true;
+      if Count>0 then
+        repeat
+          if CompareMemSmall(P,Elem,ElemSize) then
+            exit;
+          inc(PByte(P),ElemSize);
+          dec(Count);
+        until Count=0;
+      result := false;
+    end;
+  else begin // generic binary comparison (fast with leading 64-bit comparison)
+    result := true;
+    if Count>0 then
+      repeat
+        if (PInt64(P)^=PInt64(Elem)^) and
+           CompareMemSmall(PAnsiChar(P)+8,PAnsiChar(Elem)+8,ElemSize-8) then
+          exit;
+        inc(PByte(P),ElemSize);
+        dec(Count);
+      until Count=0;
+    result := false;
+  end;
   end;
 end;
+
 
 procedure QuickSortInteger(ID: PIntegerArray; L,R: PtrInt);
 var I, J, P: PtrInt;
@@ -40935,7 +40976,7 @@ function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
 @gt:    lea     R, qword ptr[rax - 1]
         cmp     r9, R
         jle     @s
-@ko:    or      rax, -1
+@ko:    mov     rax, -1
 @ok:
 end;
 {$else}

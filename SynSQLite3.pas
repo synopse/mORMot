@@ -3796,12 +3796,8 @@ begin // Byte/Word/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
     if Blob<>nil then begin
       V := sqlite3.value_int64(argv[1]);
       sqlite3.result_int64(Context,Int64(true)); // exit will report value found
-      case ElemSize of
-        1: if ByteScanIndex(Blob,Count,byte(V))>=0 then exit;
-        2: if WordScanIndex(Blob,Count,word(V))>=0 then exit;
-        4: if IntegerScanExists(Blob,Count,cardinal(V)) then exit;
-        8: if Int64ScanExists(Blob,Count,V) then exit;
-      end;
+      if AnyScanExists(Blob,@V,Count,ElemSize) then
+        exit;
     end;
   end;
   sqlite3.result_int64(Context,Int64(false)); // not found
