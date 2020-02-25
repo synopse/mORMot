@@ -694,4 +694,4 @@
   // enable https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
 {$endif USELIBCURL}
 
-{$define OPENSSL1.1}
+{$define OPENSSL1_1}
