@@ -6,7 +6,7 @@ unit SynOpenSSL;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,10 +25,11 @@ unit SynOpenSSL;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+    Pavel Mashlyakovsky
 
 
   Alternatively, the contents of this file may be used under the terms of
@@ -50,7 +51,7 @@ unit SynOpenSSL;
 
 }
 
-{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER OPENSSL1_1
 
 interface
 
@@ -120,6 +121,31 @@ const
   BIO_CLOSE = 1;
   BIO_C_GET_MD_CTX = 120;
 
+  EVP_MAX_MD_SIZE = 64;
+
+  EVP_MD_FLAG_ONESHOT = $0001;
+  EVP_MD_FLAG_XOF = $0002;
+  EVP_MD_FLAG_DIGALGID_MASK = $0018;
+  EVP_MD_FLAG_DIGALGID_NULL = $0000;
+  EVP_MD_FLAG_DIGALGID_ABSENT = $0008;
+  EVP_MD_FLAG_DIGALGID_CUSTOM = $0018;
+  EVP_MD_FLAG_FIPS = $0400;
+
+  ENGINE_METHOD_RSA = $0001;
+  ENGINE_METHOD_DSA = $0002;
+  ENGINE_METHOD_DH = $0004;
+  ENGINE_METHOD_RAND = $0008;
+  ENGINE_METHOD_CIPHERS = $0040;
+  ENGINE_METHOD_DIGESTS = $0080;
+  ENGINE_METHOD_PKEY_METHS = $0200;
+  ENGINE_METHOD_PKEY_ASN1_METHS = $0400;
+  ENGINE_METHOD_EC = $0800;
+  // Obvious all-or-nothing cases
+  ENGINE_METHOD_ALL = $FFFF;
+  ENGINE_METHOD_NONE = $0000;
+
+
+
 type
   {$ifdef CPU64}
   size_t = UInt64;
@@ -141,6 +167,7 @@ type
   ENGINE = type pointer;
   PX509 = type pointer;
   PPX509 = ^PX509;
+  PHMAC_CTX = type pointer;
 
   TASN1_STRING = record
     length: integer;
@@ -194,10 +221,66 @@ type
   {$else}
   TOpenSSLBytes = AnsiString;
   {$endif}
+  {$ifdef OPENSSL1_1}
+  OSSL_HANDSHAKE_STATE = (
+    TLS_ST_BEFORE,
+    TLS_ST_OK,
+    DTLS_ST_CR_HELLO_VERIFY_REQUEST,
+    TLS_ST_CR_SRVR_HELLO,
+    TLS_ST_CR_CERT,
+    TLS_ST_CR_CERT_STATUS,
+    TLS_ST_CR_KEY_EXCH,
+    TLS_ST_CR_CERT_REQ,
+    TLS_ST_CR_SRVR_DONE,
+    TLS_ST_CR_SESSION_TICKET,
+    TLS_ST_CR_CHANGE,
+    TLS_ST_CR_FINISHED,
+    TLS_ST_CW_CLNT_HELLO,
+    TLS_ST_CW_CERT,
+    TLS_ST_CW_KEY_EXCH,
+    TLS_ST_CW_CERT_VRFY,
+    TLS_ST_CW_CHANGE,
+    TLS_ST_CW_NEXT_PROTO,
+    TLS_ST_CW_FINISHED,
+    TLS_ST_SW_HELLO_REQ,
+    TLS_ST_SR_CLNT_HELLO,
+    DTLS_ST_SW_HELLO_VERIFY_REQUEST,
+    TLS_ST_SW_SRVR_HELLO,
+    TLS_ST_SW_CERT,
+    TLS_ST_SW_KEY_EXCH,
+    TLS_ST_SW_CERT_REQ,
+    TLS_ST_SW_SRVR_DONE,
+    TLS_ST_SR_CERT,
+    TLS_ST_SR_KEY_EXCH,
+    TLS_ST_SR_CERT_VRFY,
+    TLS_ST_SR_NEXT_PROTO,
+    TLS_ST_SR_CHANGE,
+    TLS_ST_SR_FINISHED,
+    TLS_ST_SW_SESSION_TICKET,
+    TLS_ST_SW_CERT_STATUS,
+    TLS_ST_SW_CHANGE,
+    TLS_ST_SW_FINISHED,
+    TLS_ST_SW_ENCRYPTED_EXTENSIONS,
+    TLS_ST_CR_ENCRYPTED_EXTENSIONS,
+    TLS_ST_CR_CERT_VRFY,
+    TLS_ST_SW_CERT_VRFY,
+    TLS_ST_CR_HELLO_REQ,
+    TLS_ST_SW_KEY_UPDATE,
+    TLS_ST_CW_KEY_UPDATE,
+    TLS_ST_SR_KEY_UPDATE,
+    TLS_ST_CR_KEY_UPDATE,
+    TLS_ST_EARLY_DATA,
+    TLS_ST_PENDING_EARLY_DATA_END,
+    TLS_ST_CW_END_OF_EARLY_DATA,
+    TLS_ST_SR_END_OF_EARLY_DATA);
+  {$endif}
 
   {$M+}
   /// direct access to the OpenSSL API
   // - this wrapper will initialize both libcrypto and libssl libraries
+
+  { TOpenSSLLib }
+
   TOpenSSLLib = class
   public
   protected
@@ -206,20 +289,22 @@ type
     fLibPath: TFileName;
     fAPLNNotSupported: boolean;
   public
+    ERR_remove_state: procedure(tid: cardinal); cdecl;
+    ERR_error_string_n: procedure(err: cardinal; buf: PAnsiChar; len: size_t); cdecl;
+    ERR_get_error: function: cardinal; cdecl;
+    ERR_remove_thread_state: procedure(pid: cardinal); cdecl;
+    ERR_load_BIO_strings: function: cardinal; cdecl;
     // libcrypto API functions
+    {$ifndef OPENSSL1_1}
+    ERR_free_strings: procedure; cdecl;
     CRYPTO_num_locks: function: integer; cdecl;
     CRYPTO_set_locking_callback: procedure(callback: TStatLockLockCallback); cdecl;
     CRYPTO_set_dynlock_create_callback: procedure(callback: TDynLockCreateCallBack); cdecl;
     CRYPTO_set_dynlock_lock_callback: procedure(callback: TDynLockLockCallBack); cdecl;
     CRYPTO_set_dynlock_destroy_callback: procedure(callback: TDynLockDestroyCallBack); cdecl;
     CRYPTO_cleanup_all_ex_data: procedure; cdecl;
-    ERR_remove_state: procedure(tid: cardinal); cdecl;
-    ERR_free_strings: procedure; cdecl;
-    ERR_error_string_n: procedure(err: cardinal; buf: PAnsiChar; len: size_t); cdecl;
-    ERR_get_error: function: cardinal; cdecl;
-    ERR_remove_thread_state: procedure(pid: cardinal); cdecl;
-    ERR_load_BIO_strings: function: cardinal; cdecl;
     EVP_cleanup: procedure; cdecl;
+    {$endif}
     EVP_PKEY_free: procedure(pkey: PEVP_PKEY); cdecl;
     BIO_new: function(BioMethods: PBIO_METHOD): PBIO; cdecl;
     BIO_ctrl: function(bp: PBIO; cmd: integer; larg: longint; parg: pointer): longint; cdecl;
@@ -237,8 +322,10 @@ type
     X509_get_pubkey: function(cert: PX509): PEVP_PKEY; cdecl;
     X509_free: procedure(cert: PX509); cdecl;
     X509_NAME_print_ex: function(bout: PBIO; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
+    {$ifndef OPENSSL1_1}
     sk_num: function(stack: PSTACK): integer; cdecl;
     sk_pop: function(stack: PSTACK): pointer; cdecl;
+    {$endif}
     ASN1_BIT_STRING_get_bit: function(a: PASN1_BIT_STRING; n: integer): integer; cdecl;
     OBJ_obj2nid: function(o: PASN1_OBJECT): integer; cdecl;
     OBJ_nid2sn: function(n: integer): PAnsiChar; cdecl;
@@ -247,8 +334,21 @@ type
     PEM_read_bio_PrivateKey: function(bp: PBIO; x: PPEVP_PKEY; cb: pem_password_cb; u: pointer): PEVP_PKEY; cdecl;
     PEM_read_bio_RSAPrivateKey: function(bp: PBIO; x: PPEVP_PKEY; cb: pem_password_cb; u: pointer): PEVP_PKEY; cdecl;
     PEM_read_bio_PUBKEY: function(bp: PBIO; x: PPEVP_PKEY; cb: pem_password_cb; u: pointer): PEVP_PKEY; cdecl;
+    {$ifdef OPENSSL1_1}
+    EVP_MD_CTX_new: function: PEVP_MD_CTX; cdecl;
+    EVP_MD_CTX_free: procedure(ctx: PEVP_MD_CTX); cdecl;
+    EVP_DigestInit_ex: function(ctx: PEVP_MD_CTX; const md: PEVP_MD; impl: ENGINE): integer; cdecl;
+    //EVP_DigestUpdate: function(ctx: PEVP_MD_CTX; const d: pointer; const cnt: size_t): integer; cdecl;
+    EVP_DigestFinal_ex: function(ctx: PEVP_MD_CTX; md: pointer; s: PCardinal): integer; cdecl;
+    EVP_DigestFinalXOF: function(ctx: PEVP_MD_CTX; md: pointer; len: size_t): integer; cdecl;
+    EVP_MD_size: function(const md: PEVP_MD): integer; cdecl;
+    EVP_MD_flags: function(const md: PEVP_MD): longword; cdecl;
+    EVP_MD_CTX_md: function(const ctx: PEVP_MD_CTX): PEVP_MD; cdecl;
+    //EVP_CIPHER_do_all_sorted: function()
+    {$else}
     EVP_MD_CTX_create: function: PEVP_MD_CTX; cdecl;
     EVP_MD_CTX_destroy: procedure(ctx: PEVP_MD_CTX); cdecl;
+    {$endif}
     EVP_sha256: function: PEVP_MD; cdecl;
     EVP_sha384: function: PEVP_MD; cdecl;
     EVP_sha512: function: PEVP_MD; cdecl;
@@ -258,14 +358,29 @@ type
     EVP_DigestSignFinal: function(ctx: PEVP_MD_CTX; d: PByte; var cnt: size_t): integer; cdecl;
     EVP_DigestVerifyInit: function(aCtx: PEVP_MD_CTX; aPCtx: PEVP_PKEY_CTX; aType: PEVP_MD; aEngine: ENGINE; aKey: pEVP_PKEY): integer; cdecl;
     EVP_DigestVerifyFinal: function(ctx: pEVP_MD_CTX; d: PByte; cnt: size_t): integer; cdecl;
+
+    EVP_get_digestbyname: function (const name: PChar): PEVP_MD; cdecl;
+
+    {$ifdef OPENSSL1_1}
+    HMAC_CTX_new: function(): PHMAC_CTX; cdecl;
+    HMAC_CTX_reset: function(ctx: PHMAC_CTX): integer; cdecl;
+    HMAC_Init_ex: function(ctx: PHMAC_CTX; key: PByte; key_len: integer; md: PEVP_MD; impl: ENGINE): integer; cdecl;
+    HMAC_Update: function(ctx: PHMAC_CTX; data: PByte; len: integer): integer; cdecl;
+    HMAC_Final: function(ctx: PHMAC_CTX; md: PByte; var len: cardinal): integer; cdecl;
+    HMAC_CTX_free: procedure(ctx: PHMAC_CTX); cdecl;
+    HMAC_CTX_copy: function(dctx: PHMAC_CTX; sctx: PHMAC_CTX): integer; cdecl;
+    HMAC_CTX_set_flags: procedure(ctx: PHMAC_CTX; flags: longword);
+    HMAC_CTX_get_md: function(const ctx: PHMAC_CTX): PEVP_MD; cdecl;
+    {$endif}
+
     CRYPTO_malloc: function(aLength: longint; f: PAnsiChar; aLine: integer): pointer; cdecl;
     CRYPTO_free: procedure(str: pointer); cdecl;
+    {$ifdef OPENSSL1_1}
+    OpenSSL_version: function(t: integer): PAnsiChar; cdecl;
+    {$else}
     SSLeay_version: function(t: integer): PAnsiChar; cdecl;
+    {$endif}
     // libssl API functions
-    SSL_library_init: function: integer; cdecl;
-    SSL_load_error_strings: procedure; cdecl;
-    SSLv3_method: function: PSSL_METHOD; cdecl;
-    SSLv23_method: function: PSSL_METHOD; cdecl;
     TLSv1_method: function: PSSL_METHOD; cdecl;
     TLSv1_1_method: function: PSSL_METHOD; cdecl;
     TLSv1_2_method: function: PSSL_METHOD; cdecl;
@@ -295,16 +410,30 @@ type
     SSL_set_accept_state: procedure(s: PSSL); cdecl;
     SSL_read: function(s: PSSL; buf: pointer; num: integer): integer; cdecl;
     SSL_write: function(s: PSSL; buf: pointer; num: integer): integer; cdecl;
+    {$ifdef OPENSSL1_1}
+    SSL_get_state: function(const s: PSSL): OSSL_HANDSHAKE_STATE; cdecl;
+    {$else}
+    SSL_library_init: function: integer; cdecl;
+    SSL_load_error_strings: procedure; cdecl;
+    SSLv3_method: function: PSSL_METHOD; cdecl;
+    SSLv23_method: function: PSSL_METHOD; cdecl;
     SSL_state: function(s: PSSL): integer; cdecl;
+    {$endif}
     SSL_pending: function(s: PSSL): integer; cdecl;
     SSL_set_cipher_list: function(s: PSSL; ciphers: PAnsiChar): integer; cdecl;
     SSL_get0_alpn_selected: procedure(s: PSSL; out data: PAnsiChar; out len: integer); cdecl;
     SSL_clear: function(s: PSSL): integer; cdecl;
     // aliases
     EVP_DigestVerifyUpdate: function(ctx: PEVP_MD_CTX; d: pointer; cnt: size_t): integer; cdecl;
+    {$ifdef OPENSSL1_1}
+    function OPENSSL_malloc(num: size_t): pointer; {$ifdef HASINLINE}inline;{$endif}
+    procedure OPENSSL_free(addr: pointer); {$ifdef HASINLINE}inline;{$endif}
+    function EVP_MD_CTX_size(const ctx: PEVP_MD_CTX): integer; {$ifdef HASINLINE}inline;{$endif}
+    {$else}
     sk_ASN1_OBJECT_num: function(stack: PSTACK): integer; cdecl;  // = sk_num
     sk_GENERAL_NAME_num: function(stack: PSTACK): integer; cdecl; // = sk_num
     sk_GENERAL_NAME_pop: function(stack: PSTACK): pointer; cdecl; // = sk_pop
+    {$endif}
     // helper functions
     function BIO_pending(bp: PBIO): integer; {$ifdef HASINLINE}inline;{$endif}
     function BIO_get_mem_data(bp: PBIO; parg: pointer): integer;
@@ -493,31 +622,69 @@ end;
 
 const
   {$ifdef MSWINDOWS}
-  LIBSSL_NAME = 'ssleay32.dll';
-  LIBCRYPTO_NAME = 'libeay32.dll';
+   {$ifdef OPENSSL1_1}
+      // see https://wiki.openssl.org/index.php/Binaries for precompiled binaries
+      {$ifdef CPU64}
+        LIBSSL_NAME = 'libssl-1_1-x64.dll';
+        LIBCRYPTO_NAME = 'libcrypto-1_1-x64.dll';
+      {$else}
+        LIBSSL_NAME = 'libcrypto-1_1.dll';
+        LIBCRYPTO_NAME = 'libcrypto-1_1.dll';
+      {$endif}
+    {$else}
+    LIBSSL_NAME = 'ssleay32.dll';
+    LIBCRYPTO_NAME = 'libeay32.dll';
+    {$endif}
   {$else}
-  LIBSSL_NAME = 'libssl.so.1.0.0';
-  LIBCRYPTO_NAME = 'libcrypto.so.1.0.0';
-  {$endif}
+    {$ifdef OPENSSL1_1}
+      LIBSSL_NAME = 'libssl.so.1.1';
+      LIBCRYPTO_NAME = 'libcrypto.so.1.1';
+    {$else}
+      LIBSSL_NAME = 'libssl.so.1.0.0';
+      LIBCRYPTO_NAME = 'libcrypto.so.1.0.0';
+    {$endif OPENSSL1_1}
+  {$endif MSWINDOWS}
 
-  LIBCRYPTO_ENTRIES: array[0..53] of PChar = ('CRYPTO_num_locks',
+  LIBCRYPTO_ENTRIES: array[0..{$ifdef OPENSSL1_1}59{$else}63{$endif}] of PChar = (
+    'ERR_remove_state', 'ERR_error_string_n', 'ERR_get_error',
+    'ERR_remove_thread_state', 'ERR_load_BIO_strings',
+    {$ifndef OPENSSL1_1}
+    'ERR_free_strings',
+    'CRYPTO_num_locks',
     'CRYPTO_set_locking_callback', 'CRYPTO_set_dynlock_create_callback',
     'CRYPTO_set_dynlock_lock_callback', 'CRYPTO_set_dynlock_destroy_callback',
-    'CRYPTO_cleanup_all_ex_data', 'ERR_remove_state', 'ERR_free_strings',
-    'ERR_error_string_n', 'ERR_get_error', 'ERR_remove_thread_state',
-    'ERR_load_BIO_strings', 'EVP_cleanup', 'EVP_PKEY_free', 'BIO_new',
+    'CRYPTO_cleanup_all_ex_data',
+    'EVP_cleanup',
+    {$endif}
+    'EVP_PKEY_free', 'BIO_new',
     'BIO_ctrl', 'BIO_set_flags', 'BIO_test_flags', 'BIO_clear_flags',
     'BIO_new_mem_buf', 'BIO_free', 'BIO_s_mem', 'BIO_read', 'BIO_write',
     'BIO_new_socket', 'X509_get_issuer_name', 'X509_get_subject_name', 'X509_get_pubkey',
-    'X509_free', 'X509_NAME_print_ex', 'sk_num', 'sk_pop',
+    'X509_free', 'X509_NAME_print_ex',
+    {$ifndef OPENSSL1_1}
+    'sk_num', 'sk_pop',
+    {$endif}
     'ASN1_BIT_STRING_get_bit', 'OBJ_obj2nid', 'OBJ_nid2sn', 'ASN1_STRING_data',
     'PEM_read_bio_X509', 'PEM_read_bio_PrivateKey', 'PEM_read_bio_RSAPrivateKey',
-    'PEM_read_bio_PUBKEY', 'EVP_MD_CTX_create', 'EVP_MD_CTX_destroy',
+    'PEM_read_bio_PUBKEY',
+    {$ifdef OPENSSL1_1}
+    'EVP_MD_CTX_new', 'EVP_MD_CTX_free',
+    'EVP_DigestInit_ex', 'EVP_DigestFinal_ex', 'EVP_DigestFinalXOF', 'EVP_MD_size',
+    'EVP_MD_flags', 'EVP_MD_CTX_md',
+    {$else}
+    'EVP_MD_CTX_create', 'EVP_MD_CTX_destroy',
+    {$endif}
     'EVP_sha256', 'EVP_sha384', 'EVP_sha512', 'EVP_PKEY_size', 'EVP_DigestSignInit', 'EVP_DigestUpdate',
     'EVP_DigestSignFinal', 'EVP_DigestVerifyInit', 'EVP_DigestVerifyFinal',
-    'CRYPTO_malloc', 'CRYPTO_free', 'SSLeay_version');
-  LIBSSL_ENTRIES: array[0..37] of PChar = ('SSL_library_init',
-    'SSL_load_error_strings', 'SSLv3_method', 'SSLv23_method', 'TLSv1_method',
+    {$ifdef OPENSSL1_1}
+    'EVP_get_digestbyname',
+    'HMAC_CTX_new', 'HMAC_CTX_reset', 'HMAC_Init_ex', 'HMAC_Update',
+    'HMAC_Final', 'HMAC_CTX_free', 'HMAC_CTX_copy', 'HMAC_CTX_set_flags',
+    'HMAC_CTX_get_md',
+    {$endif}
+    'CRYPTO_malloc', 'CRYPTO_free',
+    {$ifdef OPENSSL1_1}'OpenSSL_version'{$else}'SSLeay_version'{$endif});
+  LIBSSL_ENTRIES: array[0..33] of PChar = ('TLSv1_method',
     'TLSv1_1_method', 'TLSv1_2_method', 'SSL_CTX_new', 'SSL_CTX_free',
     'SSL_CTX_set_verify', 'SSL_CTX_use_PrivateKey', 'SSL_CTX_use_RSAPrivateKey',
     'SSL_CTX_use_certificate', 'SSL_CTX_check_private_key',
@@ -527,7 +694,13 @@ const
     'SSL_get_version', 'SSL_set_bio', 'SSL_get_peer_certificate',
     'SSL_get_error', 'SSL_shutdown', 'SSL_free', 'SSL_connect',
     'SSL_set_connect_state', 'SSL_set_accept_state', 'SSL_read', 'SSL_write',
-    'SSL_state', 'SSL_pending', 'SSL_set_cipher_list', 'SSL_get0_alpn_selected',
+    {$ifdef OPENSSL1_1}
+    'SSL_get_state',
+    {$else}
+    'SSL_library_init', 'SSL_load_error_strings', 'SSLv3_method',
+    'SSLv23_method', 'SSL_state',
+    {$endif}
+    'SSL_pending', 'SSL_set_cipher_list', 'SSL_get0_alpn_selected',
     'SSL_clear');
 
 var
@@ -586,27 +759,33 @@ constructor TOpenSSLLib.Create(const aFolderName: TFileName);
         if (api = @@SSL_CTX_set_alpn_protos) or (api = @@SSL_get0_alpn_selected) then
           fAPLNNotSupported := true
         else begin
-          FreeLibrary(h);
-          h := 0;
-          if @h = @fLibSSL then begin
-            FreeLibrary(fLibCrypto);
-            fLibCrypto := 0;
-          end;
-          raise EOpenSSL.CreateFmt('Missing %s in %s', [PChar(name^), result]);
+          writeln('missing ', PChar(name^), ' in ', result );
+          //FreeLibrary(h);
+          //h := 0;
+          //if @h = @fLibSSL then begin
+          //  FreeLibrary(fLibCrypto);
+          //  fLibCrypto := 0;
+          //end;
+          //raise EOpenSSL.CreateFmt('Missing %s in %s', [PChar(name^), result]);
         end;
       inc(api);
       inc(name);
     end;
   end;
 
+{$ifndef OPENSSL1_1}
 var
   i: integer;
+{$endif}
 begin
-  LoadLib(@@CRYPTO_num_locks, @LIBCRYPTO_ENTRIES, high(LIBCRYPTO_ENTRIES),
+  LoadLib(@@ERR_remove_state, @LIBCRYPTO_ENTRIES, high(LIBCRYPTO_ENTRIES),
     fLibCrypto, LIBCRYPTO_NAME);
-  LoadLib(@@SSL_library_init, @LIBSSL_ENTRIES, high(LIBSSL_ENTRIES),
+  LoadLib(@@TLSv1_method, @LIBSSL_ENTRIES, high(LIBSSL_ENTRIES),
     fLibSSL, LIBSSL_NAME);
   EVP_DigestVerifyUpdate := @EVP_DigestUpdate;
+  {$ifdef OPENSSL1_1}
+  fLibVersion := OpenSSL_version(0);
+  {$else}
   sk_ASN1_OBJECT_num := @sk_num;
   sk_GENERAL_NAME_num := @sk_num;
   sk_GENERAL_NAME_pop := @sk_pop;
@@ -622,14 +801,18 @@ begin
   SSL_load_error_strings;
   SSL_library_init;
   fLibVersion := SSLeay_version(0);
+  {$endif}
   fLibPath := ExtractFilePath(GetModuleName(flibCrypto));
 end;
 
 destructor TOpenSSLLib.Destroy;
+{$ifndef OPENSSL1_1}
 var
   i: integer;
+{$endif}
 begin
   if fLibCrypto <> 0 then begin
+    {$ifndef OPENSSL1_1}
     CRYPTO_set_locking_callback(nil);
     CRYPTO_set_dynlock_create_callback(nil);
     CRYPTO_set_dynlock_lock_callback(nil);
@@ -641,6 +824,7 @@ begin
     CRYPTO_cleanup_all_ex_data();
     ERR_remove_state(0);
     ERR_free_strings;
+    {$endif}
     FreeLibrary(fLibCrypto);
     FreeLibrary(fLibSSL);
   end;
@@ -655,6 +839,21 @@ end;
 function TOpenSSLLib.BIO_get_mem_data(bp: PBIO; parg: pointer): integer;
 begin
   result := BIO_ctrl(bp, BIO_CTRL_INFO, 0, parg);
+end;
+
+function TOpenSSLLib.OPENSSL_malloc(num: size_t): pointer;
+begin
+  Result := CRYPTO_malloc(num, nil, 0);
+end;
+
+procedure TOpenSSLLib.OPENSSL_free(addr: pointer);
+begin
+  CRYPTO_free(addr);
+end;
+
+function TOpenSSLLib.EVP_MD_CTX_size(const ctx: PEVP_MD_CTX): integer;
+begin
+  Result:= EVP_MD_size(EVP_MD_CTX_md(ctx))
 end;
 
 function TOpenSSLLib.BIO_pending(bp: PBIO): integer;
@@ -715,7 +914,11 @@ end;
 
 function TOpenSSLLib.SSL_is_init_finished(s: PSSL): boolean;
 begin
+  {$ifdef OPENSSL1_1}
+  result := SSL_get_state(s) = TLS_ST_OK;
+  {$else}
   result := SSL_state(s) = SSL_ST_OK;
+  {$endif}
 end;
 
 procedure TOpenSSLLib.SetCertificate(ctx: PSSL_CTX; certificate, privatekey: pointer;
@@ -766,7 +969,7 @@ begin
     priv := BIO_new_mem_buf(privkey, privkeylen);
     pkey := PEM_read_bio_PrivateKey(priv, nil, nil, pointer(AnsiString(password)));
   end;
-  ctx := EVP_MD_CTX_create;
+  ctx := {$ifdef OPENSSL1_1}EVP_MD_CTX_new{$else}EVP_MD_CTX_create{$endif};
   try
     if EVP_DigestSignInit(ctx, nil, EVP_sha256, nil, pkey) = EVP_OK then
       if EVP_DigestUpdate(ctx, msg, msglen) = EVP_OK then
@@ -776,7 +979,7 @@ begin
             result := '';
         end;
   finally
-    EVP_MD_CTX_destroy(ctx);
+    {$ifdef OPENSSL1_1}EVP_MD_CTX_free(ctx);{$else}EVP_MD_CTX_destroy(ctx);{$endif};
     if pkey <> nil then
       EVP_PKEY_free(pkey);
     if priv <> nil then
@@ -796,18 +999,17 @@ begin
     exit;
   pub := BIO_new_mem_buf(pubkey, pubkeylen);
   pkey := PEM_read_bio_PUBKEY(pub, nil, nil, pointer(AnsiString(password)));
-  ctx := EVP_MD_CTX_create;
+  ctx := {$ifdef OPENSSL1_1}EVP_MD_CTX_new{$else}EVP_MD_CTX_create{$endif};
   try
     if EVP_DigestVerifyInit(ctx, nil, EVP_sha256, nil, pkey) = EVP_OK then
       if EVP_DigestVerifyUpdate(ctx, msg, msglen) = EVP_OK then
         result := EVP_DigestVerifyFinal(ctx, sign, signlen) = EVP_OK;
   finally
-    EVP_MD_CTX_destroy(ctx);
+    {$ifdef OPENSSL1_1}EVP_MD_CTX_free(ctx);{$else}EVP_MD_CTX_destroy(ctx);{$endif};
     EVP_PKEY_free(pkey);
     BIO_free(pub);
   end;
 end;
-
 
 { -------------- TOpenSSL* high-level wrapper classes and types }
 

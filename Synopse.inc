@@ -1,7 +1,7 @@
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2011 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -20,7 +20,7 @@
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -210,7 +210,7 @@
   {$define HASUINT64}
   {$define HASINLINENOTX86}
   {$define NODELPHIASM}   // ignore low-level System.@LStrFromPCharLen calls
-  {$define HASAESNI} // should be commented to test project with valgrind
+  {$define HASAESNI}    // should be commented to test project with valgrind
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSTRING_USESTR} // FloatToText uses str() in FPC
@@ -307,6 +307,7 @@
   {$else}
     {$ifdef LINUX}
       {$define LINUXNOTBSD} // e.g. to disable epoll API
+      {$define FPCLINUXNOTBSD}
     {$endif}
   {$endif}
 
@@ -324,8 +325,9 @@
     {$ifdef CPUX64}
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
-      {$define FPC_X64}
-      {$ASMMODE INTEL} // as Delphi expects
+      {$define CPUX64ASM} // Delphi XE4 SSE asm is buggy :(
+      {$define FPC_X64}   // supports AVX/AVX2/AVX512 - which Delphi doesn't
+      {$ASMMODE INTEL}    // to share asm code with Delphi
     {$endif CPUX64}
   {$else}
     {$define FPC_32}
@@ -497,9 +499,12 @@
         {$define ISDELPHI2007ANDUP} // Delphi 2007 or newer
       {$ifend}
       {$if CompilerVersion = 20}
-        {$define ISDELPHI2009} // Delphi 2009 has specific compilation issues :(
-        // for Delphi 2009 and up, use UNICODE conditional :)
+        {$define ISDELPHI20092010} // specific compilation issues
+        // for Delphi 2009 and up, use UNICODE conditional
         {$define FPC_OR_UNICODE}
+      {$ifend}
+      {$if CompilerVersion = 21}
+        {$define ISDELPHI20092010} //specific compilation issues
       {$ifend}
       {$if CompilerVersion >= 21.0}
         {$define ISDELPHI2010}
@@ -541,6 +546,9 @@
       {$ifend}
       {$if CompilerVersion >= 28.0}
         {$define ISDELPHIXE7}
+        {$ifdef CPU64}
+          {$define CPUX64ASM} // e.g. Delphi XE4 SSE asm is buggy :(
+        {$endif}
       {$ifend}
       {$if CompilerVersion >= 29.0}
         {$define ISDELPHIXE8}
@@ -654,10 +662,12 @@
     {$define NOSQLITE3STATIC}
   {$endif}
 {$else}
-  // only Win32+Win64 are supported yet with Delphi anyway
-  {$ifndef MSWINDOWS}
-    {$define NOSQLITE3STATIC}
-  {$endif}
+  // there is a linking bug with Delphi XE4 on Win64
+  {$ifdef CPUX64}
+    {$if CompilerVersion = 25.0} // exactly XE4
+      {$define NOSQLITE3STATIC}
+    {$ifend}
+  {$endif} // other Win32/Win64 Delphi platforms should work as expected
 {$endif FPC}
 
 {$ifdef NOSQLITE3STATIC}
@@ -684,3 +694,4 @@
   // enable https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
 {$endif USELIBCURL}
 
+{$define OPENSSL1_1}
