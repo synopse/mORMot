@@ -14589,7 +14589,7 @@ function GetNextItemToVariant(var P: PUTF8Char; out Value: Variant;
 procedure JSONToVariant(var Value: Variant; JSON: PUTF8Char;
   Options: TDocVariantOptions=[dvoReturnNullForUnknownProperty];
   AllowDouble: boolean=false); overload;
-//  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// retrieve a variant value from a JSON as per RFC 8259, RFC 7159, RFC 7158
 // - follows TTextWriter.AddVariant() format (calls GetVariantFromJSON)
