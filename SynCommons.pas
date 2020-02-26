@@ -46200,8 +46200,8 @@ begin
 end;
 
 
-var
-  SynVariantTypes: array of TSynInvokeableVariantType; // released as TCustomVariantType
+var // released as TCustomVariantType
+  SynVariantTypes: array of TSynInvokeableVariantType;
 
 function FindSynVariantType(aVarType: Word; out CustomType: TSynInvokeableVariantType): boolean;
 var i: integer;
@@ -47133,7 +47133,7 @@ begin
           intnames.UniqueText(VName[VCount]);
         GetJSONToAnyVariant(VValue[VCount],JSON,@EndOfObject,@VOptions,false);
         if JSON=nil then
-          if EndOfObject=']' then // valid end input
+          if EndOfObject='}' then // valid end input
             JSON := @NULCHAR else
             exit; // invalid input
         if intvalues<>nil then
