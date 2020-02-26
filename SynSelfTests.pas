@@ -6961,6 +6961,36 @@ begin
   Check(ni = 10);
   Check(nt = 'toto');
   {$endif}
+  JSONToVariant(v,nil);
+  Check(vd.VType=varEmpty);
+  JSONToVariant(v,'');
+  Check(vd.VType=varEmpty);
+  JSONToVariant(v,'null');
+  Check(vd.VType=varNull);
+  JSONToVariant(v,'false');
+  Check(not boolean(v));
+  JSONToVariant(v,'true');
+  Check(boolean(v));
+  JSONToVariant(v,'0');
+  Check(vd.VType=varInteger);
+  JSONToVariant(v,'123456789012345678');
+  Check(vd.VType=varInt64);
+  Check(v=123456789012345678);
+  JSONToVariant(v,'123.1234');
+  Check(vd.VType=varCurrency);
+  CheckSame(v,123.1234);
+  JSONToVariant(v,'-1E-300',[],true);
+  Check(vd.VType=varDouble);
+  CheckSame(v,-1e-300);
+  JSONToVariant(v,'[]');
+  Check(V._kind=ord(dvArray));
+  Check(V._count=0);
+  JSONToVariant(v,'{}');
+  Check(V._kind=ord(dvObject));
+  Check(V._count=0);
+  v := JSONToVariant('"toto\r\ntoto"');
+  Check(vd.VType=varString);
+  Check(v='toto'#$D#$A'toto');
 end;
 
 type
