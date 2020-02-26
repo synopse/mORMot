@@ -26394,11 +26394,10 @@ asm
         mov     edx, [edx]
         xor     eax, eax
         cmp     ecx, edx
-        je      @0
-        jg      @1
-        dec     eax
-@0:     ret
-@1:     inc     eax
+        setl    cl
+        setg    al
+        movzx   ecx, cl
+        sub     eax, ecx
 end;
 function SortDynArrayCardinal(const A,B): integer;
 asm
@@ -36443,9 +36442,10 @@ begin // uses anti-forensic time constant "xor/or" pattern
 end;
 
 procedure FillZero(out dig: THash128);
+var d: TInt64Array absolute dig;
 begin
-  PInt64Array(@dig)^[0] := 0;
-  PInt64Array(@dig)^[1] := 0;
+  d[0] := 0;
+  d[1] := 0;
 end;
 
 function HashFound(P: PHash128Rec; Count: integer; const h: THash128Rec): boolean;
@@ -36556,11 +36556,12 @@ begin // uses anti-forensic time constant "xor/or" pattern
 end;
 
 procedure FillZero(out dig: THash256);
+var d: TInt64Array absolute dig;
 begin
-  PInt64Array(@dig)^[0] := 0;
-  PInt64Array(@dig)^[1] := 0;
-  PInt64Array(@dig)^[2] := 0;
-  PInt64Array(@dig)^[3] := 0;
+  d[0] := 0;
+  d[1] := 0;
+  d[2] := 0;
+  d[3] := 0;
 end;
 
 function IsZero(const dig: THash384): boolean;
@@ -36583,13 +36584,14 @@ begin // uses anti-forensic time constant "xor/or" pattern
 end;
 
 procedure FillZero(out dig: THash384);
+var d: TInt64Array absolute dig;
 begin
-  PInt64Array(@dig)^[0] := 0;
-  PInt64Array(@dig)^[1] := 0;
-  PInt64Array(@dig)^[2] := 0;
-  PInt64Array(@dig)^[3] := 0;
-  PInt64Array(@dig)^[4] := 0;
-  PInt64Array(@dig)^[5] := 0;
+  d[0] := 0;
+  d[1] := 0;
+  d[2] := 0;
+  d[3] := 0;
+  d[4] := 0;
+  d[5] := 0;
 end;
 
 function IsZero(const dig: THash512): boolean;
@@ -36614,15 +36616,16 @@ begin // uses anti-forensic time constant "xor/or" pattern
 end;
 
 procedure FillZero(out dig: THash512);
+var d: TInt64Array absolute dig;
 begin
-  PInt64Array(@dig)^[0] := 0;
-  PInt64Array(@dig)^[1] := 0;
-  PInt64Array(@dig)^[2] := 0;
-  PInt64Array(@dig)^[3] := 0;
-  PInt64Array(@dig)^[4] := 0;
-  PInt64Array(@dig)^[5] := 0;
-  PInt64Array(@dig)^[6] := 0;
-  PInt64Array(@dig)^[7] := 0;
+  d[0] := 0;
+  d[1] := 0;
+  d[2] := 0;
+  d[3] := 0;
+  d[4] := 0;
+  d[5] := 0;
+  d[6] := 0;
+  d[7] := 0;
 end;
 
 procedure crc512c(buf: PAnsiChar; len: cardinal; out crc: THash512);
