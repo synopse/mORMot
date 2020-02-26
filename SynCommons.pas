@@ -2217,7 +2217,7 @@ function AppendRawUTF8ToBuffer(Buffer: PUTF8Char; const Text: RawUTF8): PUTF8Cha
 /// fast add text conversion of a 32-bit signed integer value into a given buffer
 // - warning: the Buffer should contain enough space to store the text, otherwise
 // you may encounter buffer overflows and random memory errors
-function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: cardinal): PUTF8Char;
+function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: PtrUInt): PUTF8Char;
 
 
 /// buffer-safe version of StrComp(), to be used with PUTF8Char/PAnsiChar
@@ -14575,7 +14575,7 @@ function GetNumericVariantFromJSON(JSON: PUTF8Char; var Value: TVarData;
 function GetNextItemToVariant(var P: PUTF8Char; out Value: Variant;
   Sep: AnsiChar= ','; AllowDouble: boolean=true): boolean;
 
-/// retrieve a variant value from a JSON as per RFC 8259, RFC 7159, RFC 7158
+/// retrieve a variant value from a JSON buffer as per RFC 8259, RFC 7159, RFC 7158
 // - follows TTextWriter.AddVariant() format (calls GetVariantFromJSON)
 // - will instantiate either an Integer, Int64, currency, double or string value
 // (as RawUTF8), guessing the best numeric type according to the textual content,
@@ -14586,12 +14586,11 @@ function GetNextItemToVariant(var P: PUTF8Char; out Value: Variant;
 // - warning: the JSON buffer will be modified in-place during process - use
 // a temporary copy or the overloaded functions with RawUTF8 parameter
 // if you need to access it later
-procedure JSONToVariant(var Value: Variant; JSON: PUTF8Char;
+procedure JSONToVariantInPlace(var Value: Variant; JSON: PUTF8Char;
   Options: TDocVariantOptions=[dvoReturnNullForUnknownProperty];
-  AllowDouble: boolean=false); overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  AllowDouble: boolean=false);
 
-/// retrieve a variant value from a JSON as per RFC 8259, RFC 7159, RFC 7158
+/// retrieve a variant value from a JSON UTF-8 text as per RFC 8259, RFC 7159, RFC 7158
 // - follows TTextWriter.AddVariant() format (calls GetVariantFromJSON)
 // - will instantiate either an Integer, Int64, currency, double or string value
 // (as RawUTF8), guessing the best numeric type according to the textual content,
@@ -14603,8 +14602,7 @@ procedure JSONToVariant(var Value: Variant; JSON: PUTF8Char;
 // and return the variant as result
 function JSONToVariant(const JSON: RawUTF8;
   Options: TDocVariantOptions=[dvoReturnNullForUnknownProperty];
-  AllowDouble: boolean=false): variant; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  AllowDouble: boolean=false): variant;
 
 /// convert an UTF-8 encoded text buffer into a variant number or RawUTF8 varString
 // - first try with GetNumericVariantFromJSON(), then fallback to RawUTF8ToVariant
@@ -23446,7 +23444,7 @@ begin
   result := Buffer;
 end;
 
-function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: cardinal): PUTF8Char;
+function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: PtrUInt): PUTF8Char;
 var L: PtrInt;
     P: PAnsiChar;
     tmp: array[0..23] of AnsiChar;
@@ -29973,12 +29971,13 @@ begin
 end;
 
 function RawUTF8DynArrayEquals(const A,B: TRawUTF8DynArray): boolean;
-var i: integer;
+var n,i: integer;
 begin
   result := false;
-  if length(A)<>length(B) then
+  n := length(A);
+  if n<>length(B) then
     exit;
-  for i := 0 to high(A) do
+  for i := 0 to n-1 do
     if A[i]<>B[i] then
       exit;
   result := true;
@@ -30000,7 +29999,7 @@ var i: Integer;
 begin
   Finalize(result);
   SetLength(Result,length(Source));
-  for i := 0 to high(Source) do
+  for i := 0 to length(Source)-1 do
     StringToUTF8(Source[i],Result[i]);
 end;
 
@@ -31074,7 +31073,7 @@ begin
   if masks<>nil then begin
     if SortByName then
       QuickSortRawUTF8(masks,length(masks),nil,{$ifdef MSWINDOWS}@StrIComp{$else}@StrComp{$endif});
-    for m := 0 to high(masks) do begin // masks[] recursion
+    for m := 0 to length(masks)-1 do begin // masks[] recursion
       masked := FindFiles(Directory,UTF8ToString(masks[m]),
         IgnoreFileName,SortByName,IncludesDir,SubFolder);
       da.AddArray(masked);
@@ -32085,8 +32084,8 @@ function AnyScanIndex(P,Elem: pointer; Count,ElemSize: PtrInt): PtrInt;
 begin
   case ElemSize of
     // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
-    1: result := {$ifdef FPC}IndexByte(P^{$else}ByteScanIndex(P{$endif},Count,PByte(Elem)^);
-    2: result := {$ifdef FPC}IndexWord(P^{$else}WordScanIndex(P{$endif},Count,PWord(Elem)^);
+    1: result := ByteScanIndex(P,Count,PByte(Elem)^);
+    2: result := WordScanIndex(P,Count,PWord(Elem)^);
     4: result := IntegerScanIndex(P,Count,PInteger(Elem)^);
     8: result := Int64ScanIndex(P,Count,PInt64(Elem)^);
     // small ElemSize version (<SizeOf(PtrInt))
@@ -32678,7 +32677,7 @@ const MinInt = -MaxInt-1;
 begin
   Finalize(result);
   SetLength(result,length(Values));
-  for i := 0 to high(Values) do
+  for i := 0 to length(Values)-1 do
     if Values[i]>MaxInt then
       if raiseExceptionOnOverflow then
         raise ESynException.CreateUTF8('TIntegerDynArrayFrom64: Values[%]=%>%',
@@ -32697,7 +32696,7 @@ var i: PtrInt;
 begin
   Finalize(result);
   SetLength(result,length(Values));
-  for i := 0 to high(Values) do
+  for i := 0 to length(Values)-1 do
     result[i] := Values[i];
 end;
 
@@ -32706,7 +32705,7 @@ var i: PtrInt;
 begin
   Finalize(result);
   SetLength(result,length(Values));
-  for i := 0 to high(Values) do
+  for i := 0 to length(Values)-1 do
     result[i] := Values[i];
 end;
 
@@ -34920,7 +34919,7 @@ begin
       AddString(URIName);
       if (JSONDecode(ParametersJSON,Params,true)<>nil) and (Params<>nil) then begin
         sep := '?';
-        for i := 0 to High(Params) do
+        for i := 0 to length(Params)-1 do
         with Params[i] do begin
           for j := 0 to high(PropNamesToIgnore) do
             if IdemPropNameU(PropNamesToIgnore[j],Name,NameLen) then begin
@@ -38873,7 +38872,7 @@ var i: integer;
 begin
   if fIDs=nil then begin
     fIDs := TStringList.Create;
-    for i := 0 to high(fZone) do
+    for i := 0 to length(fZone)-1 do
       fIDs.Add(UTF8ToString(fZone[i].id));
   end;
   result := fIDs;
@@ -38884,7 +38883,7 @@ var i: integer;
 begin
   if fDisplays=nil then begin
     fDisplays := TStringList.Create;
-    for i := 0 to high(fZone) do
+    for i := 0 to length(fZone)-1 do
       fDisplays.Add(UTF8ToString(fZone[i].Display));
   end;
   result := fDisplays;
@@ -44487,7 +44486,7 @@ end;
 procedure TJSONCustomParserRTTI.ComputeFullPropertyName;
 var i: PtrInt;
 begin
-  for i := 0 to high(NestedProperty) do begin
+  for i := 0 to length(NestedProperty)-1 do begin
     NestedProperty[i].ComputeFullPropertyName;
     if fFullPropertyName<>'' then
       NestedProperty[i].fFullPropertyName :=
@@ -44500,7 +44499,7 @@ var i: PtrInt;
 begin
   assert(fNestedDataSize=0);
   fNestedDataSize := 0;
-  for i := 0 to high(NestedProperty) do begin
+  for i := 0 to length(NestedProperty)-1 do begin
     NestedProperty[i].ComputeDataSizeAfterAdd;
     inc(fNestedDataSize,NestedProperty[i].fDataSize);
     if fFullPropertyName<>'' then
@@ -44530,7 +44529,7 @@ begin
     ComputeNestedDataSize;
     case PropertyType of
     ptRecord:
-      for i := 0 to high(NestedProperty) do
+      for i := 0 to length(NestedProperty)-1 do
         inc(fDataSize,NestedProperty[i].fDataSize);
     //ptCustom: fDataSize already set in TJSONCustomParserCustom.Create()
     else
@@ -46202,19 +46201,21 @@ end;
 
 
 var
-  SynVariantTypes: TObjectList = nil;
+  SynVariantTypes: array of TSynInvokeableVariantType; // released as TCustomVariantType
 
 function FindSynVariantType(aVarType: Word; out CustomType: TSynInvokeableVariantType): boolean;
 var i: integer;
+    t: ^TSynInvokeableVariantType;
 begin
-  if SynVariantTypes<>nil then begin
-    for i := 0 to SynVariantTypes.Count-1 do
-      if TSynInvokeableVariantType(SynVariantTypes.List[i]).VarType=aVarType then begin
-        CustomType := TSynInvokeableVariantType(SynVariantTypes.List[i]);
+  t := pointer(SynVariantTypes);
+  if t<>nil then
+    for i := 1 to PDynArrayRec(PtrInt(t)-SizeOf(TDynArrayRec))^.length do
+      if t^.VarType=aVarType then begin
+        CustomType := t^;
         result := true;
         exit;
-      end;
-  end;
+      end else
+      inc(t);
   result := false;
 end;
 
@@ -46222,62 +46223,67 @@ procedure GetJSONToAnyVariant(var Value: variant; var JSON: PUTF8Char;
   EndOfObject: PUTF8Char; Options: PDocVariantOptions; AllowDouble: boolean);
 // internal method used by VariantLoadJSON(), GetVariantFromJSON() and
 // TDocVariantData.InitJSON()
-var wasString: boolean;
-  procedure ProcessSimple(Val: PUTF8Char); {$ifdef FPC}inline;{$endif}
+  procedure ProcessField;
+  var val: PUTF8Char;
+      wasString: boolean;
   begin
-    GetVariantFromJSON(Val,wasString,Value,nil,AllowDouble);
+    val := GetJSONField(JSON,JSON,@wasString,EndOfObject);
+    GetVariantFromJSON(val,wasString,Value,nil,AllowDouble);
     if JSON=nil then
       JSON := @NULCHAR;
   end;
 var i: integer;
-    VariantType: ^TSynInvokeableVariantType;
+    t: ^TSynInvokeableVariantType;
     ToBeParsed: PUTF8Char;
     wasParsedWithinString: boolean;
+    wasString: boolean;
 begin
   {$ifndef FPC}if TVarData(Value).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(Value);
   if (Options<>nil) and (dvoAllowDoubleValue in Options^) then
-    AllowDouble := true; // for ProcessSimple() above
+    AllowDouble := true; // for ProcessField() above
   if EndOfObject<>nil then
     EndOfObject^ := ' ';
   if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
-  if (Options=nil) or (JSON^ in ['-','1'..'9']) then begin // obvious simple type
-    ProcessSimple(GetJSONField(JSON,JSON,@wasString,EndOfObject));
+  if (Options=nil) or (JSON^ in ['-','0'..'9']) or (PInteger(JSON)^=NULL_LOW) or
+     (PInteger(JSON)^=TRUE_LOW) or (PInteger(JSON)^=FALSE_LOW) then begin
+    ProcessField; // obvious simple type
     exit;
   end;
+  wasParsedWithinString := false;
   if JSON^='"' then
     if dvoJSONObjectParseWithinString in Options^ then begin
       ToBeParsed := GetJSONField(JSON,JSON,@wasString,EndOfObject);
       EndOfObject := nil; // already set just above
       wasParsedWithinString := true;
     end else begin
-      ProcessSimple(GetJSONField(JSON,JSON,@wasString,EndOfObject));
+      ProcessField;
       exit;
-    end else begin
+    end else
       ToBeParsed := JSON;
-      wasParsedWithinString := false;
-    end;
-  if (SynVariantTypes<>nil) and
-     not (dvoJSONParseDoNotTryCustomVariants in Options^) then begin
-    VariantType := pointer(SynVariantTypes.List);
-    for i := 1 to SynVariantTypes.Count do
-      if VariantType^.TryJSONToVariant(ToBeParsed,Value,EndOfObject) then begin
+  t := pointer(SynVariantTypes);
+  if (t<>nil) and not(dvoJSONParseDoNotTryCustomVariants in Options^) then
+    for i := 1 to PDynArrayRec(PtrInt(t)-SizeOf(TDynArrayRec))^.length do
+      if t^.TryJSONToVariant(ToBeParsed,Value,EndOfObject) then begin
         if not wasParsedWithinString then
           JSON := ToBeParsed;
         exit;
       end else
-        inc(VariantType);
-  end;
+      inc(t);
   if ToBeParsed^ in ['[','{'] then begin
     // default JSON parsing and conversion to TDocVariant instance
     ToBeParsed := TDocVariantData(Value).InitJSONInPlace(ToBeParsed,Options^,EndOfObject);
+    if ToBeParsed=nil then begin
+      TDocVariantData(Value).Clear;
+      exit; // eror parsing
+    end;
     if not wasParsedWithinString then
       JSON := ToBeParsed;
   end else
-    // process to simple variant types
+    // back to simple variant types
     if wasParsedWithinString then
-      ProcessSimple(ToBeParsed) else
-      ProcessSimple(GetJSONField(JSON,JSON,@wasString,EndOfObject));
+      GetVariantFromJSON(ToBeParsed,wasString,Value,nil,AllowDouble) else
+      ProcessField;
 end;
 
 function TextToVariantNumberTypeNoDouble(JSON: PUTF8Char): word;
@@ -46419,27 +46425,12 @@ dbl:  VDouble := GetExtended(JSON,err);
   result := false;
 end;
 
-procedure JSONToVariant(var Value: variant; JSON: PUTF8Char;
+procedure JSONToVariantInPlace(var Value: variant; JSON: PUTF8Char;
   Options: TDocVariantOptions; AllowDouble: boolean);
-var wasString: boolean;
-    Val: PUTF8Char;
 begin
-  {$ifndef FPC}if TVarData(Value).VType and VTYPE_STATIC<>0 then{$endif}
+  if (JSON<>nil) and (JSON^<>#0) then
+    GetJSONToAnyVariant(Value,JSON,nil,@Options,AllowDouble) else
     VarClear(Value);
-  if (JSON=nil) or (JSON^=#0) then
-    exit;
-  if IdemPChar(JSON, 'NULL') then
-    TVarData(Value).VType := varNull
-  else begin
-    if AllowDouble then
-      Options := Options+[dvoAllowDoubleValue];
-    Val := JSON;
-    if TDocVariantData(Value).InitJSONInPlace(Val,Options)=nil then begin
-      VarClear(Value);
-      Val := GetJSONField(JSON,JSON,@wasString);
-      GetVariantFromJSON(Val,wasString,Value,nil,AllowDouble);
-    end;
-  end;
 end;
 
 function JSONToVariant(const JSON: RawUTF8; Options: TDocVariantOptions;
@@ -46448,7 +46439,7 @@ var tmp: TSynTempBuffer;
 begin
   tmp.Init(JSON); // temp copy before in-place decoding
   try
-    JsonToVariant(result,tmp.buf,Options,AllowDouble);
+    JSONToVariantInPlace(result,tmp.buf,Options,AllowDouble);
   finally
     tmp.Done;
   end;
@@ -46678,16 +46669,15 @@ end;
 {$endif FPC}
 
 function SynRegisterCustomVariantType(aClass: TSynInvokeableVariantTypeClass): TSynInvokeableVariantType;
-var i: integer;
+var i: PtrInt;
 {$ifdef DOPATCHDISPINVOKE}
 {$ifdef NOVARCOPYPROC}
     VarMgr: TVariantManager;
 {$endif}
 {$endif}
 begin
+  {$ifdef DOPATCHDISPINVOKE}
   if SynVariantTypes=nil then begin
-    {$ifndef FPC}
-    {$ifdef DOPATCHDISPINVOKE}
     {$ifndef CPU64} // we NEED our patched RTL on Win64
     if DebugHook=0 then // patch VCL/RTL only outside debugging
     {$endif} begin
@@ -46699,17 +46689,15 @@ begin
       RedirectCode(VariantsDispInvokeAddress,@SynVarDispProc);
       {$endif NOVARCOPYPROC}
     end;
-    {$endif DOPATCHDISPINVOKE}
-    {$endif FPC}
-    GarbageCollectorFreeAndNil(SynVariantTypes,TObjectList.Create);
   end else
-    for i := 0 to SynVariantTypes.Count-1 do
-    if PPointer(SynVariantTypes.List[i])^=pointer(aClass) then begin
-      result := SynVariantTypes.List[i]; // returns already registered instance
-      exit;
-    end;
+  {$endif DOPATCHDISPINVOKE}
+    for i := 0 to length(SynVariantTypes)-1 do
+      if PPointer(SynVariantTypes[i])^=pointer(aClass) then begin
+        result := SynVariantTypes[i]; // returns already registered instance
+        exit;
+      end;
   result :=  aClass.Create; // register variant type
-  SynVariantTypes.Add(result);
+  ObjArrayAdd(SynVariantTypes,result);
 end;
 
 
@@ -51844,7 +51832,6 @@ begin
     if result>v then
       exit;
   end;
-  result := maxInt; // would never happen
 end;
 
 function TDynArrayHasher.HashTableIndex(aHashCode: cardinal): cardinal;
