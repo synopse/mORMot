@@ -34211,27 +34211,36 @@ begin
   end;
 end;
 
-procedure GetNextItemShortString(var P: PUTF8Char; out Dest: ShortString; Sep: AnsiChar= ',');
+procedure GetNextItemShortString(var P: PUTF8Char; out Dest: ShortString; Sep: AnsiChar);
 var S: PUTF8Char;
-    len: integer;
+    len: PtrInt;
 begin
-  if P=nil then
-    Dest[0] := #0 else begin
-    while (P^<=' ') and (P^<>#0) do inc(P);
-    S := P;
-    while (S^<>#0) and (S^<>Sep) do
-      inc(S);
+  S := P;
+  if S<>nil then begin
+    if S^ in [#1..' '] then repeat inc(S) until not(S^ in [#1..' ']);
+    P := S;
+    if (S^<>#0) and (S^<>Sep) then
+      repeat
+        inc(S);
+      until (S^=#0) or (S^=Sep);
     len := S-P;
-    while (P[len-1] in [#1..' ']) and (len>0) do dec(len); // trim right spaces
-    SetString(Dest,P,len);
+    repeat
+      dec(len);
+    until (len<0) or not(P[len] in [#1..' ']); // trim right spaces
+    if len>=255 then
+      len := 255 else
+      inc(len);
+    Dest[0] := AnsiChar(len);
+    MoveSmall(P,@Dest[1],Len);
     if S^<>#0 then
       P := S+1 else
       P := nil;
-  end;
+  end else
+    Dest[0] := #0;
 end;
 
 function GetNextItemHexDisplayToBin(var P: PUTF8Char; Bin: PByte; BinBytes: integer;
-  Sep: AnsiChar= ','): boolean;
+  Sep: AnsiChar): boolean;
 var S: PUTF8Char;
     len: integer;
 begin
@@ -34419,7 +34428,7 @@ begin
     inc(P);
 end;
 
-function GetNextItemInteger(var P: PUTF8Char; Sep: AnsiChar= ','): PtrInt;
+function GetNextItemInteger(var P: PUTF8Char; Sep: AnsiChar): PtrInt;
 var minus: boolean;
 begin
   if P=nil then begin
@@ -34438,29 +34447,37 @@ begin
 end;
 
 function GetNextTChar64(var P: PUTF8Char; Sep: AnsiChar; out Buf: TChar64): PtrInt;
+var S: PUTF8Char;
+    c: AnsiChar;
 begin
   result := 0;
-  if P=nil then
+  S := P;
+  if S=nil then
     exit;
-  if Sep=#0 then // store up to next whitespace
-    while P[result]>' ' do begin
-      Buf[result] := P[result];
+  if Sep=#0 then
+    repeat // store up to next whitespace
+      c := S[result];
+      if c<=' ' then break;
+      Buf[result] := c;
       inc(result);
       if result>=SizeOf(Buf) then
         exit; // avoid buffer overflow
-    end else
-    while (P[result]<>#0) and (P[result]<>Sep) do begin
-      Buf[result] := P[result];
+    until false else
+    repeat // store up to Sep or end of string
+      c := S[result];
+      if (c=#0) or (c=Sep) then break;
+      Buf[result] := c;
       inc(result);
       if result>=SizeOf(Buf) then
         exit; // avoid buffer overflow
-    end;
+    until false;
   Buf[result] := #0; // make asciiz
-  inc(P,result); // P[result]=Sep or #0
-  if P^=#0 then
+  inc(S,result); // S[result]=Sep or #0
+  if S^=#0 then
     P := nil else
-    if Sep<>#0 then
-      inc(P);
+    if Sep=#0 then
+      P := S else
+      P := S+1;
 end;
 
 function GetNextItemInt64(var P: PUTF8Char; Sep: AnsiChar): Int64;
