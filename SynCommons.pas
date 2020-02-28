@@ -3477,7 +3477,9 @@ function FindRawUTF8(const Values: array of RawUTF8; const Value: RawUTF8;
 
 /// return the index of Value in Values[], -1 if not found
 // - SearchPropName will optionally use IdemPropNameU() for property matching
-function FindRawUTF8(const Values: TRawUTF8DynArray; ValuesCount: integer;
+// - typical use with a dynamic array is like:
+// ! index := FindRawUTF8(pointer(aDynArray),length(aDynArray),aValue,true);
+function FindRawUTF8(Values: PRawUTF8; ValuesCount: integer;
   const Value: RawUTF8; SearchPropName: boolean): integer; overload;
 
 /// return the index of Value in Values[], -1 if not found
@@ -21734,7 +21736,7 @@ begin
 end;
 
 function GetSetInfo(aTypeInfo: pointer; out MaxValue: Integer;
-  out Names: PShortString): boolean;
+  out Names: PShortString): boolean; {$ifdef HASINLINE}inline;{$endif}
 var info: PTypeInfo;
 begin
   info := GetTypeInfo(aTypeInfo,tkSet);
@@ -21892,7 +21894,7 @@ end;
 function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: PtrInt): boolean;
 label zero;
 begin
-  inc(P1P2Len,PtrInt(PtrUInt(P1))-SizeOf(cardinal));
+  P1P2Len := PtrInt(@PAnsiChar(P1)[P1P2Len-SizeOf(cardinal)]);
   if P1P2Len>=PtrInt(PtrUInt(P1)) then
     repeat // case-insensitive compare 4 bytes per loop
       if (PCardinal(P1)^ xor PCardinal(P2)^) and $dfdfdfdf<>0 then
@@ -21915,6 +21917,23 @@ zero:
 end;
 {$endif PUREPASCAL}
 
+function IdemPropNameUSmallNotVoid(P1,P2,P1P2Len: PtrInt): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+label zero;
+begin
+  inc(P1P2Len,P1);
+  dec(P2,P1);
+  repeat
+    if (PByte(P1)^ xor ord(PAnsiChar(P1)[P2])) and $df<>0 then
+      goto zero;
+    inc(P1);
+  until P1>=P1P2Len;
+  result := true;
+  exit;
+zero:
+  result := false;
+end;
+
 function FindShortStringListExact(List: PShortString; MaxValue: integer;
   aValue: PUTF8Char; aValueLen: PtrInt): integer;
 var PLen: PtrInt;
@@ -21922,9 +21941,10 @@ begin
   if aValueLen<>0 then
   for result := 0 to MaxValue do begin
     PLen := PByte(List)^;
-    if (PLen=aValuelen) and IdemPropNameUSameLen(@List^[1],aValue,PLen) then
-      exit;
-    inc(PByte(List),PLen+1); // next
+      if (PLen=aValuelen) and
+         IdemPropNameUSmallNotVoid(PtrInt(@List^[1]),PtrInt(aValue),PLen) then
+        exit;
+      List := pointer(@PAnsiChar(PLen)[PtrUInt(List)+1]); // next
   end;
   result := -1;
 end;
@@ -21943,9 +21963,9 @@ begin
       inc(PUTF8Char(List));
       dec(PLen);
     until PLen=0;
-    if (PLen=aValueLen) and IdemPropNameUSameLen(aValue,PUTF8Char(List),PLen) then
+    if (PLen=aValueLen) and IdemPropNameUSmallNotVoid(PtrInt(aValue),PtrInt(List),PLen) then
       exit;
-    inc(PUTF8Char(List),PLen);
+    inc(PUTF8Char(List),PLen); // next
   end;
   result := -1;
 end;
@@ -21955,7 +21975,7 @@ function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): Boolean;
 label zero;
 begin // cut-down version of our pure pascal CompareMem() function
   {$ifndef CPUX86} result := false; {$endif}
-  inc(Length,PtrInt(PtrUInt(P1))-SizeOf(PtrInt));
+  Length := PtrInt(@PAnsiChar(P1)[Length-SizeOf(PtrInt)]);
   if Length>=PtrInt(PtrUInt(P1)) then
     repeat // compare one PtrInt per loop
       if PPtrInt(P1)^<>PPtrInt(P2)^ then
@@ -22610,8 +22630,7 @@ begin
     if vt=varVariant or varByRef then
       VarClear(PVariant(V^.VPointer)^) else
     if handler=nil then
-      if (vt and varByRef=0) and
-         FindCustomVariantType(vt,handler) then
+      if (vt and varByRef=0) and FindCustomVariantType(vt,handler) then
         handler.Clear(V^) else
         VarClear(variant(V^)) else
       if vt=handler.VarType then
@@ -24697,7 +24716,7 @@ end;
 function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
 label zero;
 begin // this code compiles well under FPC and Delphi on both 32-bit and 64-bit
-  inc(Length,PtrInt(PtrUInt(P1))-SizeOf(PtrInt)*2); // Length = 2*PtrInt end
+  Length := PtrInt(@PAnsiChar(P1)[Length-SizeOf(PtrInt)*2]); // = 2*PtrInt end
   if Length>=PtrInt(PtrUInt(P1)) then begin
     if PPtrInt(PtrUInt(P1))^<>PPtrInt(P2)^ then // compare first PtrInt bytes
       goto zero;
@@ -34150,7 +34169,7 @@ begin
   end;
 end;
 
-function GetNextItemString(var P: PChar; Sep: Char= ','): string;
+function GetNextItemString(var P: PChar; Sep: Char): string;
 // this function will compile into AnsiString or UnicodeString, depending
 // of the compiler version
 var S: PChar;
@@ -44629,8 +44648,7 @@ begin
   ReAllocMem(pointer(Data),SizeOf(TDynArrayRec)+fNestedDataSize*NewLength);
   OldLength := PDynArrayRec(Data)^.length;
   if NewLength>OldLength then
-    FillCharFast(
-      PByteArray(Data)[SizeOf(TDynArrayRec)+fNestedDataSize*OldLength],
+    FillCharFast(PByteArray(Data)[SizeOf(TDynArrayRec)+fNestedDataSize*OldLength],
       fNestedDataSize*(NewLength-OldLength),0);
   PDynArrayRec(Data)^.length := NewLength;
   inc(Data,SizeOf(TDynArrayRec));
@@ -44674,7 +44692,7 @@ var EndOfObject: AnsiChar;
       repeat inc(P) until P^<>' ';
       // try to allocate nested array at once (if not too slow)
       ArrayLen := JSONArrayCount(P,P+131072); // parse up to 128 KB here
-      if ArrayLen<0 then // mostly JSONArrayCount()=nil due to PMax -> 512
+      if ArrayLen<0 then // mostly JSONArrayCount()=nil due to PMax
         ArrayCapacity := 512 else
         ArrayCapacity := ArrayLen;
       Prop.AllocateNestedArray(PPtrUInt(Data)^,ArrayCapacity);
