@@ -1434,6 +1434,7 @@ type
     VValue: TSBFString;
     {$ifndef NOVARIANTS}
     function GetFieldValue(const FieldName: RawUTF8): Variant; overload;
+    function GetFieldVarData(FieldName: PUTF8Char; FieldNameLen: PtrInt; var Value: TVarData): boolean;
     procedure GetFieldVariant(const FieldName: RawUTF8; var result: Variant);
     procedure SetFieldValue(const FieldName: RawUTF8; const Value: Variant); overload;
     {$endif}
@@ -1584,9 +1585,10 @@ type
     function GetFieldType(Index: integer): TSynTableFieldProperties;
     function GetFieldCount: integer;
     function GetFieldFromName(const aName: RawUTF8): TSynTableFieldProperties;
-    function GetFieldIndexFromName(const aName: RawUTF8): integer;
-    /// this method matchs the TSynTableFieldIndex event type
-    function GetFieldIndexFromShortName(const aName: ShortString): integer;
+    function GetFieldFromNameLen(aName: PUTF8Char; aNameLen: integer): TSynTableFieldProperties; 
+    /// following method matchs the TSynTableFieldIndex event type
+    function GetFieldIndexFromName(const aName: RawUTF8): integer; overload;
+    function GetFieldIndexFromNameLen(aName: PUTF8Char; aNameLen: integer): integer; overload;
     /// refresh Offset,FieldNumber,FieldSize and fFieldVariableIndex,fFieldVariableOffset
     procedure AfterFieldModif;
   public
@@ -1741,8 +1743,8 @@ type
   // - uses internally a TSynTableData object
   TSynTableVariantType = class(TSynInvokeableVariantType)
   protected
-    procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar; NameLen: PtrInt); override;
-    procedure IntSet(const V, Value: TVarData; Name: PAnsiChar; NameLen: PtrInt); override;
+    function IntGet(var Dest: TVarData; const Instance: TVarData; Name: PAnsiChar; NameLen: PtrInt): boolean; override;
+    function IntSet(const Instance, Value: TVarData; Name: PAnsiChar; NameLen: PtrInt): boolean; override;
   public
     /// retrieve the SBF compact binary format representation of a record content
     class function ToSBF(const V: Variant): TSBFString;
@@ -3890,20 +3892,19 @@ begin
     end;
 end;
 
-procedure TSynTableVariantType.IntGet(var Dest: TVarData;
-  const V: TVarData; Name: PAnsiChar; NameLen: PtrInt);
-var aName: RawUTF8;
+function TSynTableVariantType.IntGet(var Dest: TVarData; const Instance: TVarData;
+  Name: PAnsiChar; NameLen: PtrInt): boolean;
 begin
-  FastSetString(aName,Name,NameLen);
-  TSynTableData(V).GetFieldVariant(aName,variant(Dest));
+  result:= TSynTableData(Instance).GetFieldVarData(pointer(Name),NameLen,Dest);
 end;
 
-procedure TSynTableVariantType.IntSet(const V, Value: TVarData;
-  Name: PAnsiChar; NameLen: PtrInt);
+function TSynTableVariantType.IntSet(const Instance, Value: TVarData;
+  Name: PAnsiChar; NameLen: PtrInt): boolean;
 var aName: RawUTF8;
 begin
   FastSetString(aName,Name,NameLen);
-  TSynTableData(V).SetFieldValue(aName,Variant(Value));
+  TSynTableData(Instance).SetFieldValue(aName,Variant(Value));
+  result := true;
 end;
 
 class function TSynTableVariantType.ToID(const V: Variant): integer;
@@ -4442,33 +4443,41 @@ begin
 end;
 
 function TSynTable.GetFieldFromName(const aName: RawUTF8): TSynTableFieldProperties;
-var i: integer;
 begin
-  if self<>nil then
-    for i := 0 to fField.Count-1 do begin
-      result := TSynTableFieldProperties(fField.List[i]);
-      if IdemPropNameU(result.Name,aName) then
+  result := GetFieldFromNameLen(pointer(aName),length(aName));
+end;
+
+function TSynTable.GetFieldFromNameLen(aName: PUTF8Char; aNameLen: integer): TSynTableFieldProperties;
+var p: ^TSynTableFieldProperties;
+    i: integer;
+begin
+  if self<>nil then begin
+    p := pointer(fField.List);
+    for i := 1 to fField.Count do
+      if IdemPropNameU(p^.Name,aName,aNameLen) then begin
+        result := p^;
         exit;
-    end;
+      end else
+        inc(p);
+  end;
   result := nil;
 end;
 
 function TSynTable.GetFieldIndexFromName(const aName: RawUTF8): integer;
 begin
-  if self<>nil then
-    for result := 0 to fField.Count-1 do
-      if IdemPropNameU(TSynTableFieldProperties(fField.List[result]).Name,aName) then
-        exit;
-  result := -1;
+  result := GetFieldIndexFromNameLen(pointer(aName),length(aName));
 end;
 
-function TSynTable.GetFieldIndexFromShortName(const aName: ShortString): integer;
+function TSynTable.GetFieldIndexFromNameLen(aName: PUTF8Char; aNameLen: integer): integer;
+var p: ^TSynTableFieldProperties;
 begin
-  if self<>nil then
+  if self<>nil then begin
+    p := pointer(fField.List);
     for result := 0 to fField.Count-1 do
-      with TSynTableFieldProperties(fField.List[result]) do
-      if IdemPropName(aName,pointer(Name),length(Name)) then
-        exit;
+      if IdemPropNameU(p^.Name,aName,aNameLen) then
+        exit else
+        inc(p);
+  end;
   result := -1;
 end;
 
@@ -6455,6 +6464,24 @@ end;
 function TSynTableData.GetFieldValue(const FieldName: RawUTF8): Variant;
 begin
   GetFieldVariant(FieldName,result);
+end;
+
+function TSynTableData.GetFieldVarData(FieldName: PUTF8Char; FieldNameLen: PtrInt;
+  var Value: TVarData): boolean;
+var aField: TSynTableFieldProperties;
+begin
+  if IsRowID(FieldName,FieldNameLen) then begin
+    PVariant(@Value)^ := VID;
+    result := true;
+  end else begin
+    CheckVTableInitialized;
+    aField := VTable.GetFieldFromNameLen(FieldName,FieldNameLen);
+    if aField<>nil then begin
+      aField.GetVariant(VTable.GetData(pointer(VValue),aField),PVariant(@Value)^);
+      result := true;
+    end else
+      result := false;
+  end;
 end;
 
 procedure TSynTableData.GetFieldVariant(const FieldName: RawUTF8; var result: Variant);

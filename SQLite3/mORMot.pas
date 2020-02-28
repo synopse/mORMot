@@ -9099,8 +9099,8 @@ type
   // is used, otherwise random GPF issues may occur
   TSQLTableRowVariant = class(TSynInvokeableVariantType)
   protected
-    procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar; NameLen: PtrInt); override;
-    procedure IntSet(const V, Value: TVarData; Name: PAnsiChar; NameLen: PtrInt); override;
+    function IntGet(var Dest: TVarData; const Instance: TVarData;
+      Name: PAnsiChar; NameLen: PtrInt): boolean; override;
   public
     /// customization of variant into JSON serialization
     procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind); override;
@@ -9122,9 +9122,10 @@ type
   // which convert all properties into a TDocVariant, so may use more resource
   TObjectVariant = class(TSynInvokeableVariantType)
   protected
-    function GetInfo(const V: TVarData; Name: PUTF8Char; NameLen: PtrInt): PPropInfo;
-    procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar; NameLen: PtrInt); override;
-    procedure IntSet(const V, Value: TVarData; Name: PAnsiChar; NameLen: PtrInt); override;
+    function IntGet(var Dest: TVarData; const Instance: TVarData;
+      Name: PAnsiChar; NameLen: PtrInt): boolean; override;
+    function IntSet(const Instance, Value: TVarData;
+      Name: PAnsiChar; NameLen: PtrInt): boolean; override;
   public
     /// initialize a new custom variant instance, wrapping the specified object
     // - warning: this custom variant is just a wrapper around an existing TObject
@@ -21640,7 +21641,8 @@ begin
               exit else
               result := result^.Next else
         for i := 1 to n do
-          if IdemPropName(result^.Name,PropName,PropNameLen) then
+          if (result^.Name[0]=AnsiChar(PropNameLen)) and
+             IdemPropNameUSameLen(@result^.Name[1],PropName,PropNameLen) then
             exit else
             result := result^.Next;
       aClassType := GetClassParent(aClassType);
@@ -21699,7 +21701,7 @@ begin
   result := false;
   if Instance=nil then
     exit;
-  P := ClassFieldPropWithParents(Instance.ClassType,PropName);
+  P := ClassFieldPropWithParents(PPointer(Instance)^,PropName);
   if (P=nil) or (P^.PropType^.Kind<>tkClass) or
      not P^.PropType^.InheritsFrom(PropClassType) then
     exit;
@@ -21714,7 +21716,7 @@ begin
   result := false;
   if Instance=nil then
     exit;
-  P := ClassFieldPropWithParentsFromClassType(Instance.ClassType,PropClassType);
+  P := ClassFieldPropWithParentsFromClassType(PPointer(Instance)^,PropClassType);
   if P=nil then
     exit;
   TObject(PropInstance) := P^.GetObjProp(Instance);
@@ -21728,7 +21730,7 @@ begin
   result := false;
   if Instance=nil then
     exit;
-  P := ClassFieldPropWithParents(Instance.ClassType,PropName);
+  P := ClassFieldPropWithParents(PPointer(Instance)^,PropName);
   if P=nil then
     exit;
   PropValue := P^.GetInt64Value(Instance);
@@ -21740,7 +21742,9 @@ var nested: PPropInfoDynArray;
     i: integer;
 begin
   result := nil;
-  nested := ClassFieldAllProps(Instance.ClassType, [tkClass]);
+  if Instance=nil then
+    exit;
+  nested := ClassFieldAllProps(PPointer(Instance)^,[tkClass]);
   for i := 0 to high(nested) do
     with nested[i]^ do
       if PropType^.InheritsFrom(PropClassType) then
@@ -25301,7 +25305,7 @@ begin
     instanceName := TSynMonitor(Instance).Name else
     instanceName := Name;
   if instanceName='' then
-    ToText(instance.ClassType,instanceName);
+    ToText(Instance.ClassType,instanceName);
   fSafe.Lock;
   try
     n := length(fTracked);
@@ -25313,7 +25317,7 @@ begin
     SetLength(fTracked,n+1);
     fTracked[n].Instance := Instance;
     fTracked[n].Name := instanceName;
-    ClassTrackProps(Instance.ClassType,fTracked[n].Props);
+    ClassTrackProps(PPointer(Instance)^,fTracked[n].Props);
     if fTracked[n].Props=nil then
       // nothing to track
       SetLength(fTracked,n) else begin
@@ -28521,28 +28525,23 @@ end;
 
 { TSQLTableRowVariant }
 
-procedure TSQLTableRowVariant.IntGet(var Dest: TVarData;
-  const V: TVarData; Name: PAnsiChar; NameLen: PtrInt);
+function TSQLTableRowVariant.IntGet(var Dest: TVarData;
+  const Instance: TVarData; Name: PAnsiChar; NameLen: PtrInt): boolean;
 var r,f: integer;
+    rv: TSQLTableRowVariantData absolute Instance;
 begin
-  if (TSQLTableRowVariantData(V).VTable=nil) or (Name=nil) then
+  if rv.VTable=nil then
     raise ESQLTableException.CreateUTF8('Invalid %.% call',[self,Name]);
-  r := TSQLTableRowVariantData(V).VRow;
+  r := rv.VRow;
   if r<0 then begin
-    r := TSQLTableRowVariantData(V).VTable.fStepRow;
-    if (r=0) or (r>TSQLTableRowVariantData(V).VTable.fRowCount) then
+    r := rv.VTable.fStepRow;
+    if (r=0) or (r>rv.VTable.fRowCount) then
       raise ESQLTableException.CreateUTF8('%.%: no previous Step',[self,Name]);
   end;
-  f := TSQLTableRowVariantData(V).VTable.FieldIndex(PUTF8Char(Name));
-  if cardinal(f)>=cardinal(TSQLTableRowVariantData(V).VTable.fFieldCount) then
-    raise ESQLTableException.CreateUTF8('%.%: unknown field',[self,Name]);
-  TSQLTableRowVariantData(V).VTable.GetVariant(r,f,Variant(Dest));
-end;
-
-procedure TSQLTableRowVariant.IntSet(const V, Value: TVarData;
-  Name: PAnsiChar; NameLen: PtrInt);
-begin
-  raise ESQLTableException.CreateUTF8('% is read-only',[self]);
+  f := rv.VTable.FieldIndex(PUTF8Char(Name));
+  result := f>=0;
+  if f>=0 then
+    rv.VTable.GetVariant(r,f,Variant(Dest));
 end;
 
 procedure TSQLTableRowVariant.Cast(var Dest: TVarData; const Source: TVarData);
@@ -28604,36 +28603,48 @@ begin
   W.WriteObject(TVarData(Value).VPointer);
 end;
 
-function TObjectVariant.GetInfo(const V: TVarData; Name: PUTF8Char; NameLen: PtrInt): PPropInfo;
+const
+  _INTGETOBJECTPROPINFO_ID = pointer(1);
+
+function IntGetObjectPropInfo(o: TObject; Name: pointer; NameLen: PtrInt): PPropInfo;
 begin
-  if (V.VPointer=nil) or (Name=nil) then
-    raise EObjectVariant.CreateUTF8('Invalid %.% call',[self,Name]);
-  result := ClassFieldPropWithParentsFromUTF8(PPointer(V.VPointer)^,Name,NameLen);
-  if (result=nil) and IsRowID(Name) and TObject(V.VPointer).InheritsFrom(TSQLRecord) then
-    result := pointer(1); // recognize TSQLRecord.ID pseudo-property
-  if result=nil then
-    raise EObjectVariant.CreateUTF8('Unknown %.%',[self,Name]);
+  if (o=nil) or (Name=nil) then
+    raise EObjectVariant.CreateUTF8('Invalid TObjectVariant.% call',[Name]);
+  result := ClassFieldPropWithParentsFromUTF8(PPointer(o)^,Name,NameLen);
+  if (result=nil) and IsRowID(Name,NameLen) and o.InheritsFrom(TSQLRecord) then
+    result := _INTGETOBJECTPROPINFO_ID;
 end;
 
-procedure TObjectVariant.IntGet(var Dest: TVarData; const V: TVarData;
-  Name: PAnsiChar; NameLen: PtrInt);
+function TObjectVariant.IntGet(var Dest: TVarData; const Instance: TVarData;
+  Name: PAnsiChar; NameLen: PtrInt): boolean;
 var info: PPropInfo;
+    o: TObject;
 begin
-  info := GetInfo(V,PUTF8Char(Name),NameLen);
-  if info=pointer(1) then
-    variant(Dest) := TSQLRecord(V.VPointer).IDValue else
+  o := Instance.VPointer;
+  info := IntGetObjectPropInfo(o,Name,NameLen);
+  result := info<>nil;
+  if info<>nil then
+    if info=_INTGETOBJECTPROPINFO_ID then
+      variant(Dest) := TSQLRecord(o).IDValue else
     if info^.PropType^.Kind=tkClass then
-      New(Variant(Dest),info^.GetObjProp(V.VPointer)) else
-      info^.GetVariant(V.VPointer,Variant(Dest));
+      New(Variant(Dest),info^.GetObjProp(o)) else
+      info^.GetVariant(o,Variant(Dest));
 end;
 
-procedure TObjectVariant.IntSet(const V, Value: TVarData; Name: PAnsiChar; NameLen: PtrInt);
+function TObjectVariant.IntSet(const Instance, Value: TVarData;
+  Name: PAnsiChar; NameLen: PtrInt): boolean;
 var info: PPropInfo;
+    o: TObject;
 begin
-  info := GetInfo(V,PUTF8Char(Name),NameLen);
-  if info=pointer(1) then
-    VariantToInt64(Variant(Value),PInt64(@TSQLRecord(V.VPointer).fID)^) else
-    info^.SetFromVariant(V.VPointer,Variant(Value));
+  o := Instance.VPointer;
+  info := IntGetObjectPropInfo(o,Name,NameLen);
+  if info=nil then
+    result := false else begin
+    if info=_INTGETOBJECTPROPINFO_ID then
+      VariantToInt64(Variant(Value),PInt64(@TSQLRecord(o).fID)^) else
+      info^.SetFromVariant(o,Variant(Value));
+    result := true;
+  end;
 end;
 
 {$endif NOVARIANTS}
@@ -58957,8 +58968,7 @@ begin
       SetLength(fRecordVersionCallback,fRest.Model.TablesMax+1);
     InterfaceArrayAdd(fRecordVersionCallback[TableIndex],SlaveCallback);
     instance := ObjectFromInterface(SlaveCallback);
-    if (instance<>nil) and
-       (instance.ClassType=TInterfacedObjectFakeServer) then
+    if (instance<>nil) and (instance.ClassType=TInterfacedObjectFakeServer) then
       TInterfacedObjectFakeServer(instance).fRaiseExceptionOnInvokeError := True;
   finally
     fRest.fAcquireExecution[execORMWrite].Safe.UnLock;

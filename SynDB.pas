@@ -588,8 +588,7 @@ type
   // - use ISQLDBRows.RowData method to retrieve such a Variant
   TSQLDBRowVariantType = class(TSynInvokeableVariantType)
   protected
-    procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar; NameLen: PtrInt); override;
-    procedure IntSet(const V, Value: TVarData; Name: PAnsiChar; NameLen: PtrInt); override;
+    function IntGet(var Dest: TVarData; const Instance: TVarData; Name: PAnsiChar; NameLen: PtrInt): boolean; override;
   end;
 {$endif}
 {$endif}
@@ -7689,26 +7688,24 @@ end;
 
 { TSQLDBRowVariantType }
 
-procedure TSQLDBRowVariantType.IntGet(var Dest: TVarData;
-  const V: TVarData; Name: PAnsiChar; NameLen: PtrInt);
+function TSQLDBRowVariantType.IntGet(var Dest: TVarData;
+  const Instance: TVarData; Name: PAnsiChar; NameLen: PtrInt): boolean;
 var Rows: TSQLDBStatement;
     col: RawUTF8;
+    ndx: integer;
 begin
-  Rows := TSQLDBStatement(TVarData(V).VPointer);
+  Rows := TSQLDBStatement(Instance.VPointer);
   if Rows=nil then
     raise ESQLDBException.CreateUTF8('Invalid % call',[self]);
   FastSetString(col,Name,NameLen);
-  Rows.ColumnToVariant(Rows.ColumnIndex(col),Variant(Dest));
+  ndx := Rows.ColumnIndex(col);
+  result := ndx>=0;
+  if ndx>=0 then
+    Rows.ColumnToVariant(ndx,Variant(Dest));
 end;
 
-procedure TSQLDBRowVariantType.IntSet(const V, Value: TVarData;
-  Name: PAnsiChar; NameLen: PtrInt);
-begin
-  raise ESQLDBException.CreateUTF8('% is read-only',[self]);
-end;
-
-{$endif}
-{$endif}
+{$endif LVCL}
+{$endif DELPHI5OROLDER}
 
 
 { TSQLDBStatementWithParams }
