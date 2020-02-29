@@ -33,6 +33,7 @@ uses
   LazFileUtils,
 {$ENDIF}
   SyNodeReadWrite,
+  jsbutils,
   Classes,
   SynLog;
 
@@ -783,6 +784,34 @@ begin
   end;
 end;
 
+// read file as UTF8, remove comments, parse content as JSON and returns a JS object
+// this function is much faster when JSON.parse(fs.readfileSync()) call
+function fs_file2JSON(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+var
+  fn: TFileName;
+  json: jsval;
+  src: RawUTF8;
+  u: SynUnicode;
+begin
+  result := checkFuncArgs(cx, argc, vp, [atStr]);
+  if not result then exit;
+  try
+    fn := vp.argv^[0].asJSString.ToString(cx);
+    if not FileExists(fn) then
+      raise ESMException.CreateFmt('file "%" does not exist', [fn]);
+    src := AnyTextFileToRawUTF8(fn, true);
+    if not IsValidUTF8(src) then
+      raise ESMException.CreateUTF8('file % contains an incorrect byte sequence. Check it valid UTF8 or Unicode', [fn]);
+    RemoveCommentsFromJSON(PUTF8Char(src));
+    UTF8ToSynUnicode(PUTF8Char(src), length(src), u);
+    Result := JS_parseJSON(cx, pointer(u), length(u), json);
+    if Result then
+      vp.rval := json;
+  except
+    on E: Exception do begin Result := false; JSError(cx, E); end;
+  end;
+end;
+
 function SyNodeBindingProc_fs(const Engine: TSMEngine;
   const bindingNamespaceName: SynUnicode): jsval;
 const
@@ -810,6 +839,7 @@ begin
     obj.ptr.DefineFunction(cx, 'forceDirectories', fs_forceDirectories, 1, attrs);
     obj.ptr.DefineFunction(cx, 'removeDir', fs_removeDir, 1, attrs);
     obj.ptr.DefineFunction(cx, 'deleteFile', fs_deleteFile, 1, attrs);
+    obj.ptr.DefineFunction(cx, 'file2JSON', fs_file2JSON, 1, attrs);
     Result := obj.ptr.ToJSValue;
   finally
     cx.FreeRootedObject(obj);
