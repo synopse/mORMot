@@ -5042,13 +5042,16 @@ type
   /// internal set to specify some standard Delphi arrays
   TDynArrayKinds = set of TDynArrayKind;
 
+  /// internal integer type used for string/dynarray reference counters
+  TRefCnt = {$ifdef FPC}SizeInt{$else}longint{$endif};
+
 {$ifdef FPC}
   /// map the Delphi/FPC dynamic array header (stored before each instance)
   // - define globally for proper inlining with FPC
   // - match tdynarray type definition in dynarr.inc
   TDynArrayRec = {packed} record
     /// dynamic array reference count (basic memory management mechanism)
-    refCnt: PtrInt;
+    refCnt: TRefCnt;
     /// equals length-1
     high: tdynarrayindex;
     function GetLength: sizeint; inline;
@@ -13993,6 +13996,13 @@ function InterlockedDecrement(var I: Integer): Integer;
 
 {$endif FPC}
 
+/// low-level string/dynarray reference counter unprocess
+// - caller should have tested that refcnt>=0
+// - returns true if the managed variable should be released (i.e. refcnt was 1)
+// - on Delphi, RefCnt field is a 32-bit longint, whereas on FPC it is a SizeInt/PtrInt
+function RefCntDecFree(var refcnt: TRefCnt): boolean;
+  {$ifndef CPUINTEL}inline;{$endif}
+
 type
   /// stores some global information about the current executable and computer
   TExeVersion = record
@@ -14715,8 +14725,7 @@ type
   // ! assert(_Json('["one",2,3]')='["one",2,3]');
   TDocVariant = class(TSynInvokeableVariantType)
   protected
-    fInternNames: TRawUTF8Interning;
-    fInternValues: TRawUTF8Interning;
+    fInternNames, fInternValues: TRawUTF8Interning;
     /// fast getter/setter implementation
     function IntGet(var Dest: TVarData; const Instance: TVarData;
       Name: PAnsiChar; NameLen: PtrInt): boolean; override;
@@ -21215,7 +21224,7 @@ type
     _PaddingToQWord: DWord;
     {$endif}
   {$endif}
-    refCnt: SizeInt;
+    refCnt: TRefCnt; // =SizeInt
     length: SizeInt;
   end;
 {$else FPC}
@@ -21226,7 +21235,7 @@ type
     _Padding: LongInt;
     {$endif}
     /// dynamic array reference count (basic garbage memory mechanism)
-    refCnt: Longint;
+    refCnt: TRefCnt;
     /// length in element count
     // - size in bytes = length*ElemSize
     length: PtrInt;
@@ -21252,7 +21261,7 @@ type
     elemSize: Word;
   {$endif UNICODE}
     /// COW string reference count (basic garbage memory mechanism)
-    refCnt: Longint;
+    refCnt: TRefCnt;
     /// length in characters
     // - size in bytes = length*elemSize
     length: Longint;
@@ -27655,6 +27664,22 @@ begin
       result := false;
   end;
 end;
+
+function RefCntDecFree(var refcnt: TRefCnt): boolean;
+{$ifdef CPUINTEL} {$ifdef FPC}nostackframe; assembler; {$endif}
+asm {$ifdef CPU64DELPHI} .noframe {$endif}
+        {$ifdef FPC_64}
+        lock dec qword ptr[refcnt]  // SizeInt=PtrInt=Int64 for FPC_64
+        {$else}
+        lock dec dword ptr[refcnt]  // always longint on Delphi
+        {$endif}
+        setbe   al
+end; // we don't check for ismultithread global since lock is cheap on new CPUs
+{$else}
+begin // fallback to pure pascal version for ARM
+  result := {$ifdef FPC_64}InterLockedDecrement64{$else}InterLockedDecrement{$endif}(refcnt)=0;
+end;
+{$endif CPUINTEL}
 
 {$ifndef FPC} // FPC has its built-in InterlockedIncrement/InterlockedDecrement
 {$ifdef PUREPASCAL}
@@ -44666,7 +44691,7 @@ begin
   Rec := pointer(Data);
   dec(PtrUInt(Rec),SizeOf(TDynArrayRec));
   Data := 0;
-  if InterlockedDecrement(PInteger(@Rec^.refCnt)^)=0 then begin
+  if (Rec^.refCnt>=0) and RefCntDecFree(Rec^.refCnt) then begin
     for i := 1 to Rec.length do
       FinalizeNestedRecord(ItemData);
     FreeMem(Rec);
@@ -49464,18 +49489,24 @@ begin
     until n=0;
 end;
 
-procedure RawAnsiStringDynArrayClear(v: PRawByteString; n: PtrInt);
+procedure RawAnsiStringDynArrayClear(v: PPointer; n: PtrInt);
+var p: PStrRec;
 begin
   repeat
-    if v^<>'' then
-      {$ifdef FPC}Finalize(v^){$else}v^ := ''{$endif};
+    p := v^;
+    if p<>nil then begin
+      v^ := nil;
+      dec(p);
+      if (p^.refCnt>=0) and RefCntDecFree(p^.refCnt) then
+        freemem(p);
+    end;
     inc(v);
     dec(n);
   until n=0;
 end;
 
 procedure FastFinalizeArray(v: PPointer; ElemTypeInfo: pointer; n: integer);
-begin //  ElemTypeInfo<>nil checked by caller
+begin //  caller ensured ElemTypeInfo<>nil and n>0
   case PTypeKind(ElemTypeInfo)^ of
     tkRecord{$ifdef FPC},tkObject{$endif}:
       RawRecordDynArrayClear(pointer(v),ElemTypeinfo,n);
@@ -49499,12 +49530,14 @@ begin //  ElemTypeInfo<>nil checked by caller
         dec(n);
       until n=0;
     {$endif}
+    {$ifndef DELPHI5OROLDER}
     tkInterface:
       repeat
         {$ifdef FPC}Finalize(IInterface(v^)){$else}IInterface(v^) := nil{$endif};
         inc(v);
         dec(n);
       until n=0;
+    {$endif}
     tkDynArray: begin
       ElemTypeInfo := Deref(GetTypeInfo(ElemTypeInfo)^.elType);
       repeat
@@ -49525,7 +49558,7 @@ begin
     p := Value^;
     if p<>nil then begin
       dec(PtrUInt(p),SizeOf(TDynArrayRec));
-      if InterlockedDecrement(PInteger(@p^.refCnt)^)=0 then begin
+      if (p^.refCnt>=0) and RefCntDecFree(p^.refCnt) then begin
         if ElemTypeInfo<>nil then
           FastFinalizeArray(Value^,ElemTypeInfo,p^.length);
         Freemem(p);
@@ -51422,8 +51455,8 @@ begin // this method is faster than default System.DynArraySetLength() function
   if NewLength=0 then begin
     if p<>nil then begin // FastDynArrayClear() with ObjArray support
       dec(PtrUInt(p),SizeOf(TDynArrayRec));
-      if InterlockedDecrement(PInteger(@p^.refCnt)^)=0 then begin
-        if ElemType<>nil then
+      if (p^.refCnt>=0) and RefCntDecFree(p^.refCnt) then begin
+        if (ElemType<>nil) and (OldLength<>0) then
           FastFinalizeArray(fValue^,ElemType,OldLength) else
           if GetIsObjArray then
             RawObjectsClear(fValue^,OldLength);
@@ -51446,7 +51479,7 @@ begin // this method is faster than default System.DynArraySetLength() function
     OldLength := NewLength;    // no FillcharFast() below
   end else begin
     dec(PtrUInt(p),SizeOf(TDynArrayRec)); // p^ = start of heap object
-    if InterlockedDecrement(PInteger(@p^.refCnt)^)=0 then begin
+    if (p^.refCnt>=0) and RefCntDecFree(p^.refCnt) then begin
       if NewLength<OldLength then // reduce array in-place
         if ElemType<>nil then // release managed types in trailing items
           FastFinalizeArray(pointer(PAnsiChar(p)+NeededSize),ElemType,OldLength-NewLength) else
@@ -51455,9 +51488,9 @@ begin // this method is faster than default System.DynArraySetLength() function
       ReallocMem(p,NeededSize);
     end else begin // make copy
       GetMem(p,NeededSize);
-      minLength := oldLength;
-      if minLength>newLength then
-        minLength := newLength;
+      minLength := OldLength;
+      if minLength>NewLength then
+        minLength := NewLength;
       pp := PAnsiChar(p)+SizeOf(TDynArrayRec);
       if ElemType<>nil then begin
         FillCharFast(pp^,minLength*elemSize,0);
