@@ -5502,6 +5502,14 @@ begin
   Check(not IdemPropNameUSameLen(abcde,zbcde,3));
   Check(not IdemPropNameUSameLen(abcde,zbcde,4));
   Check(not IdemPropNameUSameLen(abcde,zbcde,5));
+  Check(FindRawUTF8(['a','bb','cc'],'a')=0);
+  Check(FindRawUTF8(['a','bb','cc'],'cc')=2);
+  Check(FindRawUTF8(['a','bb','cc'],'ab')=-1);
+  Check(FindRawUTF8(['a','bb','cc'],'A')=-1);
+  Check(FindRawUTF8(['a','bb','cc'],'A',false)=0);
+  Check(FindPropName(['a','bb','cc'],'A')=0);
+  Check(FindPropName(['a','bb','cc'],'cC')=2);
+  Check(FindPropName(['a','bb','cc'],'ab')=-1);
   WinAnsi := 'aecD';
   WinAnsi[2] := #$E9;
   WinAnsi[3] := #$E7;

@@ -3477,15 +3477,14 @@ function FindRawUTF8(const Values: array of RawUTF8; const Value: RawUTF8;
   CaseSensitive: boolean=true): integer; overload;
 
 /// return the index of Value in Values[], -1 if not found
-// - SearchPropName will optionally use IdemPropNameU() for property matching
-// - typical use with a dynamic array is like:
-// ! index := FindRawUTF8(pointer(aDynArray),length(aDynArray),aValue,true);
-function FindRawUTF8(Values: PRawUTF8; ValuesCount: integer;
-  const Value: RawUTF8; SearchPropName: boolean): integer; overload;
-
-/// return the index of Value in Values[], -1 if not found
 // - here name search would use fast IdemPropNameU() function
-function FindPropName(const Names: array of RawUTF8; const Name: RawUTF8): integer;
+function FindPropName(const Names: array of RawUTF8; const Name: RawUTF8): integer; overload;
+
+/// return the index of Value in Values[] using IdemPropNameU(), -1 if not found
+// - typical use with a dynamic array is like:
+// ! index := FindPropName(pointer(aDynArray),length(aDynArray),aValue);
+function FindPropName(Values: PRawUTF8; const Value: RawUTF8;
+  ValuesCount: integer): integer; overload;
 
 /// true if Value was added successfully in Values[]
 function AddRawUTF8(var Values: TRawUTF8DynArray; const Value: RawUTF8;
@@ -29983,11 +29982,31 @@ begin
           exit else
           inc(Values) else
       for result := 0 to ValuesCount do
-        if (PtrInt(Values^)<>0) and
+        if (PtrInt(Values^)<>0) and // StrIComp() won't change length
            (PStrRec(Pointer(PtrInt(Values^)-STRRECSIZE))^.length=ValueLen) and
            (StrIComp(pointer(Values^),pointer(Value))=0) then
           exit else
           inc(Values);
+  result := -1;
+end;
+
+function FindPropName(Values: PRawUTF8; const Value: RawUTF8;
+  ValuesCount: integer): integer;
+var ValueLen: {$ifdef FPC}PtrInt{$else}integer{$endif};
+begin
+  dec(ValuesCount);
+  ValueLen := length(Value);
+  if ValueLen=0 then
+    for result := 0 to ValuesCount do
+      if Values^='' then
+        exit else
+        inc(Values) else
+    for result := 0 to ValuesCount do
+      if (PtrInt(Values^)<>0) and
+         (PStrRec(Pointer(PtrInt(Values^)-STRRECSIZE))^.length=ValueLen) and
+         IdemPropNameUSameLen(pointer(Values^),pointer(Value),ValueLen) then
+        exit else
+        inc(Values);
   result := -1;
 end;
 
@@ -30002,55 +30021,15 @@ function FindRawUTF8(const Values: array of RawUTF8; const Value: RawUTF8;
 begin
   result := high(Values);
   if result>=0 then
-    result := FindRawUTF8(@Values[0],Value,result,CaseSensitive);
-end;
-
-function FindRawUTF8(Values: PRawUTF8; ValuesCount: integer;
-  const Value: RawUTF8; SearchPropName: boolean): integer;
-var ValueLen: {$ifdef FPC}PtrInt{$else}integer{$endif};
-begin
-  dec(ValuesCount);
-  ValueLen := length(Value);
-  if ValueLen=0 then
-    for result := 0 to ValuesCount do
-      if Values^='' then
-        exit else
-        inc(Values) else
-  if SearchPropName then
-    for result := 0 to ValuesCount do
-      if (PtrInt(Values^)<>0) and
-         (PStrRec(Pointer(PtrInt(Values^)-STRRECSIZE))^.length=ValueLen) and
-         IdemPropNameUSmallNotVoid(PtrInt(Values^),PtrInt(Value),ValueLen) then
-        exit else
-        inc(Values) else
-    for result := 0 to ValuesCount do
-      if (PtrInt(Values^)<>0) and
-         (PStrRec(Pointer(PtrInt(Values^)-STRRECSIZE))^.length=ValueLen) and
-         CompareMemFixed(pointer(PtrInt(Values^)),pointer(Value),ValueLen) then
-        exit else
-        inc(Values);
-  result := -1;
+    result := FindRawUTF8(@Values[0],Value,result+1,CaseSensitive);
 end;
 
 function FindPropName(const Names: array of RawUTF8; const Name: RawUTF8): integer;
-{$ifdef HASINLINE}
-var NameLen: integer;
 begin
-  NameLen := Length(Name);
-  for result := 0 to high(Names) do
-    if (Length(Names[result])=NameLen) and
-       IdemPropNameUSameLen(pointer(Names[result]),pointer(Name),NameLen) then
-      exit;
-  result := -1;
+  result := high(Names);
+  if result>=0 then
+    result := FindPropName(@Names[0],Name,result+1);
 end;
-{$else}
-begin
-  for result := 0 to high(names) do
-    if IdemPropNameU(names[result],Name) then
-      exit;
-  result := -1;
-end;
-{$endif HASINLINE}
 
 function AddRawUTF8(var Values: TRawUTF8DynArray; const Value: RawUTF8;
   NoDuplicates, CaseSensitive: boolean): boolean;
@@ -32137,6 +32116,17 @@ function QWordScanIndex(P: PQWordArray; Count: PtrInt; const Value: QWord): PtrI
 begin
   result := Int64ScanIndex(pointer(P),Count,Value); // this is the very same code
 end;
+
+function PtrUIntScan(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): pointer;
+{$ifdef HASINLINE}
+begin
+  result := {$ifdef CPU64}Int64Scan{$else}IntegerScan{$endif}(pointer(P),Count,Value);
+end;
+{$else}
+asm
+  jmp IntegerScan
+end;
+{$endif HASINLINE}
 
 function PtrUIntScanExists(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): boolean;
 {$ifdef HASINLINE}

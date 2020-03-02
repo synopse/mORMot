@@ -10160,7 +10160,7 @@ procedure TSynUniqueIdentifierGenerator.ComputeNew(
   out result: TSynUniqueIdentifierBits);
 var currentTime: cardinal;
 begin
-  currentTime := UnixTimeUTC; // fast API (under Windows, faster than GetTickCount64)
+  currentTime := UnixTimeUTC; // under Windows faster than GetTickCount64
   fSafe.Lock;
   try
     if currentTime>fUnixCreateTime then begin
