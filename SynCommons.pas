@@ -20738,12 +20738,13 @@ end;
 {$ifndef NOVARIANTS}
 
 procedure TRawUTF8Interning.UniqueVariant(var aResult: variant; const aText: RawUTF8);
+var vd: TVarData absolute aResult;
 begin
   {$ifndef FPC}if TVarData(aResult).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(aResult);
-  TVarData(aResult).VType := varString;
-  TVarData(aResult).VAny := nil;
-  Unique(RawUTF8(TVarData(aResult).VAny),aText);
+  vd.VType := varString;
+  vd.VAny := nil;
+  Unique(RawUTF8(vd.VAny),aText);
 end;
 
 procedure TRawUTF8Interning.UniqueVariantString(var aResult: variant;
@@ -20767,8 +20768,8 @@ end;
 procedure TRawUTF8Interning.UniqueVariant(var aResult: variant);
 var vt: cardinal;
 begin
-  vt := TVarData(aresult).VType;
-  with TVarData(aresult) do
+  vt := TVarData(aResult).VType;
+  with TVarData(aResult) do
     if vt=varString then
       UniqueText(RawUTF8(VString)) else
     if vt=varVariant or varByRef then
@@ -20952,20 +20953,36 @@ begin
   result := text; // no control char found
 end;
 
-{$ifdef CPU64}
-procedure Exchg16(P1,P2: PInt64Array); inline;
-var c: Int64;
+procedure ExchgPointer(n1,n2: PPointer); {$ifdef HASINLINE}inline;{$endif}
+var n: pointer;
 begin
-  c := P1[0];
-  P1[0] := P2[0];
-  P2[0] := c;
-  c := P1[1];
-  P1[1] := P2[1];
-  P2[1] := c;
+  n := n2^;
+  n2^ := n1^;
+  n1^ := n;
 end;
-{$else}
-procedure Exchg16(P1,P2: PIntegerArray);
-var c: integer;
+
+procedure ExchgVariant(v1,v2: PPtrIntArray); {$ifdef CPU64}inline;{$endif}
+var c: PtrInt; // 32-bit:16bytes=4ptr 64-bit:24bytes=3ptr
+begin
+  c := v2[0];
+  v2[0] := v1[0];
+  v1[0] := c;
+  c := v2[1];
+  v2[1] := v1[1];
+  v1[1] := c;
+  c := v2[2];
+  v2[2] := v1[2];
+  v1[2] := c;
+  {$ifdef CPU32}
+  c := v2[3];
+  v2[3] := v1[3];
+  v1[3] := c;
+  {$endif}
+end;
+
+{$ifdef CPU64}
+procedure Exchg16(P1,P2: PPtrIntArray); inline;
+var c: PtrInt;
 begin
   c := P1[0];
   P1[0] := P2[0];
@@ -20973,12 +20990,6 @@ begin
   c := P1[1];
   P1[1] := P2[1];
   P2[1] := c;
-  c := P1[2];
-  P1[2] := P2[2];
-  P2[2] := c;
-  c := P1[3];
-  P1[3] := P2[3];
-  P2[3] := c;
 end;
 {$endif}
 
@@ -47612,9 +47623,7 @@ end;
 procedure QuickSortDocVariant(names: PPointerArray; values: PVariantArray;
   L, R: PtrInt; Compare: TUTF8Compare);
 var I, J, P: PtrInt;
-    pivot, tempname: pointer;
-    tempvalue: TVarData;
-    vi, vj: PVarData;
+    pivot: pointer;
 begin
   if L<R then
   repeat
@@ -47626,9 +47635,8 @@ begin
       while Compare(names[J],pivot)>0 do Dec(J);
       if I <= J then begin
         if I <> J then begin
-          tempname := names[J]; names[J] := names[I]; names[I] := tempname;
-          vi := @values[I]; vj := @values[J];
-          tempvalue := vj^; vj^ := vi^; vi^ := tempvalue;
+          ExchgPointer(@names[I],@names[J]);
+          ExchgVariant(@values[I],@values[J]);
         end;
         if P = I then P := J else if P = J then P := I;
         inc(I); dec(J);
@@ -47636,11 +47644,11 @@ begin
     until I > J;
     if J - L < R - I then begin // use recursion only for smaller range
       if L < J then
-        QuickSortDocVariant(names, values, L, J, Compare);
+        QuickSortDocVariant(names,values,L,J,Compare);
       L := I;
     end else begin
       if I < R then
-        QuickSortDocVariant(names, values, I, R, Compare);
+        QuickSortDocVariant(names,values,I,R,Compare);
       R := J;
     end;
   until L >= R;
@@ -47653,22 +47661,6 @@ begin
   if not Assigned(Compare) then
     Compare := @StrIComp;
   QuickSortDocVariant(pointer(VName),pointer(VValue),0,VCount-1,Compare);
-end;
-
-procedure ExchgValues(v1,v2: PVarData);
-var v: TVarData;
-begin
-  v := v2^;
-  v2^ := v1^;
-  v1^ := v;
-end;
-
-procedure ExchgNames(n1,n2: PPointer); {$ifdef HASINLINE}inline;{$endif}
-var n: pointer;
-begin
-  n := n2^;
-  n2^ := n1^;
-  n1^ := n;
 end;
 
 procedure QuickSortDocVariantValues(var Doc: TDocVariantData;
@@ -47687,8 +47679,8 @@ begin
       if I <= J then begin
         if I <> J then begin
           if Doc.VName<>nil then
-            ExchgNames(@Doc.VName[I],@Doc.VName[J]);
-          ExchgValues(@Doc.VValue[I],@Doc.VValue[J]);
+            ExchgPointer(@Doc.VName[I],@Doc.VName[J]);
+          ExchgVariant(@Doc.VValue[I],@Doc.VValue[J]);
         end;
         if P = I then P := J else if P = J then P := I;
         inc(I); dec(J);
@@ -47746,8 +47738,8 @@ begin
       if I <= J then begin
         if I <> J then begin
           if Doc.VName<>nil then
-            ExchgNames(@Doc.VName[I],@Doc.VName[J]);
-          ExchgValues(@Doc.VValue[I],@Doc.VValue[J]);
+            ExchgPointer(@Doc.VName[I],@Doc.VName[J]);
+          ExchgVariant(@Doc.VValue[I],@Doc.VValue[J]);
           pivot := Lookup[I];
           Lookup[I] := Lookup[J];
           Lookup[J] := pivot;
@@ -50046,11 +50038,21 @@ begin
     16: begin // optimized version for 32-bit TVariantDynArray and such
       P2 := P1+n*16;
       while P1<P2 do begin
-        Exchg16(Pointer(P1),Pointer(P2));
+        {$ifdef CPU64}Exchg16{$else}ExchgVariant{$endif}(Pointer(P1),Pointer(P2));
         inc(P1,16);
         dec(P2,16);
       end;
     end;
+    {$ifdef CPU64}
+    24: begin // optimized version for 64-bit TVariantDynArray and such
+      P2 := P1+n*24;
+      while P1<P2 do begin
+        ExchgVariant(Pointer(P1),Pointer(P2));
+        inc(P1,24);
+        dec(P2,24);
+      end;
+    end;
+    {$endif CPU64}
     else begin // generic version
       P2 := P1+n*siz;
       while P1<P2 do begin
@@ -51456,10 +51458,11 @@ begin // this method is faster than default System.DynArraySetLength() function
     if p<>nil then begin // FastDynArrayClear() with ObjArray support
       dec(PtrUInt(p),SizeOf(TDynArrayRec));
       if (p^.refCnt>=0) and RefCntDecFree(p^.refCnt) then begin
-        if (ElemType<>nil) and (OldLength<>0) then
-          FastFinalizeArray(fValue^,ElemType,OldLength) else
-          if GetIsObjArray then
-            RawObjectsClear(fValue^,OldLength);
+        if OldLength<>0 then
+          if ElemType<>nil then
+            FastFinalizeArray(fValue^,ElemType,OldLength) else
+            if GetIsObjArray then
+              RawObjectsClear(fValue^,OldLength);
         FreeMem(p);
       end;
       fValue^ := nil;
@@ -65602,6 +65605,7 @@ initialization
      'Name:string Attr:Integer Size:Int64 Timestamp:TDateTime']);
   // some paranoid cross-platform/cross-compiler assertions
   {$ifndef NOVARIANTS}
+  Assert(SizeOf(TVarData)={$ifdef CPU64}24{$else}16{$endif}); // for ExchgVariant
   Assert(SizeOf(TDocVariantData)=SizeOf(TVarData));
   DocVariantType := TDocVariant(SynRegisterCustomVariantType(TDocVariant));
   DocVariantVType := DocVariantType.VarType;

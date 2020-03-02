@@ -10218,11 +10218,7 @@ begin
   fIdentifier := aIdentifier;
   fIdentifierShifted := aIdentifier shl 15;
   fSafe.Init;
-  {$ifdef NOVARIANTS}
-  variant(fSafe.Padding[SYNUNIQUEGEN_COMPUTECOUNT]) := 0;
-  {$else}
-  fSafe.LockedInt64[SYNUNIQUEGEN_COMPUTECOUNT] := 0;
-  {$endif}
+  fSafe.Padding[SYNUNIQUEGEN_COMPUTECOUNT].VType := varInt64; // reset to 0
   // compute obfuscation key using hash diffusion of the supplied text
   len := length(aSharedObfuscationKey);
   crc := crc32ctab[0,len and 1023];
