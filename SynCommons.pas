@@ -13223,10 +13223,20 @@ function UnixTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiCh
 
 /// returns the current UTC date/time as a millisecond-based c-encoded time
 // - i.e. current number of milliseconds elapsed since Unix epoch 1/1/1970
-// - faster than NowUTC or GetTickCount64, on Windows or Unix platforms
-// (will use e.g. fast clock_gettime(CLOCK_REALTIME_COARSE) under Linux,
-// or GetSystemTimeAsFileTime under Windows)
+// - faster and more accurate than NowUTC or GetTickCount64, on Windows or Unix
+// - will use e.g. fast clock_gettime(CLOCK_REALTIME_COARSE) under Linux,
+// or GetSystemTimeAsFileTime/GetSystemTimePreciseAsFileTime under Windows - the
+// later being more accurate, but slightly slower than the former, so you may
+// consider using UnixMSTimeUTCFast on Windows if its 10-16ms accuracy is enough
 function UnixMSTimeUTC: TUnixMSTime;
+  {$ifndef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
+
+/// returns the current UTC date/time as a millisecond-based c-encoded time
+// - under Linux/POSIX, is the very same than UnixMSTimeUTC
+// - under Windows 8+, will call GetSystemTimeAsFileTime instead of
+// GetSystemTimePreciseAsFileTime, which has higher precision, but is slower
+// - prefer it under Windows, if a dozen of ms resolution is enough for your task
+function UnixMSTimeUTCFast: TUnixMSTime;
   {$ifndef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// convert a millisecond-based c-encoded time (from Unix epoch 1/1/1970) as TDateTime
@@ -13262,6 +13272,9 @@ function UnixMSTimePeriodToString(const UnixMSTime: TUnixMSTime; FirstTimeChar: 
 /// returns the current UTC system date and time
 // - SysUtils.Now returns local time: this function returns the system time
 // expressed in Coordinated Universal Time (UTC)
+// - under Windows, will use GetSystemTimeAsFileTime() so will achieve about
+// 16 ms of resolution
+// - under POSIX, will call clock_gettime(CLOCK_REALTIME_COARSE)
 function NowUTC: TDateTime;
 
 type
@@ -13855,6 +13868,15 @@ var
   // - warning: FPC's SysUtils.GetTickCount64 or TThread.GetTickCount64 don't
   // handle properly 49 days wrapping under XP -> always use this safe version
   GetTickCount64: function: Int64; stdcall;
+
+  /// returns the highest resolution possible UTC timestamp on this system
+  // - detects newer API available since Windows 8, or fallback to good old
+  // GetSystemTimeAsFileTime() which may have the resolution of the HW timer,
+  // i.e. typically around 16 ms
+  // - GetSystemTimeAsFileTime() is always faster, so is to be preferred
+  // if second resolution is enough (e.g. for UnixTimeUTC)
+  // - see http://www.windowstimestamp.com/description
+  GetSystemTimePreciseAsFileTime: procedure(var ft: TFILETIME); stdcall;
 
 /// similar to Windows sleep() API call, to be truly cross-platform
 // - it should have a millisecond resolution, and handle ms=0 as a switch to
@@ -27375,8 +27397,11 @@ var
 begin
   h := GetModuleHandle(kernel32);
   GetTickCount64 := GetProcAddress(h,'GetTickCount64');
-  if not Assigned(GetTickCount64) then
+  if not Assigned(GetTickCount64) then // WinXP+
     GetTickCount64 := @GetTickCount64ForXP;
+  GetSystemTimePreciseAsFileTime := GetProcAddress(h,'GetSystemTimePreciseAsFileTime');
+  if not Assigned(GetSystemTimePreciseAsFileTime) then // Win8+
+    GetSystemTimePreciseAsFileTime := @GetSystemTimeAsFileTime;
   IsWow64Process := GetProcAddress(h,'IsWow64Process');
   Res := false;
   IsWow64 := Assigned(IsWow64Process) and
@@ -37301,7 +37326,14 @@ end;
 function UnixMSTimeUTC: TUnixMSTime;
 var ft: TFileTime;
 begin
-  GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
+  GetSystemTimePreciseAsFileTime(ft); // slower, but try to achieve ms resolution
+  result := FileTimeToUnixMSTime(ft);
+end;
+
+function UnixMSTimeUTCFast: TUnixMSTime;
+var ft: TFileTime;
+begin
+  GetSystemTimeAsFileTime(ft); // faster, but with HW interupt resolution
   result := FileTimeToUnixMSTime(ft);
 end;
 {$else MSWINDOWS}
@@ -37311,6 +37343,11 @@ begin
 end;
 
 function UnixMSTimeUTC: TUnixMSTime;
+begin
+  result := GetUnixMSUTC; // direct retrieval from UNIX API
+end;
+
+function UnixMSTimeUTCFast: TUnixMSTime;
 begin
   result := GetUnixMSUTC; // direct retrieval from UNIX API
 end;
@@ -37429,7 +37466,7 @@ function NowUTC: TDateTime;
 var ft: TFileTime;
     {$ifdef CPU64}nano100: Int64; d: double;{$endif}
 begin
-  GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
+  GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit and 16ms resolution
   {$ifdef CPU64}
   FileTimeToInt64(ft,nano100);
   // in two explicit steps to circumvent weird precision error on FPC
@@ -37443,7 +37480,7 @@ begin
 end;
 {$else}
 begin
-  result := GetNowUTC;
+  result := GetNowUTC; // calls clock_gettime(CLOCK_REALTIME_COARSE)
 end;
 {$endif}
 
@@ -39226,7 +39263,7 @@ var time, crc: THash128Rec;
 begin
   repeat
     QueryPerformanceCounter(time.Lo);
-    time.Hi := UnixMSTimeUTC xor PtrUInt(GetCurrentThreadID);
+    time.Hi := UnixMSTimeUTCFast xor PtrUInt(GetCurrentThreadID);
     crcblock(@crc.b,@time.b);
     crcblock(@crc.b,@ExeVersion.Hash.b);
     if entropy<>nil then
@@ -42511,7 +42548,7 @@ begin
   if Assigned(info^.RecInitInfo) then begin
     recInitData := PFPCRecInitData(AlignTypeDataClean(PTypeInfo(info^.RecInitInfo+2+PByte(info^.RecInitInfo+1)^)));
     firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
-    inc(PByte(firstfield),SizeOf(integer));
+    inc(PByte(firstfield),SizeOf(recInitData^.ManagedFieldCount));
     firstfield := AlignToPtr(firstfield);
     result := recInitData^.ManagedFieldCount;
   end else begin
@@ -42524,7 +42561,7 @@ begin
     {$endif}
     recInitData := PFPCRecInitData(aPointer);
     firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
-    inc(PByte(firstfield),SizeOf(integer));
+    inc(PByte(firstfield),SizeOf(recInitData^.ManagedFieldCount));
     firstfield := AlignToPtr(firstfield);
     result := recInitData^.ManagedFieldCount;
   end;

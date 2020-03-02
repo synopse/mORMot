@@ -13538,7 +13538,7 @@ begin
     data.i0 := integer(HInstance); // override data.d0d1/h0
     data.i1 := integer(GetCurrentThreadId);
     data.i2 := integer(MainThreadID);
-    data.i3 := integer(UnixMSTimeUTC);
+    data.i3 := integer(UnixMSTimeUTCFast);
     SleepHiRes(0); // force non deterministic time shift
     sha3update;
     sha3.Update(OSVersionText);
