@@ -1563,6 +1563,9 @@ type
     /// append the RawUTF8 dynamic array
     // - handled the fixed size strings array case in a very efficient way
     procedure WriteRawUTF8DynArray(const Values: TRawUTF8DynArray; ValuesCount: integer);
+    /// append a RawUTF8 array of values, from its low-level memory pointer
+    // - handled the fixed size strings array case in a very efficient way
+    procedure WriteRawUTF8Array(Values: PPtrUIntArray; ValuesCount: integer);
     /// append the RawUTF8List content
     // - if StoreObjectsAsVarUInt32 is TRUE, all Objects[] properties will be
     // stored as VarUInt32
@@ -11277,7 +11280,7 @@ end;
 
 procedure TFileBufferWriter.Write4(Data: integer);
 begin
-  if fPos+SizeOf(integer)>fBufLen then
+  if fPos+4>fBufLen then
     InternalFlush;
   PInteger(@fBuffer^[fPos])^ := Data;
   inc(fPos,SizeOf(integer));
@@ -11291,7 +11294,7 @@ end;
 
 procedure TFileBufferWriter.Write8(const Data8Bytes);
 begin
-  if fPos+SizeOf(Int64)>fBufLen then
+  if fPos+8>fBufLen then
     InternalFlush;
   PInt64(@fBuffer^[fPos])^ := PInt64(@Data8Bytes)^;
   inc(fPos,SizeOf(Int64));
@@ -11428,23 +11431,28 @@ end;
 
 procedure TFileBufferWriter.WriteRawUTF8DynArray(const Values: TRawUTF8DynArray;
   ValuesCount: integer);
+begin
+  WriteRawUTF8Array(pointer(Values),ValuesCount);
+end;
+
+procedure TFileBufferWriter.WriteRawUTF8Array(Values: PPtrUIntArray; ValuesCount: integer);
 var n, i: integer;
     fixedsize, len: PtrUInt;
     P, PEnd: PByte;
     PBeg: PAnsiChar;
-    PI: PPtrUIntArray;
 begin
   WriteVarUInt32(ValuesCount);
   if ValuesCount=0 then
     exit;
-  PI := pointer(Values);
-  fixedsize := length(Values[0]);
-  if fixedsize>0 then
+  fixedsize := Values^[0];
+  if fixedsize<>0 then begin
+    fixedsize := PStrLen(fixedsize-_STRLEN)^;
     for i := 1 to ValuesCount-1 do
-      if (PI^[i]=0) or (PStrLen(PI^[i]-_STRLEN)^<>TStrLen(fixedsize)) then begin
+      if (Values^[i]=0) or (PStrLen(Values^[i]-_STRLEN)^<>TStrLen(fixedsize)) then begin
         fixedsize := 0;
         break;
       end;
+  end;
   WriteVarUInt32(fixedsize);
   repeat
     P := @fBuffer^[fPos];
@@ -11455,7 +11463,7 @@ begin
       inc(P,4);
       if fixedsize=0 then
         for i := 0 to ValuesCount-1 do
-          if PI^[i]=0 then begin
+          if Values^[i]=0 then begin
             P^ := 0; // store length=0
             inc(P);
             if PtrUInt(P)>=PtrUInt(PEnd) then begin
@@ -11463,13 +11471,13 @@ begin
               break; // avoid buffer overflow
             end;
           end else begin
-            len := PStrLen(PI^[i]-_STRLEN)^;
+            len := PStrLen(Values^[i]-_STRLEN)^;
             if PtrUInt(PEnd)-PtrUInt(P)<=len then begin
               n := i;
               break; // avoid buffer overflow
             end;
             P := ToVarUInt32(len,P);
-            MoveFast(pointer(PI^[i])^,P^,len); // here len>0
+            MoveFast(pointer(Values^[i])^,P^,len); // here len>0
             inc(P,len);
           end else // fixedsize<>0:
         for i := 0 to ValuesCount-1 do begin
@@ -11477,14 +11485,14 @@ begin
             n := i;
             break; // avoid buffer overflow
           end;
-          MoveFast(pointer(PI^[i])^,P^,fixedsize);
+          MoveFast(pointer(Values^[i])^,P^,fixedsize);
           inc(P,fixedsize);
         end;
       len := PAnsiChar(P)-PBeg; // format: Isize+varUInt32s*strings
       PInteger(PBeg)^ := len-4;
       inc(fTotalWritten,len);
       inc(fPos,len);
-      inc(PByte(PI),n*SizeOf(PtrInt));
+      inc(PByte(Values),n*SizeOf(PtrInt));
       dec(ValuesCount,n);
       if ValuesCount=0 then
         break;
@@ -11502,7 +11510,7 @@ begin
     WriteVarUInt32(0) else begin
     List.Safe.Lock;
     try
-      WriteRawUTF8DynArray(pointer(List.TextPtr),List.Count);
+      WriteRawUTF8Array(pointer(List.TextPtr),List.Count);
       o := List.ObjectPtr;
       if o=nil then
         StoreObjectsAsVarUInt32 := false; // no Objects[] values
@@ -12240,10 +12248,10 @@ begin
 end;
 
 function TFileBufferReader.ReadVarUInt64Array(var Values: TInt64DynArray): PtrInt;
-var count, diff, i: integer;
-    Offset: boolean;
+var count, i: integer;
     P, PEnd: PByte;
     v: PQWordArray;
+    diff: QWord;
     BufTemp: RawByteString;
 begin
   result := ReadVarUInt32;
@@ -12252,9 +12260,8 @@ begin
   count := result;
   if count>length(Values) then // only set length if not big enough
     SetLength(Values,count);
-  Offset := boolean(ReadByte);
   v := pointer(Values);
-  if Offset then begin
+  if boolean(ReadByte) then begin // values were stored as offsets
     v^[0] := ReadVarUInt64; // read first value
     dec(count);
     diff := ReadVarUInt32;
@@ -12263,8 +12270,8 @@ begin
       repeat
         ReadChunk(P,PEnd,BufTemp); // raise ErrorInvalidContent on error
         while (count>0) and (PtrUInt(P)<PtrUInt(PEnd)) do begin
-          v^[1] := FromVarUInt64(P);
-          inc(v^[1],v^[0]);
+          FromVarUInt64Safe(P,PEnd,diff);
+          v^[1] := v^[0]+diff;
           v := @v^[1];
           dec(count);
         end;
@@ -12273,18 +12280,17 @@ begin
       // same offset for all items (fixed sized records)
       for i := 0 to count-1 do
         v^[i+1] := v^[i]+diff;
-    exit;
-  end;
-  repeat
-    ReadChunk(P,PEnd,BufTemp); // raise ErrorInvalidContent on error
-    while PtrUInt(P)<PtrUInt(PEnd) do begin
-      v^[0] := FromVarUInt64(P);
-      v := @v^[1];
-      dec(count);
-      if count=0 then
-        exit;
-    end;
-  until false;
+  end else
+    repeat // raw values were stored, not their offsets
+      ReadChunk(P,PEnd,BufTemp); // raise ErrorInvalidContent on error
+      while PtrUInt(P)<PtrUInt(PEnd) do begin
+        FromVarUInt64Safe(P,PEnd,v^[0]);
+        v := @v^[1];
+        dec(count);
+        if count=0 then
+          exit;
+      end;
+    until false;
 end;
 
 function TFileBufferReader.ReadRawUTF8List(List: TRawUTF8List): boolean;
