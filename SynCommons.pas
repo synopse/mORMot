@@ -4337,6 +4337,13 @@ function Int64ScanExists(P: PInt64Array; Count: PtrInt; const Value: Int64): boo
 function PtrUIntScanIndex(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// fast search of a pointer-sized unsigned integer in an pointer-sized integer array
+// - Count is the number of pointer-sized integer entries in P^
+// - returns true if P^=Value within Count entries
+// - returns false if Value was not found
+function PtrUIntScan(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): pointer;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// fast search of a pointer-sized unsigned integer position
 // in an pointer-sized integer array
 // - Count is the number of pointer-sized integer entries in P^
@@ -5043,6 +5050,11 @@ type
 
   /// internal integer type used for string/dynarray reference counters
   TRefCnt = {$ifdef FPC}SizeInt{$else}longint{$endif};
+  PRefCnt = ^TRefCnt;
+
+  /// internal integer type used for string header length field
+  TStrLen = {$ifdef FPC}SizeInt{$else}longint{$endif};
+  PStrLen = ^TStrLen;
 
 {$ifdef FPC}
   /// map the Delphi/FPC dynamic array header (stored before each instance)
@@ -5058,10 +5070,15 @@ type
     property length: sizeint read GetLength write SetLength;
   end;
   PDynArrayRec = ^TDynArrayRec;
-
-function _LStrLen(const s: RawByteString): SizeInt; inline;
-function _LStrLenP(s: pointer): SizeInt; inline;
 {$endif FPC}
+
+const
+  /// cross-compiler negative offset to TStrRec.length field
+  _STRLEN = SizeOf(TStrLen);
+  /// cross-compiler negative offset to TDynArrayRec.high/length field
+  _DALEN = SizeOf(PtrInt);
+  /// cross-compiler negative offset to TDynArrayRec.refCnt field
+  _DAREFCNT = Sizeof(TRefCnt)+_DALEN;
 
 function ToText(k: TDynArrayKind): PShortString; overload;
 
@@ -13897,6 +13914,7 @@ type
   /// direct access to the Windows Registry
   // - could be used as alternative to TRegistry, which doesn't behave the same on
   // all Delphi versions, and is enhanced on FPC (e.g. which supports REG_MULTI_SZ)
+  // - is also Unicode ready for text, using UTF-8 conversion on all compilers
   TWinRegistry = object
   public
     /// the opened HKEY handle
@@ -13907,8 +13925,8 @@ type
     /// finalize low-level read access to the Windows Registry after ReadOpen()
     procedure Close;
     /// low-level read a string from the Windows Registry after ReadOpen()
-    // - in respect to Delphi's TRegistry, will properly handle REG_MULTI_SZ - and
-    // return its first value
+    // - in respect to Delphi's TRegistry, will properly handle REG_MULTI_SZ
+    // (return the first value of the multi-list)
     function ReadString(const entry: SynUnicode; andtrim: boolean=true): RawUTF8;
     /// low-level read a Windows Registry content after ReadOpen()
     // - works with any kind of key, but was designed for REG_BINARY
@@ -17627,16 +17645,6 @@ const
   UTF8_FIRSTBYTE: array[2..6] of byte = ($c0,$e0,$f0,$f8,$fc);
 
 {$ifdef FPC}
-function _LStrLen(const s: RawByteString): SizeInt; inline;
-begin // here caller ensured s<>''
-  result := PSizeInt(PAnsiChar(pointer(s))-SizeOf(SizeInt))^;
-end;
-
-function _LStrLenP(s: pointer): SizeInt; inline;
-begin // here caller ensured s<>''
-  result := PSizeInt(PAnsiChar(s)-SizeOf(SizeInt))^;
-end;
-
 procedure VarClear(var v: variant); // defined here for proper inlining
 var p: pointer; // more efficient generated asm with an explicit temp variable
 begin
@@ -20229,7 +20237,7 @@ begin
       result := V.VInteger;
       if cardinal(result)<=high(SmallUInt32UTF8) then begin
 smlu32: Res.Text := pointer(SmallUInt32UTF8[result]);
-        Res.Len := {$ifdef FPC}_LStrLenP(Res.Text){$else}PInteger(Res.Text-4)^{$endif};
+        Res.Len := PStrLen(Res.Text-_STRLEN)^;
       end else begin
         Res.Text := PUTF8Char(StrInt32(@Res.Temp[23],result));
         Res.Len := @Res.Temp[23]-Res.Text;
@@ -21159,7 +21167,7 @@ function GetBitsCountSSE42(value: PtrInt): PtrInt;
 asm
         {$ifdef FPC}
         popcnt  eax, eax
-        {$else} // oldest Delphi don't have this opcode
+        {$else} // oldest Delphi don't support this opcode
         db       $f3,$0f,$B8,$c0
         {$endif}
 end;
@@ -21192,7 +21200,7 @@ function GetBitsCountSSE42(value: PtrInt): PtrInt;
 {$ifdef FPC} assembler; nostackframe;
 asm
         popcnt  rax, value
-{$else}
+{$else} // oldest Delphi don't support this opcode
 asm     .noframe
         {$ifdef win64} db $f3,$48,$0f,$B8,$c1
         {$else}        db $f3,$48,$0f,$B8,$c7 {$endif}
@@ -21609,14 +21617,8 @@ function DynArrayLength(Value: Pointer): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 begin
   result := PtrInt(Value);
-  if result<>0 then begin
-    {$ifdef FPC}
-    result := PDynArrayRec(result-SizeOf(TDynArrayRec))^.high;
-    inc(result);
-    {$else}
-    result := PInteger(PtrUInt(Value)-SizeOf(PtrInt))^;
-    {$endif}
-  end;
+  if result<>0 then
+    result := PPtrInt(result-_DALEN)^{$ifdef FPC}+1{$endif};
 end;
 
 {$ifdef HASALIGNTYPEDATA}
@@ -23411,13 +23413,8 @@ begin
   result := 0;
   if (p=nil) or (pSub=nil) or (PtrInt(Offset)<=0) then
     goto Exit;
-  {$ifdef FPC}
-  len := _LStrLenP(p);
-  lenSub := _LStrLenP(pSub)-1;
-  {$else}
-  len := PInteger(PtrInt(p)-4)^;
-  lenSub := PInteger(PtrInt(pSub)-4)^-1;
-  {$endif FPC}
+  len := PStrLen(PtrUInt(p)-_STRLEN)^;
+  lenSub := PStrLen(PtrUInt(pSub)-_STRLEN)^-1;
   if (len<lenSub+PtrInt(Offset)) or (lenSub<0) then
     goto Exit;
   pStop := p+len;
@@ -23532,7 +23529,7 @@ var L: PtrInt;
 begin
   if Value<=high(SmallUInt32UTF8) then begin
     P := pointer(SmallUInt32UTF8[Value]);
-    L := {$ifdef FPC}_LStrLenP(P){$else}PInteger(P-4)^{$endif};
+    L := PStrLen(P-_STRLEN)^;
   end else begin
     P := StrUInt32(@tmp[23],Value);
     L := @tmp[23]-P;
@@ -24415,7 +24412,7 @@ Txt:  len := F-FDeb;
       PWord(F)^ := ord(':')+ord('(')shl 8;
       inc(F,2);
     end;
-    L := {$ifdef FPC}_LStrLen(tmp[i]){$else}PInteger(PtrInt(tmp[i])-SizeOf(integer))^{$endif};
+    L := PStrLen(PtrUInt(tmp[i])-_STRLEN)^;
     MoveFast(pointer(tmp[i])^,F^,L);
     inc(F,L);
     if byte(i) in inlin then begin
@@ -24852,13 +24849,8 @@ begin
   result := 0;
   if (p=nil) or (pSub=nil) or (PtrInt(Offset)<=0) then
     goto Exit;
-  {$ifdef FPC}
-  len := _LStrLenP(p);
-  lenSub := _LStrLenP(pSub)-1;
-  {$else}
-  len := PInteger(p-4)^;
-  lenSub := PInteger(pSub-4)^-1;
-  {$endif FPC}
+  len := PStrLen(p-_STRLEN)^;
+  lenSub := PStrLen(pSub-_STRLEN)^-1;
   if (len<lenSub+PtrInt(Offset)) or (lenSub<0) then
     goto Exit;
   pStop := p+len;
@@ -25065,8 +25057,11 @@ end;
 function kr32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 var i: PtrInt;
 begin
-  for i := 0 to len-1 do
-    crc := ord(buf[i])+crc*31;
+  if buf<>nil then
+    for i := 0 to len-1 do begin
+      crc := crc*31;
+      inc(crc,ord(buf[i]));
+    end;
   result := crc;
 end;
 
@@ -25391,8 +25386,8 @@ begin // we can't use StrComp() since a RawByteString may contain #0
   if p1<>p2 then
     if p1<>nil then
       if p2<>nil then begin
-        l1 := PStrRec(Pointer(PtrUInt(p1)-STRRECSIZE))^.length;
-        l2 := PStrRec(Pointer(PtrUInt(p2)-STRRECSIZE))^.length;
+        l1 := PStrLen(PtrUInt(p1)-_STRLEN)^;
+        l2 := PStrLen(PtrUInt(p2)-_STRLEN)^;
         l := l1;
         if l2<l1 then
           l := l2;
@@ -26664,7 +26659,7 @@ function PosExChar(Chr: AnsiChar; const Str: RawUTF8): PtrInt;
 begin
   if Str<>'' then
   {$ifdef FPC} // will use fast FPC SSE version
-    result := IndexByte(pointer(Str)^,_LStrLen(Str),byte(chr))+1 else
+    result := IndexByte(pointer(Str)^,PStrLen(PtrUInt(Str)-_STRLEN)^,byte(chr))+1 else
   {$else}
     for result := 1 to PInteger(PtrInt(Str)-sizeof(Integer))^ do
       if Str[result]=Chr then
@@ -27662,7 +27657,7 @@ function GetTickCount64: Int64;
 begin
   result := SynFPCLinux.GetTickCount64;
 end;
-{$endif}
+{$endif FPC}
 
 {$endif MSWINDOWS}
 
@@ -29965,7 +29960,7 @@ end;
 
 function FindRawUTF8(Values: PRawUTF8; const Value: RawUTF8; ValuesCount: integer;
   CaseSensitive: boolean): integer;
-var ValueLen: {$ifdef FPC}PtrInt{$else}integer{$endif};
+var ValueLen: TStrLen;
 begin
   dec(ValuesCount);
   ValueLen := length(Value);
@@ -29976,14 +29971,14 @@ begin
         inc(Values) else
     if CaseSensitive then
       for result := 0 to ValuesCount do
-        if (PtrInt(Values^)<>0) and
-           (PStrRec(Pointer(PtrInt(Values^)-STRRECSIZE))^.length=ValueLen) and
+        if (PtrUInt(Values^)<>0) and
+           (PStrLen(PtrUInt(Values^)-_STRLEN)^=ValueLen) and
            CompareMemFixed(pointer(PtrInt(Values^)),pointer(Value),ValueLen) then
           exit else
           inc(Values) else
       for result := 0 to ValuesCount do
-        if (PtrInt(Values^)<>0) and // StrIComp() won't change length
-           (PStrRec(Pointer(PtrInt(Values^)-STRRECSIZE))^.length=ValueLen) and
+        if (PtrUInt(Values^)<>0) and // StrIComp() won't change length
+           (PStrLen(PtrUInt(Values^)-_STRLEN)^=ValueLen) and
            (StrIComp(pointer(Values^),pointer(Value))=0) then
           exit else
           inc(Values);
@@ -29992,7 +29987,7 @@ end;
 
 function FindPropName(Values: PRawUTF8; const Value: RawUTF8;
   ValuesCount: integer): integer;
-var ValueLen: {$ifdef FPC}PtrInt{$else}integer{$endif};
+var ValueLen: TStrLen;
 begin
   dec(ValuesCount);
   ValueLen := length(Value);
@@ -30002,8 +29997,8 @@ begin
         exit else
         inc(Values) else
     for result := 0 to ValuesCount do
-      if (PtrInt(Values^)<>0) and
-         (PStrRec(Pointer(PtrInt(Values^)-STRRECSIZE))^.length=ValueLen) and
+      if (PtrUInt(Values^)<>0) and
+         (PStrLen(PtrUInt(Values^)-_STRLEN)^=ValueLen) and
          IdemPropNameUSameLen(pointer(Values^),pointer(Value),ValueLen) then
         exit else
         inc(Values);
@@ -31548,6 +31543,15 @@ begin
     result := AddInt64(Values,Value);
 end;
 
+procedure DynArrayMakeUnique(Values: PPointer; TypeInfo: pointer);
+var da: TDynArray;
+    n: PtrInt;
+begin // caller ensured that Values<>nil, Values^<>nil and RefCnt>1
+  da.Init(TypeInfo,Values^);
+  n := PPtrInt(PPtrUInt(Values)^-_DALEN)^{$ifdef FPC}+1{$endif};
+  da.InternalSetLength(n,n); // make copy
+end;
+
 procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
 var n: PtrInt;
 begin
@@ -31556,8 +31560,8 @@ begin
     exit; // wrong Index
   dec(n);
   if n>Index then begin
-    if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
-      Values := copy(Values); // unique
+    if PRefCnt(PtrUInt(Values)-_DAREFCNT)^>1 then
+      DynArrayMakeUnique(@Values,TypeInfo(TWordDynArray));
     MoveFast(Values[Index+1],Values[Index],(n-Index)*SizeOf(Word));
   end;
   SetLength(Values,n);
@@ -31571,8 +31575,8 @@ begin
     exit; // wrong Index
   dec(n);
   if n>Index then begin
-    if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
-      Values := copy(Values); // unique
+    if PRefCnt(PtrUInt(Values)-_DAREFCNT)^>1 then
+      DynArrayMakeUnique(@Values,TypeInfo(TIntegerDynArray));
     MoveFast(Values[Index+1],Values[Index],(n-Index)*SizeOf(Integer));
   end;
   SetLength(Values,n);
@@ -31586,8 +31590,8 @@ begin
     exit; // wrong Index
   dec(n,Index+1);
   if n>0 then begin
-    if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
-      Values := copy(Values); // unique
+    if PRefCnt(PtrUInt(Values)-_DAREFCNT)^>1 then
+      DynArrayMakeUnique(@Values,TypeInfo(TIntegerDynArray));
     MoveFast(Values[Index+1],Values[Index],n*SizeOf(Integer));
   end;
   dec(ValuesCount);
@@ -31601,8 +31605,8 @@ begin
     exit; // wrong Index
   dec(n);
   if n>Index then begin
-    if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
-      Values := copy(Values); // unique
+    if PRefCnt(PtrUInt(Values)-_DAREFCNT)^>1 then
+      DynArrayMakeUnique(@Values,TypeInfo(TInt64DynArray));
     MoveFast(Values[Index+1],Values[Index],(n-Index)*SizeOf(Int64));
   end;
   SetLength(Values,n);
@@ -31616,8 +31620,8 @@ begin
     exit; // wrong Index
   dec(n,Index+1);
   if n>0 then begin
-    if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
-      Values := copy(Values); // unique
+    if PRefCnt(PtrUInt(Values)-_DAREFCNT)^>1 then
+      DynArrayMakeUnique(@Values,TypeInfo(TInt64DynArray));
     MoveFast(Values[Index+1],Values[Index],n*SizeOf(Int64));
   end;
   dec(ValuesCount);
@@ -31628,8 +31632,10 @@ var i,v,x,n: PtrInt;
 begin
   if (Values=nil) or (Excluded=nil) then
     exit; // nothing to exclude
-  if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
-    Values := copy(Values); // unique
+  if PRefCnt(PtrUInt(Values)-_DAREFCNT)^>1 then
+    DynArrayMakeUnique(@Values,TypeInfo(TIntegerDynArray));
+  if PRefCnt(PtrUInt(Excluded)-_DAREFCNT)^>1 then
+    DynArrayMakeUnique(@Excluded,TypeInfo(TIntegerDynArray));
   v := length(Values);
   n := 0;
   x := Length(Excluded);
@@ -31661,8 +31667,10 @@ begin
     Values := nil;
     exit;
   end;
-  if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
-    Values := copy(Values); // unique
+  if PRefCnt(PtrUInt(Values)-_DAREFCNT)^>1 then
+    DynArrayMakeUnique(@Values,TypeInfo(TIntegerDynArray));
+  if PRefCnt(PtrUInt(Included)-_DAREFCNT)^>1 then
+    DynArrayMakeUnique(@Included,TypeInfo(TIntegerDynArray));
   v := length(Values);
   n := 0;
   x := Length(Included);
@@ -33775,8 +33783,7 @@ end;
 function UpperCopy255(dest: PAnsiChar; const source: RawUTF8): PAnsiChar;
 begin
   if source<>'' then
-    result := UpperCopy255Buf(dest,pointer(source),
-      {$ifdef FPC}_LStrLen(source){$else}PInteger(PtrInt(source)-4)^{$endif}) else
+    result := UpperCopy255Buf(dest,pointer(source),PStrLen(PtrUInt(source)-_STRLEN)^) else
     result := dest;
 end;
 
@@ -33816,7 +33823,7 @@ var i, L: PtrInt;
 begin
   if source='' then
     result := dest else begin
-    L := {$ifdef FPC}_LStrLen(source){$else}PInteger(PtrInt(source)-SizeOf(integer))^{$endif};
+    L := PStrLen(PtrUInt(source)-_STRLEN)^;
     if L>250 then
       L := 250; // avoid buffer overflow
     result := dest+L;
@@ -35092,9 +35099,10 @@ var L: PtrInt;
     tmp: TSynTempBuffer;
 begin
   result := '';
-  if s='' then
+  L := PtrInt(s);
+  if L=0 then
     exit;
-  L := PStrRec(Pointer(PtrInt(s)-STRRECSIZE))^.length;
+  L := PStrLen(L-_STRLEN)^;
   if len<0 then
     len := L;
   if i>L then
@@ -40554,7 +40562,7 @@ type
   end;
 
 procedure TQuickSortRawUTF8.Sort(L, R: PtrInt);
-var I, J, P: integer;
+var I, J, P: PtrInt;
     Tmp: Pointer;
     TmpInt: integer;
 begin
@@ -40587,7 +40595,7 @@ begin
       if I < R then
         Sort(I, R);
       R := J;
-    end;
+    end; 
   until L >= R;
 end;
 
@@ -40612,8 +40620,8 @@ begin
   if cardinal(Index)>=cardinal(n) then
     result := false else begin
     dec(n);
-    if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
-      Values := copy(Values); // unique
+    if PRefCnt(PtrUInt(Values)-_DAREFCNT)^>1 then
+      DynArrayMakeUnique(@Values,TypeInfo(TRawUTF8DynArray));
     Values[Index] := ''; // avoid GPF
     if n>Index then begin
       MoveFast(pointer(Values[Index+1]),pointer(Values[Index]),(n-Index)*SizeOf(pointer));
@@ -40633,8 +40641,8 @@ begin
     result := false else begin
     dec(n);
     ValuesCount := n;
-    if PDynArrayRec(PtrUInt(Values)-SizeOf(TDynArrayRec))^.refCnt>1 then
-      Values := copy(Values); // unique
+    if PRefCnt(PtrUInt(Values)-_DAREFCNT)^>1 then
+      DynArrayMakeUnique(@Values,TypeInfo(TRawUTF8DynArray));
     Values[Index] := ''; // avoid GPF
     dec(n,Index);
     if n>0 then begin
@@ -42319,7 +42327,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     len := SizeOf(pointer);
     if P^=0 then
       result := 1 else
-      result := ToVarUInt32LengthWithData(PStrRec(Pointer(P^-STRRECSIZE))^.length);
+      result := ToVarUInt32LengthWithData(PStrLen(P^-_STRLEN)^);
   end;
   tkWString: begin // PStrRec doesn't match on Widestring for FPC
     len := SizeOf(pointer);
@@ -42330,7 +42338,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     len := SizeOf(pointer);
     if P^=0 then
       result := 1 else
-      result := ToVarUInt32LengthWithData(PStrRec(Pointer(P^-STRRECSIZE))^.length*2);
+      result := ToVarUInt32LengthWithData(PStrLen(P^-_STRLEN)^*2);
   end;
   {$endif}
   tkRecord{$ifdef FPC},tkObject{$endif}:
@@ -42385,7 +42393,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
       dest^ := #0;
       result := dest+1;
     end else begin
-      itemsize := PStrRec(Pointer(P^-STRRECSIZE))^.length;
+      itemsize := PStrLen(P^-_STRLEN)^;
       {$ifdef HASVARUSTRING} // UnicodeString length in WideChars
       if info^.Kind=tkUString then
         itemsize := itemsize*2;
@@ -45822,7 +45830,7 @@ begin
     varString, varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}: begin
       if PtrUInt(VAny)=0 then
         LenBytes := 0 else begin
-        LenBytes := PStrRec(Pointer(PtrUInt(VAny)-STRRECSIZE))^.length;
+        LenBytes := PStrLen(PtrUInt(VAny)-_STRLEN)^;
         {$ifdef HASVARUSTRING}
         if VType=varUString then
           LenBytes := LenBytes*2; // stored length is in bytes, not (wide)chars
@@ -45842,17 +45850,18 @@ end;
 
 function VariantSaveLength(const Value: variant): integer;
 var tmp: TVarData;
+    v: TVarData absolute Value;
 begin // match VariantSave() storage
-  if TVarData(Value).VType and varByRef<>0 then
-    if TVarData(Value).VType=varVariant or varByRef then begin
-      result := VariantSaveLength(PVariant(TVarData(Value).VPointer)^);
+  if v.VType and varByRef<>0 then
+    if v.VType=varVariant or varByRef then begin
+      result := VariantSaveLength(PVariant(v.VPointer)^);
       exit;
     end else
     if SetVariantUnRefSimpleValue(Value,tmp) then begin
       result := VariantSaveLength(variant(tmp));
       exit;
     end;
-  case TVarData(Value).VType of
+  case v.VType of
   varEmpty, varNull:
     result := SizeOf(tmp.VType);
   varShortInt, varByte:
@@ -45867,14 +45876,13 @@ begin // match VariantSave() storage
     if PtrUInt(TVarData(Value).VAny)=0 then
       result := 1+SizeOf(tmp.VType) else
       result := ToVarUInt32LengthWithData(
-        PStrRec(Pointer(PtrUInt(TVarData(Value).VAny)-STRRECSIZE))^.length)
-        +SizeOf(tmp.VType);
+        PStrLen(PtrUInt(v.VAny)-_STRLEN)^)+SizeOf(tmp.VType);
   {$ifdef HASVARUSTRING}
   varUString:
-    if PtrUInt(TVarData(Value).VAny)=0 then // stored length is in bytes, not (wide)chars
+    if PtrUInt(v.VAny)=0 then // stored length is in bytes, not (wide)chars
       result := 1+SizeOf(tmp.VType) else
-      result := ToVarUInt32LengthWithData(PStrRec(Pointer(PtrUInt(TVarData(Value).VAny)-STRRECSIZE))^.length*2)
-        +SizeOf(tmp.VType);
+      result := ToVarUInt32LengthWithData(
+        PStrLen(PtrUInt(v.VAny)-_STRLEN)^*2)+SizeOf(tmp.VType);
   {$endif}
   else
     try // complex types will be stored as JSON
@@ -46395,7 +46403,7 @@ begin
       ToBeParsed := JSON;
   t := pointer(SynVariantTypes);
   if (t<>nil) and not(dvoJSONParseDoNotTryCustomVariants in Options^) then
-    for i := 1 to PDynArrayRec(PtrInt(t)-SizeOf(TDynArrayRec))^.length do
+    for i := {$ifdef FPC}0{$else}1{$endif} to PPtrInt(PtrUInt(t)-_DALEN)^ do
       if t^.TryJSONToVariant(ToBeParsed,Value,EndOfObject) then begin
         if not wasParsedWithinString then
           JSON := ToBeParsed;
@@ -47647,8 +47655,17 @@ begin
   result := -1;
 end;
 
-procedure QuickSortDocVariant(names: PPointerArray; values: PVariantArray;
-  L, R: PtrInt; Compare: TUTF8Compare);
+type
+ TQuickSortDocVariant = object
+   names: PPointerArray;
+   values: PVariantArray;
+   nameCompare: TUTF8Compare;
+   valueCompare: TVariantCompare;
+   procedure SortByName(L, R: PtrInt);
+   procedure SortByValue(L, R: PtrInt);
+ end;
+
+procedure TQuickSortDocVariant.SortByName(L, R: PtrInt);
 var I, J, P: PtrInt;
     pivot: pointer;
 begin
@@ -47658,8 +47675,8 @@ begin
     P := (L + R) shr 1;
     repeat
       pivot := names[P];
-      while Compare(names[I],pivot)<0 do Inc(I);
-      while Compare(names[J],pivot)>0 do Dec(J);
+      while nameCompare(names[I],pivot)<0 do Inc(I);
+      while nameCompare(names[J],pivot)>0 do Dec(J);
       if I <= J then begin
         if I <> J then begin
           ExchgPointer(@names[I],@names[J]);
@@ -47671,27 +47688,17 @@ begin
     until I > J;
     if J - L < R - I then begin // use recursion only for smaller range
       if L < J then
-        QuickSortDocVariant(names,values,L,J,Compare);
+        SortByName(L,J);
       L := I;
     end else begin
       if I < R then
-        QuickSortDocVariant(names,values,I,R,Compare);
+        SortByName(I,R);
       R := J;
     end;
   until L >= R;
 end;
 
-procedure TDocVariantData.SortByName(Compare: TUTF8Compare);
-begin
-  if not(dvoIsObject in VOptions) or (VCount=0) then
-    exit;
-  if not Assigned(Compare) then
-    Compare := @StrIComp;
-  QuickSortDocVariant(pointer(VName),pointer(VValue),0,VCount-1,Compare);
-end;
-
-procedure QuickSortDocVariantValues(var Doc: TDocVariantData;
-  L, R: PtrInt; Compare: TVariantCompare);
+procedure TQuickSortDocVariant.SortByValue(L, R: PtrInt);
 var I, J, P: PtrInt;
     pivot: PVariant;
 begin
@@ -47700,14 +47707,14 @@ begin
     I := L; J := R;
     P := (L + R) shr 1;
     repeat
-      pivot := @Doc.VValue[P];
-      while Compare(Doc.VValue[I],pivot^)<0 do Inc(I);
-      while Compare(Doc.VValue[J],pivot^)>0 do Dec(J);
+      pivot := @values[P];
+      while valueCompare(values[I],pivot^)<0 do Inc(I);
+      while valueCompare(values[J],pivot^)>0 do Dec(J);
       if I <= J then begin
         if I <> J then begin
-          if Doc.VName<>nil then
-            ExchgPointer(@Doc.VName[I],@Doc.VName[J]);
-          ExchgVariant(@Doc.VValue[I],@Doc.VValue[J]);
+          if names<>nil then
+            ExchgPointer(@names[I],@names[J]);
+          ExchgVariant(@values[I],@values[J]);
         end;
         if P = I then P := J else if P = J then P := I;
         inc(I); dec(J);
@@ -47715,23 +47722,40 @@ begin
     until I > J;
     if J - L < R - I then begin // use recursion only for smaller range
       if L < J then
-        QuickSortDocVariantValues(Doc, L, J, Compare);
+        SortByValue(L,J);
       L := I;
     end else begin
       if I < R then
-        QuickSortDocVariantValues(Doc, I, R, Compare);
+        SortByValue(I,R);
       R := J;
     end;
   until L >= R;
 end;
 
+procedure TDocVariantData.SortByName(Compare: TUTF8Compare);
+var qs: TQuickSortDocVariant;
+begin
+  if not(dvoIsObject in VOptions) or (VCount<=0) then
+    exit;
+  if Assigned(Compare) then
+    qs.nameCompare := Compare else
+    qs.nameCompare := @StrIComp;
+  qs.names := pointer(VName);
+  qs.values := pointer(VValue);
+  qs.SortByName(0,VCount-1);
+end;
+
 procedure TDocVariantData.SortByValue(Compare: TVariantCompare);
+var qs: TQuickSortDocVariant;
 begin
   if VCount<=0 then
     exit;
-  if not Assigned(Compare) then
-    Compare := VariantCompare;
-  QuickSortDocVariantValues(self,0,VCount-1,Compare);
+  if Assigned(Compare) then
+    qs.valueCompare := Compare else
+    qs.valueCompare := @VariantCompare;
+  qs.names := pointer(VName);
+  qs.values := pointer(VValue);
+  qs.SortByValue(0,VCount-1);
 end;
 
 type
@@ -47962,12 +47986,12 @@ begin
     result := false else begin
     dec(VCount);
     if VName<>nil then begin
-      if PDynArrayRec(PtrUInt(VName)-SizeOf(TDynArrayRec))^.refCnt>1 then
-        VName := copy(VName); // unique
+      if PRefCnt(PtrUInt(VName)-_DAREFCNT)^>1 then
+        DynArrayMakeUnique(@VName,TypeInfo(TRawUTF8DynArray));
       VName[Index] := '';
     end;
-    if PDynArrayRec(PtrUInt(VValue)-SizeOf(TDynArrayRec))^.refCnt>1 then
-      VValue := copy(VValue); // unique
+    if PRefCnt(PtrUInt(VValue)-_DAREFCNT)^>1 then
+      DynArrayMakeUnique(@VValue,TypeInfo(TVariantDynArray));
     VarClear(VValue[Index]);
     if Index<VCount then begin
       if VName<>nil then begin
@@ -48032,21 +48056,19 @@ begin
     end;
 end;
 
-function FindNonVoidRawUTF8(n: PPtrInt; name: PUTF8Char; len, count: PtrInt): PtrInt;
+function FindNonVoidRawUTF8(n: PPtrInt; name: PUTF8Char; len: TStrLen; count: PtrInt): PtrInt;
 begin // FPC does proper inlining in this loop
-  for result := 0 to count-1 do // VName[] are knwown to be <> '' so n^ <> nil
-    if (PStrRec(Pointer(n^-STRRECSIZE))^.length=len) and
-       CompareMemFixed(pointer(n^),name,len) then
+  for result := 0 to count-1 do // all VName[]<>'' so n^<>0
+    if (PStrLen(n^-_STRLEN)^=len) and CompareMemFixed(pointer(n^),name,len) then
       exit else
       inc(n);
   result := -1;
 end;
 
-function FindNonVoidRawUTF8I(n: PPtrInt; name: PUTF8Char; len, count: PtrInt): PtrInt;
+function FindNonVoidRawUTF8I(n: PPtrInt; name: PUTF8Char; len: TStrLen; count: PtrInt): PtrInt;
 begin
   for result := 0 to count-1 do
-    if (PStrRec(Pointer(n^-STRRECSIZE))^.length=len) and
-       IdemPropNameUSameLen(pointer(n^),name,len) then
+    if (PStrLen(n^-_STRLEN)^=len) and IdemPropNameUSameLen(pointer(n^),name,len) then
       exit else
       inc(n);
   result := -1;
@@ -49807,14 +49829,8 @@ begin
     result := PtrUInt(fValue);
     if result<>0 then begin
       result := PPtrInt(result)^;
-      if result<>0 then begin
-        {$ifdef FPC}
-        result := PDynArrayRec(result-SizeOf(TDynArrayRec))^.high;
-        inc(result);
-        {$else}
-        result := PInteger(result-SizeOf(PtrInt))^;
-        {$endif}
-      end;
+      if result<>0 then
+        result := PPtrInt(result-_DALEN)^{$ifdef FPC}+1{$endif};
     end;
   end;
 end;
@@ -49917,12 +49933,8 @@ begin
 end;
 
 function TDynArray.GetIsObjArray: boolean;
-var o: TDynArrayObjArray; // oaUnknown, oaFalse, oaTrue
 begin
-  o := fIsObjArray; // oaUnknown, oaFalse, oaTrue
-  if o=oaUnknown then
-    result := ComputeIsObjArray else
-    result := o=oaTrue;
+  result := (fIsObjArray=oaTrue) or ((fIsObjArray=oaUnknown) and ComputeIsObjArray);
 end;
 
 function TDynArray.Delete(aIndex: PtrInt): boolean;
@@ -49935,7 +49947,7 @@ begin
   n := GetCount;
   if PtrUInt(aIndex)>=PtrUInt(n) then
     exit; // out of range
-  if PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.refCnt>1 then
+  if PRefCnt(PtrUInt(fValue^)-_DAREFCNT)^>1 then
     InternalSetLength(n,n); // unique
   dec(n);
   P := pointer(PtrUInt(fValue^)+PtrUInt(aIndex)*ElemSize);
@@ -49969,11 +49981,7 @@ begin // very efficient code on FPC and modern Delphi
 ok:   inc(PByte(result),PtrUInt(index)*ElemSize) else
       result := nil
   end else
-    {$ifdef FPC}
-    if PtrUInt(index)<=PtrUInt(PDynArrayRec(PtrUInt(result)-SizeOf(TDynArrayRec))^.high) then
-    {$else}
-    if cardinal(index)<PCardinal(PtrUInt(result)-SizeOf(PtrInt))^ then
-    {$endif}
+    if PtrUInt(index){$ifdef FPC}<={$else}<{$endif}PPtrUInt(PtrUInt(result)-_DALEN)^ then
       goto ok else
       result := nil;
 end;
@@ -50207,7 +50215,7 @@ begin
       for i := 1 to n do begin
         if PPtrUInt(P)^=0 then
           inc(result) else
-          inc(result,ToVarUInt32LengthWithData(PStrRec(PPtrUInt(P)^-STRRECSIZE)^.length));
+          inc(result,ToVarUInt32LengthWithData(PStrLen(PPtrUInt(P)^-_STRLEN)^));
         inc(P,SizeOf(pointer));
       end;
     tkRecord{$ifdef FPC},tkObject{$endif}:
@@ -51549,48 +51557,41 @@ end;
 
 procedure TDynArray.SetCount(aCount: PtrInt);
 const MINIMUM_SIZE = 64;
-var oldlen, c, v, capa, delta: PtrInt;
+var oldlen, extcount, arrayptr, capa, delta: PtrInt;
 begin
-  v := PtrInt(fValue);
-  c := PtrInt(fCountP);
+  arrayptr := PtrInt(fValue);
+  extcount := PtrInt(fCountP);
   fSorted := false;
-  if v=0 then
+  if arrayptr=0 then
     exit; // avoid GPF if void
-  v := PPtrInt(v)^;
-  if c<>0 then begin // handle external capacity with separated fCountP^
-    oldlen := PInteger(c)^;
+  arrayptr := PPtrInt(arrayptr)^;
+  if extcount<>0 then begin // fCountP^ as external capacity
+    oldlen := PInteger(extcount)^;
     delta := aCount-oldlen;
     if delta=0 then
       exit;
-    PInteger(c)^ := aCount; // store new length
-    if v=0 then begin
-      // no capa yet
+    PInteger(extcount)^ := aCount; // store new length
+    if arrayptr=0 then begin // void array
       if (delta>0) and (aCount<MINIMUM_SIZE) then
         aCount := MINIMUM_SIZE; // reserve some minimal (64) items for Add()
     end else begin
-      {$ifdef FPC}
-      capa := PDynArrayRec(v-SizeOf(TDynArrayRec))^.high+1;
-      {$else}
-      capa := PInteger(v-SizeOf(PtrInt))^;
-      {$endif}
-      if delta>0 then begin  // size-up -> grow by chunks
-        c := PInteger(c)^;
-        if capa>=c then
+      capa := PPtrInt(arrayptr-_DALEN)^{$ifdef FPC}+1{$endif};
+      if delta>0 then begin  // size-up
+        if capa>=aCount then
           exit; // no need to grow
         capa := NextGrow(capa);
-        if capa<c then
-          aCount := c else
-          aCount := capa;
-      end else  // SetCount(0) from TDynArray.Clear
+        if capa>aCount then
+          aCount := capa; // grow by chunks
+      end else  // size-down
       if (aCount>0) and ((capa<=MINIMUM_SIZE) or (capa-aCount<capa shr 3)) then
-        exit;  // size-down -> only if worth it (for faster Delete)
+        exit; // reallocate memory only if worth it (for faster Delete)
     end;
-  end else
-  if v=0 then
-    oldlen := 0 else begin
-    oldlen := PDynArrayRec(v-SizeOf(TDynArrayRec))^.length;
+  end else // no external capacity: use length()
+  if arrayptr=0 then
+    oldlen := arrayptr else begin
+    oldlen := PPtrInt(arrayptr-_DALEN)^{$ifdef FPC}+1{$endif};
     if oldlen=aCount then
-      exit;  // no InternalSetLength(samecount) which makes a private copy
+      exit;  // InternalSetLength(samecount) would make a private copy
   end;
   // no external Count, array size-down or array up-grow -> realloc
   InternalSetLength(oldlen,aCount);
@@ -51601,14 +51602,8 @@ begin // capacity = length(DynArray)
   result := PtrInt(fValue);
   if result<>0 then begin
     result := PPtrInt(result)^;
-    if result<>0 then begin
-      {$ifdef FPC}
-      result := PDynArrayRec(result-SizeOf(TDynArrayRec))^.high;
-      inc(result);
-      {$else}
-      result := PInteger(result-SizeOf(PtrInt))^;
-      {$endif}
-    end;
+    if result<>0 then
+      result := PPtrInt(result-_DALEN)^{$ifdef FPC}+1{$endif};
   end;
 end;
 
@@ -51822,8 +51817,7 @@ function HashAnsiString(const Elem; Hasher: THasher): cardinal;
 begin
   if PtrUInt(Elem)=0 then
     result := 0 else
-    result := Hasher(0,Pointer(Elem),{$ifdef FPC}_LStrLenP(pointer(Elem))
-      {$else}PInteger(PtrUInt(Elem)-SizeOf(integer))^{$endif});
+    result := Hasher(0,Pointer(Elem),PStrLen(PtrUInt(Elem)-_STRLEN)^);
 end;
 
 function HashAnsiStringI(const Elem; Hasher: THasher): cardinal;
@@ -51831,9 +51825,8 @@ var tmp: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
   if PtrUInt(Elem)=0 then
     result := 0 else
-    result := Hasher(0,tmp,UpperCopy255Buf(tmp,pointer(Elem),
-      {$ifdef FPC}_LStrLenP(pointer(Elem))
-      {$else}PInteger(PtrUInt(Elem)-SizeOf(integer))^{$endif})-tmp);
+    result := Hasher(0,tmp,UpperCopy255Buf(tmp,
+      pointer(Elem),PStrLen(PtrUInt(Elem)-_STRLEN)^)-tmp);
 end;
 
 {$ifdef UNICODE}
@@ -53946,7 +53939,7 @@ begin
     FlushToStream;
   if PtrUInt(Value)<=high(SmallUInt32UTF8) then begin
     P := pointer(SmallUInt32UTF8[Value]);
-    Len := {$ifdef FPC}_LStrLenP(P){$else}PInteger(P-4)^{$endif};
+    Len := PStrLen(P-_STRLEN)^;
   end else begin
     P := StrInt32(@tmp[23],value);
     Len := @tmp[23]-P;
@@ -53970,7 +53963,7 @@ begin
   end else
   if Value<=high(SmallUInt32UTF8) then begin
     P := pointer(SmallUInt32UTF8[Value]);
-    Len := {$ifdef FPC}_LStrLenP(P){$else}PInteger(P-4)^{$endif};
+    Len := PStrLen(P-_STRLEN)^;
   end else begin
     P := StrUInt64(@tmp[23],Value);
     Len := @tmp[23]-P;
@@ -54097,7 +54090,7 @@ begin
     FlushToStream;
   if Value<=high(SmallUInt32UTF8) then begin
     P := pointer(SmallUInt32UTF8[Value]);
-    Len := {$ifdef FPC}_LStrLenP(P){$else}PInteger(P-4)^{$endif};
+    Len := PStrLen(P-_STRLEN)^;
   end else begin
     P := StrUInt32(@tmp[23],Value);
     Len := @tmp[23]-P;
@@ -54116,7 +54109,7 @@ begin
     FlushToStream;
   if (V.Hi=0) and (V.Lo<=high(SmallUInt32UTF8)) then begin
     P := pointer(SmallUInt32UTF8[V.Lo]);
-    Len := {$ifdef FPC}_LStrLenP(P){$else}PInteger(P-4)^{$endif};
+    Len := PStrLen(P-_STRLEN)^;
   end else begin
     P := StrUInt64(@tmp[23],Value);
     Len := @tmp[23]-P;
@@ -56613,9 +56606,10 @@ end;
 procedure TTextWriter.AddString(const Text: RawUTF8);
 var L: PtrInt;
 begin
-  if PtrInt(Text)=0 then
+  L := PtrInt(Text);
+  if L=0 then
     exit;
-  L := {$ifdef FPC}_LStrLen(Text){$else}PInteger(PtrInt(Text)-SizeOf(integer))^{$endif};
+  L := PStrLen(L-_STRLEN)^;
   if L<fTempBufSize then begin
     if BEnd-B<=L then
       FlushToStream;
@@ -56628,12 +56622,13 @@ end;
 procedure TTextWriter.AddStringCopy(const Text: RawUTF8; start,len: PtrInt);
 var L: PtrInt;
 begin
-  if (len<=0) or (PtrInt(Text)=0) then
+  L := PtrInt(Text);
+  if (len<=0) or (L=0) then
     exit;
   if start<0 then
     start := 0 else
     dec(start);
-  L := {$ifdef FPC}_LStrLen(Text){$else}PInteger(PtrInt(Text)-SizeOf(integer))^{$endif};
+  L := PStrLen(L-_STRLEN)^;
   dec(L,start);
   if L>0 then begin
     if len<L then
@@ -60829,8 +60824,6 @@ begin
   Delete(IndexOf(aObject));
 end;
 
-
-
 { TObjectListHashed }
 
 function TObjectListHashed.Add(aObject: TObject; out wasAdded: boolean): integer;
@@ -60910,7 +60903,6 @@ begin
     result := -1;
 end;
 
-
 { TPointerClassHashed }
 
 constructor TPointerClassHashed.Create(aInfo: pointer);
@@ -60945,14 +60937,26 @@ end;
 
 function TPointerClassHash.Find(aInfo: pointer): TPointerClassHashed;
 var i: integer;
+    p: ^TPointerClassHashed;
 begin
   if self<>nil then begin
-    i := IndexOf(aInfo);
-    if i>=0 then
-      result := TPointerClassHashed(List[i]) else
-      result := nil;
-  end else
-    result := nil;
+    if fCount<64 then begin // brute force is faster for small count
+      p := pointer(List);
+      for i := 1 to fCount do begin
+        result := p^;
+        if result.fInfo=aInfo then
+          exit;
+        inc(p);
+      end;
+    end else begin
+      i := IndexOf(aInfo); // use hashing
+      if i>=0 then begin
+        result := TPointerClassHashed(List[i]);
+        exit;
+      end;
+    end;
+  end;
+  result := nil;
 end;
 
 
@@ -65318,7 +65322,7 @@ end;
 function IsXmmYmmOSEnabled: boolean; assembler;
 asm // see https://software.intel.com/en-us/blogs/2011/04/14/is-avx-enabled
         xor     ecx, ecx  // specify control register XCR0 = XFEATURE_ENABLED_MASK
-        db  $0f, $01, $d0 // XGETBV reads XCR (extended control register) into EDX:EAX
+        db  $0f, $01, $d0 // XGETBV reads XCR0 into EDX:EAX
         and     eax, 6    // check OS has enabled both XMM (bit 1) and YMM (bit 2)
         cmp     al, 6
         sete    al
@@ -65338,10 +65342,8 @@ begin
   PIntegerArray(@CpuFeatures)^[2] := regs.ebx;
   PIntegerArray(@CpuFeatures)^[3] := regs.ecx;
   PByte(@PIntegerArray(@CpuFeatures)^[4])^ := regs.edx;
-  {$ifdef DISABLE_SSE42}
-  // may be needed on Darwin x64 (as reported by alf)
-  Exclude(CpuFeatures, cfSSE42);
-  Exclude(CpuFeatures, cfAESNI);
+  {$ifdef DISABLE_SSE42} // paranoid execution on Darwin x64 (as reported by alf)
+  CpuFeatures := CpuFeatures-[cfSSE42,cfAESNI];
   {$endif DISABLE_SSE42}
   if not(cfOSXS in CpuFeatures) or not IsXmmYmmOSEnabled then
     CpuFeatures := CpuFeatures-[cfAVX,cfAVX2,cfFMA];
