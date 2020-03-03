@@ -31711,72 +31711,90 @@ begin
 end;
 
 function GetCardinalDef(P: PUTF8Char; Default: PtrUInt): PtrUInt;
-var c: PtrUInt;
+var c: byte;
 begin
-  if P=nil then begin
-    result := Default;
+  result := Default;
+  if P=nil then
     exit;
-  end;
-  while (P^<=' ') and (P^<>#0) do inc(P);
+  c := byte(P^);
+  repeat
+    if c=0 then
+      exit;
+    if c>ord(' ') then
+      break;
+    inc(P);
+    c := byte(P^);
+  until false;
+  dec(c,48);
   c := byte(P^)-48;
   if c>9 then
-    result := Default else begin
-    result := c;
+    exit;
+  result := c;
+  repeat
     inc(P);
-    repeat
-      c := byte(P^)-48;
-      if c>9 then
-        break else
-        result := result*10+PtrUInt(c);
-      inc(P);
-    until false;
-  end;
+    c := byte(P^)-48;
+    if c>9 then
+      break;
+    result := result*10+PtrUInt(c);
+  until false;
 end;
 
 function GetCardinal(P: PUTF8Char): PtrUInt;
-var c: PtrUInt;
+var c: byte;
 begin
-  if P=nil then begin
-    result := 0;
+  result := 0;
+  if P=nil then
     exit;
-  end;
-  while (P^<=' ') and (P^<>#0) do inc(P);
-  c := byte(P^)-48;
-  if c>9 then
-    result := 0 else begin
-    result := c;
+  c := byte(P^);
+  repeat
+    if c=0 then
+      exit;
+    if c>ord(' ') then
+      break;
     inc(P);
-    repeat
-      c := byte(P^)-48;
-      if c>9 then
-        break else
-        result := result*10+PtrUInt(c);
-      inc(P);
-    until false;
-  end;
+    c := byte(P^);
+  until false;
+  dec(c,48);
+  if c>9 then
+    exit;
+  result := c;
+  repeat
+    inc(P);
+    c := byte(P^);
+    dec(c,48);
+    if c>9 then
+      break;
+    result := result*10+PtrUInt(c);
+  until false;
 end;
 
 function GetCardinalW(P: PWideChar): PtrUInt;
 var c: PtrUInt;
 begin
-  if P=nil then begin
-    result := 0;
+  result := 0;
+  if P=nil then
     exit;
-  end;
-  if ord(P^) in [1..32] then repeat inc(P) until not(ord(P^) in [1..32]);
-  c := word(P^)-48;
-  if c>9 then
-    result := 0 else begin
-    result := c;
+  c := ord(P^);
+  repeat
+    if c=0 then
+      exit;
+    if c>ord(' ') then
+      break;
     inc(P);
-    repeat
-      c := word(P^)-48;
-      if c>9 then
-        break else
-        result := result*10+c;
-      inc(P);
-    until false;
-  end;
+    c := ord(P^);
+  until false;
+  dec(c,48);
+  if c>9 then
+    exit;
+  result := c;
+  repeat
+    inc(P);
+    c := ord(P^);
+    dec(c,48);
+    if c>9 then
+      break;
+    result := result*10+c;
+  until false;
 end;
 
 {$ifdef CPU64}
@@ -32055,7 +32073,7 @@ begin
 end;
 
 function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
-{$ifndef CPU32DELPHI} // inspired from ValExt_JOH_PAS_8_a by John O'Harrow
+{$ifndef CPU32DELPHI} // inspired by ValExt_JOH_PAS_8_a by John O'Harrow
 const POW10: array[-31..31] of TSynExtended = (
   1E-31,1E-30,1E-29,1E-28,1E-27,1E-26,1E-25,1E-24,1E-23,1E-22,1E-21,1E-20,
   1E-19,1E-18,1E-17,1E-16,1E-15,1E-14,1E-13,1E-12,1E-11,1E-10,1E-9,1E-8,1E-7,
@@ -32076,19 +32094,22 @@ begin
   end;
   byte(flags) := 0;
   U := pointer(P);
-  if P^=' ' then
-    repeat
-      inc(U)
-    until U^<>32; // trailing spaces
   ch := U^;
-  if ch=ord('+') then
-    inc(U) else
+  if ch=ord(' ') then
+    repeat
+      inc(U);
+      ch := U^;
+    until ch<>ord(' '); // trailing spaces
+  if ch=ord('+') then begin
+    inc(U);
+    ch := U^;
+  end else
   if ch=ord('-') then begin
     inc(U);
+    ch := U^;
     include(flags,fNeg);
   end;
   repeat
-    ch := U^;
     inc(U);
     if (ch<ord('0')) or (ch>ord('9')) then
       break;
@@ -32100,6 +32121,7 @@ begin
     result := result+ch;
     {$endif}
     include(flags,fValid);
+    ch := U^;
   until false;
   digits := 0;
   if ch=ord('.') then
