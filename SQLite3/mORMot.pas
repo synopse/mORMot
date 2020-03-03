@@ -25826,7 +25826,7 @@ begin
   end;
 end;
 
-procedure ExchgPtrUInt(P1,P2: PtrUInt; FieldCount: PtrUInt);
+procedure ExchgFields(P1,P2: PPointer; FieldCount: PtrUInt);
 {$ifdef CPUX86}
 asm // eax=P1 edx=P2 ecx=FieldCount
         push    esi
@@ -25843,21 +25843,28 @@ asm // eax=P1 edx=P2 ecx=FieldCount
         pop     esi
 end;
 {$else} inline;
-var B: PtrUInt;
+var p: pointer;
 begin
   repeat
-    B := PPtrUInt(P1)^;
-    PPtrUInt(P1)^ := PPtrUInt(P2)^;
-    PPtrUInt(P2)^ := B;
-    inc(PPtrUInt(P1));
-    inc(PPtrUInt(P2));
+    p := P1^;
+    P1^ := P2^;
+    P2^ := p;
+    inc(P1);
+    inc(P2);
     dec(FieldCount);
   until FieldCount=0;
 end;
 {$endif CPUX86}
 
+procedure ExchgPointer(p1,p2: PPointer); {$ifdef HASINLINE}inline;{$endif}
+var p: pointer;
+begin
+  p := p2^;
+  p2^ := p1^;
+  p1^ := p;
+end;
+
 procedure TUTF8QuickSort.Sort(L, R: Integer);
-// code below is very fast and optimized
 var P: PtrInt;
 begin
   if @Params.Comp<>nil then
@@ -25896,10 +25903,10 @@ begin
           if CurrentRow=I then
             CurrentRow := J;
           // full row exchange
-          ExchgPtrUInt(PtrUInt(CI)-FieldFirstPtr,PtrUInt(CJ)-FieldFirstPtr,
+          ExchgFields(pointer(PtrUInt(CI)-FieldFirstPtr),pointer(PtrUInt(CJ)-FieldFirstPtr),
             Params.FieldCount); // exchange PUTF8Char for whole I,J rows
           if Assigned(IDColumn) then // exchange hidden ID column also
-            ExchgPtrUInt(PtrUInt(@IDColumn[I]),PtrUInt(@IDColumn[J]),1);
+            ExchgPointer(@IDColumn[I],@IDColumn[J]);
         end;
         if PP=CI then
           SetPP(CJ,J) else
@@ -26051,10 +26058,10 @@ begin
       while Compare(J,P)>0 do dec(J);
       if I<=J then begin
         if I<>J then begin // swap elements
-          ExchgPtrUInt(PtrUInt(@Results[I*FieldCount]),
-            PtrUInt(@Results[J*FieldCount]),FieldCount);
+          ExchgFields(pointer(PtrUInt(@Results[I*FieldCount])),
+            pointer(PtrUInt(@Results[J*FieldCount])),FieldCount);
           if Assigned(IDColumn) then // update hidden ID column also
-            ExchgPtrUInt(PtrUInt(@IDColumn[I]),PtrUInt(@IDColumn[J]),1);
+            ExchgPointer(@IDColumn[I],@IDColumn[J]);
         end;
         if P=I then
           P := J else

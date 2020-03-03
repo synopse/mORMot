@@ -23096,7 +23096,7 @@ var d: PTempUTF8;
 begin
   d := @blocks;
   repeat
-    MoveSmall(d^.Text,Dest,d^.Len);
+    {$ifdef HASINLINE}MoveSmall(d^.Text,Dest{$else}MoveFast(d^.Text^,Dest^{$endif},d^.Len);
     inc(Dest,d^.Len);
     if d^.TempRawUTF8<>nil then
       {$ifdef FPC}Finalize(RawUTF8(d^.TempRawUTF8)){$else}RawUTF8(d^.TempRawUTF8) := ''{$endif};
@@ -23113,7 +23113,7 @@ begin
     if Dest<>nil then
     repeat
       if PtrUInt(Dest)+PtrUInt(d^.Len)>Max then begin // avoid buffer overflow
-        MoveSmall(d^.Text,Dest,Max-PtrUInt(Dest));
+        {$ifdef HASINLINE}MoveSmall(d^.Text,Dest{$else}MoveFast(d^.Text^,Dest^{$endif},Max-PtrUInt(Dest));
         repeat
           if d^.TempRawUTF8<>nil then
             {$ifdef FPC}Finalize(RawUTF8(d^.TempRawUTF8)){$else}RawUTF8(d^.TempRawUTF8) := ''{$endif};
@@ -23122,7 +23122,7 @@ begin
         result := PUTF8Char(Max);
         exit;
       end;
-      MoveSmall(d^.Text,Dest,d^.Len);
+      {$ifdef HASINLINE}MoveSmall(d^.Text,Dest{$else}MoveFast(d^.Text^,Dest^{$endif},d^.Len);
       inc(Dest,d^.Len);
       if d^.TempRawUTF8<>nil then
         {$ifdef FPC}Finalize(RawUTF8(d^.TempRawUTF8)){$else}RawUTF8(d^.TempRawUTF8) := ''{$endif};
@@ -31513,113 +31513,129 @@ begin
 end;
 
 function GetInteger(P: PUTF8Char): PtrInt;
-var c: PtrUInt;
+var c: byte;
     minus: boolean;
 begin
-  if P=nil then begin
-    result := 0;
+  result := 0;
+  if P=nil then
     exit;
-  end;
-  while (P^<=' ') and (P^<>#0) do inc(P);
-  if P^='-' then begin
+  c := byte(P^);
+  repeat
+    if c=0 then
+      exit;
+    if c>ord(' ') then
+      break;
+    inc(P);
+    c := byte(P^);
+  until false;
+  if c=ord('-') then begin
     minus := true;
-    repeat inc(P) until P^<>' ';
+    repeat inc(P); c := byte(P^); until c<>ord(' ');
   end else begin
     minus := false;
-    if P^='+' then
-      repeat inc(P) until P^<>' ';
+    if c=ord('+') then
+      repeat inc(P); c := byte(P^); until c<>ord(' ');
   end;
-  c := byte(P^)-48;
+  dec(c,48);
   if c>9 then
-    result := 0 else begin
-    result := c;
+    exit;
+  result := c;
+  repeat
     inc(P);
-    repeat
-      c := byte(P^)-48;
-      if c>9 then
-        break else
-        result := result*10+PtrInt(c);
-      inc(P);
-    until false;
-    if minus then
-      result := -result;
-  end;
+    c := byte(P^);
+    dec(c,48);
+    if c>9 then
+      break;
+    result := result*10+PtrInt(c);
+  until false;
+  if minus then
+    result := -result;
 end;
 
 function GetInteger(P,PEnd: PUTF8Char): PtrInt;
-var c: PtrUInt;
+var c: byte;
     minus: boolean;
 begin
   result := 0;
   if (P=nil) or (P>=PEnd) then
     exit;
-  while (P^<=' ') and (P^<>#0) do begin
+  c := byte(P^);
+  repeat
+    if c=0 then
+      exit;
+    if c>ord(' ') then
+      break;
     inc(P);
     if P=PEnd then
       exit;
-  end;
-  if P^='-' then begin
+    c := byte(P^);
+  until false;
+  if c=ord('-') then begin
     minus := true;
-    repeat inc(P); if P=PEnd then exit; until P^<>' ';
+    repeat inc(P); if P=PEnd then exit; c := byte(P^); until c<>ord(' ');
   end else begin
     minus := false;
-    if P^='+' then
-      repeat inc(P); if P=PEnd then exit; until P^<>' ';
+    if c=ord('+') then
+      repeat inc(P); if P=PEnd then exit; c := byte(P^); until c<>ord(' ');
   end;
-  c := byte(P^)-48;
-  if c<=9 then begin
-    result := c;
+  dec(c,48);
+  if c>9 then
+    exit;
+  result := c;
+  repeat
     inc(P);
-    repeat
-      c := byte(P^)-48;
-      if c>9 then
-        break else
-        result := result*10+PtrInt(c);
-      inc(P);
-    until P=PEnd;
-    if minus then
-      result := -result;
-  end;
+    if P=PEnd then
+      break;
+    c := byte(P^);
+    dec(c,48);
+    if c>9 then
+      break;
+    result := result*10+PtrInt(c);
+  until false;
+  if minus then
+    result := -result;
 end;
 
 function GetInteger(P: PUTF8Char; var err: integer): PtrInt;
-var c: PtrUInt;
+var c: byte;
     minus: boolean;
 begin
-  if P=nil then begin
-    result := 0;
-    err := 1;
+  result := 0;
+  err := 1; // don't return the exact index, just 1 as error flag
+  if P=nil then
     exit;
-  end else
-    err := 0;
-  while (P^<=' ') and (P^<>#0) do inc(P);
-  if P^='-' then begin
+  c := byte(P^);
+  repeat
+    if c=0 then
+      exit;
+    if c>ord(' ') then
+      break;
+    inc(P);
+    c := byte(P^);
+  until false;
+  if c=ord('-') then begin
     minus := true;
-    repeat inc(P) until P^<>' ';
+    repeat inc(P); c := byte(P^); until c<>ord(' ');
   end else begin
     minus := false;
-    if P^='+' then
-      repeat inc(P) until P^<>' ';
+    if c=ord('+') then
+      repeat inc(P); c := byte(P^); until c<>ord(' ');
   end;
-  c := byte(P^)-48;
-  if c>9 then begin
-    err := 1;
-    result := 0;
+  dec(c,48);
+  if c>9 then
     exit;
-  end else begin
-    result := c;
+  result := c;
+  repeat
     inc(P);
-    repeat
-      c := byte(P^)-48;
-      if c>9 then begin
-        if byte(P^)<>0 then
-          err := 1; // always return 1 as err code -> don't care about char index
+    c := byte(P^);
+    dec(c,48);
+    if c<=9 then
+      result := result*10+PtrInt(c) else
+      if c<>256-48 then
+        exit else
         break;
-      end else
-        result := result*10+PtrInt(c);
-      inc(P);
-    until false;
-  end;
+  until false;
+  err := 0; // success
   if minus then
     result := -result;
 end;
