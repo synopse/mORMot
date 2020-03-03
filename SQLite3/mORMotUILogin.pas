@@ -95,7 +95,7 @@ uses
     LCLType,
     LCLIntf,
     LResources,
-    SynTaskDialog in '.\Samples\ThirdPartyDemos\Ondrej\SynTaskDialog4Lazarus\SynTaskDialog.pas',
+    SynTaskDialog, Controls, StdCtrls, ExtCtrls, Classes in '.\Samples\ThirdPartyDemos\Ondrej\SynTaskDialog4Lazarus\SynTaskDialog.pas',
   {$else}
     Consts,
     PsAPI,

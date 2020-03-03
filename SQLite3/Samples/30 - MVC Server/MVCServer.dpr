@@ -20,6 +20,7 @@ uses
   SysUtils,
   SynCrtSock,
   SynCommons,
+  SynTable,
   SynLog,
   mORMot,
   SynSQLite3,

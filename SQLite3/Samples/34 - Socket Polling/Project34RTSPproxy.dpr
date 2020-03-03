@@ -31,6 +31,7 @@ uses
   {$I SynDprUses.inc}
   SysUtils,
   SynCommons,
+  SynTable,
   SynLog,
   SynCrtSock,
   SynBidirSock,

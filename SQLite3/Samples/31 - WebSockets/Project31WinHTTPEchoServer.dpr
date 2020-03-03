@@ -9,7 +9,8 @@ uses
   SysUtils,
   SynZip,
   SynCrtSock,
-  SynCommons;
+  SynCommons,
+  SynTable;
 
 type
   TSimpleWebsocketServer = class
