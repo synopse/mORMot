@@ -586,13 +586,13 @@ begin
     @batch,TSQLRestBatch.Create(Rest,TSQLTag,5000)]);
   auto2 := TSQLRecord.AutoFree([ // avoid several try..finally
     @info,TSQLBlogInfo, @article,TSQLArticle, @comment,TSQLComment, @tag,TSQLTag]);
-  T := data.GetObjectByName('setting') as TDotClearTable;
+  T := data.GetObjectFrom('setting');
   Rest.Retrieve('',info);
   info.Copyright := VariantToUTF8(T.GetValue('setting_id','copyright_notice','setting_value'));
   if info.ID=0 then
     Rest.Add(info,true) else
     Rest.Update(info);
-  tagTable := data.GetObjectByName('meta') as TDotClearTable;
+  tagTable := data.GetObjectFrom('meta');
   tagsCount := 0;
   meta_id := tagTable.FieldIndexExisting('meta_id');
   meta_type := tagTable.FieldIndexExisting('meta_type');
@@ -608,7 +608,7 @@ begin
   batch.Reset(TSQLArticle,5000);
   tag_post_id := tagTable.FieldIndexExisting('post_id');
   T.SortFields(tag_post_id,true,nil,sftInteger);
-  postTable := data.GetObjectByName('post') as TDotClearTable;
+  postTable := data.GetObjectFrom('post');
   postTable.SortFields('post_creadt',true,nil,sftDateTime);
   post_id := postTable.FieldIndexExisting('post_id');
   post_url := postTable.FieldIndexExisting('post_url');
