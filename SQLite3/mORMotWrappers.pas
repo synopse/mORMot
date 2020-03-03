@@ -65,6 +65,7 @@ uses
   Contnrs,
   Variants,
   SynCommons,
+  SynTable,
   mORMot,
   SynLZ,
   SynMustache;

@@ -1707,56 +1707,6 @@ const
     sftDateTime,sftDateTimeMS];
 
 {$ifndef NOVARIANTS}
-type
-  /// define a variant published property as a nullable integer
-  // - either a varNull or a varInt64 value will be stored in the variant
-  // - either a NULL or an INTEGER value will be stored in the database
-  // - the property should be defined as such:
-  // ! property Int: TNullableInteger read fInt write fInt;
-  TNullableInteger = type variant;
-  /// define a variant published property as a nullable boolean
-  // - either a varNull or a varBoolean value will be stored in the variant
-  // - either a NULL or a 0/1 INTEGER value will be stored in the database
-  // - the property should be defined as such:
-  // ! property Bool: TNullableBoolean read fBool write fBool;
-  TNullableBoolean = type variant;
-  /// define a variant published property as a nullable floating point value
-  // - either a varNull or a varDouble value will be stored in the variant
-  // - either a NULL or a FLOAT value will be stored in the database
-  // - the property should be defined as such:
-  // ! property Flt: TNullableFloat read fFlt write fFlt;
-  TNullableFloat = type variant;
-  /// define a variant published property as a nullable decimal value
-  // - either a varNull or a varCurrency value will be stored in the variant
-  // - either a NULL or a FLOAT value will be stored in the database
-  // - the property should be defined as such:
-  // ! property Cur: TNullableCurrency read fCur write fCur;
-  TNullableCurrency = type variant;
-  /// define a variant published property as a nullable date/time value
-  // - either a varNull or a varDate value will be stored in the variant
-  // - either a NULL or a ISO-8601 TEXT value will be stored in the database
-  // - the property should be defined as such:
-  // ! property Dat: TNullableDateTime read fDat write fDat;
-  TNullableDateTime = type variant;
-  /// define a variant published property as a nullable timestamp value
-  // - either a varNull or a varInt64 value will be stored in the variant
-  // - either a NULL or a TTimeLog INTEGER value will be stored in the database
-  // - the property should be defined as such:
-  // ! property Tim: TNullableTimrency read fTim write fTim;
-  TNullableTimeLog = type variant;
-  /// define a variant published property as a nullable UTF-8 encoded text
-  // - either a varNull or varString (RawUTF8) will be stored in the variant
-  // - either a NULL or a TEXT value will be stored in the database
-  // - the property should be defined as such:
-  // ! property Txt: TNullableUTF8Text read fTxt write fTxt;
-  // or for a fixed-width VARCHAR (in external databases), here of 32 max chars:
-  // ! property Txt: TNullableUTF8Text index 32 read fTxt write fTxt;
-  // - warning: prior to Delphi 2009, since the variant will be stored as
-  // RawUTF8 internally, you should not use directly the field value as a
-  // VCL string=AnsiString like string(aField) but use VariantToString(aField)
-  TNullableUTF8Text = type variant;
-
-const
   /// the SQL field property types with their TNullable* equivalency
   // - those types may be stored in a variant published property, e.g.
   // ! property Int: TNullableInteger read fInt write fInt;
@@ -1764,184 +1714,6 @@ const
   // ! property Txt: TNullableUTF8Text index 32 read fTxt write fTxt;
   NULLABLE_TYPES = [sftInteger,sftBoolean,sftEnumerate,sftFloat,sftCurrency,
     sftDateTime,sftTimeLog,sftUTF8Text];
-
-/// creates a nullable integer value from a supplied constant
-// - FPC does not allow direct assignment to a TNullableInteger = type variant
-// variable: use this function to circumvent it
-function NullableInteger(const Value: Int64): TNullableInteger;
-  {$ifdef HASINLINE}inline;{$endif}
-
-var
-  /// a nullable integer value containing null
-  NullableIntegerNull: TNullableInteger absolute NullVarData;
-  /// a nullable boolean value containing null
-  NullableBooleanNull: TNullableBoolean absolute NullVarData;
-  /// a nullable float value containing null
-  NullableFloatNull: TNullableFloat absolute NullVarData;
-  /// a nullable currency value containing null
-  NullableCurrencyNull: TNullableCurrency absolute NullVarData;
-  /// a nullable TDateTime value containing null
-  NullableDateTimeNull: TNullableDateTime absolute NullVarData;
-  /// a nullable TTimeLog value containing null
-  NullableTimeLogNull: TNullableTimeLog absolute NullVarData;
-  /// a nullable UTF-8 encoded text value containing null
-  NullableUTF8TextNull: TNullableUTF8Text absolute NullVarData;
-
-/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
-// - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
-// direct transtyping from a TNullableInteger = type variant variable: use this
-// function to circumvent those limitations
-function NullableIntegerIsEmptyOrNull(const V: TNullableInteger): Boolean;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// check if a TNullableInteger is null, or return its value
-// - returns FALSE if V is null or empty, or TRUE and set the Integer value
-function NullableIntegerToValue(const V: TNullableInteger; out Value: Int64): Boolean;
-  overload; {$ifdef HASINLINE}inline;{$endif}
-
-/// check if a TNullableInteger is null, or return its value
-// - returns 0 if V is null or empty, or the stored Integer value
-function NullableIntegerToValue(const V: TNullableInteger): Int64;
-  overload; {$ifdef HASINLINE}inline;{$endif}
-
-/// creates a nullable Boolean value from a supplied constant
-// - FPC does not allow direct assignment to a TNullableBoolean = type variant
-// variable: use this function to circumvent it
-function NullableBoolean(Value: boolean): TNullableBoolean;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
-// - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
-// direct transtyping from a TNullableBoolean = type variant variant: use this
-// function to circumvent those limitations
-function NullableBooleanIsEmptyOrNull(const V: TNullableBoolean): Boolean;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// check if a TNullableBoolean is null, or return its value
-// - returns FALSE if V is null or empty, or TRUE and set the Boolean value
-function NullableBooleanToValue(const V: TNullableBoolean; out Value: Boolean): Boolean;
-  overload; {$ifdef HASINLINE}inline;{$endif}
-
-/// check if a TNullableBoolean is null, or return its value
-// - returns false if V is null or empty, or the stored Boolean value
-function NullableBooleanToValue(const V: TNullableBoolean): Boolean;
-  overload; {$ifdef HASINLINE}inline;{$endif}
-
-/// creates a nullable floating-point value from a supplied constant
-// - FPC does not allow direct assignment to a TNullableFloat = type variant
-// variable: use this function to circumvent it
-function NullableFloat(const Value: double): TNullableFloat;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
-// - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
-// direct transtyping from a TNullableFloat = type variant variable: use this
-// function to circumvent those limitations
-function NullableFloatIsEmptyOrNull(const V: TNullableFloat): Boolean;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// check if a TNullableFloat is null, or return its value
-// - returns FALSE if V is null or empty, or TRUE and set the Float value
-function NullableFloatToValue(const V: TNullableFloat; out Value: double): boolean;
-  overload; {$ifdef HASINLINE}inline;{$endif}
-
-/// check if a TNullableFloat is null, or return its value
-// - returns 0 if V is null or empty, or the stored Float value
-function NullableFloatToValue(const V: TNullableFloat): double;
-  overload; {$ifdef HASINLINE}inline;{$endif}
-
-/// creates a nullable Currency value from a supplied constant
-// - FPC does not allow direct assignment to a TNullableCurrency = type variant
-// variable: use this function to circumvent it
-function NullableCurrency(const Value: currency): TNullableCurrency;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
-// - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
-// direct transtyping from a TNullableCurrency = type variant variable: use this
-// function to circumvent those limitations
-function NullableCurrencyIsEmptyOrNull(const V: TNullableCurrency): Boolean;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// check if a TNullableCurrency is null, or return its value
-// - returns FALSE if V is null or empty, or TRUE and set the Currency value
-function NullableCurrencyToValue(const V: TNullableCurrency; out Value: currency): boolean;
-  overload; {$ifdef HASINLINE}inline;{$endif}
-
-/// check if a TNullableCurrency is null, or return its value
-// - returns 0 if V is null or empty, or the stored Currency value
-function NullableCurrencyToValue(const V: TNullableCurrency): currency;
-  overload; {$ifdef HASINLINE}inline;{$endif}
-
-/// creates a nullable TDateTime value from a supplied constant
-// - FPC does not allow direct assignment to a TNullableDateTime = type variant
-// variable: use this function to circumvent it
-function NullableDateTime(const Value: TDateTime): TNullableDateTime;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
-// - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
-// direct transtyping from a TNullableDateTime = type variant variable: use this
-// function to circumvent those limitations
-function NullableDateTimeIsEmptyOrNull(const V: TNullableDateTime): Boolean;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// check if a TNullableDateTime is null, or return its value
-// - returns FALSE if V is null or empty, or TRUE and set the DateTime value
-function NullableDateTimeToValue(const V: TNullableDateTime; out Value: TDateTime): boolean;
-  overload; {$ifdef HASINLINE}inline;{$endif}
-
-/// check if a TNullableDateTime is null, or return its value
-// - returns 0 if V is null or empty, or the stored DateTime value
-function NullableDateTimeToValue(const V: TNullableDateTime): TDateTime;
-  overload; {$ifdef HASINLINE}inline;{$endif}
-
-/// creates a nullable TTimeLog value from a supplied constant
-// - FPC does not allow direct assignment to a TNullableTimeLog = type variant
-// variable: use this function to circumvent it
-function NullableTimeLog(const Value: TTimeLog): TNullableTimeLog;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
-// - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
-// direct transtyping from a TNullableTimeLog = type variant variable: use this
-// function to circumvent those limitations
-function NullableTimeLogIsEmptyOrNull(const V: TNullableTimeLog): Boolean;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// check if a TNullableTimeLog is null, or return its value
-// - returns FALSE if V is null or empty, or TRUE and set the TimeLog value
-function NullableTimeLogToValue(const V: TNullableTimeLog; out Value: TTimeLog): boolean;
-  overload; {$ifdef HASINLINE}inline;{$endif}
-
-/// check if a TNullableTimeLog is null, or return its value
-// - returns 0 if V is null or empty, or the stored TimeLog value
-function NullableTimeLogToValue(const V: TNullableTimeLog): TTimeLog;
-  overload; {$ifdef HASINLINE}inline;{$endif}
-
-/// creates a nullable UTF-8 encoded text value from a supplied constant
-// - FPC does not allow direct assignment to a TNullableUTF8 = type variant
-// variable: use this function to circumvent it
-function NullableUTF8Text(const Value: RawUTF8): TNullableUTF8Text;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
-// - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
-// direct transtyping from a TNullableUTF8Text = type variant variable: use this
-// function to circumvent those limitations
-function NullableUTF8TextIsEmptyOrNull(const V: TNullableUTF8Text): Boolean;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// check if a TNullableUTF8Text is null, or return its value
-// - returns FALSE if V is null or empty, or TRUE and set the UTF8Text value
-function NullableUTF8TextToValue(const V: TNullableUTF8Text; out Value: RawUTF8): boolean;
-  overload; {$ifdef HASINLINE}inline;{$endif}
-
-/// check if a TNullableUTF8Text is null, or return its value
-// - returns '' if V is null or empty, or the stored UTF8-encoded text value
-function NullableUTF8TextToValue(const V: TNullableUTF8Text): RawUTF8;
-  overload; {$ifdef HASINLINE}inline;{$endif}
-
 {$endif NOVARIANTS}
 
 /// similar to AddInt64() function, but for a TIDDynArray
@@ -13923,35 +13695,6 @@ type
     procedure NotifyDeletions(aTableIndex: integer; const aIDs: array of Int64); overload;
   end;
 
-  /// optimized thread-safe storage of a list of IP v4 adresses
-  //  - can be used e.g. as white-list or black-list of clients
-  //  - will use internally a sorted list of 32-bit integers for fast lookup
-  //  - with optional binary persistence
-  TIPBan = class(TSynPersistentStore)
-  protected
-    fIP4: TIntegerDynArray;
-    fCount: integer;
-    procedure LoadFromReader; override;
-    procedure SaveToWriter(aWriter: TFileBufferWriter); override;
-  public
-    /// register one IP to the list
-    function Add(const aIP: RawUTF8): boolean;
-    /// unregister one IP to the list
-    function Delete(const aIP: RawUTF8): boolean;
-    /// returns true if the IP is in the list
-    function Exists(const aIP: RawUTF8): boolean;
-    /// creates a TDynArray wrapper around the stored list of values
-    // - could be used e.g. for binary persistence
-    // - warning: caller should make Safe.Unlock when finished
-    function DynArrayLocked: TDynArray;
-    /// low-level access to the internal IPv4 list
-    // - 32-bit unsigned values are sorted, for fast O(log(n)) binary search
-    property IP4: TIntegerDynArray read fIP4;
-  published
-    /// how many IPs are currently banned
-    property Count: integer read fCount;
-  end;
-
   /// how a TSQLRest class may execute read or write operations
   // - used e.g. for TSQLRestServer.AcquireWriteMode or
   // TSQLRestServer.AcquireExecutionMode/AcquireExecutionLockedTimeOut
@@ -21938,7 +21681,7 @@ begin
     result := sftInteger else
   result := sftUnknown;
 end;
-{$endif}
+{$endif NOVARIANTS}
 
 const
   SQLFIELDTYPETODBFIELDTYPE: array[TSQLFieldType] of TSQLDBFieldType =
@@ -22318,7 +22061,7 @@ begin
     if aSQLFieldType<>sftUnknown then // handle sftNullable type
       result := TSQLPropInfoRTTIVariant.Create(aPropInfo,aPropIndex,aSQLFieldType,aOptions);
   end;
-  {$endif}
+  {$endif NOVARIANTS}
   if result=nil then begin
     aSQLFieldType := aType^.GetSQLFieldType;
     C := nil;
@@ -22356,7 +22099,7 @@ begin
       {$ifndef NOVARIANTS}
       sftVariant:
         C := TSQLPropInfoRTTIVariant;  // sftNullable already handle above
-      {$endif}
+      {$endif NOVARIANTS}
       sftBlob:
         C := TSQLPropInfoRTTIRawBlob;
       sftBlobDynArray:
@@ -24214,165 +23957,6 @@ end;
 
 {$ifndef NOVARIANTS}
 
-function NullableInteger(const Value: Int64): TNullableInteger;
-begin
-  PVariant(@result)^ := Value;
-end;
-
-function NullableIntegerIsEmptyOrNull(const V: TNullableInteger): Boolean;
-begin
-  result := VarDataIsEmptyOrNull(@V);
-end;
-
-function NullableIntegerToValue(const V: TNullableInteger; out Value: Int64): Boolean;
-begin
-  Value := 0;
-  result := not VarDataIsEmptyOrNull(@V) and VariantToInt64(PVariant(@V)^,Value);
-end;
-
-function NullableIntegerToValue(const V: TNullableInteger): Int64;
-begin
-  VariantToInt64(PVariant(@V)^,result);
-end;
-
-
-function NullableBoolean(Value: boolean): TNullableBoolean;
-begin
-  PVariant(@result)^ := Value;
-end;
-
-function NullableBooleanIsEmptyOrNull(const V: TNullableBoolean): Boolean;
-begin
-  result := VarDataIsEmptyOrNull(@V);
-end;
-
-function NullableBooleanToValue(const V: TNullableBoolean; out Value: Boolean): Boolean;
-begin
-  Value := false;
-  result := not VarDataIsEmptyOrNull(@V) and VariantToBoolean(PVariant(@V)^,Value);
-end;
-
-function NullableBooleanToValue(const V: TNullableBoolean): Boolean;
-begin
-  VariantToBoolean(PVariant(@V)^,result);
-end;
-
-
-function NullableFloat(const Value: double): TNullableFloat;
-begin
-  PVariant(@result)^ := Value;
-end;
-
-function NullableFloatIsEmptyOrNull(const V: TNullableFloat): Boolean;
-begin
-  result := VarDataIsEmptyOrNull(@V);
-end;
-
-function NullableFloatToValue(const V: TNullableFloat; out Value: Double): Boolean;
-begin
-  Value := 0;
-  result := not VarDataIsEmptyOrNull(@V) and VariantToDouble(PVariant(@V)^,Value);
-end;
-
-function NullableFloatToValue(const V: TNullableFloat): Double;
-begin
-  VariantToDouble(PVariant(@V)^,result);
-end;
-
-
-function NullableCurrency(const Value: currency): TNullableCurrency;
-begin
-  PVariant(@result)^ := Value;
-end;
-
-function NullableCurrencyIsEmptyOrNull(const V: TNullableCurrency): Boolean;
-begin
-  result := VarDataIsEmptyOrNull(@V);
-end;
-
-function NullableCurrencyToValue(const V: TNullableCurrency; out Value: currency): Boolean;
-begin
-  Value := 0;
-  result := not VarDataIsEmptyOrNull(@V) and VariantToCurrency(PVariant(@V)^,Value);
-end;
-
-function NullableCurrencyToValue(const V: TNullableCurrency): currency;
-begin
-  VariantToCurrency(PVariant(@V)^,result);
-end;
-
-
-function NullableDateTime(const Value: TDateTime): TNullableDateTime;
-begin
-  PVariant(@result)^ := Value;
-end;
-
-function NullableDateTimeIsEmptyOrNull(const V: TNullableDateTime): Boolean;
-begin
-  result := VarDataIsEmptyOrNull(@V);
-end;
-
-function NullableDateTimeToValue(const V: TNullableDateTime; out Value: TDateTime): Boolean;
-begin
-  Value := 0;
-  result := not VarDataIsEmptyOrNull(@V) and VariantToDouble(PVariant(@V)^,Double(Value));
-end;
-
-function NullableDateTimeToValue(const V: TNullableDateTime): TDateTime;
-begin
-  VariantToDouble(PVariant(@V)^,Double(result));
-end;
-
-
-function NullableTimeLog(const Value: TTimeLog): TNullableTimeLog;
-begin
-  PVariant(@result)^ := Value;
-end;
-
-function NullableTimeLogIsEmptyOrNull(const V: TNullableTimeLog): Boolean;
-begin
-  result := VarDataIsEmptyOrNull(@V);
-end;
-
-function NullableTimeLogToValue(const V: TNullableTimeLog; out Value: TTimeLog): Boolean;
-begin
-  Value := 0;
-  result := not VarDataIsEmptyOrNull(@V) and VariantToInt64(PVariant(@V)^,Int64(Value));
-end;
-
-function NullableTimeLogToValue(const V: TNullableTimeLog): TTimeLog;
-begin
-  VariantToInt64(PVariant(@V)^,Int64(result));
-end;
-
-
-function NullableUTF8Text(const Value: RawUTF8): TNullableUTF8Text;
-begin
-  VarClear(PVariant(@result)^);
-  TVarData(result).VType := varString;
-  TVarData(result).VAny := nil; // avoid GPF below
-  RawUTF8(TVarData(result).VAny) := Value;
-end;
-
-function NullableUTF8TextIsEmptyOrNull(const V: TNullableUTF8Text): Boolean;
-begin
-  result := VarDataIsEmptyOrNull(@V);
-end;
-
-function NullableUTF8TextToValue(const V: TNullableUTF8Text; out Value: RawUTF8): boolean;
-begin
-  result := not VarDataIsEmptyOrNull(@V) and VariantToUTF8(PVariant(@V)^,Value);
-end;
-
-function NullableUTF8TextToValue(const V: TNullableUTF8Text): RawUTF8;
-var dummy: boolean;
-begin
-  if VarDataIsEmptyOrNull(@V) then // VariantToUTF8() will return 'null'
-    result := '' else
-    VariantToUTF8(PVariant(@V)^,result,dummy);
-end;
-
-
 { TSQLPropInfoRTTIVariant }
 
 constructor TSQLPropInfoRTTIVariant.Create(aPropInfo: PPropInfo; aPropIndex: integer;
@@ -26226,12 +25810,12 @@ begin
         if ContentType=sftUnknown then
           ContentType := sftNullable;
       end;
-      {$endif}
+      {$endif NOVARIANTS}
       end;
     {$ifndef NOVARIANTS}
     if ContentType in [sftVariant,sftNullable] then
       ContentDB := ftUnknown else // ftUTF8/ftNull are not precise enough
-    {$endif}
+    {$endif NOVARIANTS}
       ContentDB := SQLFIELDTYPETODBFIELDTYPE[ContentType];
     TableIndex := FieldTableIndex;
   end;
@@ -27292,7 +26876,7 @@ var
     {$ifndef NOVARIANTS}
     nil,                 // Variant (TEXT serialization)
     nil,                 // TNullable*
-    {$endif}
+    {$endif NOVARIANTS}
     nil,                 // Blob
     nil,                 // BlobDynArray
     nil,                 // BlobCustom
@@ -27329,7 +26913,7 @@ type
     PP, CI, CJ: PPUTF8Char;
     I, J: PtrInt;
     /// recursively perform the sort
-    procedure QuickSort(L, R: Integer);
+    procedure Sort(L, R: Integer);
     /// compare value at index I with pivot value
     // - sort by ID if values are identical
     function CompI: integer; {$ifdef HASINLINE}inline;{$endif}
@@ -27382,7 +26966,7 @@ begin
 end;
 
 procedure ExchgPtrUInt(P1,P2: PtrUInt; FieldCount: PtrUInt);
-{$ifdef CPUX86NOTPIC}
+{$ifdef CPUX86}
 asm // eax=P1 edx=P2 ecx=FieldCount
         push    esi
         push    edi
@@ -27397,37 +26981,23 @@ asm // eax=P1 edx=P2 ecx=FieldCount
         pop     edi
         pop     esi
 end;
-{$else}
-var B,i: PtrUInt;
+{$else} inline;
+var B: PtrUInt;
 begin
-  for i := 1 to FieldCount do begin
+  repeat
     B := PPtrUInt(P1)^;
     PPtrUInt(P1)^ := PPtrUInt(P2)^;
     PPtrUInt(P2)^ := B;
     inc(PPtrUInt(P1));
     inc(PPtrUInt(P2));
-  end;
+    dec(FieldCount);
+  until FieldCount=0;
 end;
-{$endif CPUX86NOTPIC}
+{$endif CPUX86}
 
-{$ifndef ABSOLUTEORPUREPASCAL} // outside TUTF8QuickSort.QuickSort for FPC
-procedure ExchgPUTF8Charx86(P: pointer; I,J: integer);
-asm // eax=P edx=I ecx=J
-        push    ebx
-        lea     edx, [eax + edx * 4]
-        lea     ecx, [eax + ecx * 4]
-        mov     eax, [edx]
-        mov     ebx, [ecx]
-        mov     [ecx], eax
-        mov     [edx], ebx
-        pop     ebx
-end;
-{$endif ABSOLUTEORPUREPASCAL}
-
-procedure TUTF8QuickSort.QuickSort(L, R: Integer);
+procedure TUTF8QuickSort.Sort(L, R: Integer);
 // code below is very fast and optimized
 var P: PtrInt;
-    {$ifdef ABSOLUTEORPUREPASCAL}Tmp: PUTF8Char;{$endif}
 begin
   if @Params.Comp<>nil then
   repeat
@@ -27467,15 +27037,8 @@ begin
           // full row exchange
           ExchgPtrUInt(PtrUInt(CI)-FieldFirstPtr,PtrUInt(CJ)-FieldFirstPtr,
             Params.FieldCount); // exchange PUTF8Char for whole I,J rows
-          if Assigned(IDColumn) then begin // exchange hidden ID column also
-            {$ifdef ABSOLUTEORPUREPASCAL}
-            Tmp := IDColumn[I];
-            IDColumn[I] := IDColumn[J];
-            IDColumn[J] := Tmp;
-            {$else}
-            ExchgPUTF8Charx86(IDColumn,I,J);
-            {$endif}
-          end;
+          if Assigned(IDColumn) then // exchange hidden ID column also
+            ExchgPtrUInt(PtrUInt(@IDColumn[I]),PtrUInt(@IDColumn[J]),1);
         end;
         if PP=CI then
           SetPP(CJ,J) else
@@ -27491,27 +27054,26 @@ begin
     if J - L < R - I then begin // use recursion only for smaller range
       P := I; // I,J will be overriden in QuickSort() call
       if L < J then
-        QuickSort(L, J);
+        Sort(L, J);
       L := P;
     end else begin
       P := J;
       if I < R then
-        QuickSort(I, R);
+        Sort(I, R);
       R := P
     end;
   until L >= R;
 end;
 
-procedure TSQLTable.SortFields(const FieldName: RawUTF8; Asc: boolean=true;
-  PCurrentRow: PInteger=nil; FieldType: TSQLFieldType=sftUnknown;
-  CustomCompare: TUTF8Compare=nil);
+procedure TSQLTable.SortFields(const FieldName: RawUTF8; Asc: boolean;
+  PCurrentRow: PInteger; FieldType: TSQLFieldType; CustomCompare: TUTF8Compare);
 begin
   SortFields(FieldIndex(FieldName),Asc,PCurrentRow,FieldType,CustomCompare);
 end;
 
 procedure TSQLTable.SortFields(Field: integer; Asc: boolean; PCurrentRow: PInteger;
   FieldType: TSQLFieldType; CustomCompare: TUTF8Compare);
-var Sort: TUTF8QuickSort; // fast static object for sorting
+var quicksort: TUTF8QuickSort; // fast static object for sorting
 begin
   if (FieldCount=0) or (Cardinal(Field)>=cardinal(FieldCount)) then
     exit;
@@ -27529,21 +27091,21 @@ begin
   fSortParams.FieldIndex := Field;
   fSortParams.Asc := Asc;
   // this sort routine is very fast, thanks to the dedicated static object
-  Sort.Params := fSortParams;
-  Sort.Results := fResults;
-  Sort.IDColumn := @fIDColumn[0];
-  Sort.FieldCountNextPtr := FieldCount*SizeOf(PtrInt);
-  Sort.FieldFirstPtr := Field*SizeOf(PtrInt);
+  quicksort.Params := fSortParams;
+  quicksort.Results := fResults;
+  quicksort.IDColumn := @fIDColumn[0];
+  quicksort.FieldCountNextPtr := FieldCount*SizeOf(PtrInt);
+  quicksort.FieldFirstPtr := Field*SizeOf(PtrInt);
   if fFieldIndexID<0 then // if no ID colum, assume first
-    Sort.FieldIDPtr := Sort.FieldFirstPtr else
-    Sort.FieldIDPtr := (Field-fFieldIndexID)*SizeOf(PtrInt);
+    quicksort.FieldIDPtr := quicksort.FieldFirstPtr else
+    quicksort.FieldIDPtr := (Field-fFieldIndexID)*SizeOf(PtrInt);
   if PCurrentRow=nil then
-    Sort.CurrentRow := -1 else
-    Sort.CurrentRow := PCurrentRow^;
-  if fRowCount>1 then
-    Sort.QuickSort(1,fRowCount); // ignore first row = field names -> (1,RowCount)
+    quicksort.CurrentRow := -1 else
+    quicksort.CurrentRow := PCurrentRow^;
+  if fRowCount>1 then // ignore first row = field names -> (1,RowCount)
+    quicksort.Sort(1,fRowCount);
   if PCurrentRow<>nil then
-    PCurrentRow^ := Sort.CurrentRow;
+    PCurrentRow^ := quicksort.CurrentRow;
 end;
 
 function TSQLTable.SearchFieldSorted(const Value: RawUTF8; FieldIndex: integer;
@@ -27594,11 +27156,11 @@ type
     // used for row content comparison
     function Compare(A,B: integer): integer;
     /// recursively perform the sort
-    procedure QuickSort(L, R: Integer);
+    procedure Sort(L, R: Integer);
   end;
 
 function TUTF8QuickSortMulti.Compare(A,B: integer): integer;
-var i: integer;
+var i: PtrInt;
 begin
   result := 0;
   for i := 0 to IndexMax do
@@ -27615,9 +27177,8 @@ begin
    end;
 end;
 
-procedure TUTF8QuickSortMulti.QuickSort(L, R: Integer);
+procedure TUTF8QuickSortMulti.Sort(L, R: Integer);
 var I,J,P: integer;
-    Tmp: PUTF8Char;
 begin
   if L<R then
   repeat
@@ -27631,11 +27192,8 @@ begin
         if I<>J then begin // swap elements
           ExchgPtrUInt(PtrUInt(@Results[I*FieldCount]),
             PtrUInt(@Results[J*FieldCount]),FieldCount);
-          if Assigned(IDColumn) then begin // update hidden ID column also
-            Tmp := IDColumn[I];
-            IDColumn[I] := IDColumn[J];
-            IDColumn[J] := Tmp;
-          end;
+          if Assigned(IDColumn) then // update hidden ID column also
+            ExchgPtrUInt(PtrUInt(@IDColumn[I]),PtrUInt(@IDColumn[J]),1);
         end;
         if P=I then
           P := J else
@@ -27647,11 +27205,11 @@ begin
     until I>J;
     if J - L < R - I then begin // use recursion only for smaller range
       if L < J then
-        QuickSort(L, J);
+        Sort(L, J);
       L := I;
     end else begin
       if I < R then
-        QuickSort(I, R);
+        Sort(I, R);
       R := J;
     end;
   until L >= R;
@@ -27659,16 +27217,16 @@ end;
 
 procedure TSQLTable.SortFields(const Fields: array of integer;
   const Asc: array of boolean; const CustomCompare: array of TUTF8Compare);
-var Sort: TUTF8QuickSortMulti;
+var quicksort: TUTF8QuickSortMulti;
     i: integer;
 begin
   if (self=nil) or (fRowCount<=1) or (FieldCount<=0) or (length(Fields)=0) then
     exit;
-  Sort.FieldCount := FieldCount;
-  Sort.IndexMax := high(Fields);
-  SetLength(Sort.Index,Sort.IndexMax+1);
-  for i := 0 to Sort.IndexMax do
-  with Sort.Index[i] do begin
+  quicksort.FieldCount := FieldCount;
+  quicksort.IndexMax := high(Fields);
+  SetLength(quicksort.Index,quicksort.IndexMax+1);
+  for i := 0 to quicksort.IndexMax do
+  with quicksort.Index[i] do begin
     if i<=high(CustomCompare) then
       Comp := CustomCompare[i];
     ndx := Fields[i];
@@ -27688,11 +27246,11 @@ begin
       exit; // impossible to sort this kind of field (or invalid field index)
   end;
   for i := 0 to high(Asc) do
-    if (i<=Sort.IndexMax) and not Asc[i] then
-      Sort.Index[i].Desc := true;
-  Sort.Results := fResults;
-  Sort.IDColumn := @fIDColumn[0];
-  Sort.QuickSort(1,fRowCount); // ignore first row = field names -> (1,RowCount)
+    if (i<=quicksort.IndexMax) and not Asc[i] then
+      quicksort.Index[i].Desc := true;
+  quicksort.Results := fResults;
+  quicksort.IDColumn := @fIDColumn[0];
+  quicksort.Sort(1,fRowCount); // ignore first row = field names -> (1,RowCount)
 end;
 
 function TSQLTable.SortCompare(Field: integer): TUTF8Compare;
@@ -27747,7 +27305,7 @@ begin
       result := nil;
 end;
 
-function TSQLTable.NewRecord(RecordType: TSQLRecordClass=nil): TSQLRecord;
+function TSQLTable.NewRecord(RecordType: TSQLRecordClass): TSQLRecord;
 begin
   result := nil;
   if self=nil then
@@ -31460,7 +31018,7 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
       result := sftVariant;
       exit;
     end;
-    {$endif}
+    {$endif NOVARIANTS}
     tkClass: begin
       result := ClassSQLFieldType;
       exit;
@@ -37853,76 +37411,6 @@ begin
 end;
 
 
-{ TIPBan }
-
-procedure TIPBan.LoadFromReader;
-begin
-  inherited;
-  fReader.ReadVarUInt32Array(fIP4);
-  fCount := length(fIP4);
-end;
-
-procedure TIPBan.SaveToWriter(aWriter: TFileBufferWriter);
-begin // wkSorted not efficient: too big diffs between IPs
-  aWriter.WriteVarUInt32Array(fIP4, fCount, wkUInt32);
-end;
-
-function TIPBan.Add(const aIP: RawUTF8): boolean;
-var ip4: cardinal;
-begin
-  result := false;
-  if (self=nil) or not IPToCardinal(aIP,ip4) then
-    exit;
-  fSafe.Lock;
-  try
-    AddSortedInteger(fIP4,fCount,ip4);
-    result := true;
-  finally
-    fSafe.UnLock;
-  end;
-end;
-
-function TIPBan.Delete(const aIP: RawUTF8): boolean;
-var ip4: cardinal;
-    i: integer;
-begin
-  result := false;
-  if (self=nil) or not IPToCardinal(aIP,ip4) then
-    exit;
-  fSafe.Lock;
-  try
-    i := FastFindIntegerSorted(pointer(fIP4),fCount-1,ip4);
-    if i<0 then
-      exit;
-    DeleteInteger(fIP4,fCount,i);
-    result := true;
-  finally
-    fSafe.UnLock;
-  end;
-end;
-
-function TIPBan.Exists(const aIP: RawUTF8): boolean;
-var ip4: cardinal;
-begin
-  result := false;
-  if (self=nil) or (fCount=0) or not IPToCardinal(aIP,ip4) then
-    exit;
-  fSafe.Lock;
-  try
-    if FastFindIntegerSorted(pointer(fIP4),fCount-1,ip4)>=0 then
-      result := true;
-  finally
-    fSafe.UnLock;
-  end;
-end;
-
-function TIPBan.DynArrayLocked: TDynArray;
-begin
-  fSafe.Lock;
-  result.InitSpecific(TypeInfo(TCardinalDynArray),fIP4,djCardinal,@fCount);
-end;
-
-
 { TSQLRestThread }
 
 constructor TSQLRestThread.Create(aRest: TSQLRest;
@@ -40922,7 +40410,7 @@ end;
 procedure BackgroundExecuteProc(Call: pointer); forward;
 
 {$ifdef DELPHI6OROLDER} {$ifndef LVCL}
-type TThreadHook = class(TThread);
+type TThreadHook = class(TThread); // Delphi 5-6 tweak to access private fields
 {$endif} {$endif}
 
 procedure BackGroundExecute(var synch: TBackgroundLauncher;
@@ -51596,7 +51084,7 @@ const
     {$ifndef NOVARIANTS}
     ' TEXT COLLATE BINARY, ',        // sftVariant
     ' TEXT COLLATE NOCASE, ',        // sftNullable (from SQLFieldTypeStored)
-    {$endif}
+    {$endif NOVARIANTS}
     ' BLOB, ',                       // sftBlob
     ' BLOB, ',                       // sftBlobDynArray
     ' BLOB, ',                       // sftBlobCustom
@@ -63119,7 +62607,8 @@ begin
     result[i] := a[i].fID;
 end;
 
-procedure ObjArrayCopy(const aSourceObjArray; var aDestObjArray; aDestObjArrayClear: boolean);
+procedure ObjArrayCopy(const aSourceObjArray; var aDestObjArray;
+  aDestObjArrayClear: boolean);
 var s: TObjectDynArray absolute aSourceObjArray;
     d: TObjectDynArray absolute aDestObjArray;
     slen,dlen: integer;
@@ -63178,7 +62667,7 @@ initialization
   {$ifndef NOVARIANTS}
   pointer(@SQLFieldTypeComp[sftVariant]) := @StrComp;
   pointer(@SQLFieldTypeComp[sftNullable]) := @StrComp;
-  {$endif}
+  {$endif NOVARIANTS}
   {$ifndef USENORMTOUPPER}
   pointer(@SQLFieldTypeComp[sftUTF8Text]) := @AnsiIComp;
   {$endif}

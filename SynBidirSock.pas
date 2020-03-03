@@ -89,6 +89,7 @@ uses
   SyncObjs,
   SynLZ,
   SynCommons,
+  SynTable,
   SynLog,
   SynCrtSock,
   SynCrypto, // for SHA and AES

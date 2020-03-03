@@ -62,7 +62,8 @@ uses
   {$endif}
   Variants,
   SysUtils,
-  SynCommons;
+  SynCommons,
+  SynTable;
 
 
 type

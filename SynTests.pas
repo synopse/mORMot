@@ -83,6 +83,7 @@ uses
 {$endif}
   SynLZ, // needed e.g. for TSynMapFile .mab format
   SynCommons,
+  SynTable,
   SynLog,
   SysUtils;
 

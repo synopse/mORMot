@@ -107,6 +107,7 @@ uses
   Contnrs,
   {$endif}
   SynCommons,
+  SynTable,
   SynLog,
   SynCrypto, // for executable MD5/SHA256 hashes
   mORMot; // for TSynJsonFileSettings (i.e. JSON serialization)
