@@ -1697,14 +1697,15 @@ You can also allocate directly the {\f1\fs20 TDocVariantData} instance on stack,
 !  writeln(Doc2.ToJSON);         // will write '{"name":"Paul","birthyear":1982}'
 You do not need to protect the stack-allocated {\f1\fs20 TDocVariantData} instances with a {\f1\fs20 try..finally}, since the compiler will do it for your. Take a look at all the methods and properties of {\f1\fs20 TDocVariantData}.
 :   FPC restrictions
-You should be warning that with the {\i @*FreePascal@} compiler, calling late-binding functions with arguments (like {\f1\fs20 Add} or {\f1\fs20 Delete}) would most probably fail to work as expected.\line We have found out that the following code may trigger some random access violations:
+You should take note that with the {\i @*FreePascal@} compiler, calling late-binding functions with arguments (like {\f1\fs20 Add} or {\f1\fs20 Delete}) would most probably fail to work as expected.\line We have found out that the following code may trigger some random access violations:
 !  doc.Add('text');
 !  doc.Add(anotherdocvariant);
-So you should access instead directly the underlying :
+So you should rather access directly the underlying {\f1\fs20 TDocVariantData} instance:
 !  TDocVariantData(doc).AddItem('text');
 !  TDocVariantData(doc).AddItem(anotherdocvariant);
-Or using {\f1\fs20 _Safe()}:
-!  DocVariantData(doc)^.AddItem('text');
+Or even better using {\f1\fs20 _Safe()}:
+!  _Safe(doc)^.AddItem('text');
+!  _Safe(doc)^.AddItem(anotherdocvariant);
 In fact, late-binding functions arguments seem to work only for simple values (like {\f1\fs20 integer} or {\f1\fs20 double}), but not complex types (like {\f1\fs20 string} or other {\f1\fs20 TDocVariantData}), which generate some random GPF, especially when {\f1\fs20 heaptrc} paranoid memory checks are enabled.
 As a result, direct access to {\f1\fs20 TJSONVariantData} instances - preferably via {\f1\fs20 _Safe()}, and not a {\f1\fs20 variant} variable, will be faster and less error-prone when using FPC.
 :   Variant array documents
