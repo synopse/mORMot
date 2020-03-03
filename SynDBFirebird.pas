@@ -44,8 +44,8 @@ unit SynDBFirebird;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.18
-  - first public release, corresponding to mORMot Framework 1.18
+  WARNING: This unit is NOT FINISHED and doesn't work as expected!
+    PLEASE USE SynDBZeos instead!
 
   TODO:
   - share a global database connection for embedded mode, instead of

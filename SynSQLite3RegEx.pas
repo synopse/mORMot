@@ -58,10 +58,6 @@ unit SynSQLite3RegEx;
   a per-connection cache of compiled regular expressions to ensure the best
   performance possible.
 
-
-  Version 1.18
-  - initial revision, implementing feature request [659d1df866]
-
 }
 
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER

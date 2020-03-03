@@ -36,13 +36,6 @@ unit PasZip;
    - .zip reading from file, resource or direct memory - Windows only
    - .zip write into a file (new .zip creation, not update) - Windows only
 
-
-   Version 1.18
-   - enhanced compatibility with new targets and compilers (Win32, Win64,
-     Delphi 2009+, FPC)
-   - even more refactoring, and fixes
-   - .zip supported for Windows only
-
 }
 
 {$WARNINGS OFF}

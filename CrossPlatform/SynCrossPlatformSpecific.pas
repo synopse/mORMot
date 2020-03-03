@@ -47,10 +47,8 @@ unit SynCrossPlatformSpecific;
   ***** END LICENSE BLOCK *****
 
 
-  Version 1.18
-  - first public release, corresponding to mORMot Framework 1.18
-  - each operating system will have its own API calls in this single unit
-  - would compile with Delphi for any platform (including NextGen for mobiles),
+  Each operating system will have its own API calls in this single unit
+  Should compile with Delphi for any platform (including NextGen for mobiles),
     with FPC 2.7 or Kylix, and with SmartMobileStudio 2.2
 
 }

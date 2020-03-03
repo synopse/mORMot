@@ -46,11 +46,8 @@ unit SynFPCTypInfo;
 
   ***** END LICENSE BLOCK *****
 
-
-  Version 1.18
-  - initial revision
-  - unit created to avoid polluting the SynCommons.pas/mORMot.pas namespace
-    with overloaded typinfo.pp types
+  Unit created to avoid polluting the SynCommons.pas/mORMot.pas namespace
+  with overloaded typinfo.pp types.
 
 }
 

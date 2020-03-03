@@ -75,9 +75,6 @@ unit SynEcc;
   ***** END LICENSE BLOCK *****
 
 
-  Version 1.18
-  - first public release, corresponding to mORMot Framework 1.18
-
   TODO:
   - secure sign-then-crypt by signing the destination name with the plain content
     to avoid "Surreptitious Forwarding" (reuse of the plain content to another

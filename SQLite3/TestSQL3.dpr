@@ -44,29 +44,6 @@ program TestSQL3;
 
   ***** END LICENSE BLOCK *****
 
-
-  Version 1.13
-  - code modifications to compile with Delphi 5 compiler (no ORM code compiles
-    yet: so only low-level units like SynCommons / SynCrypto / SynPdf are tested)
-  - note: in order to be able to use http.sys server under Vista or Seven,
-    first compile then execute TestSQL3Register.dpr (need Administrator rights)
-
-  Version 1.15
-  - all tests passed with Delphi XE2 (32 Bit)
-  - SynSQLite3 logic extracted from SQLite3 unit
-  - enhanced tests about external database handling
-  - tests renamed to match the new "mORMot" framework name
-
-  Version 1.16
-  - all tests are now implemented in a separated SQLite3SelfTests unit -
-    this is requested by Delphi XE2 background compiler issues
-
-  Version 1.18
-  - renamed SQLite3*.pas units to mORMot*.pas
-  - included Windows 64 bit regression tests (and potential FullDebugMode)
-  - all tests passed with Delphi XE3 up to 10.1 Berlin for Win32 and Win64 platforms
-
-
   this application has EnableMemoryLeakReporting conditional defined in its
   Project/Options -> we can therefore ensure that our mORMot Client/Server
   framework classes have no memory leak
@@ -77,7 +54,9 @@ program TestSQL3;
   - if you do not plan to use LVCL, do not refers to these libraries
     (which works only for Delphi 7)
   - first line of uses clause must be  {$I SynDprUses.inc}  to enable FastMM4
-    on older versions of Delphi *)
+    on older versions of Delphi
+
+*)
 
 {$ifdef Linux}
   {$ifdef FPC_CROSSCOMPILING}

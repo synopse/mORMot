@@ -44,17 +44,6 @@ unit SynTests;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.18
-  - first public release, extracted from SynCommons.pas unit
-  - added class function TSynTestCase.RandomTextParagraph
-  - TSynTests will now write the tests summary with colored console output
-  - added TSynTestCase.CleanUp virtual method for proper cleaning before Destroy
-  - added TSynTestCase.CheckMatchAny() method for multi-value checks
-  - TSynTestCase.TestFailed now triggers a debugger breakpoint when run from IDE
-  - added TSynTestCase.NotifyTestSpeed() method
-  - extraction of TTestLowLevelCommon code into SynSelfTests.pas unit
-  - added TSynTests.RunAsConsole() class method to ease console test app writing
-
 *)
 
 

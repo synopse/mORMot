@@ -47,9 +47,6 @@ unit SynCurl;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.18
-  - initial revision
-
 }
 
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER

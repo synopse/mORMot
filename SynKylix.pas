@@ -42,10 +42,6 @@ unit SynKylix;
 
   ***** END LICENSE BLOCK *****
 
-
-  Version 1.18
-  - initial revision, corresponding to functions not available in LibC.pas
-
 }
 
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER

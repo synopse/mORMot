@@ -44,50 +44,6 @@ unit SynDBSQLite3;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.15
-  - first public release, corresponding to mORMot Framework 1.15
-  - use the SQLite3 engine, as wrapped via the new separated SynSQLite3 unit
-
-  Version 1.16
-  - implemented the SQLite3 private encryption using a password (beta feature -
-    better not to be used on production)
-  - added RowsToSQLite3() functions for direct export of any DB statement rows
-    into a SQLite3 database
-  - new TSQLDBSQLite3ConnectionProperties.UseMormotCollations property to
-    allow SQL table creation statement with or without the mORMot collations
-
-  Version 1.17
-  - now allow compilation with Delphi 5
-  - now TSQLDBSQLite3Statement.BindDateTime() will store '' when value is 0,
-    or a pure date or a pure time if the value is defined as such - by the
-    way, it will match SQlite3 expectations of internal date/time functions, as
-    defined at http://www.sqlite.org/lang_datefunc.html
-  - fixed TSQLDBSQLite3Statement.Step to update CurrentRow and
-    TotalRowsRetrieved properties as expected
-  - added TSQLDBSQLite3Connection.Synchronous property
-  - code refactoring, especially about error handling and ODBC integration
-
-  Version 1.18
-  - statement cache refactoring: cache logic is now at SynDB unit level
-  - fixed ticket [4c68975022] about broken SQL statement when logging active
-  - fixed logging SQL content of external SQLite3 statements
-  - added TSQLDBSQLite3ConnectionProperties.SQLTableName() overridden method
-  - added TSQLDBSQLite3ConnectionProperties.Create(aDB: TSQLDatabase) overloaded
-    constructor, to be used e.g. with a TSQLRestServerDB.DB existing database
-  - added TSQLDBSQLite3ConnectionProperties.MainDB property
-  - overloaded function RowsToSQLite3() is now moved as generic
-    TSQLDBConnection.NewTableFromRows() method
-  - TSQLDBSQLite3Statement.BindTextP('') will bind '' text instead of null value
-  - TSQLDBSQLite3Statement will now log textual values as quoted SQL text
-  - TSQLDBSQLite3Statement.Step(SeekFirst=true) will now raise an exception
-  - TSQLDBSQLite3Statement.ColumnType() can now use sqlite3.column_decltype()
-    to return the expected column type, even before Step is called (like others)
-  - most SQL-level specific methods are moved to SynDB unit for reusability
-  - TSQLDBSQLite3Statement.Reset won't call BindReset, since it is not mandatory
-  - added TSQLDBSQLite3Connection.LockingMode property for performance tuning
-  - exception during Commit should leave transaction state - see [ca035b8f0da]
-
-
 }
 
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER

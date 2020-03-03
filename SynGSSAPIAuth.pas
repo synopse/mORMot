@@ -44,8 +44,6 @@ unit SynGSSAPIAuth;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.18
-  - initial release, as an alternative to SynSSPIAuth.pas for Linux servers
 }
 
 {$I Synopse.inc} // define HASINLINE and other compatibility switches

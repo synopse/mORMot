@@ -1,4 +1,6 @@
 /// wrapper of some Windows-like functions translated to Linux/BSD for FPC
+// - this unit is a part of the freeware Synopse mORMot framework,
+// licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynFPCLinux;
 
 {
@@ -44,10 +46,6 @@ unit SynFPCLinux;
   the terms of any one of the MPL, the GPL or the LGPL.
 
   ***** END LICENSE BLOCK *****
-
-
-  Version 1.18
-  - initial revision
 
 }
 

@@ -47,40 +47,6 @@ unit mORMotService;
 
   ***** END LICENSE BLOCK *****
 
-
-      Daemon / Service managment classes
-      ----------------------------------
-
-    Version 1.3
-    - TService debug and enhancements
-    - can compile without SQLite3Commons dependency for smaller executables
-
-    Version 1.4 - February 8, 2010
-    - whole Synopse SQLite3 database framework released under the GNU Lesser
-      General Public License version 3, instead of generic "Public Domain"
-
-    Version 1.16
-    - code refactoring after Leander007 proposals for better compatibility -
-      see https://synopse.info/forum/viewtopic.php?id=584
-
-    Version 1.18
-    - renamed SQLite3Service.pas to mORMotService.pas
-    - added FPC compatibility (including missing WinSvc.pas API unit)
-    - changed ServicesRun to return an indicator of success - see [8666906039]
-    - TServiceController.CreateOpenService() use lower rights - see [c3ebb6b5d6]
-    - added TServiceSingle class and its global handler (to be used instead of
-      TServer which does not work as expected)
-    - added logging to the Service registration and command process
-    - added TServiceController.CheckParameters() generic method to control
-      a service from the command line
-    - check the executable file in TServiceController.CreateNewService()
-    - use private global ServiceLog instead of TSQLLog - see [779d773e966]
-    - ensure TServiceController.CreateNewService() won't allow to install
-      the service on a network drive - see [f487d3de45]
-    - add an optional Description text when the service is installed
-    - added TSynDaemon/TSynDaemonSettings cross-platform classses as a lighter
-      alternative to dddInfraApps/dddInfraSettings
-
 }
 
 interface

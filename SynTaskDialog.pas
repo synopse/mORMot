@@ -45,30 +45,6 @@ unit SynTaskDialog;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.13
-  - initial release
-
-  Version 1.15
-  - new tdfQueryMasked function to display * in the tdfQuery editor field
-
-  Version 1.16
-  - fixed issue when changing the current application with Alt+Tab - see
-    https://synopse.info/fossil/tktview?name=01395e5932
-  - fixed compiler error when using the unit with runtime packages enabled
-    (known compiler issue about string resources, referenced as E2201)
-  - default modal dialog parent changed into any current active form
-  - added tdfQueryFieldFocused optional flag to focus the input field component
-  - some aesthetical rendering changes and code clean-up (e.g. no temporary
-    form necessary), thanks to uligerhardt proposals
-
-  Version 1.18
-  - fixed label height display when long text is wrapped on several lines
-  - bottom buttons use better looking TButton component
-  - bottom buttons won't trim expected shortcut definition, in emulated mode
-  - added OnButtonClicked property and associated SetElementText() method
-  - fix the Windows Vista Alt key VCL bug (QC 37403) for Delphi 6/7/2006
-  - now compiles and run in Win64 platform (Delphi XE2+)
-
 }
 
 interface

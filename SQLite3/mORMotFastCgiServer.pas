@@ -63,17 +63,6 @@ fastcgi.server = ( "/test/" =>
   ))
 )
 
-  Version 1.5
-  - new server class, using FASTCGI to communicate with an external
-    dedicated HTTP Server (tested with lighttpd under Linux via CrossKylix
-    compile), using the LibFastCgi external library
-  - can use either the standard client library (libfcgi.dll or libfcgi.so),
-    either an embedded 100% pascal FastCGI client (for Windows only) - not
-    fully tested yet on real production project
-
-  Version 1.18
-  - renamed unit SQlite3FastCgiServer.pas to mORMotFastCgiServer.pas
-
   ------------------------------------------------------------------------
   TODO: to be changed so that it uses THttpServerRequest, and would be
         directly defined as THttpFastCGIServer = class(THttpServerGeneric)

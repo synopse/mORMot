@@ -39,38 +39,6 @@
   the terms of any one of the MPL, the GPL or the LGPL.
 
   ***** END LICENSE BLOCK *****
-
-  Version 1.7
-  - first public release, corresponding to SQLite3 Framework 1.7
-
-  Version 1.8
-  - force no Range Checking and other compilation settings
-
-  Version 1.10
-  - code modifications to support Delphi 5 / Delphi 6 compilers
-
-  Version 1.11
-  - allow to fix Delphi 2009 specific compilation issues :(
-
-  Version 1.13
-  - updated conditionals for FPC
-  - code modifications for Delphi 5 compiler
-  - new WITHLOG conditional (defined by default)
-
-  Version 1.15
-  - now handles Delphi XE2 (32 Bit)
-
-  Version 1.16
-  - added USEPACKAGES conditional to help compiling the unit within packages
-  - added ISDELPHIXE conditional for fixing some compilation warnings
-  - added DOPATCHTRTL conditional (not set by default, for compatibility)
-
-  Version 1.18
-  - added NEWRTTINOTUSED conditional (unset by default, for compatibility) - see
-    https://synopse.info/forum/viewtopic.php?id=1394
-  - enhanced FPC compatibility
-  - now handles Delphi XE3 and up (32 and 64 bit)
-
 }
 
 

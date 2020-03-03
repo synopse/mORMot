@@ -45,11 +45,8 @@ unit dddInfraSettings;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.18
-  - first public release, corresponding to Synopse mORMot Framework 1.18
-
   TODO:
-   - store settings in database, or in a centralized service
+   - store settings in database, or in a centralized service?
 
 }
 

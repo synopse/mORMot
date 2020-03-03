@@ -47,16 +47,6 @@ unit SynDBMidasVCL;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.18
-  - first public release, corresponding to Synopse mORMot Framework 1.18,
-    which is an extraction from former SynDBVCL.pas unit (which is faster
-    but read/only)
-  - introducing TSynDBDataSet (under Delphi), which allows to apply updates:
-    will be used now for overloaded ToClientDataSet() functions result
-  - BREAKING CHANGE: QueryToClientDataSet() and StatementToClientDataSet()
-    renamed as overloaded functions ToClientDataSet()
-
-
 }
 
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER

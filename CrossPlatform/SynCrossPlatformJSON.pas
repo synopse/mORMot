@@ -45,10 +45,7 @@ unit SynCrossPlatformJSON;
 
   ***** END LICENSE BLOCK *****
 
-  
-  Version 1.18
-  - first public release, corresponding to mORMot Framework 1.18
-  - would compile with Delphi for any platform (including NextGen for mobiles),
+  Should compile with Delphi for any platform (including NextGen for mobiles),
     with FPC 2.7 or Kylix, and with SmartMobileStudio 2+
   - FPC prior to 2.7.1 has some issues with working with variants: UTF-8
     encoding is sometimes lost, and TInvokeableVariantType.SetProperty is broken

@@ -44,10 +44,7 @@ unit SynCrossPlatformCrypto;
 
   ***** END LICENSE BLOCK *****
 
-
-  Version 1.18
-  - first public release, corresponding to mORMot Framework 1.18
-  - would compile with Delphi for any platform (including NextGen for mobiles),
+  Should compile with Delphi for any platform (including NextGen for mobiles),
     with FPC 2.7 or Kylix, and with SmartMobileStudio 2.1.1
 
 }

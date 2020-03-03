@@ -76,13 +76,7 @@ unit SynLizard;
 
   ***** END ORIGINAL LICENSE BLOCK *****
 
-  Revision history
-
-  Version 1.18
-  - first release, associated with the main Synopse mORMot framework
-
   Some numbers, for a 53MB log file (taken from a production server):
-
   FPC Win32
        TAlgoSynLz 53 MB->5 MB: comp 563.7 MB/s decomp 815.3 MB/s
        TAlgoLizard 53 MB->3.9 MB: comp 54.6 MB/s decomp 1.1 GB/s
@@ -109,7 +103,6 @@ unit SynLizard;
        TAlgoDeflateFast 53 MB->7 MB: comp 141.4 MB/s decomp 420.2 MB/s
   Conclusion: SynLZ has the best compression ratio for its compression speed,
     but Lizard is much faster at decompression, when working with big log filesiles.
-
   For small files (<MB), SynLZ is always faster, and uses less memory than Lizard.
 
   NOTE:

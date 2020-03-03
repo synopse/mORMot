@@ -3,6 +3,8 @@
 // - define -dFPC_SYNCMEM (for glibc), -dFPC_SYNTBB (after "apt-get install libtbb2")
 // or -dFPC_SYNJEMALLOC (after "apt-get install libjemalloc1")
 // - with Linux glibc, alignment is 2*SizeOf(pointer) i.e. 16 bytes under x86_64
+// - this unit is a part of the freeware Synopse mORMot framework,
+// licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynFPCCMemAligned;
 
 {
@@ -46,10 +48,6 @@ unit SynFPCCMemAligned;
   the terms of any one of the MPL, the GPL or the LGPL.
 
   ***** END LICENSE BLOCK *****
-
-
-  Version 1.18
-  - initial revision
 
 }
 

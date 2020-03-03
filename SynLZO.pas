@@ -42,9 +42,7 @@ unit SynLZO;
 
   ***** END LICENSE BLOCK *****
 
-
-
-     Pascal SynLZO Compression / Decompression library
+      Pascal SynLZO Compression / Decompression library
      =================================================
      by Arnaud Bouchez http://bouchez.info
 
@@ -100,44 +98,6 @@ unit SynLZO;
     - if you include it in your application, please give me some credits:
        "use SynLZO compression by http://bouchez.info"
     - use at your own risk!
-
- Some benchmark are available at the end of the file (on my Turion TL-65 1.8Ghz)
-
- The results show that our SynLZO implementation is often faster than original
-   LZO C implementation, especially for compression.
- It's a must-have for compression speed, regarding ZIP (compression is
-   10 times faster, decompression 4 times, with lower compression rate) or others.
- You can notice some speed enhancements in the compiler from Delphi 7 to 2009:
-   the D2009 optimizer deals better with register assignment and 8bits-32bits
-   conversion. Note the pascal code was optimized by looking at the generated
-   asm (via Alt-F2), and by proper profiling. D2009 use fpu fast move(), and my
-   D7 version use the FastCode SSE move() version (which may be blazzing fast
-   on the upcoming CPUs, with true 128bits memory access - until now, the
-   use of 128bits registers in the move() code were not faster than 64bits FPU).
- => for the first time, I consider leaving D7 for the new D2009 IDE... there's
-   a lot to refactor (string->ansistring, PChar->PAnsiChar) in the code,
-   but it may be worth it, since quite all my code is test-driven, so that I can
-   be sure the conversion is ok. My only negative impact is that I can't use the
-   language enhancements if I want to be compatible with CrossKylix, which I
-   would like to, in order to be able to compile for Linux target. But the new
-   D2009 IDE is great, even if it seems a bit slow compared to the old D7 one.
-   And don't speak about the MSHelp system used in Delphi 2009: it's a bulky
-   piece of software - such coders should be hang. :)
- => an optimized asm version, derivating from D2009 generated code, is provided
-   and is to be used - this asm version is 100% compatible with the pascal code
-
-
-  Revision history
-
-  Version 1.6
-  - first release, associated with the main Synopse SQLite3 framework
-
-  Version 1.13
-  - code modifications to compile with Delphi 5 compiler
-  - comment refactoring (mostly for inclusion in SynProject documentation)
-  - new CompressSynLZO function, for THttpSocket.RegisterCompress - those
-    functions will return 'synlzo' as ACCEPT-ENCODING: HTTP header parameter
-
 }
 
 interface

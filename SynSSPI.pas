@@ -44,12 +44,6 @@ unit SynSSPI;
 
   ***** END LICENSE BLOCK *****
 
-
-
-  Version 1.18
-  - initial release, with code split from SynSSPIAuth.pas
-  - has no external unit dependency, so can be used e.g. by SynCrtSock
-
 }
 
 {$I Synopse.inc} // define HASINLINE and other compatibility switches

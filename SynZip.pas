@@ -74,8 +74,6 @@ unit SynZip;
   Jean-loup Gailly
   Mark Adler
 
-
-
     Cross-platform ZLib implementation
    ====================================
 
@@ -83,78 +81,6 @@ unit SynZip;
     - Win32: use fast obj and inline asm
     - Linux: use available system library libz.so
     Also defines .zip file structure (TFileInfo TFileHeader TLastHeader)
-
-   Version 1.3
-    - Delphi 2009/2010 compatibility (Unicode)
-
-   Version 1.3.1 - January 23, 2010
-    - issue corrected in CompressStream()
-    - compilation of TSynZipCompressor under Delphi 2009/2010, without any
-      Internal Error DT5830 (triggered with my Delphi 2009 Update 3)
-
-   Version 1.3.2 - February 5, 2010
-    - added .zip direct reading class
-
-   Version 1.4 - February 8, 2010
-    - whole Synopse SQLite3 database framework released under the GNU Lesser
-      General Public License version 3, instead of generic "Public Domain"
-
-   Version 1.5 - February 11, 2010
-    - added .zip direct writing class
-
-   Version 1.9
-   - crc32 is now coded in inlined fast asm (crc32.obj is no longer necessary)
-   - crc32 hashing is performed using 8 tables, for better CPU pipelining and
-     faster execution
-   - crc32 tables are created on the fly during unit initialization, therefore
-     save 8 KB of code size from standard crc32.obj, with no speed penalty
-
-   Version 1.9.2
-   - both obj files (i.e. deflate.obj and trees.obj) updated to version 1.2.5
-
-   Version 1.13
-   - code modifications to compile with Delphi 5 compiler
-   - new CompressGZip and CompressDeflate functions, for THttpSocket.RegisterCompress
-   - now handle Unicode file names UTF-8 encoded inside .Zip archive
-   - new TZipWrite.CreateFrom constructor, to add some new content to an
-     existing .Zip archive
-   - EventArchiveZip function can be used as a TSynLogArchiveEvent handler to
-     compress old .log files into a .zip standard archive
-
-   Version 1.15
-   - unit now tested with Delphi XE2 (32 Bit)
-
-   Version 1.16
-   - unit now compiles with Delphi XE2 (64 Bit)
-   - TZipWrite.AddDeflated(const aFileName) method will use streaming instead
-     of in-memory compression (will handle huge files much efficiently, e.g.
-     log files as for EventArchiveZip)
-
-   Version 1.18
-   - defined ZipString dedicated type, to store data in a Unicode-neutral manner
-   - introducing new TZipWriteToStream class, able to create a zip without file
-   - added TFileHeader.IsFolder and TLocalFileHeader.LocalData methods
-   - added TZipRead.UnZip() overloaded methods using a file name parameter
-   - added DestDirIsFileName optional parameter to TZipRead.UnZip() methods
-   - added TZipRead.UnZipAll() method
-   - fixed CompressDeflate() function, which was in fact creating zlib content
-   - fixed TZipWrite.AddDeflated() to handle data > 200 MB - thanks jpdk!
-   - fixed unexpected error when adding files e.g. via TZipWrite.CreateForm()
-     to an empty archive - thanks Gigo for the feedback!
-   - addded CompressZLib() function, as expected by web browsers
-   - any zip-related error will now raise a ESynZipException
-   - fixed ticket [2e22dd25aa] about TZipRead.UnMap
-   - fixed ticket [431b8b3dd9d] about gzread() overoptimistic assertion
-   - fixed UnZip() when crc and sizes are stored not within the file header,
-     but in a separate data descriptor block, after the compressed data (this
-     may occur e.g. if the .zip is created with latest Java JRE) - also added
-     corresponding TZipRead.RetrieveFileInfo() method and renamed TZipEntry
-     info field into infoLocal, and introduced infoDirectory new field
-   - renamed ZipFormat parameter to ZlibFormat, and introduce it also for
-     uncompression, so that both deflate and zlib layout are handled
-   - allow reading files of size 0 in TZipRead
-   - fixed TZipWrite.Destroy issue as reported by [aa468640c59]
-   - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler
 
 }
 

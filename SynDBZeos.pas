@@ -50,11 +50,6 @@ unit SynDBZeos;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.18
-  - first public release, corresponding to mORMot framework 1.18
-  - PostgreSQL array binding for select statements like
-     SELECT usr.ID, usr.name FROM user usr WHERE usr.ID = ANY(?)
-     work with all ZEOS versions
 }
 
 (*

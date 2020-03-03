@@ -45,10 +45,6 @@ unit SynDBBDE;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.18
-  - first public release, corresponding to mORMot framework 1.18
-
-  
   Todo:
   - use BDE metadata to retrieve table names and field definitions from
     any supported database (not only our SynDB.TSQLDBDefinition list)

@@ -47,9 +47,8 @@ unit SynSQLite3Static;
   ***** END LICENSE BLOCK *****
 
 
-
-    Statically linked SQLite3 3.25.2 engine
-   *****************************************
+    Statically linked SQLite3 3.31.0 engine with optional AES encryption
+   **********************************************************************
 
   To be declared in your project uses clause:  will fill SynSQlite3.sqlite3
   global variable with all statically linked .obj API entries.
@@ -75,21 +74,6 @@ unit SynSQLite3Static;
     sudo dpkg -i libsqlite3-0_3.8.7.4-1_i386.deb
   - for a 64 bit system, you need to download and install both packages, e.g.
     sudo dpkg -i libsqlite3-0_3.8.2-1ubuntu2_amd64.deb libsqlite3-0_3.8.2-1ubuntu2_i386.deb
-
-  Version 1.18
-  - initial revision, extracted from SynSQLite3.pas unit
-  - updated SQLite3 engine to latest version 3.31.0
-  - now all sqlite3_*() API calls are accessible via sqlite3.*()
-  - our custom file encryption is now called via sqlite3.key() - i.e. official
-    SQLite Encryption Extension (SEE) sqlite3_key() API - and works for database
-    files of any size without touching the main sqlite.c amalgamation file
-  - Memory-Mapped I/O support - see http://www.sqlite.org/mmap.html
-  - added sqlite3.backup_*() Online Backup API functions
-  - added missing function sqlite3_column_text16() - fixed ticket [25d8d1f47a]
-  - added sqlite3.db_config() support
-  - enabled FTS5 and RBU support
-  - added FPC cross-platform support, statically linked for Win32/Win64
-
 }
 
 (* WARNING: with current 3.29+ version, the following sqlite3.c patch is needed:

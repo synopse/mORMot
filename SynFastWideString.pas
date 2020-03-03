@@ -1,5 +1,7 @@
 /// this unit will patch the System.pas RTL to use a custom NON OLE COMPATIBLE
 // WideString type, NOT using the slow Windows API, but FastMM4 (without COW)
+// - this unit is a part of the freeware Synopse mORMot framework,
+// licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynFastWideString;
 
 interface
@@ -44,9 +46,6 @@ interface
   the terms of any one of the MPL, the GPL or the LGPL.
 
   ***** END LICENSE BLOCK *****
-
-  Version 1.18
-  - first public release, corresponding to mORMot Framework 1.18
 
   DISCLAIMER:
 

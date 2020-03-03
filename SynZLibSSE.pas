@@ -58,10 +58,6 @@ end. // put as reference all deprecated code below
   the terms of any one of the MPL, the GPL or the LGPL.
 
   ***** END LICENSE BLOCK *****
-
-  Version 1.18
-  - first public release, corresponding to mORMot Framework 1.18
-
 *)
 
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64

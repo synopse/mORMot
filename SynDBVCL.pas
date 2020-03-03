@@ -46,18 +46,6 @@ unit SynDBVCL;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.17
-  - first public release, corresponding to Synopse mORMot Framework 1.17
-
-  Version 1.18
-  - BREAKING CHANGE: QueryToDataSet() and StatementToDataSet() renamed
-    as overloaded functions ToDataSet()
-  - now uses read/only TSynVirtualDataSet class for much faster process
-    and lower resource use - see SynDBMidasVCL.pas unit if you need
-  	a TClientDataset writable (but slower) instance
-  - introducing TSynDBSQLDataSet as a re-usable TDataSet for queries
-
-
 }
 
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER

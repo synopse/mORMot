@@ -44,65 +44,6 @@ unit SynSelfTests;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.8
-  - first public release, corresponding to SQLite3 Framework 1.8
-  - includes Unitary Testing class and functions
-
-  Version 1.9
-  - test multi-threaded AES encryption/decryption of 4 MB blocks
-  - added crc32 tests
-
-  Version 1.11
-  - added some more regression tests in TTestCompression.ZipFormat
-
-  Version 1.12
-  - handle producer version change in TTestSynopsePDF
-
-  Version 1.13
-  - code modifications to compile with Delphi 5 compiler
-  - enhanced compression tests
-
-  Version 1.15
-  - unit now tested with Delphi XE2 (32 Bit)
-  - new TTestSQLite3ExternalDB class to test TSQLRecordExternal records,
-    i.e. external DB access from the mORMot framework (use an in-memory SQLite3
-    database as an external SynDB engine for fast and reliable testing)
-  - added test of TModTime published property (i.e. latest update time)
-  - added test of TCreateTime published property (i.e. record creation time)
-
-  Version 1.16
-  - added interface-based remote service implementation tests
-  - added test about per-database encryption in TTestExternalDatabase.CryptedDatabase
-  - added TAESECB, TAESCBC, TAESCFB, TAESOFB and TAESCTR classes tests (+ PKCS7)
-  - enhanced SynLZ tests (comparing asm and pas versions of the implementation)
-
-  Version 1.17
-  - added test for TInterfaceCollection kind of parameter
-  - added multi-thread testing of ExecuteInMainThread() method
-  - removed TSQLRecordExternal class type, to allow any TSQLRecord (e.g.
-    TSQLRecordMany) to be used with VirtualTableExternalRegister()
-  - added DBMS full test coverage in TTestExternalDatabase.AutoAdaptSQL
-
-  Version 1.18
-  - included some unit tests like TTestLowLevelTypes and TTestBasicClasses,
-    previously included in SQLite3Commons.pas or TTestLowLevelCommon, extracted
-    from SynCommons.pas, or TTestSQLite3Engine from SQLite3.pas
-  - added test for variant JSON serialization for interface-based services and
-    for ORM (aka TSQLRecord)
-  - added test for SynLZdecompress1partial() new function
-  - added external TSQLRecordOnlyBlob test associated to ticket [21c2d5ae96]
-    and OleDB/JET-based external database tests
-  - included testing of interface-based services in sicSingle, sicPerSession,
-    sicPerUser, sicPerGroup and sicPerThread modes
-  - included testing of ServiceContext threadvar for opt*InMainThread or
-    opt*InPerInterfaceThread options
-  - included testing of new REGEXP function for SQLite3
-  - included testing of TSQLRestServerAuthenticationNone
-  - added TTestMultiThreadProcess test cases over all communication protocols
-  - introducing TTestDDDSharedUnits test cases
-  - added PDF-1.5 and page orientation testing
-  - now default HTTP port would be 8888 under Linux (888 needs root rights)
-
 }
 
 interface

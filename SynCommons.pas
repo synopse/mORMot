@@ -66,9 +66,6 @@ unit SynCommons;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.18
-  - old version history has been cut down to maintain this huge unit under
-    65,000 lines, as required by Delphi 5 to avoid internal error PRO-3006
 *)
 
 

@@ -52,9 +52,6 @@ unit SynFPCSock;
 
   Shared by Kylix and FPC for all POSIX systems.
 
-  Version 1.18
-  - initial release
-
 }
 
 {$ifdef FPC}

@@ -47,7 +47,6 @@ unit mORMotHttpClient;
   ***** END LICENSE BLOCK *****
 
 
-
       HTTP/1.1 RESTful JSON Client for mORMot
     ******************************************
 
@@ -60,73 +59,6 @@ unit mORMotHttpClient;
      i.e. 5000 requests per second, with 113 result rows (i.e. 4803 bytes
      of JSON data each)... try to find a faster JSON HTTP server! ;)
 
-    Initial version: 2009 May, by Arnaud Bouchez
-
-    Version 1.1
-      - code rewrite for FPC and Delphi 2009/2010 compilation
-
-    Version 1.3 - January 22, 2010
-      - some small fixes and multi-compiler enhancements
-
-    Version 1.4 - February 08, 2010
-      - whole Synopse SQLite3 database framework released under the GNU Lesser
-        General Public License version 3, instead of generic "Public Domain"
-      - HTTP/1.1 RESTful JSON Client and Server split into two units
-        (SQLite3HttpClient and SQLite3HttpServer)
-
-    Version 1.5 - February 12, 2010
-      - test HTTP connection in both KeepAlive and with new connection for
-        each request (an issue with no KeepAlive connections was detected)
-
-    Version 1.13
-      - now can compress its content using deflate or faster SynLZ algorithm:
-        by default, the SynLZ algorithm will be used between a Delphi Client
-        and Server over HTTP/1.1 - there will be no speed penalty on the
-        server side, whereas deflate would use much more CPU
-      - can make TCP/IP stream not HTTP compliant (against antivirus slowdown)
-      - new TSQLite3HttpClientWinINet class, using WinINet API (very slow)
-      - new TSQLite3HttpClientWinHTTP class, using WinHTTP API (fast and stable):
-        this class should be considered to be used instead of TSQLite3HttpClient
-        for any HTTP/1.1 client connection over a network - it is therefore
-        the default TSQLite3HttpClient class since this 1.13 revision
-
-    Version 1.16
-      - fixed GPF issue at closing
-      - fixed unnecessary dual URL signing (when authentication actived)
-
-    Version 1.17
-      - added optional aProxyName, aProxyByPass parameters to
-        TSQLite3HttpClientWinGeneric / TSQLite3HttpClientWinINet and
-        TSQLite3HttpClientWinHTTP constructors
-
-    Version 1.18
-     - unit SQLite3HttpClient.pas renamed mORMotHttpClient.pas
-       (see mORMotHTTPServer.pas for the server side)
-     - TSQLite3HttpClient* classes renamed as TSQLHttpClient*
-     - introducing TSQLHttpClientCurl class, using cross-platform libcurl to
-       connect over HTTP or HTTPS (using system OpenSSL library, if available)
-     - all TSQLHttpClient* classes are now thread-safe (i.e. protected by
-       a global mutex, as other TSQLRestClientURI implementations already did)
-     - fixed TSQLHttpClientGeneric.InternalURI() method to raise an explicit
-       exception on connection error (as expected by TSQLRestClientURI.URI)
-     - ensure TSQLHttpClientGeneric.InternalURI would not erase any custom
-       header supplied by the method, when Content-Type appears (thanks EVaF)
-     - TSQLHttpClient* classes will now handle properly reconnection in case
-       of connection break via overridden InternalCheckOpen/InternalClose methods
-     - introducing TSQLHttpClientGeneric.Compression property to set the handled
-       compression schemes at runtime, i.e. SynLZ, deflate or SynLZ+SHA/AES:
-       hcDeflate will in fact use gzip content encoding, since deflate/gzip is
-       not consistent in practice among clients - default is set to [hcSynzip],
-       which seems to be a good compromise before compression rate and CPU use
-     - added SendTimeout and ReceiveTimeout optional parameters (in ms) to
-       TSQLHttpClientWinHTTP / TSQLHttpClientWinINet constructors [bfe485b678]
-     - added ConnectTimeout optional parameter (thanks hnb for the patch!)
-     - added TSQLHttpClientGeneric.CreateForRemoteLogging() constructor for
-       easy remote logging to our LogView tool, running as server process
-     - added TSQLHttpClientWinGeneric.IgnoreSSLCertificateErrors property
-       to set the corresponding parameter for the underlying connection
-     - added AuthScheme and AuthUserName/AuthPassword properties, for
-       authentication - only implemented at TSQLHttpClientWinHTTP level yet
 }
 
 interface

@@ -45,12 +45,9 @@ unit SynTable;
   ***** END LICENSE BLOCK *****
 
 
-  Version 1.18
-   - initial release
-   - removed from SynCommons.pas, for better code clarity, and to reduce the
-   number of source code lines of the unit, and circumvent the Delphi 5/6/7
-   limitation of 65535 lines (internal error PRO-3006)
-
+   A lot of code has moved from SynCommons.pas and mORMot.pas, to reduce the
+   number of source code lines of those units, and circumvent Delphi 5/6/7
+   limitations (e.g. internal error PRO-3006)
 
 *)
 

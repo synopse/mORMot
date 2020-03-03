@@ -44,61 +44,6 @@ unit SynLog;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.18
-  - first public release, extracted from SynCommons.pas unit
-  - BREAKING CHANGE: PWinAnsiChar type for constant text format parameters has
-    been changed into a RawUTF8, to please all supported platforms and compilers
-  - WARNING: any user of the framework in heavy-loaded multi-threaded application
-    should UPGRADE to at least revision 1.18.1351, fixing a long-standing bug
-  - all logged timestamps are now in much less error-prone UTC by default,
-    unless the TSynLogFamily.LocalTimestamp property is defined
-  - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler under Windows
-  - compatibility with (Cross)Kylix 3 and FPC 3.1 under Linux (and Darwin)
-  - Exception logging and Stack trace do work now on Linux with Kylix/CrossKylix
-  - added TSynLogFile.Freq read-only property
-  - added DefaultSynLogExceptionToStr() function and TSynLogExceptionToStrCustom
-    variable, and ESynException.CustomLog() method to customize how raised
-    exception are logged when intercepted - feature request [495720e0b9]
-  - added new sllDDDError, sllDDDInfo log levels
-  - added TSynLogFamily.EndOfLineCRLF properties
-  - added TSynLogFamily's NoFile and EchoCustom properties - see [91a114d2f6]
-  - TSynLog will now append only the execution time when leaving a method,
-    without the class/method name (smaller log file, and less resource use)
-  - TSynLog header now contains system environment variables
-  - added overloaded ISynLog.Log(string) method for Unicode Delphi
-  - added TSynLog.DebuggerNotify() and TSynLog.CloseLogFile / Release methods
-  - protected the global TSynLog instances list against potential race condition
-  - introducing TSynLogFamily.StackTraceUse: TSynLogStackTraceUse property
-    (set to stManualAndAPI by default, but stOnlyAPI within the Delphi IDE)
-  - introducing TSynLogFamily.EchoToConsole: TSynLogInfos property, able to
-    optionally echo the process log to the current console window, using colors
-  - added TSynLogFamily.EchoRemoteStart() and EchoRemoteStop methods
-  - added TSynLog.Void class function
-  - added TSynLogFile.EventSelect method
-  - if new property TSynLogFamily.PerThreadLog is set to ptIdentifiedInOnFile,
-    a new column will be added for each logged row - LogViewer has been updated
-    to allow easy and efficient multi-thread process logging
-  - introducing TSynLogFamily.RotateFileCount and associated RotateFileSizeKB,
-    RotateFileDailyAtHour and OnRotate properties, to enable log file rotation
-    by size or at given hour - request [72feb66d45] + [b3e8cc8424]
-  - added TSynLog.CustomFileName property - see [d8fbc10bf8]
-  - added TSynLog.ComputeFileName virtual method and TSynLogFamily.FileExistsAction
-    property for feature request [d029051dcb]
-  - added TSynLog/ISynLog.LogLines() method for direct multi-line text logging
-  - added optional TextTruncateAtLength parameter for TSynLog/ISynLog.Log()
-  - declared TSynLog.LogInternal() methods as virtual - request [e47c64fb2c]
-  - .NET/CLR external exceptions will now be logged with their C# type name
-  - special 'SetThreadName' exception will now be ignored by TSynLog hook
-  - introducing TSynLog.Enter overload method, with FormatUTF8-like parameters
-  - fixed ticket [19e567b8ca] about TSynLog issue in heavily concurrent mode:
-    now a per-thread context will be stored, e.g. for Enter/Leave tracking
-  - fixed ticket [a516b1a954] about ptOneFilePerThread log file rotation
-  - introduced clear distinction between absolute and relative memory address
-    values, and TSynMapFile.AbsoluteToOffset(), as reported by [0aeaa1353149]
-  - introduced ISynLogCallback and TSynLogCallbacks types for easy integration
-    with mORMot's interface-based services real-time notification
-  - FPC compatibility - with source lines if compiled using -g or -gl switches
-
 *)
 
 

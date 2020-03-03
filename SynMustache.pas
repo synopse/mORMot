@@ -45,10 +45,6 @@ unit SynMustache;
 
   ***** END LICENSE BLOCK *****
 
-
-  Version 1.18
-  - initial revision
-
 }
 
 

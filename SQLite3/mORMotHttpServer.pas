@@ -46,111 +46,19 @@ unit mORMotHttpServer;
 
   ***** END LICENSE BLOCK *****
 
+   HTTP/1.1 RESTFUL JSON Client/Server for mORMot
+  ************************************************
 
-     HTTP/1.1 RESTFUL JSON Client/Server for mORMot
-    ************************************************
-
-   - use internaly the JSON format for content communication
-   - can be called by TSQLHttpClient class from direct Delphi clients
-     (see mORMotHttpClient unit)
-   - can be called by any JSON-aware AJAX application
-   - can optionaly compress the returned data to optimize Internet bandwidth
-   - speed is very high: more than 20MB/sec R/W localy on a 1.8GHz Sempron,
-     i.e. 400Mb/sec of duplex raw IP data, with about 200 탎 only elapsed
-     by request (direct call is 50 탎, so bottle neck is the Win32 API),
-     i.e. 5000 requests per second, with 113 result rows (i.e. 4803 bytes
-     of JSON data each)... try to find a faster JSON HTTP server! ;)
-
-    Initial version: 2009 May, by Arnaud Bouchez
-
-    Version 1.1
-      - code rewrite for FPC and Delphi 2009/2010 compilation
-
-    Version 1.3 - January 22, 2010
-      - some small fixes and multi-compiler enhancements
-
-    Version 1.4 - February 8, 2010
-      - whole Synopse SQLite3 database framework released under the GNU Lesser
-        General Public License version 3, instead of generic "Public Domain"
-      - HTTP/1.1 RESTFUL JSON Client and Server split into two units
-        (SQLite3HttpClient and SQLite3HttpServer)
-
-    Version 1.5 - February 22, 2010
-      - by default, the SQlite3 unit is now not included, in order to save
-        some space
-
-    Version 1.8
-      - includes Unitary Testing class and functions
-      - allows content-type changing for GET blob fields
-
-    Version 1.12
-      - TSQLHttpServer now handle multiple TSQLRestServer instances
-        per one server (dispatching requests via the Root URI used)
-      - new AddServer method, to register a TSQLRestServer after launch
-      - new TSQLRestServer.OnlyJSONRequests property
-
-    Version 1.13
-      - can now use fast http.sys kernel-mode server (THttpApiServer) if
-        available, and our pure Delphi THttpServer on default
-      - now can compress its content using deflate or faster SynLZ algorithm
-      - by default, will handle SynLZ compression for TSQLHttpClient
-      - can make TCP/IP stream not HTTP compliant (for security visions)
-      - TSQLHttpServer.Request now uses the new THttpServerGeneric.Request
-        virtual abstract method prototype to handle THttpApiServer
-
-    Version 1.16
-      - added optional aRestAccessRights parameter in TSQLHttpServer.AddServer
-        to override the default HTTP_DEFAULT_ACCESS_RIGHTS settings
-      - added ServerThreadPoolCount parameter to TSQLHttpServer.Create()
-        constructor, set by default to 32 - will speed up process of slow
-        requests (e.g. a POST with some huge data transmitted at slow rate)
-      - fixed error in case of URI similar to 'root?session_signature=...'
-      - fixed incorect thread count in TSQLHttpServer.Create
-      - regression tests are now extracted from this unit, in order to allow
-        construction of a TSQLHttpServer instance without the need
-        of linking the SQLite3 engine to the executable
-
-    Version 1.17
-      - made URI check case-insensitive (as for official RFC)
-      - TSQLHttpServer will now call virtual TSQLRestServer.EndCurrentThread
-        method in each of its terminating threads, to release any thread-specific
-        resources (for instance, external connections in SQlite3DB)
-
-    Version 1.18
-      - renamed SQLite3HttpServer.pas unit to mORMotHttpServer.pas
-      - classes TSQLHttpServer* renamed as TSQLHttpServer*
-      - added TSQLHttpServer.RemoveServer() and Shutdown methods
-      - added TSQLHttpServer.Port and DomainName properties
-      - added TSQLHttpServer.AccessControlAllowOrigin property to handle
-        cross-site AJAX requests via cross-origin resource sharing (CORS)
-      - added TSQLHttpServer.RedirectServerRootUriForExactCase to fix
-        URIs on the fly for case sensitivity
-      - TSQLHttpServer now handles sub-domains generic matching (via
-        TSQLModel.URIMatch call) at database model level (e.g. you can set
-        root='/root/sub1' URIs)
-      - added TSQLHttpServer.DomainHostRedirect() method for virtual-host
-        redirection of Internet domains or sub-domains
-      - declared TSQLHttpServer.Request method as virtual, to allow easiest
-        customization, like direct file sending to the clients
-      - added TSQLHttpServerOptions parameter to TSQLHttpServer.Create(),
-        allowing optional auto-registration of the URI to http.sys internals
-      - added aHttpServerSecurity: TSQLHttpServerSecurity parameter to
-        TSQLHttpServer.Create(), allowing HTTPS secure content publishing, when
-        using the http.sys kind of server, or our proprietary SHA-256 /
-        AES-256-CTR encryption identified as "ACCEPT-ENCODING: synshaaes"
-      - added optional aAdditionalURL parameter to TSQLHttpServer.Create(), to
-        be used e.g. to registry an URI to server static file content in addition
-        to TSQLRestServer instances - need to override TSQLHttpServer.Request()
-      - added optional parameter to TSQLHttpServer.Create(), to specify a
-        name for the THttpApiServer HTTP queue
-      - COMPRESSDEFLATE conditional will use gzip (and not deflate/zip)
-      - added TSQLHTTPRemoteLogServer class for easy remote log serving
-      - ensure TSQLHttpServer.AddServer() will handle useHttpApiRegisteringURI
-      - added TSQLHttpServer.RootRedirectToURI() method for root URI redirection
-      - declared TSQLHttpServer.HttpThreadStart/HttpThreadTerminate as virtual
-      - allow TSQLHttpServer.Create() without any associated TSQLRestServer
-      - allow to specify the binding server address for sockets ('1.2.3.4:1234')
-      - implement asynchronous interface callbacks using WebSockets
+ - use internaly the JSON format for content communication
+ - can be called by TSQLHttpClient class from direct Delphi clients
+   (see mORMotHttpClient unit)
+ - can be called by any JSON-aware AJAX application
+ - can optionaly compress the returned data to optimize Internet bandwidth
+ - speed is very high: more than 20MB/sec R/W localy on a 1.8GHz Sempron,
+   i.e. 400Mb/sec of duplex raw IP data, with about 200 탎 only elapsed
+   by request (direct call is 50 탎, so bottle neck is the Win32 API),
+   i.e. 5000 requests per second, with 113 result rows (i.e. 4803 bytes
+   of JSON data each)... try to find a faster JSON HTTP server! ;)
 
 }
 

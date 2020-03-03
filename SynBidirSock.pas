@@ -48,10 +48,6 @@ unit SynBidirSock;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.18
-  - first public release, corresponding to mORMot Framework 1.18
-
-
    TODO: broadcast a message to several aCallingThread: THttpServerResp values
      (add TWebSocketClientRequest? or asynch notifications may be enough, and
       the "broadcast" feature should be implementation at application level,
@@ -60,7 +56,6 @@ unit SynBidirSock;
    TODO: enhance TWebSocketServer process to use events, and not threads
    - current implementation has its threads spending most time waiting in loops
    - eventually also at SynCrtSock's THttpServer class level also
-
 
 }
 

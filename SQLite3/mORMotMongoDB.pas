@@ -44,17 +44,11 @@ unit mORMotMongoDB;
 
   ***** END LICENSE BLOCK *****
 
-
-  Version 1.18
-  - first public release, corresponding to mORMot Framework 1.18
-    and feature request [0fee1d995c]
-
-
   TODO:
-  - complex WHERE clause with a MongoDB Query object instead of SQL syntax
-    (mitigated by the fact that most SQL queries are translated into BSON
-    Query Object at runtime - need for most complex features like in-object
-    inspection)
+  - complex WHERE clause with a MongoDB Query object instead of SQL syntax;
+    mitigated by the fact that most SQL queries are translated into BSON
+    Query Object at runtime - needed only for most complex features like
+    in-object inspection?
   - handle TSQLRawBlob fields with GridFS (and rely on TByteDynArray to store
     smaller BLOBs - < 16 MB - within the document, or in a separated collection)
   - allow PolyMorphic schemas: the same MongoDB collection may be able to

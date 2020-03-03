@@ -33,7 +33,6 @@ unit SynMongoDB;
   - Sabbiolina
   - Zed
 
-
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -48,16 +47,10 @@ unit SynMongoDB;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.18
-  - first public release, corresponding to mORMot Framework 1.18
-    and feature request [0fee1d995c]
-
-
   TODO:
   - handle BULK commands support for MongoDB >=2.6 for faster writes
     see http://blog.mongodb.org/post/84922794768
-  - GridFS support
-
+  - GridFS support ?
 
 }
 

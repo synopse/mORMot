@@ -47,10 +47,6 @@ unit SynGSSAPI;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.18
-  - initial release, as an alternative to SynSSPI.pas for Linux servers
-  - currently only tested and supported with FPC (not Kylix)
-  - has no external unit dependency, so can be used e.g. by SynCrtSock
 }
 
 {$I Synopse.inc} // define HASINLINE and other compatibility switches
