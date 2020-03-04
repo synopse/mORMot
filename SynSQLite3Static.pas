@@ -231,10 +231,20 @@ implementation
       {$ifndef FPC_CROSSCOMPILING}
         {$linklib gcc.a}
       {$endif}
+      {$ifdef CPUAARCH64}
+        {$ifdef ANDROID}
+          {$L .\static\aarch64-android\libsqlite3.a}
+          {$L .\static\aarch64-android\libgcc.a}
+        {$else}
+          {$L .\static\aarch64-linux\libsqlite3.a}
+          {$L .\static\aarch64-linux\libgcc.a}
+        {$endif}
+        const _PREFIX = '';
+      {$endif}
       {$ifdef CPUARM}
         {$ifdef ANDROID}
-          {$L static\arm-android\sqlite3.o}
-          {$L libgcc.a}
+          {$L .\static\arm-android\libsqlite3.a}
+          {$L .\static\arm-android\libgcc.a}
         {$else}
           {$L static\arm-linux\sqlite3.o}
           {$ifdef FPC_CROSSCOMPILING}
@@ -281,19 +291,19 @@ end;
 
 {$ifdef DARWIN}
 
-function moddi3(num,den:int64):int64; cdecl; [public, alias: '___moddi3'];
+function moddi3(num,den:int64):int64; cdecl; public alias: '___moddi3';
 begin
  result := num mod den;
 end;
-function umoddi3(num,den:uint64):uint64; cdecl; [public, alias: '___umoddi3'];
+function umoddi3(num,den:uint64):uint64; cdecl; public alias: '___umoddi3';
 begin
  result := num mod den;
 end;
-function divdi3(num,den:int64):int64; cdecl; [public, alias: '___divdi3'];
+function divdi3(num,den:int64):int64; cdecl; public alias: '___divdi3';
 begin
  result := num div den;
 end;
-function udivdi3(num,den:uint64):uint64; cdecl; [public, alias: '___udivdi3'];
+function udivdi3(num,den:uint64):uint64; cdecl; public alias: '___udivdi3';
 begin
  result := num div den;
 end;
@@ -301,20 +311,20 @@ end;
 {$endif DARWIN}
 
 {$ifdef ANDROID}
-
-function bswapsi2(num:uint32):uint32; cdecl; [public, alias: '__bswapsi2'];
+{$ifdef CPUARM}
+function bswapsi2(num:uint32):uint32; cdecl; public alias: '__bswapsi2';
 asm
   rev r0, r0	// reverse bytes in parameter and put into result register
   bx  lr
 end;
-function bswapdi2(num:uint64):uint64; cdecl; [public, alias: '__bswapdi2'];
+function bswapdi2(num:uint64):uint64; cdecl; public alias: '__bswapdi2';
 asm
   rev r2, r0  // r2 = rev(r0)
   rev r0, r1  // r0 = rev(r1)
   mov r1, r2  // r1 = r2 = rev(r0)
   bx  lr
 end;
-
+{$endif}
 {$endif ANDROID}
 
 {$else FPC}

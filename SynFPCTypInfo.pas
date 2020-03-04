@@ -67,6 +67,8 @@ type
   PFPCAttributeTable = TypInfo.PAttributeTable;
 {$endif FPC_PROVIDE_ATTR_TABLE}
 
+Function AlignPTypeInfo(p : Pointer) : Pointer; inline;
+
 {$ifdef HASALIGNTYPEDATA}
 function AlignTypeData(p: pointer): pointer; inline;
 {$else}
@@ -179,6 +181,22 @@ begin
 end;
 {$endif HASALIGNTYPEDATA}
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+
+Function AlignPTypeInfo(p : Pointer) : Pointer; inline;
+{$packrecords c}
+  type
+    TAlignCheck = record
+      b : byte;
+      p : pointer;
+    end;
+{$packrecords default}
+begin
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  Result:=Pointer(align(p,PtrInt(@TAlignCheck(nil^).p)))
+{$else FPC_REQUIRES_PROPER_ALIGNMENT}
+  Result:=p;
+{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+end;
 
 
 end.

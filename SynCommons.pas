@@ -12989,7 +12989,7 @@ type
     osArch, osAurox, osDebian, osFedora, osGentoo, osKnoppix, osMint, osMandrake,
     osMandriva, osNovell, osUbuntu, osSlackware, osSolaris, osSuse, osSynology,
     osTrustix, osClear, osUnited, osRedHat, osLFS, osOracle, osMageia, osCentOS,
-    osCloud, osXen, osAmazon, osCoreOS, osAlpine);
+    osCloud, osXen, osAmazon, osCoreOS, osAlpine, osAndroid);
   /// the recognized Windows versions
   // - defined even outside MSWINDOWS to allow process e.g. from monitoring tools
   TWindowsVersion = (
@@ -13027,21 +13027,22 @@ const
   OS_INITIAL: array[TOperatingSystem] of AnsiChar =
     ('?', 'W', 'L', 'X', 'B', 'P', 'A', 'a', 'D', 'F', 'G', 'K', 'M', 'm',
      'n', 'N', 'U', 'S', 's', 'u', 'Y', 'T', 'C', 't', 'R', 'l', 'O', 'G',
-     'c', 'd', 'x', 'Z', 'r', 'p');
+     'c', 'd', 'x', 'Z', 'r', 'p', 'J'); // for Android ... J = Java VM
   /// the operating systems items which actually are Linux distributions
-  OS_LINUX = [osLinux, osArch .. osAlpine];
+  OS_LINUX = [osLinux, osArch .. osAndroid];
 
   /// the compiler family used
   COMP_TEXT = {$ifdef FPC}'Fpc'{$else}'Delphi'{$endif};
   /// the target Operating System used for compilation, as text
   OS_TEXT = {$ifdef MSWINDOWS}'Win'{$else}{$ifdef DARWIN}'OSX'{$else}
-  {$ifdef BSD}'BSD'{$else}{$ifdef LINUX}'Linux'{$else}'Posix'
-  {$endif}{$endif}{$endif}{$endif};
+  {$ifdef BSD}'BSD'{$else}{$ifdef ANDROID}'Android'{$else}{$ifdef LINUX}'Linux'{$else}'Posix'
+  {$endif}{$endif}{$endif}{$endif}{$endif};
   /// the CPU architecture used for compilation
   CPU_ARCH_TEXT = {$ifdef CPUX86}'x86'{$else}{$ifdef CPUX64}'x64'{$else}
     {$ifdef CPUARM}'arm'+{$else}
+    {$ifdef CPUAARCH64}'arm'+{$else}
     {$ifdef CPUPOWERPC}'ppc'+{$else}
-    {$ifdef CPUSPARC}'sparc'+{$endif}{$endif}{$endif}
+    {$ifdef CPUSPARC}'sparc'+{$endif}{$endif}{$endif}{$endif}
     {$ifdef CPU32}'32'{$else}'64'{$endif}{$endif}{$endif};
 
 function ToText(os: TOperatingSystem): PShortString; overload;
@@ -13052,8 +13053,8 @@ var
   /// the target Operating System used for compilation, as TOperatingSystem
   // - a specific Linux distribution may be detected instead of plain osLinux
   OS_KIND: TOperatingSystem = {$ifdef MSWINDOWS}osWindows{$else}{$ifdef DARWIN}osOSX{$else}
-  {$ifdef BSD}osBSD{$else}{$ifdef LINUX}osLinux{$else}osPOSIX
-  {$endif}{$endif}{$endif}{$endif};
+  {$ifdef BSD}osBSD{$else}{$ifdef Android}osAndroid{$else}{$ifdef LINUX}osLinux{$else}osPOSIX
+  {$endif}{$endif}{$endif}{$endif}{$endif};
   /// the current Operating System version, as retrieved for the current process
   // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or
   // 'Ubuntu 16.04.5 LTS - Linux 3.13.0 110 generic#157 Ubuntu SMP Mon Feb 20 11:55:25 UTC 2017'
@@ -20244,7 +20245,11 @@ type
     {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
     record
     TypeInfo: PTypeInfoStored;
-    Offset: PtrUInt; // match TInitManagedField/TManagedField in FPC typinfo.pp
+    {$ifdef FPC}
+    Offset: sizeint; // match TInitManagedField/TManagedField in FPC typinfo.pp
+    {$else}
+    Offset: PtrUInt;
+    {$endif FPC}
     {$ifdef ISDELPHI2010}
     Flags: Byte;
     NameLen: byte; // = Name[0] = length(Name)
@@ -20363,6 +20368,10 @@ type
     );
   end;
 
+  {$ifdef FPC}
+    {$push}
+    {$PACKRECORDS 1}
+  {$endif}
   TPropInfo = packed record
     PropType: PTypeInfoStored;
     GetProc: PtrInt;
@@ -20381,6 +20390,9 @@ type
     NameLen: byte;
   end;
   PPropInfo = ^TPropInfo;
+  {$ifdef FPC}
+    {$pop}
+  {$endif}
 
 {$ifdef HASDIRECTTYPEINFO}
 type
@@ -20526,10 +20538,15 @@ end;
 
 {$ifdef HASALIGNTYPEDATA}
 function FPCTypeInfoOverName(P: pointer): pointer; inline;
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+var
+  diff: PtrUInt;
+{$endif}
 begin
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    diff := PtrUInt(@PTypeInfo(P)^.NameFirst)-PtrUInt(@PTypeInfo(P)^.Kind);
     result := AlignTypeData(P+2+PByte(P+1)^);
-    dec(PByte(result),2*SizeOf(pointer)); // -2 pointers to point on PTypeInfo^.kind
+    dec(PByte(result),diff);
   {$else}
     result := AlignTypeData(P+PByte(P+1)^);
   {$endif}
@@ -26501,6 +26518,9 @@ begin
     FormatUTF8('% %',[sysname,release],OSVersionText);
   if SystemInfo.release<>'' then
     OSVersionText := FormatUTF8('% - %',[SystemInfo.release,OSVersionText]);
+  {$ifdef Android}
+  OSVersionText := 'Android ('+OSVersionText+')';
+  {$endif}
   if (SystemInfo.dwNumberOfProcessors>0) and (modname<>nil) then begin
     beg := modname;
     while not (ord(modname^) in [0,10,13]) do begin
@@ -26510,6 +26530,9 @@ begin
     end;
     modname^ := #0;
     FormatUTF8('% x % ('+CPU_ARCH_TEXT+')',[SystemInfo.dwNumberOfProcessors,beg],CpuInfoText);
+  end;
+  if Length(CpuInfoText)=0 then begin
+     CpuInfoText:=CPU_ARCH_TEXT;
   end;
 end;
 
@@ -40973,20 +40996,24 @@ begin
     recInitData := PFPCRecInitData(AlignTypeDataClean(PTypeInfo(info^.RecInitInfo+2+PByte(info^.RecInitInfo+1)^)));
     firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
     inc(PByte(firstfield),SizeOf(recInitData^.ManagedFieldCount));
-    firstfield := AlignToPtr(firstfield);
+    //firstfield := AlignToPtr(firstfield);
+    firstfield := AlignPTypeInfo(firstfield);
     result := recInitData^.ManagedFieldCount;
   end else begin
     aPointer:=@info^.RecInitInfo;
     {$ifdef FPC_PROVIDE_ATTR_TABLE}
     dec(PByte(aPointer),SizeOf(Pointer));
     {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    {$ifdef CPUARM}
     dec(PByte(aPointer),SizeOf(Pointer));
+    {$endif CPUARM}
     {$endif}
     {$endif}
     recInitData := PFPCRecInitData(aPointer);
     firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
     inc(PByte(firstfield),SizeOf(recInitData^.ManagedFieldCount));
-    firstfield := AlignToPtr(firstfield);
+    //firstfield := AlignToPtr(firstfield);
+    firstfield := AlignPTypeInfo(firstfield);
     result := recInitData^.ManagedFieldCount;
   end;
 {$else}
