@@ -307,10 +307,14 @@
       {$define FPC_X64}   // supports AVX/AVX2/AVX512 - which Delphi doesn't
       {$ASMMODE INTEL}    // to share asm code with Delphi
     {$endif CPUX64}
+    {$ifdef CPUAARCH64}
+      {$define CPUARM3264}
+    {$endif CPUAARCH64}
   {$else}
     {$define FPC_32}
     {$ifdef CPUARM}
       {$define PUREPASCAL} // ARM32
+      {$define CPUARM3264}
     {$endif CPUARM}
     {$ifdef CPUX86}
       {$define CPUINTEL}

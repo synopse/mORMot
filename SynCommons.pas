@@ -3695,7 +3695,7 @@ type
   /// file found result item, as returned by FindFiles()
   // - Delphi "object" is buggy on stack -> also defined as record with methods
   {$ifdef FPC_OR_UNICODE}TFindFiles = record
-  {$else}TFindFiles = object{$endif}
+    {$else}TFindFiles = object{$endif}
   public
     /// the matching file name, including its folder name
     Name: TFileName;
@@ -4541,7 +4541,7 @@ type
   /// used to store and retrieve Words in a sorted array
   // - Delphi "object" is buggy on stack -> also defined as record with methods
   {$ifdef FPC_OR_UNICODE}TSortedWordArray = record
-  {$else}TSortedWordArray = object{$endif}
+    {$else}TSortedWordArray = object{$endif}
   public
     /// the actual 16-bit word storage
     Values: TWordDynArray;
@@ -4560,7 +4560,7 @@ type
   /// used to store and retrieve Integers in a sorted array
   // - Delphi "object" is buggy on stack -> also defined as record with methods
   {$ifdef FPC_OR_UNICODE}TSortedIntegerArray = record
-  {$else}TSortedIntegerArray = object{$endif}
+    {$else}TSortedIntegerArray = object{$endif}
   public
     /// the actual 32-bit integers storage
     Values: TIntegerDynArray;
@@ -6415,7 +6415,7 @@ type
   /// used to store one list of hashed RawUTF8 in TRawUTF8Interning pool
   // - Delphi "object" is buggy on stack -> also defined as record with methods
   {$ifdef FPC_OR_UNICODE}TRawUTF8InterningSlot = record
-  {$else}TRawUTF8InterningSlot = object{$endif}
+    {$else}TRawUTF8InterningSlot = object{$endif}
   public
     /// actual RawUTF8 storage
     Value: TRawUTF8DynArray;
@@ -26531,9 +26531,8 @@ begin
     modname^ := #0;
     FormatUTF8('% x % ('+CPU_ARCH_TEXT+')',[SystemInfo.dwNumberOfProcessors,beg],CpuInfoText);
   end;
-  if Length(CpuInfoText)=0 then begin
-     CpuInfoText:=CPU_ARCH_TEXT;
-  end;
+  if CpuInfoText='' then
+     CpuInfoText := CPU_ARCH_TEXT;
 end;
 
 {$ifdef KYLIX3}
@@ -31749,7 +31748,6 @@ begin
     c := byte(P^);
   until false;
   dec(c,48);
-  c := byte(P^)-48;
   if c>9 then
     exit;
   result := c;
@@ -40996,7 +40994,6 @@ begin
     recInitData := PFPCRecInitData(AlignTypeDataClean(PTypeInfo(info^.RecInitInfo+2+PByte(info^.RecInitInfo+1)^)));
     firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
     inc(PByte(firstfield),SizeOf(recInitData^.ManagedFieldCount));
-    //firstfield := AlignToPtr(firstfield);
     firstfield := AlignPTypeInfo(firstfield);
     result := recInitData^.ManagedFieldCount;
   end else begin
@@ -41012,7 +41009,6 @@ begin
     recInitData := PFPCRecInitData(aPointer);
     firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
     inc(PByte(firstfield),SizeOf(recInitData^.ManagedFieldCount));
-    //firstfield := AlignToPtr(firstfield);
     firstfield := AlignPTypeInfo(firstfield);
     result := recInitData^.ManagedFieldCount;
   end;
@@ -46155,7 +46151,7 @@ end;
 
 type
   {$ifdef FPC_OR_UNICODE}TQuickSortDocVariantValuesByField = record
-  {$else}TQuickSortDocVariantValuesByField = object{$endif}
+    {$else}TQuickSortDocVariantValuesByField = object{$endif}
     Lookup: array of PVariant;
     Compare: TVariantCompare;
     Doc: PDocVariantData;

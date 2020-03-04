@@ -19236,12 +19236,10 @@ begin
       if fTestClass=TSQLRestClientURIMessage then
         break else
       {$endif}
-      {$ifdef FPC}
-      {$if defined(CPUARM) or defined(CPUAARCH64)}
+      {$ifdef CPUARM3264}
       if fTestClass=TSQLHttpClientWebsockets then
         break else
-      {$endif}
-      {$ifend}
+      {$endif CPUARM3264}
         fRunningThreadCount := fRunningThreadCount+20;
   until fRunningThreadCount>fMaxThreads;
   // 3. Cleanup for this protocol (but reuse the same threadpool)

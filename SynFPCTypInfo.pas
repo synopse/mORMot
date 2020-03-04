@@ -67,28 +67,23 @@ type
   PFPCAttributeTable = TypInfo.PAttributeTable;
 {$endif FPC_PROVIDE_ATTR_TABLE}
 
-Function AlignPTypeInfo(p : Pointer) : Pointer; inline;
-
 {$ifdef HASALIGNTYPEDATA}
 function AlignTypeData(p: pointer): pointer; inline;
-{$else}
-type
-  AlignTypeData = pointer;
-{$endif HASALIGNTYPEDATA}
-
-{$ifdef HASALIGNTYPEDATA}
 function AlignTypeDataClean(p: pointer): pointer; inline;
 {$else}
 type
+  AlignTypeData = pointer;
   AlignTypeDataClean = pointer;
 {$endif HASALIGNTYPEDATA}
 
 
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
 function AlignToPtr(p: pointer): pointer; inline;
+function AlignPTypeInfo(p: pointer): pointer; inline;
 {$else FPC_REQUIRES_PROPER_ALIGNMENT}
 type
   AlignToPtr = pointer;
+  AlignPTypeInfo = pointer;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 type
@@ -158,6 +153,7 @@ end;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} // copied from latest typinfo.pp
+
 function AlignTypeDataClean(p: pointer): pointer;
 {$packrecords c}
   type
@@ -173,16 +169,8 @@ begin
     result := Pointer(align(p,PtrInt(@TAlignCheck(nil^).q)));
   {$endif VER3_0}
 end;
-{$else}
-{$ifdef HASALIGNTYPEDATA}
-function AlignTypeDataClean(p: pointer): pointer;
-begin
-  result := p;
-end;
-{$endif HASALIGNTYPEDATA}
-{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
-Function AlignPTypeInfo(p : Pointer) : Pointer; inline;
+function AlignPTypeInfo(p: pointer): pointer; inline;
 {$packrecords c}
   type
     TAlignCheck = record
@@ -191,12 +179,18 @@ Function AlignPTypeInfo(p : Pointer) : Pointer; inline;
     end;
 {$packrecords default}
 begin
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  Result:=Pointer(align(p,PtrInt(@TAlignCheck(nil^).p)))
-{$else FPC_REQUIRES_PROPER_ALIGNMENT}
-  Result:=p;
-{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+  Result := Pointer(align(p,PtrInt(@TAlignCheck(nil^).p)))
+
 end;
 
+{$else}
+{$ifdef HASALIGNTYPEDATA}
+function AlignTypeDataClean(p: pointer): pointer;
+begin
+  result := p;
+end;
+{$endif HASALIGNTYPEDATA}
+
+{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 end.
