@@ -57674,7 +57674,7 @@ asm
         // get Args
         mov     r12, Args
         // copy (push) stack content (if any)
-        mov     ecx, [r12].TCallMethodArgs.StackSize
+        mov     rcx, [r12].TCallMethodArgs.StackSize
         mov     rdx, [r12].TCallMethodArgs.StackAddr
         jmp     @checkstack
 @addstack:
