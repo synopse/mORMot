@@ -679,8 +679,11 @@ end;
 
 procedure TSynTestCase.CheckUTF8(condition: Boolean; const msg: RawUTF8;
   const args: array of const);
-  procedure SubProcForMessage;
-  var str: string;
+var
+  str: string;
+begin
+  InterlockedIncrement(fAssertions);
+  if not condition or (tcoLogEachCheck in fOptions) then
   begin
     if msg<>'' then begin
       FormatString(msg,args,str);
@@ -690,10 +693,6 @@ procedure TSynTestCase.CheckUTF8(condition: Boolean; const msg: RawUTF8;
     if not condition then
       TestFailed(str);
   end;
-begin
-  InterlockedIncrement(fAssertions);
-  if not condition or (tcoLogEachCheck in fOptions) then
-    SubProcForMessage;
 end;
 
 procedure TSynTestCase.CheckLogTimeStart;

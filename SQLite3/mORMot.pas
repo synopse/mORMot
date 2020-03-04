@@ -119,6 +119,10 @@ unit mORMot;
   {$define NOGSSAPIAUTH} // SynGSSAPI.pas unit is not Kylix-compatible
 {$endif}
 
+{$ifdef Android}
+  {$define NOGSSAPIAUTH} // SynGSSAPI.pas unit is not Android-compatible [anymore]
+{$endif}
+
 {$ifdef SSPIAUTH}
   {$undef GSSAPIAUTH} // exclusive
   {$ifdef NOSSPIAUTH}
@@ -1489,7 +1493,7 @@ type
   /// a wrapper containing a RTTI property definition
   // - used for direct Delphi / UTF-8 SQL type mapping/conversion
   // - doesn't depend on RTL's TypInfo unit, to enhance cross-compiler support
-  {$ifdef UNICODE}TPropInfo = record{$else}TPropInfo = object{$endif}
+  {$ifdef UNICODE}TPropInfo = packed record{$else}TPropInfo = packed object{$endif}
   public
     /// raw retrieval of the property read access definition
     // - note: 'var Call' generated incorrect code on Delphi XE4 -> use PMethod
@@ -10333,9 +10337,6 @@ type
     fFakeStub: PByteArray;
     fMethodIndexCallbackReleased: Integer;
     fMethodIndexCurrentFrameCallback: Integer;
-    {$ifdef CPUAARCH64}
-    fDetectX0ResultMagic: cardinal; // alf: temporary hack for AARCH64
-    {$endif}
     procedure AddMethodsFromTypeInfo(aInterface: PTypeInfo); virtual; abstract;
     function GetMethodsVirtualTable: pointer;
   public
@@ -53065,7 +53066,7 @@ const
   REGX7 = 8;
   PARAMREG_FIRST = REGX0;
   PARAMREG_LAST = REGX7;
-  PARAMREG_RESULT = REGX0; // is really REGX1 self?
+  PARAMREG_RESULT = REGX1;
   // 64-bit floating-point (double) registers
   REGD0 = 1; // map REGV0 128-bit NEON register
   REGD1 = 2; // REGV1
@@ -53324,15 +53325,15 @@ var method: PServiceMethod;
       if ValueType>smvSelf then begin
         {$ifdef HAS_FPREG} // x64, arm, aarch64
         if FPRegisterIdent>0 then
-          V := Pointer((PtrUInt(@aCall.FPRegs[FPREG_FIRST])+SizeOf(Double)*PtrUInt(FPRegisterIdent-1))) else
+          V := @aCall.FPRegs[FPREG_FIRST+FPRegisterIdent-1]
+        else
         if RegisterIdent>0 then
-          V := Pointer((PtrUInt(@aCall.ParamRegs[PARAMREG_FIRST])+SizeOf(pointer)*PtrUInt(RegisterIdent-1))) else
+          V := @aCall.ParamRegs[PARAMREG_FIRST+RegisterIdent-1]
+        else
         {$endif}
           V := nil;
-        {$ifndef CPUAARCH64} // on aarch64, reference result can be in PARAMREG_FIRST
         if RegisterIdent=PARAMREG_FIRST then
            RaiseError('unexpected self',[]);
-        {$endif}
         {$ifdef CPUX86}
         case RegisterIdent of
         REGEAX: RaiseError('unexpected self',[]);
@@ -53436,25 +53437,6 @@ begin
      forged to call a remote SOA server or mock/stub an interface
   *)
   self := SelfFromInterface;
-  {$ifdef CPUAARCH64}
-  // alf: on aarch64, the self is sometimes only available in x1, when we have a result pointer !
-  // try to detect this ... although not very elegant, but I do not yet know how else to do this
-  try
-    if (fFactory=nil) or (fFactory.fDetectX0ResultMagic<>$AAAAAAAA) then begin
-      // aha, we have a reference result, placed in X0, so self is in X1 !!
-      self := aCall.ParamRegs[REGX1];
-      self := SelfFromInterface;
-      if fFactory.fDetectX0ResultMagic<>$AAAAAAAA then
-         raise EInterfaceFactoryException.CreateUTF8('Self error',[]);
-    end;
-  except
-    // if the above fails due to some error, we are definitely sure that the self is in REGX1 !!
-    self := aCall.ParamRegs[REGX1];
-    self := SelfFromInterface;
-    if fFactory.fDetectX0ResultMagic<>$AAAAAAAA then
-       raise EInterfaceFactoryException.CreateUTF8('Self error',[]);
-  end;
-  {$endif}
   if aCall.MethodIndex>=fFactory.fMethodsCount then
     raise EInterfaceFactoryException.CreateUTF8(
       '%.FakeCall(%.%) failed: out of range method %>=%',[self,
@@ -53891,9 +53873,6 @@ begin
   {$ifndef NOVARIANTS}
   fDocVariantOptions := JSON_OPTIONS_FAST;
   {$endif NOVARIANTS}
-  {$ifdef CPUAARCH64}
-  fDetectX0ResultMagic := $AAAAAAAA; // alf: see comment above
-  {$endif CPUAARCH64}
   fInterfaceTypeInfo := aInterface;
   fInterfaceIID := aInterface^.InterfaceGUID^;
   if IsNullGUID(fInterfaceIID) then
@@ -57461,11 +57440,11 @@ type
   {$PACKRECORDS 16}
   {$endif}
   TCallMethodArgs = record
-    StackSize: integer;
+    StackSize: PtrInt;
     StackAddr, method: PtrInt;
-    ParamRegs: packed array[PARAMREG_FIRST..PARAMREG_LAST] of PtrInt;
+    ParamRegs: array[PARAMREG_FIRST..PARAMREG_LAST] of PtrInt;
     {$ifdef HAS_FPREG}
-    FPRegs: packed array[FPREG_FIRST..FPREG_LAST] of Double;
+    FPRegs: array[FPREG_FIRST..FPREG_LAST] of Double;
     {$endif}
     res64: Int64Rec;
     resKind: TServiceMethodValueType;
@@ -57497,6 +57476,9 @@ asm
    //lr    14          link address / scratch register
    //pc    15          program counter
 
+   // sometimes, the entry-point is not exact ... give some room for errors
+   nop
+   nop
    // prolog
    mov	 ip, sp // sp is the stack pointer ; ip is the Intra-Procedure-call scratch register
    stmfd sp!, {v1, v2, sb, sl, fp, ip, lr, pc}
@@ -57535,7 +57517,16 @@ load_regs:
    vldr  d6, [v2,#TCallMethodArgs.FPRegs+REGD6*8-8]
    vldr  d7, [v2,#TCallMethodArgs.FPRegs+REGD7*8-8]
    ldr   v1, [v2,#TCallMethodArgs.method]
+   {$ifdef CPUARM_HAS_BLX}
    blx   v1
+   {$else}
+   mov lr, pc
+   {$ifdef CPUARM_HAS_BX}
+   bx  v1
+   {$else}
+   mov pc, v1
+   {$endif}
+   {$endif}
    str   a1, [v2,#TCallMethodArgs.res64.Lo]
    str   a2, [v2,#TCallMethodArgs.res64.Hi]
    ldr   a3, [v2,#TCallMethodArgs.resKind]
@@ -57562,13 +57553,18 @@ asm
    // fp       x29
    // lr       x30
    // sp       sp
-   stp	fp, lr, [sp, #-16]!
-   stp	x19, x20, [sp, #-16]!
-   mov	fp, sp
+
+   // sometimes, the entry-point is not exact ... give some room for errors
+   nop
+   nop
+   // prolog
+   stp  x29, x30, [sp, #-16]!
+   mov  x29, sp
+   stp  x19, x19, [sp, #-16]!
    // make space on stack
    sub	sp, sp, #MAX_EXECSTACK
+   //and  sp, sp, #-16   // Always align sp.
    mov  x19, Args
-   ldr  x20, [x19,#TCallMethodArgs.method]
    // prepare to copy (push) stack content (if any)
    ldr  x2, [x19,#TCallMethodArgs.StackSize]
    // if there is no stack content, do nothing
@@ -57610,24 +57606,24 @@ load_regs:
    ldr  d6, [x19,#TCallMethodArgs.FPRegs+REGD6*8-8]
    ldr  d7, [x19,#TCallMethodArgs.FPRegs+REGD7*8-8]
    // call TCallMethodArgs.method
-   blr  x20
+   ldr  x15, [x19,#TCallMethodArgs.method]
+   blr  x15
    // store normal result
    str  x0, [x19, #TCallMethodArgs.res64]
-   ldr  x20, [x19, #TCallMethodArgs.resKind]
-   cmp  x20, smvDouble
+   ldr  x15, [x19, #TCallMethodArgs.resKind]
+   cmp  x15, smvDouble
    b.eq float_result
-   cmp  x20, smvDateTime
+   cmp  x15, smvDateTime
    b.eq float_result
-   cmp  x20, smvCurrency
+   cmp  x15, smvCurrency
    b.ne asmcall_end
    // store double result in res64
 float_result:
    str  d0, [x19,#TCallMethodArgs.res64]
 asmcall_end:
-   // give back space on stack (add sp,sp,#MAX_EXECSTACK)
-   mov	sp, fp
-   ldp	x19, x20, [sp], #16
-   ldp	fp, lr, [sp], #16
+   add  sp, sp, #MAX_EXECSTACK
+   ldr  x19,[sp], #16
+   ldp  x29,x30,[sp], #16
    ret
 end;
 {$endif CPUAARCH64}
@@ -60154,17 +60150,8 @@ begin
         end;
       end;
       // prepare the low-level call context for the asm stub
-      {$ifndef CPUAARCH64}
+      //Pass the Self (also named $this)
       call.ParamRegs[PARAMREG_FIRST] := PtrInt(Instances[i]);
-      {$else}
-      // alf note for FPC on Linux aarch64:
-      // the above is not true for aarch64, when a function result is a pointer
-      // the function result pointer is placed in REGX0 and self in REGX1
-      // thus, in that case: call.ParamRegs[REGX1] := PtrInt(Instances[i]);
-       if call.ParamRegs[PARAMREG_FIRST]=0 then
-          call.ParamRegs[PARAMREG_FIRST] := PtrInt(Instances[i]) else
-          call.ParamRegs[REGX1] := PtrInt(Instances[i]);
-      {$endif}
       call.method := PPtrIntArray(PPointer(Instances[i])^)^[ExecutionMethodIndex];
       if ArgsResultIndex>=0 then
         call.resKind := Args[ArgsResultIndex].ValueType else

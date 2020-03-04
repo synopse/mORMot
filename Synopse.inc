@@ -257,7 +257,11 @@
     {$ifdef CPUARM}
       {$define FPCSQLITE3STATIC} // use static/arm-linux\sqlite3.o
     {$endif}
-    // note: problems with current static/aarch64-linux\sqlite3.o
+    {$ifdef CPUAARCH64}
+      {$ifdef ANDROID}
+        {$define FPCSQLITE3STATIC} // note: problems with current static/aarch64-linux\sqlite3.o
+      {$endif}
+    {$endif}
   {$endif}
 
   {$ifdef BSD}

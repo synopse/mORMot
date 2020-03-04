@@ -8300,7 +8300,7 @@ check(IsValidJSON(J));
    peop.YearOfDeath := 10;
    peop.LastName := 'john';
    TObjectVariant.New(Va,peop);
-   Check(Va.id=-1234);
+   Check(Va.id=TID(-1234));
    Check(Va.FirstName='');
    Check(Va.LastName='john');
    Check(Va.YearOfDeath=10);
@@ -10501,7 +10501,7 @@ var Model: TSQLModel;
     i,j,n: integer;
     dummy: RawUTF8;
 {$ifndef NOVARIANTS}
-procedure CheckVariantWith(V: Variant; i: Integer; offset: integer=0);
+procedure CheckVariantWith(const V: Variant; const i: Integer; const offset: integer=0);
 begin
   Check(V.ID=i);
   Check(V.Int=i);
@@ -19236,6 +19236,12 @@ begin
       if fTestClass=TSQLRestClientURIMessage then
         break else
       {$endif}
+      {$ifdef FPC}
+      {$if defined(CPUARM) or defined(CPUAARCH64)}
+      if fTestClass=TSQLHttpClientWebsockets then
+        break else
+      {$endif}
+      {$ifend}
         fRunningThreadCount := fRunningThreadCount+20;
   until fRunningThreadCount>fMaxThreads;
   // 3. Cleanup for this protocol (but reuse the same threadpool)
