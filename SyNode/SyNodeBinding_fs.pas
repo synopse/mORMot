@@ -377,8 +377,51 @@ begin
 end;
 
 /// read content of directory. return array of file names witout started from dot '.'
-/// in case of includeDirNames - return sub direcrory with trailing slash
+/// in case of includeDirNames (windoes only) - return sub direcrory with trailing slash
 function fs_readDir(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+{$ifdef LINUX}
+var
+  fn: string;
+  dir: PDir;
+  dirent: PDirent;
+  res: PJSRootedObject;
+  pjsStr: PJSString;
+  cNum: uint32;
+begin
+  result := checkFuncArgs(cx, argc, vp, [atStr, atAny]);  // 2-d arg is Windows legacy
+  if not result then exit;
+  try
+    fn := vp.argv^[0].asJSString.ToString(cx);
+    dir := fpOpenDir(PChar(fn));
+    if dir = nil then begin
+      vp.rval := JSVAL_NULL;
+      Result := true;
+      Exit;
+    end;
+    res := cx.NewRootedObject(cx.NewArrayObject(0)); cNum := 0;
+    try
+      repeat
+        dirent := fpReadDir(dir^);
+        if dirent <> nil then begin
+          if ((dirent^.d_name[0] = #0) or
+              ( (dirent^.d_name[0] = '.') and (dirent^.d_name[1] = #0) ) or
+              ( (dirent^.d_name[0] = '.') and (dirent^.d_name[1] = '.') and (dirent^.d_name[2] = #0) )
+             ) then continue;
+          pjsStr := JS_NewStringCopyUTF8Z(cx, PUTF8Char(@dirent^.d_name[0]));
+          res.ptr.SetElement(cx, cNum, pjsStr.ToJSVal);
+          inc(cNum);
+        end;
+      until dirent = nil;
+      vp.rval := res.ptr.ToJSValue;
+    finally
+      fpCloseDir(dir^);
+      cx.FreeRootedObject(res);
+    end;
+  except
+    on E: Exception do begin Result := false; JSError(cx, E); end;
+  end;
+end;
+{$else}
 var
   in_argv: PjsvalVector;
   dir: TFileName;
@@ -439,6 +482,7 @@ begin
     end;
   end;
 end;
+{$endif}
 
 {$ifdef MSWINDOWS}
 {$if defined(FPC) or not defined(ISDELPHIXE2)}
