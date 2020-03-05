@@ -249,6 +249,9 @@ JS_PUBLIC_API(JSString*) (*SM_NewStringCopyN)(
 JS_PUBLIC_API(JSString*) (*SM_NewStringCopyUTF8Z)(
     JSContext* cx, const JS::ConstUTF8CharsZ s) = &JS_NewStringCopyUTF8Z;
 
+JS_PUBLIC_API(JSString*)
+    SM_NewStringCopyUTF8N(JSContext* cx, const char* aBytes, size_t aLangth);
+
 JS_PUBLIC_API(JS::Value) (*SM_GetEmptyStringValue)(JSContext* cx) = &JS_GetEmptyStringValue;
 
 JS_PUBLIC_API(JSString*) (*SM_NewUCStringCopyN)(
