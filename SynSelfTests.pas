@@ -18033,7 +18033,7 @@ begin
      CheckFailed(fClient.Services['testperthread'].Get(Inst.CT)) then
     exit;
 {$endif}
-  {$ifdef CPUARM}
+  {$ifndef CPUARM}
   // The FPC arm optimizer ruins a return address at level -O2
   // So, disable this test until a suitable fix is found.
   Inst.CN.Imaginary;
