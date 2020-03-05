@@ -187,6 +187,7 @@
   {$define FPC_OR_KYLIX}
   {$define FPC_OR_UNICODE}
   {$define FPC_OR_DELPHIXE}
+  {$define FPC_OR_DELPHIXE4}
   {$define FPC_ENUMHASINNER}
 
   // $if FPC_FULLVERSION>20700 breaks Delphi 6-7 and SynProject :(
@@ -516,6 +517,7 @@
       {$ifend}
       {$if CompilerVersion >= 25.0}
         {$define ISDELPHIXE4}
+        {$define FPC_OR_DELPHIXE4} // circumvent Internal Error: C2130 on XE3
         {$define HASAESNI}
       {$ifend}
       {$if CompilerVersion >= 26.0}

@@ -5783,8 +5783,8 @@ type
     // - returns the number of duplicated values found
     function ReHash(forced, forceGrow: boolean): integer;
     /// compute the hash of a given item
-    function HashOne(Elem: pointer): cardinal;
-       {$ifdef FPC_OR_DELPHIXE}inline;{$endif} // Delphi 2007=C1632, 2010=C1872
+    function HashOne(Elem: pointer): cardinal; {$ifdef FPC_OR_DELPHIXE4}inline;{$endif}
+      { not inlined to circumvent Delphi 2007=C1632, 2010=C1872, XE3=C2130 }
     /// retrieve the low-level hash of a given item
     function GetHashFromIndex(aIndex: PtrInt): cardinal;
   end;
@@ -50521,7 +50521,7 @@ begin
     if Assigned(Compare) then
       cmp := Compare(P^,Elem^) else
       cmp := 1;
-    if cmp=0 then begin // faster than hash e.g. for strings
+    if cmp=0 then begin // faster than hash e.g. for huge strings
       if aHashTableIndex<>nil then
         aHashTableIndex^ := result;
       result := ndx;
