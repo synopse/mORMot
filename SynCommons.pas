@@ -3655,6 +3655,10 @@ function SearchRecToDateTime(const F: TSearchRec): TDateTime;
 function SearchRecValidFile(const F: TSearchRec): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// check if a FindFirst/FindNext found instance is actually a folder
+function SearchRecValidFolder(const F: TSearchRec): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
 const
   /// operating-system dependent wildchar to match all files in a folder
   FILES_ALL = {$ifdef MSWINDOWS}'*.*'{$else}'*'{$endif};
@@ -3726,6 +3730,16 @@ function FindFiles(const Directory,Mask: TFileName;
 
 /// convert a result list, as returned by FindFiles(), into an array of Files[].Name
 function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
+
+/// ensure all files in Dest folder(s) do match the one in Reference
+// - won't copy all files from Reference folders, but only update files already
+// existing in Dest, which did change since last synchronization
+// - will also process recursively nested folders if SubFolder is true
+// - will use file content instead of file date check if ByContent is true
+// - can optionally write the synched file name to the console
+// - returns the number of files copied during the process
+function SynchFolders(const Reference, Dest: TFileName; SubFolder: boolean=false;
+  ByContent: boolean=false; WriteFileNameToConsole: boolean=false): integer;
 
 {$ifdef DELPHI5OROLDER}
 
@@ -7475,6 +7489,10 @@ const
   // algorithm, so no power of two is defined on those targets
   HASH_PO2 = 1 shl 18;
 {$endif CPU32DELPHI}
+
+/// compute the 32-bit default hash of a file content
+// - you can specify your own hashing function if DefaultHasher is not what you expect
+function HashFile(const FileName: TFileName; Hasher: THasher=nil): cardinal;
 
 /// hash one AnsiString content with the suppplied Hasher() function
 function HashAnsiString(const Elem; Hasher: THasher): cardinal;
@@ -29752,6 +29770,12 @@ begin
   {$endif}
 end;
 
+function SearchRecValidFolder(const F: TSearchRec): boolean;
+begin
+  result := (F.Attr and (faDirectory {$ifdef MSWINDOWS}and faHidden{$endif})=faDirectory) and
+    (F.Name<>'') and (F.Name<>'.') and (F.Name<>'..');
+end;
+
 function DirectoryDelete(const Directory: TFileName; const Mask: TFileName;
   DeleteOnlyFilesNotDirectory: Boolean; DeletedCount: PInteger): Boolean;
 var F: TSearchRec;
@@ -29831,7 +29855,7 @@ end;
 function FindFiles(const Directory,Mask,IgnoreFileName: TFileName;
   SortByName,IncludesDir,SubFolder: boolean): TFindFilesDynArray;
 var m,count: integer;
-    Dir: TFileName;
+    dir: TFileName;
     da: TDynArray;
     masks: TRawUTF8DynArray;
     masked: TFindFilesDynArray;
@@ -29840,22 +29864,22 @@ var m,count: integer;
     F: TSearchRec;
     ff: TFindFiles;
   begin
-    if FindFirst(Dir+folder+Mask,faAnyfile-faDirectory,F)=0 then begin
+    if FindFirst(dir+folder+Mask,faAnyfile-faDirectory,F)=0 then begin
       repeat
         if SearchRecValidFile(F) and ((IgnoreFileName='') or
             (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
           if IncludesDir then
-            ff.FromSearchRec(Dir+folder,F) else
+            ff.FromSearchRec(dir+folder,F) else
             ff.FromSearchRec(folder,F);
           da.Add(ff);
         end;
       until FindNext(F)<>0;
       FindClose(F);
     end;
-    if SubFolder and (FindFirst(Dir+folder+'*',faDirectory,F)=0) then begin
+    if SubFolder and (FindFirst(dir+folder+'*',faDirectory,F)=0) then begin
       repeat
-        if (F.Name<>'.') and (F.Name<>'..') and ((IgnoreFileName='') or
-            (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then
+        if SearchRecValidFolder(F) and ((IgnoreFileName='') or
+           (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then
           SearchFolder(IncludeTrailingPathDelimiter(folder+F.Name));
       until FindNext(F)<>0;
       FindClose(F);
@@ -29876,7 +29900,7 @@ begin
     end;
   end else begin
     if Directory<>'' then
-      Dir := IncludeTrailingPathDelimiter(Directory);
+      dir := IncludeTrailingPathDelimiter(Directory);
     SearchFolder('');
     if SortByName and (da.Count>0) then
       da.Sort(SortDynArrayFileName);
@@ -29892,6 +29916,43 @@ begin
   SetLength(result,n);
   for i := 0 to n-1 do
     result[i] := Files[i].Name;
+end;
+
+function SynchFolders(const Reference, Dest: TFileName;
+  SubFolder,ByContent,WriteFileNameToConsole: boolean): integer;
+var s,d: TFileName;
+    f,f2: TSearchRec;
+    idem: boolean;
+    buf: RawByteString;
+begin
+  result := 0;
+  s := IncludeTrailingPathDelimiter(Reference);
+  d := IncludeTrailingPathDelimiter(Dest);
+  if DirectoryExists(s) and (FindFirst(d+FILES_ALL,faAnyFile,f)=0) then begin
+    repeat
+      if SearchRecValidFile(f) then begin
+        if not ByContent then begin
+          if FindFirst(s+f.Name,faAnyFile,f2)<>0 then
+            continue;
+          idem := (f.Size=f2.Size) and (f.Time=f2.Time);
+          FindClose(f2);
+          if idem then
+            continue;
+        end else if not FileExists(s+f.Name) then
+          continue;
+        buf := StringFromFile(s+f.Name);
+        if (buf<>'') and ((not ByContent) or (length(buf)<>f.Size) or
+            (DefaultHasher(0,pointer(buf),length(buf))<>HashFile(d+f.Name))) then begin
+          FileFromString(buf,d+f.Name,false,FileAgeToDateTime(s+f.Name));
+          inc(result);
+          if WriteFileNameToConsole then
+            {$I-} writeln('synched ',d,f.name); {$I+}
+        end;
+      end else if SubFolder and SearchRecValidFolder(f) then
+        SynchFolders(s+f.Name,d+f.Name,SubFolder,ByContent,WriteFileNameToConsole);
+    until FindNext(f)<>0;
+    FindClose(f);
+  end;
 end;
 
 function EnsureDirectoryExists(const Directory: TFileName;
@@ -50210,6 +50271,26 @@ end;
 
 
 { TDynArrayHasher }
+
+function HashFile(const FileName: TFileName; Hasher: THasher=nil): cardinal;
+var buf: array[word] of cardinal; // 256KB of buffer
+    read: integer;
+    f: THandle;
+begin
+  if not Assigned(Hasher) then
+    Hasher := DefaultHasher;
+  result := 0;
+  f := FileOpenSequentialRead(FileName);
+  if PtrInt(f)>=0 then begin
+    repeat
+      read := FileRead(f,buf,SizeOf(buf));
+      if read<=0 then
+        break;
+      result := Hasher(result,@buf,read);
+    until false;
+    FileClose(f);
+  end;
+end;
 
 function HashAnsiString(const Elem; Hasher: THasher): cardinal;
 begin
