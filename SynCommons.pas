@@ -5890,12 +5890,12 @@ type
     // - Elem must refer to a variable: e.g. you can't write FindHashed(i+10)
     // - will call fHashElement(Elem,fHasher) to compute the needed hash
     // - returns -1 if not found, or the index in the dynamic array if found
-    function FindHashed(const Elem): integer; overload;
+    function FindHashed(const Elem): integer;
     /// search for an element value inside the dynamic array using its hash
     // - returns -1 if not found, or the index in the dynamic array if found
     // - aHashCode parameter constains an already hashed value of the item,
     // to be used e.g. after a call to HashFind()
-    function FindHashed(const Elem; aHashCode: cardinal): integer; overload;
+    function FindFromHash(const Elem; aHashCode: cardinal): integer;
     /// search for an element value inside the dynamic array using hashing, and
     // fill Elem with the found content
     // - return the index found (0..Count-1), or -1 if Elem was not found
@@ -51074,8 +51074,8 @@ begin
     result := -1; // for coherency with most methods
 end;
 
-function TDynArrayHashed.FindHashed(const Elem; aHashCode: cardinal): integer;
-begin
+function TDynArrayHashed.FindFromHash(const Elem; aHashCode: cardinal): integer;
+begin // overload FindHashed() trigger F2084 Internal Error: C2130 on Delphi XE3
   result := fHash.FindOrNew(aHashCode,@Elem); // fallback to Scan() if needed
   if result<0 then
     result := -1; // for coherency with most methods
@@ -58451,9 +58451,11 @@ begin
 end;
 
 function TObjectListPropertyHashed.IndexOf(aObject: TObject): integer;
+var h: cardinal;
 begin
   if fCount>0 then begin
-    result := fHash.FindHashed(aObject,fHash.fHash.HashElement(aObject,fHash.fHash.Hasher));
+    h := fHash.fHash.HashElement(aObject,fHash.fHash.Hasher);
+    result := fHash.fHash.FindOrNew(h,@aObject); // fallback to Scan() if needed
     if result>=0 then
       exit else // found
       result := -1; // for consistency
