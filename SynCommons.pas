@@ -20558,12 +20558,19 @@ end;
 {$ifdef HASALIGNTYPEDATA}
 function FPCTypeInfoOverName(P: pointer): pointer; inline;
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+{$ifdef CPUARM3264}
+const
+  diff=SizeOf(QWord);// always on these two CPU's
+{$else}
 var
   diff: PtrUInt;
 {$endif}
+{$endif}
 begin
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    {$ifndef CPUARM3264}
     diff := PtrUInt(@PTypeInfo(P)^.NameFirst)-PtrUInt(@PTypeInfo(P)^.Kind);
+    {$endif}
     result := AlignTypeData(P+2+PByte(P+1)^);
     dec(PByte(result),diff);
   {$else}
