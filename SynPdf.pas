@@ -6080,9 +6080,6 @@ type
     FirstNameRecord: TNameRecord;
   end;
 
-function TPdfDocument.TTFFontPostcriptName(aFontIndex: integer; AStyle: TPdfFontStyles;
-  AFont: TPdfFontTrueType): PDFString;
-// see http://www.microsoft.com/typography/OTSPEC/name.htm
 function TrueTypeFontName(const aFontName: RawUTF8; AStyle: TPdfFontStyles): PDFString;
 var i: Integer;
 begin // from PDF 1.3 #5.5.2
@@ -6090,6 +6087,8 @@ begin // from PDF 1.3 #5.5.2
   for i := length(result) downto 1 do
     if (Result[i]<=' ') or (Result[i]>=#127) then
       Delete(result,i,1); // spaces and not ASCII chars are removed
+  if not IsAnsiCompatible(aFontName) then // unique non-void font name
+    result := result+PDFString(CardinalToHexLower(CRC32string(aFontName)));
   if pfsItalic in AStyle then
     if pfsBold in AStyle then
       result := result+',BoldItalic' else
@@ -6097,6 +6096,10 @@ begin // from PDF 1.3 #5.5.2
     if pfsBold in AStyle then
       result := result+',Bold';
 end;
+
+function TPdfDocument.TTFFontPostcriptName(aFontIndex: integer; AStyle: TPdfFontStyles;
+  AFont: TPdfFontTrueType): PDFString;
+// see http://www.microsoft.com/typography/OTSPEC/name.htm
 const NAME_POSTCRIPT = 6;
 var fName: TWordDynArray;
     name: ^TNameFmt4;
@@ -6106,9 +6109,10 @@ var fName: TWordDynArray;
     PW: pointer;
 begin
   aFontName := FTrueTypeFonts[aFontIndex];
-  result := TrueTypeFontName(aFontName,AStyle);
-  if IsAnsiCompatible(aFontName) or (AFont=nil) then
+  if IsAnsiCompatible(aFontName) or (AFont=nil) then begin
+    result := TrueTypeFontName(aFontName,AStyle);
     exit; // no need to search for the PostScript name field in TTF content
+  end;
   name := GetTTFData(GetDCWithFont(AFont),'name',fName);
   if (name=nil) or (name^.format<>0) then
     exit;
@@ -6124,8 +6128,8 @@ begin
         inc(PByte(PW));
         SwapBuffer(PW,L);   // convert from big-endian at correct odd offset
       end;
-      SetLength(result,L);
-      RawUnicodeToWinPChar(pointer(Result),PW,L);
+      RawUnicodeToUtf8(PW,L,aFontName);
+      result := TrueTypeFontName(aFontName,AStyle); // adjust name and style
       exit;
     end else
     inc(Rec);
