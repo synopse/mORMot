@@ -50,6 +50,12 @@ JS_PUBLIC_API(uint64_t) SM_GetReservedSlot(JSObject* obj, uint32_t index)
     return js::GetReservedSlot(obj, index).asRawBits();
 }
 
+JS_PUBLIC_API(JSString*) SM_NewStringCopyUTF8N(JSContext* cx, const char* aBytes, size_t aLangth)
+{
+	JS::UTF8Chars utf8chars = JS::UTF8Chars(aBytes, aLangth);
+	return JS_NewStringCopyUTF8N(cx, utf8chars);
+}
+
 JS_PUBLIC_API(JSObject*) SM_NewDateObjectMsec(JSContext* cx, double msec)
 {
     JS::ClippedTime time = JS::TimeClip(msec);
