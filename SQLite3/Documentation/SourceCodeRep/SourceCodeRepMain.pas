@@ -251,7 +251,7 @@ procedure TMainForm.btnGitSynchClick(Sender: TObject);
 var
   Desc, status: string;
   DescFile, BatchFile, GitHub: TFileName;
-  i: integer;
+  i,n: integer;
 begin
   Desc := trim(mmoDescription.Text);
   if Desc = '' then begin
@@ -292,16 +292,18 @@ begin
   DescFile := fBatPath + 'desc.txt';
   FileFromString(Desc, DescFile);
   GitHub := ExtractFilePath(fGitRepository);
+  n := 0;
   if (Sender = btnGitAll) or (Sender = btnSynProject) then
-    SynchFolders(fFossilRepository, GitHub + 'SynProject', true, true, true);
+    inc(n,SynchFolders(fFossilRepository, GitHub + 'SynProject', true, true, true));
   if (Sender = btnGitAll) or (Sender = btnSynPdf) then
-    SynchFolders(fFossilRepository, GitHub + 'SynPDF', false, true, true);
+    inc(n,SynchFolders(fFossilRepository, GitHub + 'SynPDF', false, true, true));
   if (Sender = btnGitAll) or (Sender = btnDMustache) then
-    SynchFolders(fFossilRepository, GitHub + 'dmustache', false, true, true);
+    inc(n,SynchFolders(fFossilRepository, GitHub + 'dmustache', false, true, true));
   if (Sender = btnGitAll) or (Sender = btnLVCL) then
-    SynchFolders(fFossilRepository, GitHub + 'LVCL', false, true, true);
+    inc(n,SynchFolders(fFossilRepository, GitHub + 'LVCL', false, true, true));
   if (Sender = btnGitAll) or (Sender = btnGitSynch) then
-    SynchFolders(fFossilRepository, GitHub + 'mORMot', true, true, true);
+    inc(n,SynchFolders(fFossilRepository, GitHub + 'mORMot', true, true, true));
+  {$I-} Writeln(n,' file(s) synched to GitHub'#13#10); {$I+}
   if Sender = btnGitAll then
     BatchFile := 'GitCommitAll'
   else if Sender = btnSynProject then
