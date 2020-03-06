@@ -17196,18 +17196,20 @@ end;
 function TSynAnsiFixedWidth.AnsiBufferToUnicode(Dest: PWideChar;
   Source: PAnsiChar; SourceChars: Cardinal; NoTrailingZero: boolean): PWideChar;
 var i: Integer;
+    tab: PWordArray;
 begin
   // PWord*(Dest)[] is much faster than dest^ := WideChar(c) for FPC
+  tab := pointer(fAnsiToWide);
   for i := 1 to SourceChars shr 2 do begin
-    PWordArray(Dest)[0] := fAnsiToWide[Ord(Source[0])];
-    PWordArray(Dest)[1] := fAnsiToWide[Ord(Source[1])];
-    PWordArray(Dest)[2] := fAnsiToWide[Ord(Source[2])];
-    PWordArray(Dest)[3] := fAnsiToWide[Ord(Source[3])];
+    PWordArray(Dest)[0] := tab[Ord(Source[0])];
+    PWordArray(Dest)[1] := tab[Ord(Source[1])];
+    PWordArray(Dest)[2] := tab[Ord(Source[2])];
+    PWordArray(Dest)[3] := tab[Ord(Source[3])];
     inc(Source,4);
     inc(Dest,4);
   end;
   for i := 1 to SourceChars and 3 do begin
-    PWord(Dest)^ := fAnsiToWide[Ord(Source^)];
+    PWord(Dest)^ := tab[Ord(Source^)];
     inc(Dest);
     inc(Source);
   end;
@@ -17334,7 +17336,7 @@ begin
       A256[i] := AnsiChar(i);
     FillcharFast(U256,SizeOf(U256),0);
     if PtrUInt(inherited AnsiBufferToUnicode(U256,A256,256))-PtrUInt(@U256)>512 then
-      // ESynException.CreateUTF8() uses UTF8ToString() -> use CreateFmt() here
+      // warning: CreateUTF8() uses UTF8ToString() -> use CreateFmt() now
       raise ESynException.CreateFmt('OS error for %s.Create(%d)',[ClassName,aCodePage]);
     MoveFast(U256[0],fAnsiToWide[0],512);
   end;
@@ -17450,6 +17452,7 @@ end;
 function TSynAnsiFixedWidth.UnicodeBufferToAnsi(Dest: PAnsiChar;
   Source: PWideChar; SourceChars: Cardinal): PAnsiChar;
 var c: cardinal;
+    tab: PAnsiChar;
 begin
   // first handle trailing 7 bit ASCII chars, by pairs (Sha optimization)
   if SourceChars>=2 then
@@ -17464,16 +17467,17 @@ begin
     inc(Dest,2);
   until SourceChars<2;
   // use internal lookup tables for fast process of remaining chars
+  tab := pointer(fWideToAnsi);
   for c := 1 to SourceChars shr 2 do begin
-    Dest[0] := AnsiChar(fWideToAnsi[Ord(Source[0])]);
-    Dest[1] := AnsiChar(fWideToAnsi[Ord(Source[1])]);
-    Dest[2] := AnsiChar(fWideToAnsi[Ord(Source[2])]);
-    Dest[3] := AnsiChar(fWideToAnsi[Ord(Source[3])]);
+    Dest[0] := tab[Ord(Source[0])];
+    Dest[1] := tab[Ord(Source[1])];
+    Dest[2] := tab[Ord(Source[2])];
+    Dest[3] := tab[Ord(Source[3])];
     inc(Source,4);
     inc(Dest,4);
   end;
   for c := 1 to SourceChars and 3 do begin
-    Dest^ := AnsiChar(fWideToAnsi[Ord(Source^)]);
+    Dest^ := tab[Ord(Source^)];
     inc(Dest);
     inc(Source);
   end;
