@@ -793,7 +793,8 @@ type
   end;
 
   /// parameters to be used for WebSockets process
-  {$ifdef UNICODE}TWebSocketProcessSettings = record{$else}TWebSocketProcessSettings = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TWebSocketProcessSettings = record
+    {$else}TWebSocketProcessSettings = object{$endif}
   public
     /// time in milli seconds between each focPing commands sent to the other end
     // - default is 0, i.e. no automatic ping sending on client side, and

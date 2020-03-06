@@ -510,7 +510,8 @@ type
     mStorage: Int64;
   end;
 /// internal Spidermonkey structure for storrage jsid
-  JSIdArray  = {$ifdef UNICODE}record{$else}object{$endif}
+  {$ifdef USERECORDWITHMETHODS}JSIdArray  = record
+    {$else}JSIdArray  = object{$endif}
   private
     _internal: _JSIdArray;
     procedure init(cx: PJSContext); {$ifdef HASINLINE}inline;{$endif}
@@ -567,7 +568,8 @@ type
   JSONWriteCallback = function(const buf: PCChar16; len: uint32; data: pointer): Boolean; cdecl;
 
   /// high-level definition of the JSValue
-  jsval = {$ifdef UNICODE}record{$else}object{$endif}
+  {$ifdef USERECORDWITHMETHODS}jsval = record
+    {$else}jsval = object{$endif}
   private
     _l: jsval_layout;
 
@@ -704,7 +706,8 @@ type
   end;
 
   /// hight-level definition of arguments of function
-  JSArgRec = {$ifdef UNICODE}record{$else}object{$endif}
+  {$ifdef USERECORDWITHMETHODS}JSArgRec = record
+    {$else}JSArgRec = object{$endif}
   private
     rec: _JSArgRec;
     function GetIsConstructing: Boolean; {$ifdef HASINLINE}inline;{$endif}
@@ -1352,7 +1355,8 @@ type
   /// JSObject is the type of JavaScript objects in the JSAPI
   // - this object does not store anything, but just provide some helper methods
   // to access a PJSObject value via low-level API functions
-  JSObject = {$ifdef UNICODE}record{$else}object{$endif}
+  {$ifdef USERECORDWITHMETHODS}JSObject = record
+    {$else}JSObject = object{$endif}
   private
     function GetPrivate: Pointer; {$ifdef HASINLINE}inline;{$endif}
     procedure SetPrivate(data: Pointer); cdecl; {$ifdef HASINLINE}inline;{$endif}

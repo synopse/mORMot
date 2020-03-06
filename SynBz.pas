@@ -103,7 +103,8 @@ uses
 type
   TBZAlloc = function(AppData: Pointer; Items, Size: Cardinal): Pointer; stdcall;
   TBZFree = procedure(AppData, Block: Pointer); stdcall;
-  TBZStreamRec = object
+  {$ifdef USERECORDWITHMETHODS}TBZStreamRec = record
+    {$else}TBZStreamRec = object{$endif}
     next_in: PAnsiChar;
     avail_in: Integer;
     total_in: Int64;

@@ -186,6 +186,7 @@
   {$define FPC_OR_PUREPASCAL}
   {$define FPC_OR_KYLIX}
   {$define FPC_OR_UNICODE}
+  {$define USERECORDWITHMETHODS}
   {$define FPC_OR_DELPHIXE}
   {$define FPC_OR_DELPHIXE4}
   {$define FPC_ENUMHASINNER}
@@ -399,6 +400,7 @@
     {$define HASVARUSTRING}
     {$define HASCODEPAGE}
     {$define FPC_OR_UNICODE}
+    {$define USERECORDWITHMETHODS}
     { due to a bug in Delphi 2009+, we need to fake inheritance of record,
       since TDynArrayHashed = object(TDynArray) fails to initialize
       http://blog.synopse.info/post/2011/01/29/record-and-object-issue-in-Delphi-2010 }
@@ -483,8 +485,6 @@
       {$ifend}
       {$if CompilerVersion = 20}
         {$define ISDELPHI20092010} // specific compilation issues
-        // for Delphi 2009 and up, use UNICODE conditional
-        {$define FPC_OR_UNICODE}
       {$ifend}
       {$if CompilerVersion = 21}
         {$define ISDELPHI20092010} //specific compilation issues
@@ -493,7 +493,6 @@
         {$define ISDELPHI2010}
         {$define ISDELPHI2010_OR_FPC} // eltype2 field
         {$define ISDELPHI2010_OR_FPC_NEWRTTI}
-        {$define FPC_OR_UNICODE}
         {$define HASTTHREADSTART}
         {$define HASINTERFACEASTOBJECT}
         {$ifdef NEWRTTINOTUSED} // option reduce EXE size by disabling much RTTI

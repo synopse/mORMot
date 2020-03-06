@@ -107,7 +107,8 @@ type
 
   TSynCompressionAlgoClass = class of TSynCompressionAlgo;
 
-  {$ifdef UNICODE}TSynCompressionAlgos = record{$else}TSynCompressionAlgos = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TSynCompressionAlgos = record
+    {$else}TSynCompressionAlgos = object{$endif}
   public
     Values: array of record
       ID, WholeID: integer;
@@ -227,7 +228,8 @@ type
   // used to transfert Blob Data from/to Client without compress/uncompress:
 {$A-}
   PBlobData = ^TBlobData;
-  {$ifdef UNICODE}TBlobData = record{$else}TBlobData = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TBlobData = record
+    {$else}TBlobData = object{$endif}
   private
     // test if algo is registered, perform crc32 check and create one instance
     function AlgoCreate(data: pointer): TSynCompressionAlgo;

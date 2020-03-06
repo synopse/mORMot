@@ -627,7 +627,7 @@ type
   // - this is the main process for marshalling JSON into SQL statements
   // - used e.g. by GetJSONObjectAsSQL() function or ExecuteFromJSON and
   // InternalBatchStop methods
-  {$ifdef FPC_OR_UNICODE}TJSONObjectDecoder = record
+  {$ifdef USERECORDWITHMETHODS}TJSONObjectDecoder = record
     {$else}TJSONObjectDecoder = object{$endif}
   public
     /// contains the decoded field names
@@ -1128,7 +1128,7 @@ type
   /// store information about a class, able to easily create new instances
   // - using this temporary storage will speed up the creation process
   // - any virtual constructor will be used, including for TCollection types
-  {$ifdef FPC_OR_UNICODE}TClassInstance = record
+  {$ifdef USERECORDWITHMETHODS}TClassInstance = record
     {$else}TClassInstance = object{$endif}
   public
     /// the class type itself
@@ -1188,7 +1188,7 @@ type
   //  as in the TypInfo.GetPropInfos() PPropList usage
   // - for TSQLRecord, you should better use the RecordProps.Fields[] array,
   // which is faster and contains the properties published in parent classes
-  {$ifdef FPC_OR_UNICODE}TClassProp = record
+  {$ifdef USERECORDWITHMETHODS}TClassProp = record
     {$else}TClassProp = object{$endif}
   public
     /// number of published properties in this object
@@ -1209,7 +1209,7 @@ type
 
   PClassType = ^TClassType;
   /// a wrapper to class type information, as defined by the Delphi RTTI
-  {$ifdef FPC_OR_UNICODE}TClassType = record
+  {$ifdef USERECORDWITHMETHODS}TClassType = record
     {$else}TClassType = object{$endif}
   public
     /// the class type
@@ -1239,7 +1239,7 @@ type
   // - we use this to store the enumeration values as integer, but easily provide
   // a text equivalent, translated if necessary, from the enumeration type
   // definition itself
-  {$ifdef FPC_OR_UNICODE}TEnumType = record
+  {$ifdef USERECORDWITHMETHODS}TEnumType = record
     {$else}TEnumType = object{$endif}
   public
     /// specify ordinal storage size and sign
@@ -1414,7 +1414,7 @@ type
     {$push}
     {$PACKRECORDS 1}
   {$endif}
-  {$ifdef FPC_OR_UNICODE}TTypeInfo = record
+  {$ifdef USERECORDWITHMETHODS}TTypeInfo = record
     {$else}TTypeInfo = object{$endif}
   public
     /// the value type family
@@ -1499,7 +1499,7 @@ type
   /// a wrapper containing a RTTI property definition
   // - used for direct Delphi / UTF-8 SQL type mapping/conversion
   // - doesn't depend on RTL's TypInfo unit, to enhance cross-compiler support
-  {$ifdef FPC_OR_UNICODE}TPropInfo = packed record
+  {$ifdef USERECORDWITHMETHODS}TPropInfo = packed record
     {$else}TPropInfo = object{$endif} { "packed" above is needed on ARM (alf) }
   public
     /// raw retrieval of the property read access definition
@@ -1827,7 +1827,7 @@ type
   PParamInfo  = ^TParamInfo;
 
   /// a wrapper around method returned result definition
-  {$ifdef FPC_OR_UNICODE}TReturnInfo = record
+  {$ifdef USERECORDWITHMETHODS}TReturnInfo = record
     {$else}TReturnInfo = object{$endif}
   public
     /// RTTI version
@@ -1848,7 +1848,7 @@ type
   end;
 
   /// a wrapper around an individual method parameter definition
-  {$ifdef FPC_OR_UNICODE}TParamInfo = record
+  {$ifdef USERECORDWITHMETHODS}TParamInfo = record
     {$else}TParamInfo = object{$endif}
   public
     /// the kind of parameter
@@ -1872,7 +1872,7 @@ type
   end;
 
   /// a wrapper around a method definition
-  {$ifdef FPC_OR_UNICODE}TMethodInfo = packed record
+  {$ifdef USERECORDWITHMETHODS}TMethodInfo = packed record
     {$else}TMethodInfo = object{$endif}
   public
     {$ifdef FPC}
@@ -3626,7 +3626,7 @@ type
   // consolidated statistics
   // - it will therefore store up to 24*365+365+12+1 = 9138 records per year
   // in the associated storage engine (so there is no actual need to purge it)
-  {$ifdef FPC_OR_UNICODE}TSynMonitorUsageID = record
+  {$ifdef USERECORDWITHMETHODS}TSynMonitorUsageID = record
     {$else}TSynMonitorUsageID = object{$endif}
   public
     /// the TID, as computed from time and granularity
@@ -4495,7 +4495,7 @@ type
 
   /// store all parameters for a Client or Server method call
   // - as used by TSQLRestServer.URI or TSQLRestClientURI.InternalURI
-  {$ifdef FPC_OR_UNICODE}TSQLRestURIParams = record
+  {$ifdef USERECORDWITHMETHODS}TSQLRestURIParams = record
     {$else}TSQLRestURIParams = object{$endif}
   public
     /// input parameter containing the caller URI
@@ -4762,7 +4762,7 @@ type
   /// set the User Access Rights, for each Table
   // - one property for every and each URI method (GET/POST/PUT/DELETE)
   // - one bit for every and each Table in Model.Tables[]
-  {$ifdef FPC_OR_UNICODE}TSQLAccessRights = record
+  {$ifdef USERECORDWITHMETHODS}TSQLAccessRights = record
     {$else}TSQLAccessRights = object{$endif}
   public
     /// set of allowed actions on the server side
@@ -7925,7 +7925,7 @@ type
   /// used to store the locked record list, in a specified table
   // - the maximum count of the locked list if fixed to 512 by default,
   // which seems correct for common usage
-  {$ifdef FPC_OR_UNICODE}TSQLLocks = record
+  {$ifdef USERECORDWITHMETHODS}TSQLLocks = record
     {$else}TSQLLocks = object{$endif}
   public
     /// the number of locked records stored in this object
@@ -8219,7 +8219,7 @@ type
   // - in end user code, mostly MapField/MapFields/Options methods
   // should be used, if needed as a fluent chained interface - other lower
   // level methods will be used by the framework internals
-  {$ifdef FPC_OR_UNICODE}TSQLRecordPropertiesMapping = record
+  {$ifdef USERECORDWITHMETHODS}TSQLRecordPropertiesMapping = record
     {$else}TSQLRecordPropertiesMapping = object{$endif}
   private
     /// storage of main read-only properties
@@ -9530,7 +9530,7 @@ type
     vIsObjArray, vIsSPI, vIsQword, vIsDynArrayString, vIsDateTimeMS);
 
   /// describe a service provider method argument
-  {$ifdef FPC_OR_UNICODE}TServiceMethodArgument = record
+  {$ifdef USERECORDWITHMETHODS}TServiceMethodArgument = record
     {$else}TServiceMethodArgument = object{$endif}
   public
     /// the argument name, as declared in Delphi
@@ -9650,7 +9650,7 @@ type
   TServiceMethodParamsDocVariantKind = (pdvArray, pdvObject, pdvObjectFixed);
 
   /// describe an interface-based service provider method
-  {$ifdef FPC_OR_UNICODE}TServiceMethod = record
+  {$ifdef USERECORDWITHMETHODS}TServiceMethod = record
     {$else}TServiceMethod = object{$endif}
   public
     /// the method URI, i.e. the method name
@@ -10771,7 +10771,7 @@ type
   end;
 
   /// define the rules for a given method as used internaly by TInterfaceStub
-  {$ifdef FPC_OR_UNICODE}TInterfaceStubRules = record
+  {$ifdef USERECORDWITHMETHODS}TInterfaceStubRules = record
     {$else}TInterfaceStubRules = object{$endif}
   public
     /// the mocking / stubing rules associated to this method
@@ -10820,7 +10820,7 @@ type
   TInterfaceStubLogLayouts = set of TInterfaceStubLogLayout;
 
   /// used to keep track of one stubbed method call
-  {$ifdef FPC_OR_UNICODE}TInterfaceStubLog = record
+  {$ifdef USERECORDWITHMETHODS}TInterfaceStubLog = record
     {$else}TInterfaceStubLog = object{$endif}
   public
     /// call timestamp, in milliseconds
@@ -11405,7 +11405,7 @@ type
   /// server-side service provider uses this to store one internal instance
   // - used by TServiceFactoryServer in sicClientDriven, sicPerSession,
   // sicPerUser or sicPerGroup mode
-  {$ifdef FPC_OR_UNICODE}TServiceFactoryServerInstance = record
+  {$ifdef USERECORDWITHMETHODS}TServiceFactoryServerInstance = record
     {$else}TServiceFactoryServerInstance = object{$endif}
   public
     /// the internal Instance ID, as remotely sent in "id":1
@@ -12412,7 +12412,7 @@ type
   TSQLRestCacheEntryValueDynArray = array of TSQLRestCacheEntryValue;
 
   /// for TSQLRestCache, stores a table settings and values
-  {$ifdef FPC_OR_UNICODE}TSQLRestCacheEntry = record
+  {$ifdef USERECORDWITHMETHODS}TSQLRestCacheEntry = record
     {$else}TSQLRestCacheEntry = object{$endif}
   public
     /// TRUE if this table should use caching
@@ -15639,7 +15639,7 @@ type
   /// used to access a TSQLRestServer from its TSQLRestServerURIString URI
   // - URI format is 'address:port/root', and may be transmitted as
   // TSQLRestServerURIString text instances
-  {$ifdef FPC_OR_UNICODE}TSQLRestServerURI = record
+  {$ifdef USERECORDWITHMETHODS}TSQLRestServerURI = record
     {$else}TSQLRestServerURI = object{$endif}
   private
     function GetURI: TSQLRestServerURIString;
@@ -15664,7 +15664,7 @@ type
   /// used to publish all Services supported by a TSQLRestServer instance
   // - as expected by TSQLRestServer.ServicesPublishedInterfaces
   // - can be serialized as a JSON object via RecordLoadJSON/RecordSaveJSON
-  {$ifdef FPC_OR_UNICODE}TServicesPublishedInterfaces = record
+  {$ifdef USERECORDWITHMETHODS}TServicesPublishedInterfaces = record
     {$else}TServicesPublishedInterfaces = object{$endif}
   public
     /// how this TSQLRestServer could be accessed
@@ -18837,7 +18837,7 @@ type
 
   /// the WHERE and ORDER BY statements as set by TSQLVirtualTable.Prepare
   // - Where[] and OrderBy[] are fixed sized arrays, for fast and easy code
-  {$ifdef FPC_OR_UNICODE}TSQLVirtualTablePrepared = record
+  {$ifdef USERECORDWITHMETHODS}TSQLVirtualTablePrepared = record
     {$else}TSQLVirtualTablePrepared = object{$endif}
   public
     /// number of WHERE statement parameters in Where[] array
@@ -25786,7 +25786,7 @@ type
   // - code generated is very optimized: stack and memory usage, CPU registers
   // prefered, multiplication avoided to calculate memory position from index,
   // hand tuned assembler...
-  {$ifdef FPC_OR_UNICODE}TUTF8QuickSort = record
+  {$ifdef USERECORDWITHMETHODS}TUTF8QuickSort = record
     {$else}TUTF8QuickSort = object{$endif}
   public
     // sort parameters
@@ -26037,7 +26037,7 @@ begin
 end;
 
 type
-  {$ifdef FPC_OR_UNICODE}TUTF8QuickSortMulti = record
+  {$ifdef USERECORDWITHMETHODS}TUTF8QuickSortMulti = record
     {$else}TUTF8QuickSortMulti = object{$endif}
   public
     Results: PPUtf8CharArray;

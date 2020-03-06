@@ -789,7 +789,8 @@ type
   // - all Init() methods will allocate 16 more bytes, for a trailing #0 and
   // to ensure our fast JSON parsing won't trigger any GPF (since it may read
   // up to 4 bytes ahead via its PInteger() trick) or any SSE4.2 function
-  TSynTempBuffer = object
+  {$ifdef USERECORDWITHMETHODS}TSynTempBuffer = record
+    {$else}TSynTempBuffer = object{$endif}
   public
     /// the text/binary length, in bytes, excluding the trailing #0
     len: PtrInt;
@@ -3698,7 +3699,7 @@ type
   {$A-}
   /// file found result item, as returned by FindFiles()
   // - Delphi "object" is buggy on stack -> also defined as record with methods
-  {$ifdef FPC_OR_UNICODE}TFindFiles = record
+  {$ifdef USERECORDWITHMETHODS}TFindFiles = record
     {$else}TFindFiles = object{$endif}
   public
     /// the matching file name, including its folder name
@@ -4554,7 +4555,7 @@ function FromU64(const Values: array of QWord): TQWordDynArray;
 type
   /// used to store and retrieve Words in a sorted array
   // - Delphi "object" is buggy on stack -> also defined as record with methods
-  {$ifdef FPC_OR_UNICODE}TSortedWordArray = record
+  {$ifdef USERECORDWITHMETHODS}TSortedWordArray = record
     {$else}TSortedWordArray = object{$endif}
   public
     /// the actual 16-bit word storage
@@ -4573,7 +4574,7 @@ type
 
   /// used to store and retrieve Integers in a sorted array
   // - Delphi "object" is buggy on stack -> also defined as record with methods
-  {$ifdef FPC_OR_UNICODE}TSortedIntegerArray = record
+  {$ifdef USERECORDWITHMETHODS}TSortedIntegerArray = record
     {$else}TSortedIntegerArray = object{$endif}
   public
     /// the actual 32-bit integers storage
@@ -5740,7 +5741,7 @@ type
   // maintain a hash table over an existing dynamic array: several TDynArrayHasher
   // could be applied to a single TDynArray wrapper
   // - TDynArrayHashed will use a TDynArrayHasher for its own store
-  {$ifdef FPC_OR_UNICODE}TDynArrayHasher = record private
+  {$ifdef USERECORDWITHMETHODS}TDynArrayHasher = record private
   {$else}TDynArrayHasher = object protected{$endif}
     DynArray: PDynArray;
     HashElement: TDynArrayHashOne;
@@ -6428,7 +6429,7 @@ type
 
   /// used to store one list of hashed RawUTF8 in TRawUTF8Interning pool
   // - Delphi "object" is buggy on stack -> also defined as record with methods
-  {$ifdef FPC_OR_UNICODE}TRawUTF8InterningSlot = record
+  {$ifdef USERECORDWITHMETHODS}TRawUTF8InterningSlot = record
     {$else}TRawUTF8InterningSlot = object{$endif}
   public
     /// actual RawUTF8 storage
@@ -6554,7 +6555,7 @@ type
   // - is defined as an object, not as a class: you can use this in any
   // class, without the need to destroy the content
   // - Delphi "object" is buggy on stack -> also defined as record with methods
-  {$ifdef FPC_OR_UNICODE}TSynNameValue = record private
+  {$ifdef USERECORDWITHMETHODS}TSynNameValue = record private
   {$else}TSynNameValue = object protected{$endif}
     fOnAdd: TSynNameValueNotify;
     function GetBlobData: RawByteString;
@@ -14257,7 +14258,7 @@ type
   // former will handle internal variant redirection (varByRef), e.g. from late
   // binding or assigned another TDocVariant
   // - Delphi "object" is buggy on stack -> also defined as record with methods
-  {$ifdef FPC_OR_UNICODE}TDocVariantData = record private
+  {$ifdef USERECORDWITHMETHODS}TDocVariantData = record private
   {$else}TDocVariantData = object protected{$endif}
     VType: TVarType;
     VOptions: TDocVariantOptions;
@@ -46213,13 +46214,13 @@ begin
 end;
 
 type
-  {$ifdef FPC_OR_UNICODE}TQuickSortDocVariantValuesByField = record
+  {$ifdef USERECORDWITHMETHODS}TQuickSortDocVariantValuesByField = record
     {$else}TQuickSortDocVariantValuesByField = object{$endif}
-    Lookup: array of PVariant;
-    Compare: TVariantCompare;
-    Doc: PDocVariantData;
-    Reverse: boolean;
-    procedure Sort(L, R: PtrInt);
+   Lookup: array of PVariant;
+   Compare: TVariantCompare;
+   Doc: PDocVariantData;
+   Reverse: boolean;
+   procedure Sort(L, R: PtrInt);
   end;
 
 procedure TQuickSortDocVariantValuesByField.Sort(L, R: PtrInt);

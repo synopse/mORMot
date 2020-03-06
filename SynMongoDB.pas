@@ -119,11 +119,8 @@ type
   // explicitly on native language value representation (e.g. currency, TBCD or
   // any BigNumber library) - use ToCurr/FromCurr or ToText/FromText to make
   // the appropriate safe conversions
-  {$ifndef UNICODE}
-  TDecimal128 = object
-  {$else}
-  TDecimal128 = record
-  {$endif}
+  {$ifdef USERECORDWITHMETHODS}TDecimal128 = record
+    {$else}TDecimal128 = object{$endif}
   public
     /// the raw binary storage
     Bits: TDecimal128Bits;
@@ -277,11 +274,8 @@ type
   // creation time, so ease sharding and BTREE storage
   // - match betObjectID TBSONElementType
   {$A-}
-  {$ifndef UNICODE}
-  TBSONObjectID = object
-  {$else}
-  TBSONObjectID = record
-  {$endif}
+  {$ifdef USERECORDWITHMETHODS}TBSONObjectID = record
+    {$else}TBSONObjectID = object{$endif}
     /// big-endian 4-byte value representing the seconds since the Unix epoch
     // - time is expressed in Coordinated Universal Time (UTC), not local time
     UnixCreateTime: cardinal;
@@ -463,13 +457,8 @@ type
   // - see http://bsonspec.org/#/specification
   // - this structure has been optimized to map the BSON binary content,
   // without any temporary memory allocation (the SAX way)
-  {$ifndef UNICODE}
-  TBSONElement = object
-  protected
-  {$else}
-  TBSONElement = record
-  private
-  {$endif}
+  {$ifdef USERECORDWITHMETHODS}TBSONElement = record private
+    {$else}TBSONElement = object protected{$endif}
     /// used internally to set the TBSONElement content, once Kind has been set
     procedure FromBSON(bson: PByte);
   public
@@ -637,13 +626,8 @@ type
 
   /// data structure used for iterating over a BSON binary buffer
   // - is just a wrapper around a PByte value, to be used with a TBSONDocument
-  {$ifndef UNICODE}
-  TBSONIterator = object
-  protected
-  {$else}
-  TBSONIterator = record
-  private
-  {$endif}
+  {$ifdef USERECORDWITHMETHODS}TBSONIterator = record private
+    {$else}TBSONIterator = object protected{$endif}
     fBson: PByte;
   public
     /// map the current item, after the Next method did return TRUE
@@ -1510,13 +1494,8 @@ type
   // response, and navigate within all nested documents
   // - several TMongoReplyCursor instances may map the same TMongoReply content
   // - you can safely copy one TMongoReplyCursor instance to another
-  {$ifndef UNICODE}
-  TMongoReplyCursor = object
-  protected
-  {$else}
-  TMongoReplyCursor = record
-  private
-  {$endif}
+  {$ifdef USERECORDWITHMETHODS}TMongoReplyCursor = record private
+    {$else}TMongoReplyCursor = object protected{$endif}
     fReply: TMongoReply;
     fRequestID: integer;
     fResponseTo: integer;

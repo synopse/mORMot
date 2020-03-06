@@ -296,7 +296,8 @@ var
 
 type
   /// a common record to identify a language
-  {$ifdef UNICODE}TLanguage = record{$else}TLanguage = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TLanguage = record
+    {$else}TLanguage = object{$endif}
   public
     /// as in LanguageAbr[index], LANGUAGE_NONE before first SetLanguageLocal()
     Index: TLanguages;

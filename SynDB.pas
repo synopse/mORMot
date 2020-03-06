@@ -2798,7 +2798,8 @@ type
   // dynamic array (and our TDynArrayHashed wrapper) for fast property name
   // handling (via name hashing) and pre-allocation
   // - it is based on an internal Variant to store the parameter or column value
-  {$ifdef UNICODE}TQueryValue = record{$else}TQueryValue = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TQueryValue = record
+    {$else}TQueryValue = object{$endif}
   private
     /// fName should be the first property, i.e. the searched hashed value
     fName: string;

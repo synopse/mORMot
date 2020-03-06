@@ -96,7 +96,8 @@ type
   // are handled with dedicated code, optionally with case-insensitive search
   // - consider using TMatchs (or SetMatchs/TMatchDynArray) if you expect to
   // search for several patterns, or even TExprParserMatch for expression search
-  {$ifdef UNICODE}TMatch = record{$else}TMatch = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TMatch = record
+    {$else}TMatch = object{$endif}
   private
     Pattern, Text: PUTF8Char;
     P, T, PMax, TMax: PtrInt;
@@ -1277,7 +1278,8 @@ type
   // - is also safer, since will check for reaching end of buffer
   // - raise a EFastReader exception on decoding error (e.g. if a buffer
   // overflow may occur) or call OnErrorOverflow/OnErrorData event handlers
-  {$ifdef FPC_OR_UNICODE}TFastReader = record{$else}TFastReader = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TFastReader = record
+    {$else}TFastReader = object{$endif}
   public
     /// the current position in the memory
     P: PAnsiChar;
@@ -2249,7 +2251,8 @@ type
   TRawByteStringGroupValueDynArray = array of TRawByteStringGroupValue;
 
   /// store several RawByteString content with optional concatenation
-  {$ifdef UNICODE}TRawByteStringGroup = record{$else}TRawByteStringGroup = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TRawByteStringGroup = record
+    {$else}TRawByteStringGroup = object{$endif}
   public
     /// actual list storing the data
     Values: TRawByteStringGroupValueDynArray;
@@ -2333,8 +2336,8 @@ type
 
   /// simple stack-allocated type for handling a non-void type names list
   // - Delphi "object" is buggy on stack -> also defined as record with methods
-  {$ifdef FPC_OR_UNICODE}TPropNameList = record
-  {$else}TPropNameList = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TPropNameList = record
+    {$else}TPropNameList = object{$endif}
   public
     /// the actual names storage
     Values: TRawUTF8DynArray;
@@ -2375,7 +2378,8 @@ type
   // - bits 0..14 map a 15-bit increasing counter (collision-free)
   // - bits 15..30 map a 16-bit process identifier
   // - bits 31..63 map a 33-bit UTC time, encoded as seconds since Unix epoch
-  {$ifdef FPC_OR_UNICODE}TSynUniqueIdentifierBits = record{$else}TSynUniqueIdentifierBits = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TSynUniqueIdentifierBits = record
+    {$else}TSynUniqueIdentifierBits = object{$endif}
   public
     /// the actual 64-bit storage value
     // - in practice, only first 63 bits are used
@@ -3497,8 +3501,8 @@ type
   TSystemUseDataDynArray = array of TSystemUseData;
 
   /// low-level structure used to compute process memory and CPU usage
-  {$ifdef FPC_OR_UNICODE}TProcessInfo = record private
-  {$else}TProcessInfo = object protected{$endif}
+  {$ifdef USERECORDWITHMETHODS}TProcessInfo = record private
+    {$else}TProcessInfo = object protected{$endif}
     {$ifdef MSWINDOWS}
     fSysPrevIdle, fSysPrevKernel, fSysPrevUser,
     fDiffIdle, fDiffKernel, fDiffUser, fDiffTotal: Int64;
@@ -3794,8 +3798,8 @@ type
 
   /// used to store Time Zone information for a single area in TSynTimeZone
   // - Delphi "object" is buggy on stack -> also defined as record with methods
-  {$ifdef FPC_OR_UNICODE}TTimeZoneData = record
-  {$else}TTimeZoneData = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TTimeZoneData = record
+    {$else}TTimeZoneData = object{$endif}
   public
     id: TTimeZoneID;
     display: RawUTF8;
@@ -4723,8 +4727,8 @@ type
   // - is defined either as an object either as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
-  {$ifdef UNICODE}TSynTableData = record{$else}TSynTableData = object{$endif UNICODE}
-  {$ifdef UNICODE}private{$else}protected{$endif UNICODE}
+  {$ifdef USERECORDWITHMETHODS}TSynTableData = record private
+    {$else}TSynTableData = object protected{$endif UNICODE}
     VType: TVarType;
     Filler: array[1..SizeOf(TVarData)-SizeOf(TVarType)-SizeOf(pointer)*2-4] of byte;
     VID: integer;

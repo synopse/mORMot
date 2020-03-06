@@ -1951,7 +1951,8 @@ type
   // - used e.g. by class function THttpRequest.Get()
   // - will decode standard HTTP/HTTPS urls or Unix sockets URI like
   // 'http://unix:/path/to/socket.sock:/url/path'
-  TURI = {$ifdef UNICODE}record{$else}object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TURI = record
+    {$else}TURI = object{$endif}
   public
     /// if the server is accessible via https:// and not plain http://
     Https: boolean;
@@ -2520,7 +2521,8 @@ const
 type
   /// may be used to store a connection to a SMTP server
   // - see SendEmail() overloaded function
-  TSMTPConnection = {$ifdef UNICODE}record{$else}object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TSMTPConnection = record
+    {$else}TSMTPConnection = object{$endif}
   public
     /// the SMTP server IP or host name
     Host: SockString;
@@ -3008,7 +3010,8 @@ type
   {$M-}
 
   /// store information of one TPollAsynchSockets connection
-  TPollSocketsSlot = {$ifdef UNICODE}record{$else}object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TPollSocketsSlot = record
+    {$else}TPollSocketsSlot = object{$endif}
     /// the associated TCP connection
     // - equals 0 after TPollAsynchSockets.Stop
     socket: TSocket;

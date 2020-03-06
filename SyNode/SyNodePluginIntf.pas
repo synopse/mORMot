@@ -2,12 +2,16 @@ unit SyNodePluginIntf;
 
 interface
 
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
+{$I SyNode.inc}   //define WITHASSERT
+
 uses
   SynCommons,
   SpiderMonkey;
 
 type
-  TSMPluginRec = {$ifdef UNICODE}record{$else}object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TSMPluginRec = record
+    {$else}TSMPluginRec = object{$endif}
     cx: PJSContext;
     Exp: PJSRootedObject;
     Req: PJSRootedObject;

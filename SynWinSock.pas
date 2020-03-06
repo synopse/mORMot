@@ -836,7 +836,8 @@ type
 
   ESChannel = class(Exception);
 
-  {$ifdef UNICODE}TSChannelClient = record{$else}TSChannelClient = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TSChannelClient = record
+    {$else}TSChannelClient = object{$endif}
   private
     Cred: TCredHandle;
     Ctxt: TCtxtHandle;
@@ -1649,7 +1650,8 @@ const
   TLSRECMAXSIZE = 19000; // stack buffers for TSChannelClient.Receive/Send
 
 type
-  {$ifdef UNICODE}THandshakeBuf = record{$else}THandshakeBuf = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}THandshakeBuf = record
+    {$else}THandshakeBuf = object{$endif}
   public
     buf: array[0..2] of TSecBuffer;
     input, output: TSecBufferDesc;

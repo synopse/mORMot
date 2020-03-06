@@ -703,7 +703,8 @@ type
 
   {$A-}
   /// memory structure used to store SQL_C_TYPE_TIMESTAMP values
-  {$ifdef UNICODE}SQL_TIMESTAMP_STRUCT = record{$else}SQL_TIMESTAMP_STRUCT = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}SQL_TIMESTAMP_STRUCT = record
+    {$else}SQL_TIMESTAMP_STRUCT = object{$endif}
     Year:     SqlSmallint;
     Month:    SqlUSmallint;
     Day:      SqlUSmallint;

@@ -365,11 +365,8 @@ type
   PFileInfo = ^TFileInfo;
   /// generic file information structure, as used in .zip file format
   // - used in any header, contains info about following block
-  {$ifndef UNICODE}
-  TFileInfo = object
-  {$else}
-  TFileInfo = record
-  {$endif}
+  {$ifndef USERECORDWITHMETHODS}TFileInfo = object
+    {$else}TFileInfo = record{$endif}
     neededVersion : word;            // $14
     flags         : word;            // 0
     zzipMethod    : word;            // 0=Z_STORED 8=Z_DEFLATED 12=BZ2 14=LZMA
@@ -389,7 +386,8 @@ type
 
   /// directory file information structure, as used in .zip file format
   // - used at the end of the zip file to recap all entries
-  TFileHeader = {$ifdef UNICODE}record{$else}object{$endif}
+  TFileHeader = {$ifdef USERECORDWITHMETHODS}record
+    {$else}object{$endif}
     signature     : dword;           // $02014b50 PK#1#2
     madeBy        : word;            // $14
     fileInfo      : TFileInfo;
@@ -405,7 +403,8 @@ type
 
   /// internal file information structure, as used in .zip file format
   // - used locally inside the file stream, followed by the name and then the data
-  TLocalFileHeader = {$ifdef UNICODE}record{$else}object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TLocalFileHeader = record
+    {$else}TLocalFileHeader = object{$endif}
     signature     : dword;           // $04034b50 PK#3#4
     fileInfo      : TFileInfo;
     function LocalData: PAnsiChar;
@@ -520,7 +519,8 @@ function get_crc_table: pointer; cdecl;
 
 type
   /// simple wrapper class to decompress a .gz file into memory or stream/file
-  {$ifdef UNICODE}TGZRead = record{$else}TGZRead = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TGZRead = record
+    {$else}TGZRead = object{$endif}
   private
     comp, zsdest: pointer;
     zscrc: cardinal;

@@ -93,7 +93,8 @@ type
   TSecContextDynArray = array of TSecContext;
 
   /// defines a SSPI buffer
-  {$ifdef UNICODE}TSecBuffer = record{$else}TSecBuffer = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TSecBuffer = record
+    {$else}TSecBuffer = object{$endif}
   public
     cbBuffer: Cardinal;
     BufferType: Cardinal;
@@ -103,7 +104,8 @@ type
   PSecBuffer = ^TSecBuffer;
 
   /// describes a SSPI buffer
-  {$ifdef UNICODE}TSecBufferDesc = record{$else}TSecBufferDesc = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TSecBufferDesc = record
+    {$else}TSecBufferDesc = object{$endif}
   public
     ulVersion: Cardinal;
     cBuffers: Cardinal;
