@@ -29913,38 +29913,40 @@ end;
 
 function SynchFolders(const Reference, Dest: TFileName;
   SubFolder,ByContent,WriteFileNameToConsole: boolean): integer;
-var s,d: TFileName;
-    f,f2: TSearchRec;
-    idem: boolean;
-    buf: RawByteString;
+var ref,dst: TFileName;
+    fref,fdst: TSearchRec;
+    reftime: TDateTime;
+    s: RawByteString;
 begin
   result := 0;
-  s := IncludeTrailingPathDelimiter(Reference);
-  d := IncludeTrailingPathDelimiter(Dest);
-  if DirectoryExists(s) and (FindFirst(d+FILES_ALL,faAnyFile,f)=0) then begin
+  ref := IncludeTrailingPathDelimiter(Reference);
+  dst := IncludeTrailingPathDelimiter(Dest);
+  if DirectoryExists(ref) and (FindFirst(dst+FILES_ALL,faAnyFile,fdst)=0) then begin
     repeat
-      if SearchRecValidFile(f) then begin
-        if not ByContent then begin
-          if FindFirst(s+f.Name,faAnyFile,f2)<>0 then
-            continue;
-          idem := (f.Size=f2.Size) and (f.Time=f2.Time);
-          FindClose(f2);
-          if idem then
-            continue;
-        end else if not FileExists(s+f.Name) then
+      if SearchRecValidFile(fdst) then begin
+        if ByContent then
+          reftime := FileAgeToDateTime(ref+fdst.Name) else
+          if FindFirst(ref+fdst.Name,faAnyFile,fref)=0 then begin
+            reftime := SearchRecToDateTime(fref);
+            if (fdst.Size=fref.Size) and (SearchRecToDateTime(fdst)=reftime) then
+              reftime := 0;
+            FindClose(fref);
+          end else
+            reftime := 0; // "continue" trigger unexpected warning on Delphi
+        if reftime=0 then
+          continue; // skip if no reference file to copy from
+        s := StringFromFile(ref+fdst.Name);
+        if (s='') or (ByContent and (length(s)=fdst.Size) and
+           (DefaultHasher(0,pointer(s),fdst.Size)=HashFile(dst+fdst.Name))) then
           continue;
-        buf := StringFromFile(s+f.Name);
-        if (buf<>'') and ((not ByContent) or (length(buf)<>f.Size) or
-            (DefaultHasher(0,pointer(buf),length(buf))<>HashFile(d+f.Name))) then begin
-          FileFromString(buf,d+f.Name,false,FileAgeToDateTime(s+f.Name));
-          inc(result);
-          if WriteFileNameToConsole then
-            {$I-} writeln('synched ',d,f.name); {$I+}
-        end;
-      end else if SubFolder and SearchRecValidFolder(f) then
-        SynchFolders(s+f.Name,d+f.Name,SubFolder,ByContent,WriteFileNameToConsole);
-    until FindNext(f)<>0;
-    FindClose(f);
+        FileFromString(s,dst+fdst.Name,false,reftime);
+        inc(result);
+        if WriteFileNameToConsole then
+          {$I-} writeln('synched ',dst,fdst.name); {$I+}
+      end else if SubFolder and SearchRecValidFolder(fdst) then
+        SynchFolders(ref+fdst.Name,dst+fdst.Name,SubFolder,ByContent,WriteFileNameToConsole);
+    until FindNext(fdst)<>0;
+    FindClose(fdst);
   end;
 end;
 
