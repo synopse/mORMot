@@ -29946,7 +29946,7 @@ begin
         if WriteFileNameToConsole then
           {$I-} writeln('synched ',dst,fdst.name); {$I+}
       end else if SubFolder and SearchRecValidFolder(fdst) then
-        SynchFolders(ref+fdst.Name,dst+fdst.Name,SubFolder,ByContent,WriteFileNameToConsole);
+        inc(result,SynchFolders(ref+fdst.Name,dst+fdst.Name,SubFolder,ByContent,WriteFileNameToConsole));
     until FindNext(fdst)<>0;
     FindClose(fdst);
   end;
