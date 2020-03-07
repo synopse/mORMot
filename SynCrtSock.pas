@@ -814,6 +814,7 @@ type
     fThreadNumber: integer;
     {$ifndef USE_WINIOCP}
     fProcessingContext: pointer;
+    fSafeProcessingContext: TRTLCriticalSection;
     fEvent: TEvent;
     {$endif USE_WINIOCP}
     procedure NotifyThreadStart(Sender: TSynThread);
@@ -833,6 +834,7 @@ type
   // Event-driven approach under Linux/POSIX
   TSynThreadPool = class
   protected
+    fSafeSubThread: TRTLCriticalSection;
     fSubThread: TObjectList; // holds TSynThreadPoolSubThread
     fRunningThreads: integer;
     fExceptionsCount: integer;
@@ -849,7 +851,7 @@ type
     fQueuePendingContext: boolean;
     fPendingContext: array of pointer;
     fPendingContextCount: integer;
-    fSafe: TRTLCriticalSection;
+    fSafePendingContext: TRTLCriticalSection; // but last to avoid CPU cache issue
     function GetPendingContextCount: integer;
     function PopPendingContext: pointer;
     function QueueLength: integer; virtual;
@@ -7085,7 +7087,8 @@ begin
     exit;
   end;
   {$else}
-  InitializeCriticalSection(fSafe);
+  InitializeCriticalSection(fSafeSubThread);
+  InitializeCriticalSection(fSafePendingContext);
   fQueuePendingContext := aQueuePendingContext;
   {$endif}
   // now create the worker threads
@@ -7121,7 +7124,8 @@ begin
     {$ifdef USE_WINIOCP}
     CloseHandle(fRequestQueue);
     {$else}
-    DeleteCriticalSection(fSafe);
+    DeleteCriticalSection(fSafeSubThread);
+    DeleteCriticalSection(fSafePendingContext);
     {$endif USE_WINIOCP}
   end;
   inherited Destroy;
@@ -7136,20 +7140,33 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
   {$else}
   function Enqueue: boolean;
   var i, n: integer;
+      found: TSynThreadPoolSubThread;
       thread: ^TSynThreadPoolSubThread;
   begin
     result := false;
-    EnterCriticalsection(fSafe);
+    found := nil;
+    EnterCriticalsection(fSafeSubThread);
     try
       thread := pointer(fSubThread.List);
       for i := 1 to fSubThread.Count do
         if thread^.fProcessingContext=nil then begin
-          thread^.fProcessingContext := aContext;
-          thread^.fEvent.SetEvent;
-          result := true; // found one available thread
-          exit;
+          found := thread^;
+          EnterCriticalSection(found.fSafeProcessingContext);
+          found.fProcessingContext := aContext;
+          LeaveCriticalSection(found.fSafeProcessingContext);
+          break;
         end else
           inc(thread);
+    finally
+      LeaveCriticalsection(fSafeSubThread);
+    end;
+    if found<>nil then begin
+      found.fEvent.SetEvent;
+      result := true; // found one available thread
+      exit;
+    end;
+    EnterCriticalsection(fSafePendingContext);
+    try
       if not fQueuePendingContext then
         exit;
       n := fPendingContextCount;
@@ -7161,7 +7178,7 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
       inc(fPendingContextCount);
       result := true; // added in pending queue
     finally
-      LeaveCriticalsection(fSafe);
+      LeaveCriticalsection(fSafePendingContext);
     end;
   end;
   {$endif}
@@ -7202,11 +7219,11 @@ begin
   result := 0;
   if (self=nil) or fTerminated or (fPendingContext=nil) then
     exit;
-  EnterCriticalsection(fSafe);
+  EnterCriticalsection(fSafePendingContext);
   try
     result := fPendingContextCount;
   finally
-    LeaveCriticalsection(fSafe);
+    LeaveCriticalsection(fSafePendingContext);
   end;
 end;
 
@@ -7220,7 +7237,7 @@ begin
   result := nil;
   if (self=nil) or fTerminated or (fPendingContext=nil) then
     exit;
-  EnterCriticalsection(fSafe);
+  EnterCriticalsection(fSafePendingContext);
   try
     if fPendingContextCount>0 then begin
       result := fPendingContext[0];
@@ -7228,7 +7245,7 @@ begin
       Move(fPendingContext[1],fPendingContext[0],fPendingContextCount*SizeOf(pointer));
     end;
   finally
-    LeaveCriticalsection(fSafe);
+    LeaveCriticalsection(fSafePendingContext);
   end;
 end;
 
@@ -7256,6 +7273,7 @@ begin
   fOnTerminate := Owner.fOnTerminate;
   {$ifndef USE_WINIOCP}
   fEvent := TEvent.Create(nil,false,false,'');
+  InitializeCriticalSection(fSafeProcessingContext);
   {$endif}
   inherited Create(false);
 end;
@@ -7264,6 +7282,7 @@ destructor TSynThreadPoolSubThread.Destroy;
 begin
   inherited Destroy;
   {$ifndef USE_WINIOCP}
+  DeleteCriticalSection(fSafeProcessingContext);
   fEvent.Free;
   {$endif}
 end;
@@ -7307,16 +7326,16 @@ begin
       fEvent.WaitFor(INFINITE);
       if fOwner.fTerminated then
         break;
-      EnterCriticalSection(fOwner.fSafe);
-      Context := fProcessingContext; { TODO : use Interlocked*() to reduce OS calls? }
-      LeaveCriticalSection(fOwner.fSafe);
+      EnterCriticalSection(fSafeProcessingContext);
+      Context := fProcessingContext;
+      LeaveCriticalSection(fSafeProcessingContext);
       while Context<>nil do begin
         DoTask(Context);
         Context := fOwner.PopPendingContext; // unqueue any pending context
       end;
-      EnterCriticalSection(fOwner.fSafe);
+      EnterCriticalSection(fSafeProcessingContext);
       fProcessingContext := nil; // indicates this thread is now available
-      LeaveCriticalSection(fOwner.fSafe);
+      LeaveCriticalSection(fSafeProcessingContext);
       {$endif USE_WINIOCP}
     until fOwner.fTerminated;
   finally
