@@ -6212,7 +6212,7 @@ type
   // conflict which may degrade the multi-threading performance, as reported by
   // @http://www.delphitools.info/2011/11/30/fixing-tcriticalsection
   // - internal padding is used to safely store up to 7 values protected
-  // from concurrent access with a mutex
+  // from concurrent access with a mutex, so that SizeOf(TSynLocker)>128
   // - for object-level locking, see TSynPersistentLock which owns one such
   // instance, or call low-level NewSynLocker function then DoneAndFreemem
   TSynLocker = object
@@ -61803,6 +61803,7 @@ initialization
   assert(SizeOf(TSynSystemTime)=SizeOf(TSystemTime));
   assert(SizeOf(TSynSystemTime)=SizeOf(THash128));
   Assert(SizeOf(TOperatingSystemVersion)=SizeOf(integer));
+  Assert(SizeOf(TSynLocker)>=128,'cpucacheline');
   {$ifdef MSWINDOWS}
   {$ifndef CPU64}
   Assert(SizeOf(TFileTime)=SizeOf(Int64)); // see e.g. FileTimeToInt64

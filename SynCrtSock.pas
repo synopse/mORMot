@@ -849,9 +849,10 @@ type
     fRequestQueue: THandle; // IOCSP has its own internal queue
     {$else}
     fQueuePendingContext: boolean;
-    fPendingContext: array of pointer;
     fPendingContextCount: integer;
-    fSafePendingContext: TRTLCriticalSection; // but last to avoid CPU cache issue
+    fPendingContext: array of pointer;
+    {$ifdef CPU32}fPaddingForCpuCacheLineOfCriticalSections: array[0..63] of byte;{$endif}
+    fSafePendingContext: TRTLCriticalSection;
     function GetPendingContextCount: integer;
     function PopPendingContext: pointer;
     function QueueLength: integer; virtual;
