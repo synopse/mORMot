@@ -3937,6 +3937,10 @@ begin
     crcblocks(@crc1,@crcs.h0,j);
     check(not IsZero(crc1));
     check(IsEqual(crc1,crc2),'crcblocks4');
+    FillZero(crc1);
+    crcblocksfast(@crc1,@crcs.h0,j);
+    check(not IsZero(crc1));
+    check(IsEqual(crc1,crc2),'crcblocksfast4');
   end;
   for i := 0 to 50000 do begin
     FillZero(crc1);

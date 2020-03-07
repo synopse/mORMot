@@ -413,6 +413,9 @@ type
   PWordDynArray = ^TWordDynArray;
   TByteDynArray = array of byte;
   PByteDynArray = ^TByteDynArray;
+  {$ifndef ISDELPHI2007ANDUP}
+  TBytes = array of byte;
+  {$endif}
   TObjectDynArray = array of TObject;
   PObjectDynArray = ^TObjectDynArray;
   TPersistentDynArray = array of TPersistent;
@@ -520,10 +523,6 @@ type
 { ************ fast UTF-8 / Unicode / Ansi types and conversion routines **** }
 
 type
-  {$ifndef ISDELPHI2007ANDUP}
-  TBytes = array of byte;
-  {$endif}
-
   /// kind of adding in a TTextWriter
   TTextWriterKind = (twNone, twJSONEscape, twOnSameLine);
 
@@ -11634,15 +11633,20 @@ type
 procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);
 
 /// compute a proprietary 128-bit CRC of 128-bit binary buffers
+// - to be used for regression tests only: crcblocks will use the fastest
+// implementation available on the current CPU (e.g. with SSE 4.2 opcodes)
+procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
+
+/// compute a proprietary 128-bit CRC of 128-bit binary buffers
 // - apply four crc32c() calls on the 128-bit input chunks, into a 128-bit crc
 // - its output won't match crc128c() value, which works on 8-bit input
 // - will use SSE 4.2 hardware accelerated instruction, if available
 // - is used e.g. by SynEcc's TECDHEProtocol.ComputeMAC for macCrc128c
-procedure crcblocks(crc128, data128: PBlock128; count: integer);
+var crcblocks: procedure(crc128, data128: PBlock128; count: integer)=crcblocksfast;
 
 /// computation of our 128-bit CRC of a 128-bit binary buffer without SSE4.2
 // - to be used for regression tests only: crcblock will use the fastest
-// implementation available on the current CPU
+// implementation available on the current CPU (e.g. with SSE 4.2 opcodes)
 procedure crcblockNoSSE42(crc128, data128: PBlock128);
 
 /// compute a proprietary 128-bit CRC of a 128-bit binary buffer
@@ -11794,6 +11798,7 @@ procedure mul64x64(const left, right: QWord; out product: THash128Rec);
 type
   /// the potential features, retrieved from an Intel CPU
   // - see https://en.wikipedia.org/wiki/CPUID#EAX.3D1:_Processor_Info_and_Feature_Bits
+  // - is defined on all platforms, since an ARM desktop could browse Intel logs
   TIntelCpuFeature =
    ( { CPUID 1 in EDX }
    cfFPU, cfVME, cfDE, cfPSE, cfTSC, cfMSR, cfPAE, cfMCE,
@@ -24011,7 +24016,7 @@ end;
 
 procedure crcblockNoSSE42(crc128, data128: PBlock128);
 var c: cardinal;
-    tab: ^TCrc32tab;
+    tab: PCrc32tab;
 begin
   tab := @crc32ctab;
   c := crc128^[0] xor data128^[0];
@@ -24030,7 +24035,7 @@ end;
 
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef ABSOLUTEPASCALORNOTINTEL}
-var tab: ^TCrc32tab;
+var tab: PCrc32tab;
 begin // on ARM, we use slicing-by-4 to avoid polluting smaller L1 cache
   tab := @crc32ctab;
   result := not crc;
@@ -30947,7 +30952,7 @@ begin
     4: result := IntegerScanIndex(P,Count,PInteger(Elem)^);
     8: result := Int64ScanIndex(P,Count,PInt64(Elem)^);
     // small ElemSize version (<SizeOf(PtrInt))
-    3{$ifdef CPU64},5..7{$endif}: begin
+    3,5..7: begin
       for result := 0 to Count-1 do
         if CompareMemSmall(P,Elem,ElemSize) then
           exit else
@@ -30974,7 +30979,7 @@ begin
     4: result := IntegerScanExists(P,Count,PInteger(Elem)^);
     8: result := Int64ScanExists(P,Count,PInt64(Elem)^);
     // small ElemSize version (<SizeOf(PtrInt))
-    3{$ifdef CPU64},5..7{$endif}: begin
+    3,5..7: begin
       result := true;
       if Count>0 then
         repeat
@@ -35074,50 +35079,27 @@ asm .noframe // rcx=S (Linux: rdi)
 end;
 
 {$endif CPU64}
-{$endif CPUINTEL}
 
-procedure crcblocks(crc128, data128: PBlock128; count: integer);
-var oneblock: procedure(crc128, data128: PBlock128);
-    i: integer;
-begin
-  if count>0 then
-    {$ifndef DISABLE_SSE42}
-    {$ifdef CPUX86}
-    if cfSSE42 in CpuFeatures then
-    asm
-          mov     ecx, crc128
-          mov     edx, data128
-  @s:     mov     eax, dword ptr[ecx]
-          db      $F2, $0F, $38, $F1, $02 // crc32 eax, dword ptr [edx]
-          mov     dword ptr[ecx], eax
-          mov     eax, dword ptr[ecx + 4]
-          db      $F2, $0F, $38, $F1, $42, $04 // crc32 eax, dword ptr [edx+4]
-          mov     dword ptr[ecx + 4], eax
-          mov     eax, dword ptr[ecx + 8]
-          db      $F2, $0F, $38, $F1, $42, $08 // crc32 eax, dword ptr [edx+8]
-          mov     dword ptr[ecx + 8], eax
-          mov     eax, dword ptr[ecx + 12]
-          db      $F2, $0F, $38, $F1, $42, $0C // crc32 eax, dword ptr [edx+12]
-          mov     dword ptr[ecx + 12], eax
-          add     edx, 16
-          dec     count
-          jnz     @s
-    end else
-    {$endif CPUX86}
-    {$ifdef CPUX64}
-    {$ifdef FPC} // only FPC is able to compile such inlined asm block
-    if cfSSE42 in CpuFeatures then
-    asm
+procedure crcblockssse42(crc128, data128: PBlock128; count: integer);
+{$ifdef CPUX64} {$ifdef FPC}nostackframe; assembler; asm {$else}
+asm .noframe {$endif FPC}
+          test    count, count
+          jle     @z
           mov     rax, data128
-          mov     rdx, crc128
-          mov     ecx, count
-          mov     r8d, dword ptr [rdx] // we can't use qword ptr here
-          mov     r9d, dword ptr [rdx + 4]
+          {$ifdef win64}
+          mov     rdx, rcx
+          mov     ecx, r8d
+          {$else}
+          mov     ecx, edx
+          mov     rdx, rdi
+          {$endif win64}
+          mov     r8d,  dword ptr [rdx] // we can't use qword ptr here
+          mov     r9d,  dword ptr [rdx + 4]
           mov     r10d, dword ptr [rdx + 8]
           mov     r11d, dword ptr [rdx + 12]
-          align 16
-@s:       crc32   r8d, dword ptr [rax]
-          crc32   r9d, dword ptr [rax + 4]
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@s:       crc32   r8d,  dword ptr [rax]
+          crc32   r9d,  dword ptr [rax + 4]
           crc32   r10d, dword ptr [rax + 8]
           crc32   r11d, dword ptr [rax + 12]
           add     rax, 16
@@ -35127,17 +35109,80 @@ begin
           mov     dword ptr [rdx + 4], r9d
           mov     dword ptr [rdx + 8], r10d
           mov     dword ptr [rdx + 12], r11d
-    end else
-    {$endif FPC}
-    {$endif CPUX64}
-    {$endif DISABLE_SSE42} begin
-      oneblock := @crcblock;
-      for i := 1 to count do begin
-        oneblock(crc128,data128);
-        inc(data128);
-      end;
-    end;
+@z:
 end;
+{$else}
+asm // eax=crc128 edx=data128 ecx=count
+          push    ebx
+          push    esi
+          push    edi
+          push    ebp
+          test    count, count
+          jle     @z
+          mov     ebp, count
+          mov     esi, crc128
+          mov     edi, data128
+          mov     eax, dword ptr[esi]
+          mov     ebx, dword ptr[esi + 4]
+          mov     ecx, dword ptr[esi + 8]
+          mov     edx, dword ptr[esi + 12]
+{$ifdef FPC} align 8
+@s:       crc32   eax, dword ptr[edi]
+          crc32   ebx, dword ptr[edi + 4]
+          crc32   ecx, dword ptr[edi + 8]
+          crc32   edx, dword ptr[edi + 12]
+{$else}@s:db $F2, $0F, $38, $F1, $07
+          db $F2, $0F, $38, $F1, $5F, $04
+          db $F2, $0F, $38, $F1, $4F, $08
+          db $F2, $0F, $38, $F1, $57, $0C
+{$endif}  add     edi, 16
+          dec     ebp
+          jnz     @s
+          mov     dword ptr[esi], eax
+          mov     dword ptr[esi + 4], ebx
+          mov     dword ptr[esi + 8], ecx
+          mov     dword ptr[esi + 12], edx
+@z:       pop     ebp
+          pop     edi
+          pop     esi
+          pop     ebx
+end;
+{$endif CPUX64}
+{$endif CPUINTEL}
+
+procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
+{$ifdef PUREPASCAL} // efficient registers use on 64-bit, ARM or PIC
+var c: cardinal;
+    tab: PCrc32tab;
+begin
+  tab := @crc32ctab;
+  if count>0 then
+    repeat
+      c := crc128^[0] xor data128^[0];
+      crc128^[0] := tab[3,ToByte(c)] xor tab[2,ToByte(c shr 8)]
+                xor tab[1,ToByte(c shr 16)] xor tab[0,ToByte(c shr 24)];
+      c := crc128^[1] xor data128^[1];
+      crc128^[1] := tab[3,ToByte(c)] xor tab[2,ToByte(c shr 8)]
+                xor tab[1,ToByte(c shr 16)] xor tab[0,ToByte(c shr 24)];
+      c := crc128^[2] xor data128^[2];
+      crc128^[2] := tab[3,ToByte(c)] xor tab[2,ToByte(c shr 8)]
+                xor tab[1,ToByte(c shr 16)] xor tab[0,ToByte(c shr 24)];
+      c := crc128^[3] xor data128^[3];
+      crc128^[3] := tab[3,ToByte(c)] xor tab[2,ToByte(c shr 8)]
+                xor tab[1,ToByte(c shr 16)] xor tab[0,ToByte(c shr 24)];
+      inc(data128);
+      dec(count);
+    until count=0;
+end;
+{$else} // call optimized x86 asm within the loop
+begin
+  while count>0 do begin
+    crcblockNoSSE42(crc128,data128);
+    inc(data128);
+    dec(count);
+  end;
+end;
+{$endif PUREPASCAL}
 
 {$ifdef CPUINTEL}
 function crc32cBy4SSE42(crc, value: cardinal): cardinal;
@@ -35208,7 +35253,7 @@ end;
 {$endif CPUINTEL}
 
 function crc32cBy4fast(crc, value: cardinal): cardinal;
-var tab: ^TCrc32tab;
+var tab: PCrc32tab;
 begin
   tab := @crc32ctab;
   result := crc xor value;
@@ -35220,7 +35265,7 @@ end;
 
 function crc32cinlined(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef HASINLINE}
-var tab: ^TCrc32tab;
+var tab: PCrc32tab;
 begin
   result := not crc;
   if len>0 then begin
@@ -36032,7 +36077,7 @@ end;
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
 var i,len: integer;
     d: PCardinal;
-    tab: ^TCrc32tab;
+    tab: PCrc32tab;
 begin
   tab := @crc32ctab;
   {$ifdef FPC}
@@ -61564,6 +61609,7 @@ begin
     crc32c := @crc32csse42; // seems safe on all targets
     crc32cby4 := @crc32cby4sse42;
     crcblock := @crcblockSSE42;
+    crcblocks := @crcblocksSSE42;
     {$ifdef FORCE_STRSSE42} // disabled by default: may trigger random GPF
     strspn := @strspnSSE42;
     strcspn := @strcspnSSE42;
