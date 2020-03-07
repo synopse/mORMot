@@ -4871,8 +4871,15 @@ end;
 procedure TCrtSocket.AcceptRequest(aClientSock: TSocket; aRemoteIP: PSockString);
 begin
   CreateSockIn; // use SockIn by default if not already initialized: 2x faster
+  {$ifdef LINUX}
+  // on Linux fd returned from accept() inherits all parent fd options
+  // except O_NONBLOCK and O_ASYNC;
+  fSock := aClientSock;
+  {$else}
+  // on other OS inheritance is undefined, so call OpenBind to set all fd options
   OpenBind('','',false,aClientSock, fSocketLayer); // set the ACCEPTed aClientSock
   Linger := 5; // should remain open for 5 seconds after a closesocket() call
+  {$endif}
   if (aRemoteIP<>nil) and (aRemoteIP^='') then
     aRemoteIP^ := GetRemoteIP(aClientSock);
 end;
