@@ -17703,7 +17703,6 @@ begin
 end;
 
 
-
 function WideCharToUtf8(Dest: PUTF8Char; aWideChar: PtrUInt): integer;
 begin
   if aWideChar<=$7F then begin

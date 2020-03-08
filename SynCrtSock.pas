@@ -814,7 +814,6 @@ type
     fThreadNumber: integer;
     {$ifndef USE_WINIOCP}
     fProcessingContext: pointer;
-    fSafeProcessingContext: TRTLCriticalSection;
     fEvent: TEvent;
     {$endif USE_WINIOCP}
     procedure NotifyThreadStart(Sender: TSynThread);
@@ -834,8 +833,8 @@ type
   // Event-driven approach under Linux/POSIX
   TSynThreadPool = class
   protected
-    fSafeSubThread: TRTLCriticalSection;
-    fSubThread: TObjectList; // holds TSynThreadPoolSubThread
+    fSubThread: array of TSynThreadPoolSubThread;
+    fSubThreadCount: integer;
     fRunningThreads: integer;
     fExceptionsCount: integer;
     fOnTerminate: TNotifyThreadEvent;
@@ -849,10 +848,9 @@ type
     fRequestQueue: THandle; // IOCSP has its own internal queue
     {$else}
     fQueuePendingContext: boolean;
-    fPendingContextCount: integer;
     fPendingContext: array of pointer;
-    {$ifdef CPU32}fPaddingForCpuCacheLineOfCriticalSections: array[0..63] of byte;{$endif}
-    fSafePendingContext: TRTLCriticalSection;
+    fPendingContextCount: integer;
+    fSafe: TRTLCriticalSection;
     function GetPendingContextCount: integer;
     function PopPendingContext: pointer;
     function QueueLength: integer; virtual;
@@ -1319,6 +1317,10 @@ type
   THttpApiRequestAuthentications = set of (
     haBasic, haDigest, haNtlm, haNegotiate, haKerberos);
 
+  THttpApiServer = class;
+
+  THttpApiServers = array of THttpApiServer;
+
   /// HTTP server using fast http.sys kernel-mode server
   // - The HTTP Server API enables applications to communicate over HTTP without
   // using Microsoft Internet Information Server (IIS). Applications can register
@@ -1335,7 +1337,7 @@ type
     /// the internal request queue
     fReqQueue: THandle;
     /// contain list of THttpApiServer cloned instances
-    fClones: TObjectList;
+    fClones: THttpApiServers;
     // if fClones=nil, fOwner contains the main THttpApiServer instance
     fOwner: THttpApiServer;
     /// list of all registered URL
@@ -1445,7 +1447,7 @@ type
       aCompressMinSize: integer=1024); override;
     /// access to the internal THttpApiServer list cloned by this main instance
     // - as created by Clone() method
-    property Clones: TObjectList read fClones;
+    property Clones: THttpApiServers read fClones;
   public { HTTP API 2.0 methods and properties }
     /// can be used to check if the HTTP API 2.0 is available
     function HasAPI2: boolean;
@@ -1651,7 +1653,7 @@ type
     fFirstEmptyConnectionIndex: Integer;
     fServer: THttpApiWebSocketServer;
     fSafe: TRTLCriticalSection;
-    fPendingForClose: TList;
+    fPendingForClose: {$ifdef FPC}TFPList{$else}TList{$endif};
     fIndex: integer;
     function AddConnection(aConn: PHttpApiWebSocketConnection): Integer;
     procedure RemoveConnection(index: integer);
@@ -1831,7 +1833,7 @@ type
     fProcessCS: TRTLCriticalSection;
     fHeaderRetrieveAbortDelay: integer;
     fThreadPool: TSynThreadPoolTHttpServer;
-    fInternalHttpServerRespList: TList;
+    fInternalHttpServerRespList: {$ifdef FPC}TFPList{$else}TList{$endif};
     fServerConnectionCount: integer;
     fServerConnectionActive: integer;
     fServerKeepAliveTimeOut: cardinal;
@@ -6064,7 +6066,7 @@ constructor THttpServer.Create(const aPort: SockString; OnStart,
   OnStop: TNotifyThreadEvent; const ProcessName: SockString;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer);
 begin
-  fInternalHttpServerRespList := TList.Create;
+  fInternalHttpServerRespList := {$ifdef FPC}TFPList{$else}TList{$endif}.Create;
   InitializeCriticalSection(fProcessCS);
   fSock := TCrtSocket.Bind(aPort); // BIND + LISTEN
   fServerKeepAliveTimeOut := KeepAliveTimeOut; // 30 seconds by default
@@ -6104,26 +6106,29 @@ begin
   end;
   endtix := GetTick64+20000;
   EnterCriticalSection(fProcessCS);
-  if fInternalHttpServerRespList<>nil then begin
-    for i := 0 to fInternalHttpServerRespList.Count-1 do begin
-      resp := fInternalHttpServerRespList.List[i];
-      resp.Terminate;
-      DirectShutdown(resp.fServerSock.Sock,{rdwr=}true);
+  try
+    if fInternalHttpServerRespList<>nil then begin
+      for i := 0 to fInternalHttpServerRespList.Count-1 do begin
+        resp := fInternalHttpServerRespList.List[i];
+        resp.Terminate;
+        DirectShutdown(resp.fServerSock.Sock,{rdwr=}true);
+      end;
+      repeat // wait for all THttpServerResp.Execute to be finished
+        if (fInternalHttpServerRespList.Count=0) and fExecuteFinished then
+          break;
+        LeaveCriticalSection(fProcessCS);
+        SleepHiRes(100);
+        EnterCriticalSection(fProcessCS);
+      until GetTick64>endtix;
+      FreeAndNil(fInternalHttpServerRespList);
     end;
-    repeat // wait for all THttpServerResp.Execute to be finished
-      if (fInternalHttpServerRespList.Count=0) and fExecuteFinished then
-        break;
-      LeaveCriticalSection(fProcessCS);
-      SleepHiRes(100);
-      EnterCriticalSection(fProcessCS);
-    until GetTick64>endtix;
-    FreeAndNil(fInternalHttpServerRespList);
+  finally
+    LeaveCriticalSection(fProcessCS);
+    FreeAndNil(fThreadPool); // release all associated threads and I/O completion
+    FreeAndNil(fSock);
+    inherited Destroy;       // direct Thread abort, no wait till ended
+    DeleteCriticalSection(fProcessCS);
   end;
-  LeaveCriticalSection(fProcessCS);
-  FreeAndNil(fThreadPool); // release all associated threads and I/O completion
-  FreeAndNil(fSock);
-  inherited Destroy;       // direct Thread abort, no wait till ended
-  DeleteCriticalSection(fProcessCS);
 end;
 
 function THttpServer.GetStat(one: THttpServerSocketGetRequestResult): integer;
@@ -7088,14 +7093,14 @@ begin
     exit;
   end;
   {$else}
-  InitializeCriticalSection(fSafeSubThread);
-  InitializeCriticalSection(fSafePendingContext);
+  InitializeCriticalSection(fSafe);
   fQueuePendingContext := aQueuePendingContext;
   {$endif}
   // now create the worker threads
-  fSubThread := TObjectList.Create(true);
-  for i := 1 to NumberOfThreads do
-    fSubThread.Add(TSynThreadPoolSubThread.Create(Self));
+  fSubThreadCount := NumberOfThreads;
+  SetLength(fSubThread,fSubThreadCount);
+  for i := 0 to fSubThreadCount-1 do
+    fSubThread[i] := TSynThreadPoolSubThread.Create(Self);
 end;
 
 destructor TSynThreadPool.Destroy;
@@ -7105,11 +7110,11 @@ begin
   fTerminated := true; // fSubThread[].Execute will check this flag
   try
     // notify the threads we are shutting down
-    for i := 0 to fSubThread.Count-1 do
+    for i := 0 to fSubThreadCount-1 do
       {$ifdef USE_WINIOCP}
       PostQueuedCompletionStatus(fRequestQueue,0,0,nil);
       {$else}
-      TSynThreadPoolSubThread(fSubThread.Items[i]).fEvent.SetEvent;
+      fSubThread[i].fEvent.SetEvent;
       {$endif}
     {$ifndef USE_WINIOCP}
     // cleanup now any pending task
@@ -7120,13 +7125,13 @@ begin
     endtix := GetTick64+30000;
     while (fRunningThreads>0) and (GetTick64<endtix) do
       SleepHiRes(5);
-    fSubThread.Free;
+    for i := 0 to fSubThreadCount-1 do
+      fSubThread[i].Free;
   finally
     {$ifdef USE_WINIOCP}
     CloseHandle(fRequestQueue);
     {$else}
-    DeleteCriticalSection(fSafeSubThread);
-    DeleteCriticalSection(fSafePendingContext);
+    DeleteCriticalSection(fSafe);
     {$endif USE_WINIOCP}
   end;
   inherited Destroy;
@@ -7144,34 +7149,23 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
       found: TSynThreadPoolSubThread;
       thread: ^TSynThreadPoolSubThread;
   begin
-    result := false;
+    result := false; // queue is full
     found := nil;
-    EnterCriticalsection(fSafeSubThread);
+    EnterCriticalsection(fSafe);
     try
-      thread := pointer(fSubThread.List);
-      for i := 1 to fSubThread.Count do
+      thread := pointer(fSubThread);
+      for i := 1 to fSubThreadCount do
         if thread^.fProcessingContext=nil then begin
           found := thread^;
-          EnterCriticalSection(found.fSafeProcessingContext);
           found.fProcessingContext := aContext;
-          LeaveCriticalSection(found.fSafeProcessingContext);
-          break;
+          result := true; // found one available thread
+          exit;
         end else
           inc(thread);
-    finally
-      LeaveCriticalsection(fSafeSubThread);
-    end;
-    if found<>nil then begin
-      found.fEvent.SetEvent;
-      result := true; // found one available thread
-      exit;
-    end;
-    EnterCriticalsection(fSafePendingContext);
-    try
       if not fQueuePendingContext then
         exit;
       n := fPendingContextCount;
-      if n+fSubThread.Count>QueueLength then
+      if n+fSubThreadCount>QueueLength then
         exit; // too many connection limit reached (see QueueIsFull)
       if n=length(fPendingContext) then
         SetLength(fPendingContext,n+n shr 3+64);
@@ -7179,7 +7173,9 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
       inc(fPendingContextCount);
       result := true; // added in pending queue
     finally
-      LeaveCriticalsection(fSafePendingContext);
+      LeaveCriticalsection(fSafe);
+      if found<>nil then
+        found.fEvent.SetEvent; // rather notify outside of the fSafe lock
     end;
   end;
   {$endif}
@@ -7220,17 +7216,18 @@ begin
   result := 0;
   if (self=nil) or fTerminated or (fPendingContext=nil) then
     exit;
-  EnterCriticalsection(fSafePendingContext);
+  EnterCriticalsection(fSafe);
   try
     result := fPendingContextCount;
   finally
-    LeaveCriticalsection(fSafePendingContext);
+    LeaveCriticalsection(fSafe);
   end;
 end;
 
 function TSynThreadPool.QueueIsFull: boolean;
 begin
-  result := fQueuePendingContext and (GetPendingContextCount+fSubThread.Count>QueueLength);
+  result := fQueuePendingContext and
+    (GetPendingContextCount+fSubThreadCount>QueueLength);
 end;
 
 function TSynThreadPool.PopPendingContext: pointer;
@@ -7238,15 +7235,17 @@ begin
   result := nil;
   if (self=nil) or fTerminated or (fPendingContext=nil) then
     exit;
-  EnterCriticalsection(fSafePendingContext);
+  EnterCriticalsection(fSafe);
   try
     if fPendingContextCount>0 then begin
       result := fPendingContext[0];
       dec(fPendingContextCount);
       Move(fPendingContext[1],fPendingContext[0],fPendingContextCount*SizeOf(pointer));
+      if fPendingContextCount=128 then
+        SetLength(fPendingContext,128); // small queue when congestion is resolved
     end;
   finally
-    LeaveCriticalsection(fSafePendingContext);
+    LeaveCriticalsection(fSafe);
   end;
 end;
 
@@ -7274,7 +7273,6 @@ begin
   fOnTerminate := Owner.fOnTerminate;
   {$ifndef USE_WINIOCP}
   fEvent := TEvent.Create(nil,false,false,'');
-  InitializeCriticalSection(fSafeProcessingContext);
   {$endif}
   inherited Create(false);
 end;
@@ -7283,7 +7281,6 @@ destructor TSynThreadPoolSubThread.Destroy;
 begin
   inherited Destroy;
   {$ifndef USE_WINIOCP}
-  DeleteCriticalSection(fSafeProcessingContext);
   fEvent.Free;
   {$endif}
 end;
@@ -7306,10 +7303,10 @@ begin
 end;
 
 procedure TSynThreadPoolSubThread.Execute;
-var Context: pointer;
+var ctxt: pointer;
     {$ifdef USE_WINIOCP}
-    Dummy1: DWORD;
-    Dummy2: PtrUInt;
+    dum1: DWORD;
+    dum2: PtrUInt;
     {$endif}
 begin
   if fOwner<>nil then
@@ -7318,27 +7315,29 @@ begin
     NotifyThreadStart(self);
     repeat
       {$ifdef USE_WINIOCP}
-      if (not GetQueuedCompletionStatus(fOwner.fRequestQueue,Dummy1,Dummy2,Context,INFINITE) and
+      if (not GetQueuedCompletionStatus(fOwner.fRequestQueue,dum1,dum2,ctxt,INFINITE) and
          fOwner.NeedStopOnIOError) or fOwner.fTerminated then
         break;
-      if Context<>nil then
-        DoTask(Context);
+      if ctxt<>nil then
+        DoTask(ctxt);
       {$else}
       fEvent.WaitFor(INFINITE);
       if fOwner.fTerminated then
         break;
-      EnterCriticalSection(fSafeProcessingContext);
-      Context := fProcessingContext;
-      LeaveCriticalSection(fSafeProcessingContext);
-      while Context<>nil do begin
-        DoTask(Context);
-        Context := fOwner.PopPendingContext; // unqueue any pending context
+      EnterCriticalSection(fOwner.fSafe);
+      ctxt := fProcessingContext;
+      LeaveCriticalSection(fOwner.fSafe);
+      if ctxt<>nil then begin
+        repeat
+          DoTask(ctxt);
+          ctxt := fOwner.PopPendingContext; // unqueue any pending context
+        until ctxt=nil;
+        EnterCriticalSection(fOwner.fSafe);
+        fProcessingContext := nil; // indicates this thread is now available
+        LeaveCriticalSection(fOwner.fSafe);
       end;
-      EnterCriticalSection(fSafeProcessingContext);
-      fProcessingContext := nil; // indicates this thread is now available
-      LeaveCriticalSection(fSafeProcessingContext);
       {$endif USE_WINIOCP}
-    until fOwner.fTerminated;
+    until fOwner.fTerminated or Terminated;
   finally
     InterlockedDecrement(fOwner.fRunningThreads);
   end;
@@ -8675,8 +8674,9 @@ begin
     exit; // nothing to clone (need a queue and a process event)
   if ChildThreadCount>256 then
     ChildThreadCount := 256; // not worth adding
-  for i := 1 to ChildThreadCount do
-    fClones.Add(THttpApiServerClass(Self.ClassType).CreateClone(self));
+  SetLength(fClones,ChildThreadCount);
+  for i := 0 to ChildThreadCount-1 do
+    fClones[i] := THttpApiServerClass(Self.ClassType).CreateClone(self);
 end;
 
 function THttpApiServer.GetAPIVersion: string;
@@ -8688,9 +8688,9 @@ procedure THttpApiServer.SetOnTerminate(const Event: TNotifyThreadEvent);
 var i: integer;
 begin
   inherited SetOnTerminate(Event);
-  if (Clones<>nil) and (fOwner=nil) then
-    for i := 0 to Clones.Count-1 do
-      THttpApiServer(Clones[i]).OnHttpThreadTerminate := Event;
+  if fOwner=nil then
+    for i := 0 to length(fClones)-1 do
+      fClones[i].OnHttpThreadTerminate := Event;
 end;
 
 constructor THttpApiServer.Create(CreateSuspended: boolean; QueueName: SynUnicode;
@@ -8717,7 +8717,6 @@ begin
       fUrlGroupID,HttpServerBindingProperty,@bindInfo,SizeOf(bindInfo)));
   end else
     EHttpApiServer.RaiseOnError(hCreateHttpHandle,Http.CreateHttpHandle(fReqQueue));
-  fClones := TObjectList.Create;
   fReceiveBufferSize := 1048576; // i.e. 1 MB
   if not CreateSuspended then
     Suspended := False;
@@ -8766,7 +8765,8 @@ begin
       CloseHandle(fReqQueue); // will break all THttpApiServer.Execute
     end;
     fReqQueue := 0;
-    FreeAndNil(fClones);
+    for i := 0 to high(fClones) do
+      fClones[i].Free;
     Http.Terminate(HTTP_INITIALIZE_SERVER);
   end;
 end;
@@ -9184,10 +9184,8 @@ procedure THttpApiServer.RegisterCompress(aFunction: THttpSocketCompress;
 var i: integer;
 begin
   inherited;
-  if fClones<>nil then
-    for i := 0 to fClones.Count-1 do
-      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).
-        RegisterCompress(aFunction,aCompressMinSize);
+  for i := 0 to length(fClones)-1 do
+    fClones[i].RegisterCompress(aFunction,aCompressMinSize);
 end;
 
 function THttpApiServer.GetHTTPQueueLength: Cardinal;
@@ -9378,17 +9376,16 @@ begin
   if (self=nil) or (fClones=nil) or (fLogData=nil) then
     exit;
   fLogData := nil;
-  for i := 0 to fClones.Count-1 do
-    THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).fLogData := nil;
+  for i := 0 to length(fClones)-1 do
+    fClones[i].fLogData := nil;
 end;
 
 procedure THttpApiServer.SetReceiveBufferSize(Value: cardinal);
 var i: integer;
 begin
   fReceiveBufferSize := Value;
-  if fClones<>nil then // parameter shared by all clones
-    for i := 0 to fClones.Count-1 do
-      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).fReceiveBufferSize := Value;
+  for i := 0 to length(fClones)-1 do
+    fClones[i].fReceiveBufferSize := Value;
 end;
 
 procedure THttpApiServer.SetServerName(const aName: SockString);
@@ -9399,81 +9396,72 @@ begin
     ServerName := pointer(aName);
     ServerNameLength := Length(aName);
   end;
-  if fClones<>nil then // server name is shared by all clones
-    for i := 0 to fClones.Count-1 do
-      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetServerName(aName);
+  for i := 0 to length(fClones)-1 do
+    fClones[i].SetServerName(aName);
 end;
 
 procedure THttpApiServer.SetOnRequest(const aRequest: TOnHttpServerRequest);
 var i: integer;
 begin
   inherited SetOnRequest(aRequest);
-  if fClones<>nil then // event is shared by all clones
-    for i := 0 to fClones.Count-1 do
-      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetOnRequest(aRequest);
+  for i := 0 to length(fClones)-1 do
+    fClones[i].SetOnRequest(aRequest);
 end;
 
 procedure THttpApiServer.SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody);
 var i: integer;
 begin
   inherited SetOnBeforeBody(aEvent);
-  if fClones<>nil then // event is shared by all clones
-    for i := 0 to fClones.Count-1 do
-      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetOnBeforeBody(aEvent);
+  for i := 0 to length(fClones)-1 do
+    fClones[i].SetOnBeforeBody(aEvent);
 end;
 
 procedure THttpApiServer.SetOnBeforeRequest(const aEvent: TOnHttpServerRequest);
 var i: integer;
 begin
   inherited SetOnBeforeRequest(aEvent);
-  if fClones<>nil then // event is shared by all clones
-    for i := 0 to fClones.Count-1 do
-      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetOnBeforeRequest(aEvent);
+  for i := 0 to length(fClones)-1 do
+    fClones[i].SetOnBeforeRequest(aEvent);
 end;
 
 procedure THttpApiServer.SetOnAfterRequest(const aEvent: TOnHttpServerRequest);
 var i: integer;
 begin
   inherited SetOnAfterRequest(aEvent);
-  if fClones<>nil then // event is shared by all clones
-    for i := 0 to fClones.Count-1 do
-      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetOnAfterRequest(aEvent);
+  for i := 0 to length(fClones)-1 do
+    fClones[i].SetOnAfterRequest(aEvent);
 end;
 
 procedure THttpApiServer.SetOnAfterResponse(const aEvent: TOnHttpServerAfterResponse);
 var i: integer;
 begin
   inherited SetOnAfterResponse(aEvent);
-  if fClones<>nil then // event is shared by all clones
-    for i := 0 to fClones.Count-1 do
-      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetOnAfterResponse(aEvent);
+  for i := 0 to length(fClones)-1 do
+    fClones[i].SetOnAfterResponse(aEvent);
 end;
 
 procedure THttpApiServer.SetMaximumAllowedContentLength(aMax: cardinal);
 var i: integer;
 begin
   inherited SetMaximumAllowedContentLength(aMax);
-  if fClones<>nil then // parameter is shared by all clones
-    for i := 0 to fClones.Count-1 do
-      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetMaximumAllowedContentLength(aMax);
+  for i := 0 to length(fClones)-1 do
+    fClones[i].SetMaximumAllowedContentLength(aMax);
 end;
 
 procedure THttpApiServer.SetRemoteIPHeader(const aHeader: SockString);
 var i: integer;
 begin
   inherited SetRemoteIPHeader(aHeader);
-  if fClones<>nil then // parameter is shared by all clones
-    for i := 0 to fClones.Count-1 do
-      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetRemoteIPHeader(aHeader);
+  for i := 0 to length(fClones)-1 do
+    fClones[i].SetRemoteIPHeader(aHeader);
 end;
 
 procedure THttpApiServer.SetRemoteConnIDHeader(const aHeader: SockString);
 var i: integer;
 begin
   inherited SetRemoteConnIDHeader(aHeader);
-  if fClones<>nil then // parameter is shared by all clones
-    for i := 0 to fClones.Count-1 do
-      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetRemoteConnIDHeader(aHeader);
+  for i := 0 to length(fClones)-1 do
+    fClones[i].SetRemoteConnIDHeader(aHeader);
 end;
 
 procedure THttpApiServer.SetLoggingServiceName(const aName: SockString);
@@ -9876,7 +9864,7 @@ begin
   {$else}
    InitializeCriticalSection(fSafe);
   {$endif}
-  fPendingForClose := TList.Create;
+  fPendingForClose := {$ifdef FPC}TFPList{$else}TList{$endif}.Create;
   fName := aName;
   fManualFragmentManagement := aManualFragmentManagement;
   fServer := aServer;
