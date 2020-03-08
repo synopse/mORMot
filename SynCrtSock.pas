@@ -833,7 +833,7 @@ type
   // Event-driven approach under Linux/POSIX
   TSynThreadPool = class
   protected
-    fSubThread: TObjectList; // holds TSynThreadPoolSubThread
+    fSubThread: {$ifdef FPC}TFPObjectList{$else}TObjectList{$endif}; // holds TSynThreadPoolSubThread
     fRunningThreads: integer;
     fExceptionsCount: integer;
     fOnTerminate: TNotifyThreadEvent;
@@ -1828,7 +1828,7 @@ type
     fProcessCS: TRTLCriticalSection;
     fHeaderRetrieveAbortDelay: integer;
     fThreadPool: TSynThreadPoolTHttpServer;
-    fInternalHttpServerRespList: TList;
+    fInternalHttpServerRespList: {$ifdef FPC}TFPList{$else}TList{$endif};
     fServerConnectionCount: integer;
     fServerConnectionActive: integer;
     fServerKeepAliveTimeOut: cardinal;
@@ -6061,7 +6061,7 @@ constructor THttpServer.Create(const aPort: SockString; OnStart,
   OnStop: TNotifyThreadEvent; const ProcessName: SockString;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer);
 begin
-  fInternalHttpServerRespList := TList.Create;
+  fInternalHttpServerRespList := {$ifdef FPC}TFPList{$else}TList{$endif}.Create;
   InitializeCriticalSection(fProcessCS);
   fSock := TCrtSocket.Bind(aPort); // BIND + LISTEN
   fServerKeepAliveTimeOut := KeepAliveTimeOut; // 30 seconds by default
@@ -7089,7 +7089,7 @@ begin
   fQueuePendingContext := aQueuePendingContext;
   {$endif}
   // now create the worker threads
-  fSubThread := TObjectList.Create(true);
+  fSubThread := {$ifdef FPC}TFPObjectList{$else}TObjecList{$endif}.Create(true);
   for i := 1 to NumberOfThreads do
     fSubThread.Add(TSynThreadPoolSubThread.Create(Self));
 end;
@@ -7141,7 +7141,7 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
     result := false;
     EnterCriticalsection(fSafe);
     try
-      thread := pointer(fSubThread.List);
+      thread := pointer(fSubThread.List{$ifdef FPC}.List{$endif});
       for i := 1 to fSubThread.Count do
         if thread^.fProcessingContext=nil then begin
           thread^.fProcessingContext := aContext;
