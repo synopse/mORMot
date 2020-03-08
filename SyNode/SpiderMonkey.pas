@@ -5,10 +5,10 @@ unit SpiderMonkey;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
-    SyNode for mORMot Copyright (C) 2019 Pavel Mashlyakovsky & Vadim Orel
+    SyNode for mORMot Copyright (C) 2020 Pavel Mashlyakovsky & Vadim Orel
       pavel.mash at gmail.com
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SpiderMonkey;
 
   The Initial Developer of the Original Code is
   Pavel Mashlyakovsky & Vadim Orel.
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -442,7 +442,7 @@ type
 
   { JSIdArray }
 
-  JSIdArray  = {$ifdef UNICODE}record{$else}object{$endif}
+  JSIdArray  = {$ifdef USERECORDWITHMETHODS}record{$else}object{$endif}
   end;
   PJSIdArray = ^JSIdArray;
 
@@ -494,7 +494,8 @@ type
   JSONWriteCallback = function(const buf: PCChar16; len: uint32; data: pointer): Boolean; cdecl;
 
   /// high-level definition of the JSValue
-  jsval = {$ifdef UNICODE}record{$else}object{$endif}
+  {$ifdef USERECORDWITHMETHODS}jsval = record
+    {$else}jsval = object{$endif}
   private
     _l: jsval_layout;
 
@@ -627,7 +628,8 @@ type
   end;
 
   /// hight-level definition of arguments of function
-  JSArgRec = {$ifdef UNICODE}record{$else}object{$endif}
+  {$ifdef USERECORDWITHMETHODS}JSArgRec = record
+    {$else}JSArgRec = object{$endif}
   private
     rec: _JSArgRec;
     function GetIsConstructing: Boolean; {$ifdef HASINLINE}inline;{$endif}
@@ -1191,7 +1193,8 @@ type
   /// JSObject is the type of JavaScript objects in the JSAPI
   // - this object does not store anything, but just provide some helper methods
   // to access a PJSObject value via low-level API functions
-  JSObject = {$ifdef UNICODE}record{$else}object{$endif}
+  {$ifdef USERECORDWITHMETHODS}JSObject = record
+    {$else}JSObject = object{$endif}
   private
     function GetPrivate: Pointer; {$ifdef HASINLINE}inline;{$endif}
     procedure SetPrivate(data: Pointer); cdecl; {$ifdef HASINLINE}inline;{$endif}

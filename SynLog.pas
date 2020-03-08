@@ -6,7 +6,7 @@ unit SynLog;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynLog;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -43,61 +43,6 @@ unit SynLog;
   the terms of any one of the MPL, the GPL or the LGPL.
 
   ***** END LICENSE BLOCK *****
-
-  Version 1.18
-  - first public release, extracted from SynCommons.pas unit
-  - BREAKING CHANGE: PWinAnsiChar type for constant text format parameters has
-    been changed into a RawUTF8, to please all supported platforms and compilers
-  - WARNING: any user of the framework in heavy-loaded multi-threaded application
-    should UPGRADE to at least revision 1.18.1351, fixing a long-standing bug
-  - all logged timestamps are now in much less error-prone UTC by default,
-    unless the TSynLogFamily.LocalTimestamp property is defined
-  - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler under Windows
-  - compatibility with (Cross)Kylix 3 and FPC 3.1 under Linux (and Darwin)
-  - Exception logging and Stack trace do work now on Linux with Kylix/CrossKylix
-  - added TSynLogFile.Freq read-only property
-  - added DefaultSynLogExceptionToStr() function and TSynLogExceptionToStrCustom
-    variable, and ESynException.CustomLog() method to customize how raised
-    exception are logged when intercepted - feature request [495720e0b9]
-  - added new sllDDDError, sllDDDInfo log levels
-  - added TSynLogFamily.EndOfLineCRLF properties
-  - added TSynLogFamily's NoFile and EchoCustom properties - see [91a114d2f6]
-  - TSynLog will now append only the execution time when leaving a method,
-    without the class/method name (smaller log file, and less resource use)
-  - TSynLog header now contains system environment variables
-  - added overloaded ISynLog.Log(string) method for Unicode Delphi
-  - added TSynLog.DebuggerNotify() and TSynLog.CloseLogFile / Release methods
-  - protected the global TSynLog instances list against potential race condition
-  - introducing TSynLogFamily.StackTraceUse: TSynLogStackTraceUse property
-    (set to stManualAndAPI by default, but stOnlyAPI within the Delphi IDE)
-  - introducing TSynLogFamily.EchoToConsole: TSynLogInfos property, able to
-    optionally echo the process log to the current console window, using colors
-  - added TSynLogFamily.EchoRemoteStart() and EchoRemoteStop methods
-  - added TSynLog.Void class function
-  - added TSynLogFile.EventSelect method
-  - if new property TSynLogFamily.PerThreadLog is set to ptIdentifiedInOnFile,
-    a new column will be added for each logged row - LogViewer has been updated
-    to allow easy and efficient multi-thread process logging
-  - introducing TSynLogFamily.RotateFileCount and associated RotateFileSizeKB,
-    RotateFileDailyAtHour and OnRotate properties, to enable log file rotation
-    by size or at given hour - request [72feb66d45] + [b3e8cc8424]
-  - added TSynLog.CustomFileName property - see [d8fbc10bf8]
-  - added TSynLog.ComputeFileName virtual method and TSynLogFamily.FileExistsAction
-    property for feature request [d029051dcb]
-  - added TSynLog/ISynLog.LogLines() method for direct multi-line text logging
-  - added optional TextTruncateAtLength parameter for TSynLog/ISynLog.Log()
-  - declared TSynLog.LogInternal() methods as virtual - request [e47c64fb2c]
-  - .NET/CLR external exceptions will now be logged with their C# type name
-  - special 'SetThreadName' exception will now be ignored by TSynLog hook
-  - introducing TSynLog.Enter overload method, with FormatUTF8-like parameters
-  - fixed ticket [19e567b8ca] about TSynLog issue in heavily concurrent mode:
-    now a per-thread context will be stored, e.g. for Enter/Leave tracking
-  - fixed ticket [a516b1a954] about ptOneFilePerThread log file rotation
-  - introduced clear distinction between absolute and relative memory address
-    values, and TSynMapFile.AbsoluteToOffset(), as reported by [0aeaa1353149]
-  - introduced ISynLogCallback and TSynLogCallbacks types for easy integration
-    with mORMot's interface-based services real-time notification
-  - FPC compatibility - with source lines if compiled using -g or -gl switches
 
 *)
 
@@ -812,7 +757,7 @@ type
   TSynLog = class(TObject, ISynLog)
   protected
     fFamily: TSynLogFamily;
-    fWriter: TTextWriter;
+    fWriter: TTextWriterWithEcho;
     fWriterClass: TTextWriterClass;
     fWriterStream: TStream;
     fThreadContext: PSynLogThreadContext;
@@ -861,7 +806,7 @@ type
     // any call to this method MUST call LogTrailerUnLock
     function LogHeaderLock(Level: TSynLogInfo; AlreadyLocked: boolean): boolean;
     procedure LogTrailerUnLock(Level: TSynLogInfo); {$ifdef HASINLINENOTX86}inline;{$endif}
-    procedure LogCurrentTime;
+    procedure LogCurrentTime; virtual;
     procedure LogFileInit; virtual;
     procedure LogFileHeader; virtual;
     {$ifndef DELPHI5OROLDER}
@@ -1078,7 +1023,7 @@ type
     procedure ForceRotation;
     /// direct access to the low-level writing content
     // - should usually not be used directly, unless you ensure it is safe
-    property Writer: TTextWriter read fWriter;
+    property Writer: TTextWriterWithEcho read fWriter;
   published
     /// the associated file name containing the log
     // - this is accurate only with the default implementation of the class:
@@ -1324,7 +1269,7 @@ type
     /// the computer Operating System in which the process was running on
     // - returns e.g. '2.3=5.1.2600' for Windows XP
     // - under Linux, it will return the full system version, e.g.
-    // 'Linux-3.13.0-43-generic#72-Ubuntu-SMP-Mon-Dec-8-19:35:44-UTC-2014'
+    // 'Ubuntu=Linux-3.13.0-43-generic#72-Ubuntu-SMP-Mon-Dec-8-19:35:44-UTC-2014'
     property DetailedOS: RawUTF8 read fOSDetailed;
     /// the associated framework information
     // - returns e.g. 'TSQLLog 1.18.2765 ERTL FTS3'
@@ -1600,8 +1545,8 @@ function EventArchiveSynLZ(const aOldLogFileName, aDestinationPath: TFileName): 
 // - returns the number of bytes written to destbuffer (which should have
 // destsize > 127)
 function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
-  const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: integer;
-  trimmsgfromlog: boolean): integer;
+  const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: PtrInt;
+  trimmsgfromlog: boolean): PtrInt;
 
 /// check if the supplied file name is a currently working log file
 // - may be used to avoid e.g. infinite recursion when monitoring the log file
@@ -1619,12 +1564,12 @@ uses
 {$endif FPC}
 
 var
-  LogInfoText: array[TSynLogInfo] of RawUTF8;
-  LogInfoCaption: array[TSynLogInfo] of string;
+  _LogInfoText: array[TSynLogInfo] of RawUTF8;
+  _LogInfoCaption: array[TSynLogInfo] of string;
 
 function ToText(event: TSynLogInfo): RawUTF8;
 begin
-  result := LogInfoText[event];
+  result := _LogInfoText[event];
 end;
 
 function ToText(events: TSynLogInfos): ShortString;
@@ -1634,7 +1579,7 @@ end;
 
 function ToCaption(event: TSynLogInfo): string;
 begin
-  result := LogInfoCaption[event];
+  result := _LogInfoCaption[event];
 end;
 
 function ToCaption(filter: TSynLogFilter): string;
@@ -1783,7 +1728,7 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
           inc(U.Symbol.Stop,U.Symbol.Start-1);
           if (U.Symbol.Name<>'') and
              ((U.Symbol.Start<>0) or (U.Symbol.Stop<>0)) then
-            fUnits.FindHashedAndUpdate(U,true); // true for adding
+            fUnits.FindHashedAndUpdate(U,{addifnotexisting=}true);
         end;
         NextLine;
       end;
@@ -2386,7 +2331,7 @@ begin
     if ELevel<>sllNone then begin
       if info.Addr='' then
         info.Addr := GetInstanceMapFile.FindLocation(EAddr);
-      FormatUTF8('% % at %: % [%]',[LogInfoCaption[ELevel],EClass,info.Addr,
+      FormatUTF8('% % at %: % [%]',[_LogInfoCaption[ELevel],EClass,info.Addr,
         DateTimeToIso8601Text(UnixTimeToDateTime(ETimestamp),' '),
         StringToUTF8(info.Message)],result);
     end else
@@ -2416,55 +2361,54 @@ begin
 end;
 {$endif}
 
-function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
-  const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: integer;
-  trimmsgfromlog: boolean): integer;
-  procedure PrintUSAscii(const text: RawUTF8);
-  var i: PtrInt;
-  begin
-    destbuffer^ := ' ';
-    inc(destbuffer);
-    for i := 1 to length(text) do
-      if ord(text[i]) in [33..126] then begin // only printable ASCII chars
-        destbuffer^ := text[i];
-        inc(destbuffer);
-      end;
-    if destbuffer[-1]=' ' then begin
-      destbuffer^ := '-'; // nothing appended -> NILVALUE
-      inc(destbuffer);
+function PrintUSAscii(P: PUTF8Char; const text: RawUTF8): PUTF8Char;
+var i: PtrInt;
+begin
+  P^ := ' ';
+  inc(P);
+  for i := 1 to length(text) do
+    if ord(text[i]) in [33..126] then begin // only printable ASCII chars
+      P^ := text[i];
+      inc(P);
     end;
+  if P[-1]=' ' then begin
+    P^ := '-'; // nothing appended -> NILVALUE
+    inc(P);
   end;
-var tmp: array[0..15] of AnsiChar;
-    P: PAnsiChar;
+  result := P;
+end;
+
+function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
+  const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: PtrInt;
+  trimmsgfromlog: boolean): PtrInt;
+var P: PAnsiChar;
     start: PUTF8Char;
-    D: TDateTime;
-    len: integer;
+    len: PtrInt;
+    st: TSynSystemTime;
 begin
   result := 0;
   if destsize<127 then
     exit;
   start := destbuffer;
   destbuffer^ := '<';
-  inc(destbuffer);
-  P := StrUInt32(@tmp[15],ord(severity)+ord(facility) shl 3);
-  len := @tmp[15]-P;
-  MoveFast(P^,destbuffer^,len);
-  inc(destbuffer,len);
+  destbuffer := AppendUInt32ToBuffer(destbuffer+1,ord(severity)+ord(facility) shl 3);
   PInteger(destbuffer)^ := ord('>')+ord('1')shl 8+ord(' ')shl 16; // VERSION=1
   inc(destbuffer,3);
-  D := NowUTC;
-  DateToIso8601PChar(D,destbuffer,true);
-  TimeToIso8601PChar(D,destbuffer+10,True,'T',true);
+  st.FromNowUTC;
+  DateToIso8601PChar(destbuffer,true,st.Year,st.Month,st.Day);
+  TimeToIso8601PChar(destbuffer+10,true,st.Hour,st.Minute,st.Second,st.MilliSecond,'T',true);
   destbuffer[23] := 'Z';
   inc(destbuffer,24);
-  if length(ExeVersion.Host)+length(ExeVersion.ProgramName)+length(procid)+length(msgid)+
-     (destbuffer-start)+15>destsize then
-    exit; // avoid buffer overflow
-  PrintUSAscii(ExeVersion.Host); // HOST
-  PrintUSAscii(ExeVersion.ProgramName); // APP-NAME
-  PrintUSAscii(procid); // PROCID
-  PrintUSAscii(msgid);  // MSGID
-  PrintUSAscii('');     // no STRUCTURED-DATA
+  with ExeVersion do begin
+    if length(Host)+length(ProgramName)+length(procid)+length(msgid)+
+       (destbuffer-start)+15>destsize then
+      exit; // avoid buffer overflow
+    destbuffer := PrintUSAscii(destbuffer,Host); // HOST
+    destbuffer := PrintUSAscii(destbuffer,ProgramName); // APP-NAME
+  end;
+  destbuffer := PrintUSAscii(destbuffer,procid); // PROCID
+  destbuffer := PrintUSAscii(destbuffer,msgid);  // MSGID
+  destbuffer := PrintUSAscii(destbuffer,'');     // no STRUCTURED-DATA
   destbuffer^ := ' ';
   inc(destbuffer);
   len := length(msg);
@@ -2487,9 +2431,8 @@ begin
     PInteger(destbuffer)^ := $bfbbef; // UTF-8 BOM
     inc(destbuffer,3);
   end;
-  result := destbuffer-start;
   MoveFast(P^,destbuffer^,len);
-  inc(result,len);
+  result := (destbuffer-start)+len;
 end;
 
 function IsActiveLogFile(const aFileName: TFileName): boolean;
@@ -3305,7 +3248,7 @@ begin
           exit; // avoid GPF
       end;
       {$else}
-      FixedWaitFor(fEvent, 1000);
+      FixedWaitFor(fEvent,1000);
       if Terminated then
         exit;
       {$endif}
@@ -3364,7 +3307,7 @@ begin
   if AutoFlushThread<>nil then begin
     {$ifndef AUTOFLUSHRAWWIN}
     AutoFlushThread.Terminate;
-    AutoFlushThread.fEvent.SetEvent; // notify Execute to finish now
+    AutoFlushThread.fEvent.SetEvent; // notify TAutoFlushThread.Execute
     {$endif}
     AutoFlushThread := nil; // Terminated=true to avoid GPF in AutoFlushProc
   end;
@@ -4355,31 +4298,32 @@ begin
       Add('*');
       Add(wProcessorArchitecture); Add('-'); Add(wProcessorLevel); Add('-');
       Add(wProcessorRevision);
+    {$endif}
       {$ifdef CPUINTEL}
       Add(':'); AddBinToHex(@CpuFeatures,SizeOf(CpuFeatures));
       {$endif}
-      AddShort(' OS='); Add(ord(OSVersion)); Add('.'); Add(wServicePackMajor);
+      AddShort(' OS=');
+    {$ifdef MSWINDOWS}
+      Add(ord(OSVersion)); Add('.'); Add(wServicePackMajor);
       Add('='); Add(dwMajorVersion); Add('.'); Add(dwMinorVersion); Add('.');
       Add(dwBuildNumber);
-      AddShort(' Wow64='); Add(integer(IsWow64));
     end;
     {$else}
-    {$ifdef CPUINTEL}
-    Add(':'); AddBinToHex(@CpuFeatures,SizeOf(CpuFeatures));
-    {$endif}
-    AddShort(' OS=');
-    AddNoJSONEscape(@SystemInfo.uts.sysname); Add('-');
-    AddNoJSONEscape(@SystemInfo.uts.release);
+    AddTrimLeftLowerCase(ToText(OS_KIND)); Add('=');
+    AddTrimSpaces(@SystemInfo.uts.sysname); Add('-');
+    AddTrimSpaces(@SystemInfo.uts.release);
     AddReplace(@SystemInfo.uts.version,' ','-');
-    AddShort(' Wow64=0');
-    {$endif}
+    {$endif MSWINDOWS}
+    if OSVersionInfoEx<> '' then begin
+      Add('/'); AddTrimSpaces(OSVersionInfoEx); end;
+    {$ifdef MSWINDOWS}
+    AddShort(' Wow64='); Add(integer(IsWow64));
     AddShort(' Freq=');
-    {$ifdef LINUX}
-    AddShort('1000000'); // taken by QueryPerformanceMicroSeconds()
-    {$else}
     QueryPerformanceFrequency(fFrequencyTimestamp);
     Add(fFrequencyTimestamp);
-    {$endif LINUX}
+    {$else}
+    AddShort(' Wow64=0 Freq=1000000'); // taken by QueryPerformanceMicroSeconds()
+    {$endif MSWINDOWS}
     if IsLibrary then begin
       AddShort(' Instance=');
       AddNoJSONEscapeString(InstanceFileName);
@@ -4700,8 +4644,8 @@ begin
       fWriterStream.Seek(0,soFromEnd); // in rotation mode, append at the end
   end;
   if fWriterClass=nil then
-    // set to TTextWriter or TJSONSerializer if mORMot.pas is linked
-    fWriterClass := TTextWriter.GetDefaultJSONClass;
+    // set to TTextWriterWithEcho or TJSONSerializer if mORMot.pas is linked
+    fWriterClass := DefaultTextWriterSerializer;
   if fWriter=nil then begin
     fWriter := fWriterClass.Create(fWriterStream,fFamily.BufferSize);
     fWriter.CustomOptions := fWriter.CustomOptions+[twoEnumSetsAsTextInRecord,twoFullSetsAsStar];
@@ -4738,7 +4682,7 @@ begin // aLevel = sllEnter,sllLeave or sllNone
         fWriter.AddInstancePointer(Instance,'.',fFamily.WithUnitName,fFamily.WithInstancePointer);
       if MethodName<>nil then begin
         if MethodNameLocal<>mnLeave then begin
-          fWriter.AddNoJSONEscape(MethodName);
+          fWriter.AddOnSameLine(MethodName);
           case MethodNameLocal of
           mnEnter:
             MethodNameLocal := mnLeave;
@@ -5453,6 +5397,7 @@ end;
 function TSynLogFile.ThreadNames(CurrentLogIndex: integer): TRawUTF8DynArray;
 var i: integer;
 begin
+  result := nil;
   SetLength(result,fThreadMax);
   if fThreadInfo=nil then
     exit;
@@ -5732,7 +5677,7 @@ begin
   if cardinal(aRow)<cardinal(fCount) then begin
     dt := EventDateTime(aRow);
     FormatString('% %'#9'%'#9,[DateToStr(dt),FormatDateTime(TIME_FORMAT,dt),
-      LogInfoCaption[EventLevel[aRow]]],result);
+      _LogInfoCaption[EventLevel[aRow]]],result);
     if fThreads<>nil then
       result := result+IntToString(cardinal(fThreads[aRow]))+#9;
     result := result+EventString(aRow,'   ');
@@ -5748,7 +5693,7 @@ begin
       aRow := fSelected[aRow];
       case aCol of
       0: DateTimeToString(result,TIME_FORMAT,EventDateTime(aRow));
-      1: result := LogInfoCaption[EventLevel[aRow]];
+      1: result := _LogInfoCaption[EventLevel[aRow]];
       2: if fThreads<>nil then
            result := IntToString(cardinal(fThreads[aRow]));
       3: result := EventString(aRow,'   ',MAXLOGLINES);
@@ -6010,9 +5955,9 @@ initialization
   {$ifndef NOEXCEPTIONINTERCEPT}
   DefaultSynLogExceptionToStr := InternalDefaultSynLogExceptionToStr;
   {$endif}
-  GetEnumTrimmedNames(TypeInfo(TSynLogInfo),@LogInfoText);
-  GetEnumCaptions(TypeInfo(TSynLogInfo),@LogInfoCaption);
-  LogInfoCaption[sllNone] := '';
+  GetEnumTrimmedNames(TypeInfo(TSynLogInfo),@_LogInfoText);
+  GetEnumCaptions(TypeInfo(TSynLogInfo),@_LogInfoCaption);
+  _LogInfoCaption[sllNone] := '';
   TTextWriter.RegisterCustomJSONSerializerFromText([
     TypeInfo(TSynMapSymbol),_TSynMapSymbol,
     TypeInfo(TSynMapUnit),_TSynMapUnit]);

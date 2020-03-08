@@ -7,7 +7,7 @@ unit SynDBFirebird;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -26,7 +26,7 @@ unit SynDBFirebird;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -44,8 +44,8 @@ unit SynDBFirebird;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.18
-  - first public release, corresponding to mORMot Framework 1.18
+  WARNING: This unit is NOT FINISHED and doesn't work as expected!
+    PLEASE USE SynDBZeos instead!
 
   TODO:
   - share a global database connection for embedded mode, instead of

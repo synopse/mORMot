@@ -12,12 +12,6 @@ echo ---------------------
 
 cd $2
 cd ../SynProject
-
-$3 pull
-
-rsync -av --update --existing $1/* $2
-
-$3 add .
 $3 commit -a --file=$4
 $3 push
 

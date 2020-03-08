@@ -6,7 +6,7 @@ unit SynSQLite3RegEx;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynSQLite3RegEx;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -57,10 +57,6 @@ unit SynSQLite3RegEx;
   This unit will call directly the UTF-8 API of the PCRE library, and maintain
   a per-connection cache of compiled regular expressions to ensure the best
   performance possible.
-
-
-  Version 1.18
-  - initial revision, implementing feature request [659d1df866]
 
 }
 

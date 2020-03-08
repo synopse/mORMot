@@ -6,7 +6,7 @@ unit SynTests;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynTests;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -43,17 +43,6 @@ unit SynTests;
   the terms of any one of the MPL, the GPL or the LGPL.
 
   ***** END LICENSE BLOCK *****
-
-  Version 1.18
-  - first public release, extracted from SynCommons.pas unit
-  - added class function TSynTestCase.RandomTextParagraph
-  - TSynTests will now write the tests summary with colored console output
-  - added TSynTestCase.CleanUp virtual method for proper cleaning before Destroy
-  - added TSynTestCase.CheckMatchAny() method for multi-value checks
-  - TSynTestCase.TestFailed now triggers a debugger breakpoint when run from IDE
-  - added TSynTestCase.NotifyTestSpeed() method
-  - extraction of TTestLowLevelCommon code into SynSelfTests.pas unit
-  - added TSynTests.RunAsConsole() class method to ease console test app writing
 
 *)
 
@@ -83,6 +72,7 @@ uses
 {$endif}
   SynLZ, // needed e.g. for TSynMapFile .mab format
   SynCommons,
+  SynTable,
   SynLog,
   SysUtils;
 
@@ -245,10 +235,13 @@ type
     // and ExpectedResult=true
     function CheckMatchAny(const Value: RawUTF8; const Values: array of RawUTF8;
       CaseSentitive: Boolean=true; ExpectedResult: Boolean=true; const msg: string = ''): Boolean;
+    /// used by the published methods to run a test assertion, with an UTF-8 error message
+    // - condition must equals TRUE to pass the test
+    procedure CheckUTF8(condition: Boolean; const msg: RawUTF8); overload;
     /// used by the published methods to run a test assertion, with a error
     // message computed via FormatUTF8()
     // - condition must equals TRUE to pass the test
-    procedure CheckUTF8(condition: Boolean; const msg: RawUTF8; const args: array of const);
+    procedure CheckUTF8(condition: Boolean; const msg: RawUTF8; const args: array of const); overload;
     /// used by published methods to start some timing on associated log
     // - call this once, before one or several consecutive CheckLogTime()
     // - warning: this method is not thread-safe
@@ -286,11 +279,17 @@ type
     procedure TestFailed(const msg: string);
     /// will add to the console a message with a speed estimation
     // - speed is computed from the method start
+    // - returns the number of microsec of the (may be specified) timer
+    // - OnlyLog will compute and append the info to the log, but not on the console
     // - warning: this method is not thread-safe if a local Timer is not specified
-    procedure NotifyTestSpeed(const ItemName: string; ItemCount: integer;
-      SizeInBytes: cardinal=0; Timer: PPrecisionTimer=nil);
+    function NotifyTestSpeed(const ItemName: string; ItemCount: integer;
+      SizeInBytes: cardinal=0; Timer: PPrecisionTimer=nil; OnlyLog: boolean=false): TSynMonitorOneMicroSec; overload;
+    /// will add to the console a formatted message with a speed estimation
+    function NotifyTestSpeed(const ItemNameFmt: RawUTF8; const ItemNameArgs: array of const;
+      ItemCount: integer; SizeInBytes: cardinal=0; Timer: PPrecisionTimer=nil; OnlyLog: boolean=false): TSynMonitorOneMicroSec; overload;
     /// append some text to the current console
-    procedure AddConsole(const msg: string);
+    // - OnlyLog will compute and append the info to the log, but not on the console
+    procedure AddConsole(const msg: string; OnlyLog: boolean=false);
     /// the test suit which owns this test case
     property Owner: TSynTests read fOwner;
     /// the test name
@@ -521,7 +520,7 @@ begin
     if IdemPChar(Pointer(id),'TSYN') then
       if IdemPChar(Pointer(id),'TSYNTEST') then
         Delete(id,1,8) else
-      Delete(id,1,4) else
+        Delete(id,1,4) else
     if IdemPChar(Pointer(id),'TTEST') then
       Delete(id,1,5) else
     if id[1]='T' then
@@ -671,11 +670,19 @@ begin
   Check(result);
 end;
 
+procedure TSynTestCase.CheckUTF8(condition: Boolean; const msg: RawUTF8);
+begin
+  InterlockedIncrement(fAssertions);
+  if not condition or (tcoLogEachCheck in fOptions) then
+    CheckUTF8(condition,'%',[msg]);
+end;
+
 procedure TSynTestCase.CheckUTF8(condition: Boolean; const msg: RawUTF8;
   const args: array of const);
-  procedure SubProcForMessage;
-  var str: string;
-  begin
+var str: string; // using a sub-proc may be faster, but unstable on Android
+begin
+  InterlockedIncrement(fAssertions);
+  if not condition or (tcoLogEachCheck in fOptions) then begin
     if msg<>'' then begin
       FormatString(msg,args,str);
       if tcoLogEachCheck in fOptions then
@@ -684,10 +691,6 @@ procedure TSynTestCase.CheckUTF8(condition: Boolean; const msg: RawUTF8;
     if not condition then
       TestFailed(str);
   end;
-begin
-  InterlockedIncrement(fAssertions);
-  if not condition or (tcoLogEachCheck in fOptions) then
-    SubProcForMessage;
 end;
 
 procedure TSynTestCase.CheckLogTimeStart;
@@ -870,8 +873,11 @@ begin
   end;   
 end;
 
-procedure TSynTestCase.AddConsole(const msg: string);
+procedure TSynTestCase.AddConsole(const msg: string; OnlyLog: boolean);
 begin
+  TSynLogTestLog.Add.Log(sllMonitoring, '% %', [ClassType, msg]);
+  if OnlyLog then
+    exit;
   fOwner.fSafe.Lock;
   try
     if fRunConsole<>'' then
@@ -882,21 +888,30 @@ begin
   end;
 end;
 
-procedure TSynTestCase.NotifyTestSpeed(const ItemName: string;
-  ItemCount: integer; SizeInBytes: cardinal; Timer: PPrecisionTimer);
+function TSynTestCase.NotifyTestSpeed(const ItemName: string; ItemCount: integer;
+  SizeInBytes: cardinal; Timer: PPrecisionTimer; OnlyLog: boolean): TSynMonitorOneMicroSec;
 var Temp: TPrecisionTimer;
     msg: string;
 begin
   if Timer=nil then
     Temp := Owner.TestTimer else
     Temp := Timer^;
-  if ItemCount <= 1 then
-    FormatString('% in %', [ItemName,Temp.Stop], msg) else
-    FormatString('% % in % i.e. %/s, aver. %', [ItemCount,ItemName,Temp.Stop,
-      IntToThousandString(Temp.PerSec(ItemCount)),Temp.ByCount(ItemCount)], msg);
+  if ItemCount<=1 then
+    FormatString('% in %',[ItemName,Temp.Stop],msg) else
+    FormatString('% % in % i.e. %/s, aver. %',[ItemCount,ItemName,Temp.Stop,
+      IntToThousandString(Temp.PerSec(ItemCount)),Temp.ByCount(ItemCount)],msg);
   if SizeInBytes>0 then
     msg := FormatString('%, %/s',[msg,KB(Temp.PerSec(SizeInBytes))]);
-  AddConsole(msg);
+  AddConsole(msg,OnlyLog);
+  result := Temp.TimeInMicroSec;
+end;
+
+function TSynTestCase.NotifyTestSpeed(const ItemNameFmt: RawUTF8; const ItemNameArgs: array of const;
+  ItemCount: integer; SizeInBytes: cardinal; Timer: PPrecisionTimer; OnlyLog: boolean): TSynMonitorOneMicroSec;
+var str: string;
+begin
+  FormatString(ItemNameFmt,ItemNameArgs,str);
+  result := NotifyTestSpeed(str,ItemCount,SizeInBytes,Timer,OnlyLog);
 end;
 
 
@@ -1291,7 +1306,7 @@ procedure TSynTestsLogged.Failed(const msg: string; aTest: TSynTestCase);
 begin
   inherited;
   with TestCase[fCurrentMethod] do begin
-    fLogFile.Log(sllFail,'%: % "%"',[Ident,TestName[fCurrentMethodIndex],msg],aTest);
+    fLogFile.Log(sllFail,'%: % [%]',[Ident,TestName[fCurrentMethodIndex],msg],aTest);
     {$ifdef KYLIX3}
     fLogFile.Flush(true);
     // we do not have a debugger for CrossKylix -> stop here!
@@ -1302,5 +1317,6 @@ begin
     {$endif}
   end;
 end;
+
 
 end.

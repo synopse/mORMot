@@ -5,10 +5,10 @@ unit SyNodeRemoteDebugger;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
-    SyNode for mORMot Copyright (C) 2019 Pavel Mashlyakovsky & Vadim Orel
+    SyNode for mORMot Copyright (C) 2020 Pavel Mashlyakovsky & Vadim Orel
       pavel.mash at gmail.com
 
     Some ideas taken from
@@ -215,7 +215,7 @@ begin
   eng := fManager.EngineForThread(curThreadID);
   if eng<>nil then begin
     Debugger := eng.PrivateDataForDebugger;
-    Debugger.fLogQueue.SafePush(Text);
+    Debugger.fLogQueue.Add(Text);
 
     if eng.cx.IsRunning then
       eng.cx.RequestInterruptCallback
@@ -538,7 +538,7 @@ begin
 
     engine := fParent.fManager.EngineForThread(fDebugger.fSmThreadID);
     if (engine <> nil) then begin
-      fDebugger.fMessagesQueue.SafePush(VariantToUTF8(request));
+      fDebugger.fMessagesQueue.Add(VariantToUTF8(request));
       if not fDebugger.fIsPaused then begin
         if (not engine.cx.IsRunning) then begin
           if not Assigned(engine.doInteruptInOwnThread) then
@@ -611,8 +611,8 @@ end;
 procedure TSMDebugger.attach(aThread: TSMRemoteDebuggerCommunicationThread);
 begin
   fCommunicationThread := aThread;
-  fMessagesQueue.SafeClear;
-  fLogQueue.SafeClear;
+  fMessagesQueue.Clear;
+  fLogQueue.Clear;
 end;
 
 constructor TSMDebugger.Create(aParent: TSMRemoteDebuggerThread; aEng: TSMEngine);
@@ -688,8 +688,8 @@ var
   dbgObject: PJSRootedObject;
   res: Boolean;
 begin
-  fMessagesQueue.SafeClear;
-  fLogQueue.SafeClear;
+  fMessagesQueue.Clear;
+  fLogQueue.Clear;
 
   cx := aEng.cx;
   cx.BeginRequest;
@@ -780,7 +780,7 @@ begin
     Queue := debugger.fLogQueue;
   msg := '';
   while ((Queue <> nil) and (debugger.fCommunicationThread <> nil) and
-    (not Queue.SafePop(msg))) and (argc = 0) do
+    (not Queue.PopLast(msg))) and (argc = 0) do
     SleepHiRes(10);
   result := true;
   if (Queue <> nil) and (debugger.fCommunicationThread <> nil) then

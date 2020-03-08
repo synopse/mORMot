@@ -6,7 +6,7 @@ unit SynDBZeos;
 {
   This file is part of Synopse framework.
 
-  Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+  Synopse framework. Copyright (C) 2020 Arnaud Bouchez
   Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDBZeos;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -50,11 +50,6 @@ unit SynDBZeos;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.18
-  - first public release, corresponding to mORMot framework 1.18
-  - PostgreSQL array binding for select statements like
-     SELECT usr.ID, usr.name FROM user usr WHERE usr.ID = ANY(?)
-     work with all ZEOS versions
 }
 
 (*
@@ -1089,7 +1084,7 @@ begin
       case VType of
       ftNull:     fStatement.SetNull(i+FirstDbcIndex,stUnknown);
       ftInt64:    fStatement.SetLong(i+FirstDbcIndex,VInt64);
-      ftDouble:   fStatement.SetDouble(i+FirstDbcIndex,PDouble(@VInt64)^);
+      ftDouble:   fStatement.SetDouble(i+FirstDbcIndex,unaligned(PDouble(@VInt64)^));
       ftCurrency: {$ifdef ZEOS72UP}
                   fStatement.SetCurrency(i+FirstDbcIndex,PCurrency(@VInt64)^);
                   {$else}

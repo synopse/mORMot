@@ -28,7 +28,7 @@ HtmlSideBar=Overview/Meet the mORMot:SOURCE,Download/How to install:TITL_113,API
 ; the sidebar first links, for html export
 
 {\b Document License}
-{\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2019 Arnaud Bouchez.\line Synopse Informatique - @https://synopse.info
+{\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2020 Arnaud Bouchez.\line Synopse Informatique - @https://synopse.info
 The {\i Synopse mORMot Framework Source Code} is licensed under GPL / LGPL / MPL licensing terms, free to be included in any application.
 ;This documentation has been generated using {\i Synopse SynProject} - @https://synopse.info/fossil/wiki?name=SynProject
 ;This document is a free document; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
@@ -748,7 +748,8 @@ Feel free to give your feedback at @https://synopse.info/forum asking new questi
 {\b So far, I can see your {\i mORMot} fits most of the requirement, but seems only for Database Client-Server apps.}\line First of all, the framework is a {\i set of bricks}, so you can use it e.g. to build interface based services, even with no database at all. We tried to make its main features modular and uncoupled.
 {\b I am not a great fan of ORM, sorry, I still like SQL and have some experience of that. Some times sophisticated SQL query is hard to change to ORM code.}\line ORM can make development much easier; but you can use e.g. interface-based services and "manual" SQL statements - in this case, you have at hand @27@ classes in {\i mORMot}, which allow very high performance and direct export to JSON.
 {\b I am tempted by using an ORM, but {\i mORMot} forces you to inherit from a root {\f1\fs20 @*TSQLRecord@} type, whereas I'd like to use any kind of object.}\line We will discuss this in details @168@. Adding attributes to an existing class is tempting, but will pollute your code at the end, mixing persistence and business logic: see {\i @*Persistence Ignorance@} and {\i @*Aggregates@} @124@. The framework proposes a second level of {\i Object} mapping, allowing to persist any kind of {\i @*PODO@} ({\i Plain Old Delphi Object}), by defining @*CQRS@ services - see @167@.
-{\b Why are you not using the latest features of the compiler, like generics or class attributes?}\line Our ORM does not rely on {\i generics}, but on the power of the object pascal type system: specifying a {\f1\fs20 class} or {\f1\fs20 interface} type as parameter is safe and efficient - and generics tends to blow the executable size, lower down performance (the current RTL is not very optimized, and sometimes bugged), and hide implementation details. Some methods are available for newer version of the compiler, introducing access via generics; but it was not mandatory to depend on them. We also identified, as several Java or C# gurus, that {\f1\fs20 class} attributes may sound like a good idea, but tend to {\i pollute} the code, and introduce unexpected coupling. Last but not least, those features are incompatible with older version of Delphi we would like to support, and may reduce compatibility with @*FPC@.
+{\b I would like to replace pieces of delphi-code by using mORMot and the @*DDD@-concept in a huge system, but its legacy database doesn't have integer primary keys, and {\i mORMot} ORM expects a {\f1\fs20 TID}-like field.}\line By design, such legacy tables are not compatible with {\i SQLite3} virtual tables, or our ORM - unless you add an {\f1\fs20 ID} integer additional primary key, which may not be the best idea. Some hints: write a {\i persistence service} as {\f1\fs20 interface}/{\f1\fs20 class} (as required by DDD - see @124@); uncouple persistence and @*SOA@ services (i.e. the SOA {\f1\fs20 @*TSQLRestServer@} is a {\f1\fs20 @*TSQLRestServerFullMemory@} and not a DB/ORM {\f1\fs20 @*TSQLRestServerDB@}); reuse your existing SQL statements, with {\f1\fs20 SynDB} as access layer if possible (you will have better performance, and direct @*JSON@ support); use the ORM for @*MicroService@ local persistence (with {\i SQLite3}), and/or for new tables in your legacy DB (or another storage, e.g. @*MongoDB@).
+{\b Why are you not using the latest features of the compiler, like generics or class attributes?}\line Our framework does not rely on {\i generics}, but on the power of the object pascal type system: specifying a {\f1\fs20 class} or {\f1\fs20 interface} type as parameter is safe and efficient - and generics tends to blow the executable size, lower down performance (the current RTL is not very optimized, and sometimes bugged), and hide implementation details. Some methods are available for newer version of the compiler, introducing access via generics; but it was not mandatory to depend on them. We also identified, as several Java or C# gurus, that {\f1\fs20 class} attributes may sound like a good idea, but tend to {\i pollute} the code, and introduce unexpected coupling. Last but not least, those features are incompatible with older version of Delphi we would like to support, and may reduce compatibility with @*FPC@.
 {\b I also notice in your SAD doc, data types are different from Delphi. You have {\f1\fs20 RawUTF8}, etc, which make me puzzled, what are they?}\line You can for sure use standard {\i Delphi} {\f1\fs20 string} types, but some more optimized types were defined: since the whole framework is @*UTF-8@ based, we defined a dedicated type, which works with all versions of {\i Delphi}, before and after {\i Delphi} 2009. By the way, just search for {\f1\fs20 RawUTF8} in the {\i keyword index} of this document, or see @32@.
 {\b During my tests, my client receives non standard @*JSON@ with unquoted fields.}\line Internally, the framework uses JSON in {\i MongoDB} @*extended syntax@, i.e. fields are not quoted - this gives better performance and reduces memory and bandwidth with a {\i mORMot} client. To receive {\f1\fs20 "field":value} instead of {\f1\fs20 field:value}, just add a proper {\f1\fs20 @**User-Agent@} HTTP header to the client request (as any browser does), and the server will emit standard JSON.
 {\b When I work with floating points and JSON, sometimes numerical values with more than 4 decimals are converted into JSON strings.}\line By default, {\f1\fs20 double} values are disabled in the JSON serialization, to avoid any hidden precision lost during conversion: see @194@ how to enable it.
@@ -1394,9 +1395,8 @@ Faster and safer way of comparing two {\f1\fs20 @*currency@} values is certainly
 !begin
 !  result := A64-B64;
 !end;
-This will avoid any rounding error during comparison (working with *10000 integer values), and will be faster than the default implementation, which uses the FPU (or SSE2 under {\i x64} architecture) instructions.
-You some direct {\f1\fs20 currency} handling in the {\f1\fs20 SynCommons.pas} unit. It will by-pass the FPU use, and is therefore very fast.
-There are some functions using the {\f1\fs20 Int64} binary representation (accessible either as {\f1\fs20 PInt64(@aCurrencyVar)^} or the {\f1\fs20 absolute} syntax):
+This will avoid any rounding error during comparison (working with *10000 integer values), and is likely to be faster than the default implementation, which uses the FPU (or SSE2 under {\i x64} architecture) instructions.
+Some direct {\f1\fs20 currency} processing is available in the {\f1\fs20 SynCommons.pas} unit. It will by-pass the FPU use, and is therefore very fast.\line There are some functions using the {\f1\fs20 Int64} binary representation (accessible either as {\f1\fs20 PInt64(@aCurrencyVar)^} or the {\f1\fs20 absolute} syntax):
 - {\f1\fs20 function Curr64ToString(Value: Int64): string;}
 - {\f1\fs20 function StrToCurr64(P: PUTF8Char): Int64;}
 - {\f1\fs20 function Curr64ToStr(Value: Int64): RawUTF8;}
@@ -1404,6 +1404,7 @@ There are some functions using the {\f1\fs20 Int64} binary representation (acces
 - {\f1\fs20 function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;}
 Using those functions can be {\i much} faster for textual conversion than using the standard {\f1\fs20 FloatToText()} implementation. They are validated with provided regression tests.
 Of course, in normal code, it is certainly not worth using the {\f1\fs20 Int64} binary representation of {\f1\fs20 currency}, but rely on the default compiler/RTL implementation. In all cases, having optimized functions was a need for both speed and accuracy of our ORM data processing, and also for @27@.
+Note that we discovered some issue in the FPC compiler, when {\f1\fs20 currency} is used when compiling from {\i x64-win64}: {\f1\fs20 currency} values comparison may be wrongly implemented using {\i x87} registers: we found out that using a {\i i386-win32} FPC compiler is a safer approach, even targetting {\i x64-win64} - at least for the trunk in 2019/11.
 \page
 :48 TDynArray dynamic array wrapper
 Version 1.13 of the {\f1\fs20 SynCommons.pas} unit introduced two kinds of wrapper:
@@ -1696,14 +1697,15 @@ You can also allocate directly the {\f1\fs20 TDocVariantData} instance on stack,
 !  writeln(Doc2.ToJSON);         // will write '{"name":"Paul","birthyear":1982}'
 You do not need to protect the stack-allocated {\f1\fs20 TDocVariantData} instances with a {\f1\fs20 try..finally}, since the compiler will do it for your. Take a look at all the methods and properties of {\f1\fs20 TDocVariantData}.
 :   FPC restrictions
-You should be warning that with the {\i @*FreePascal@} compiler, calling late-binding functions with arguments (like {\f1\fs20 Add} or {\f1\fs20 Delete}) would most probably fail to work as expected.\line We have found out that the following code may trigger some random access violations:
+You should take note that with the {\i @*FreePascal@} compiler, calling late-binding functions with arguments (like {\f1\fs20 Add} or {\f1\fs20 Delete}) would most probably fail to work as expected.\line We have found out that the following code may trigger some random access violations:
 !  doc.Add('text');
 !  doc.Add(anotherdocvariant);
-So you should access instead directly the underlying :
+So you should rather access directly the underlying {\f1\fs20 TDocVariantData} instance:
 !  TDocVariantData(doc).AddItem('text');
 !  TDocVariantData(doc).AddItem(anotherdocvariant);
-Or using {\f1\fs20 _Safe()}:
-!  DocVariantData(doc)^.AddItem('text');
+Or even better using {\f1\fs20 _Safe()}:
+!  _Safe(doc)^.AddItem('text');
+!  _Safe(doc)^.AddItem(anotherdocvariant);
 In fact, late-binding functions arguments seem to work only for simple values (like {\f1\fs20 integer} or {\f1\fs20 double}), but not complex types (like {\f1\fs20 string} or other {\f1\fs20 TDocVariantData}), which generate some random GPF, especially when {\f1\fs20 heaptrc} paranoid memory checks are enabled.
 As a result, direct access to {\f1\fs20 TJSONVariantData} instances - preferably via {\f1\fs20 _Safe()}, and not a {\f1\fs20 variant} variable, will be faster and less error-prone when using FPC.
 :   Variant array documents
@@ -1870,8 +1872,8 @@ In addition to the default {\f1\fs20 @**TDateTime@} type, which will be serializ
 !type
 !  TDateTimeMS = type TDateTime;
 This {\f1\fs20 TDateTimeMS} type is handled both during {\f1\fs20 record} - see @51@ - and dynamic array - see @53@ - JSON serialization, and by the framework {\f1\fs20 @*ORM@}.
-:   TTimeLog
-The {\f1\fs20 SynCommons.pas} unit also defines a {\f1\fs20 @**TTimeLog@} type, and some functions able to convert to/from regular {\f1\fs20 TDateTime} values:
+:   TTimeLog and TTimeLogBits
+The {\f1\fs20 SynCommons.pas} unit defines a {\f1\fs20 @**TTimeLog@} type, and some functions able to convert to/from regular {\f1\fs20 TDateTime} values:
 !type
 !  TTimeLog = type Int64;
 This integer storage is encoded as a series of bits, which will map the {\f1\fs20 @**TTimeLogBits@} record type, as defined in {\f1\fs20 SynCommons.pas} unit.
@@ -1881,8 +1883,8 @@ The resolution of such values is one second. In fact, it uses internally for com
 - 12..16 bits will map {\i hours},
 - 17..21 bits will map {\i days} (minus one),
 - 22..25 bits will map {\i months} (minus one),
-- 26..38 bits will map {\i years}.
-The {\i ISO 8601} standard allows millisecond resolution, encoded as {\f1\fs20 hh:mm:ss.sss} or {\f1\fs20 hhmmss.sss}. Our {\f1\fs20 TTimeLog}/{\f1\fs20 TTimeLogBits} integer encoding uses a second time resolution, and a 64-bit integer storage, so is not able to handle such precision. You could use {\f1\fs20 @*TDateTimeMS@} values instead, if milliseconds are required.
+- 26..40 bits will map {\i years}.
+The {\i ISO 8601} standard allows millisecond resolution, encoded as {\f1\fs20 hh:mm:ss.sss} or {\f1\fs20 hhmmss.sss}. Our {\f1\fs20 TTimeLog}/{\f1\fs20 TTimeLogBits} integer encoding uses a second time resolution, and a 64-bit integer storage, so is not able to handle such precision. You could use {\f1\fs20 @*TDateTimeMS@} or {\f1\fs20 @*TUnixMSTime@} values instead, if milliseconds are required.
 Note that since {\f1\fs20 TTimeLog} type is bit-oriented, you can't just use {\i add} or {\i subtract} two {\f1\fs20 TTimeLog} values when doing such date/time computation: use a {\f1\fs20 TDateTime} temporary conversion in such case. See for instance how the {\f1\fs20 TSQLRest.ServerTimestamp} property is computed:
 !function TSQLRest.GetServerTimestamp: TTimeLog;
 !begin
@@ -1901,15 +1903,16 @@ Due to compiler limitation in older versions of {\i Delphi}, direct typecast of 
 ! function TimeLogToDateTime(const Timestamp: TTimeLog): TDateTime; overload;
 ! function Iso8601ToTimeLog(const S: RawByteString): TTimeLog;
 See @174@ for additional information about this {\f1\fs20 TTimeLog} storage, and how it is handled by the framework @*ORM@, via the additional {\f1\fs20 @*TModTime@} and {\f1\fs20 @*TCreateTime@} types.
-:   TUnixTime
-As an alternative, you may use the {\f1\fs20 @**TUnixTime@} type, which is a 64-bit encoded number of seconds since the Unix Epoch, i.e. 1970-01-01 00:00:00 UTC:
+:   TUnixTime and TUnixMSTime
+You may consider the {\f1\fs20 @**TUnixTime@} type, which holds a 64-bit encoded number of {\i seconds} since the Unix Epoch, i.e. 1970-01-01 00:00:00 UTC:
 !type
 !  TUnixTime = type Int64;
 You can convert such values:
 - to/from {\f1\fs20 TTimeLog} values using {\f1\fs20 TTimeLogBits.ToUnixTime} and {\f1\fs20 TTimeLogBits.FromUnixTime} methods;
 - to/from {\f1\fs20 TDateTime} values using {\f1\fs20 UnixTimeToDateTime}/{\f1\fs20 DateTimeToUnixTime} functions;
 - using {\f1\fs20 UnixTimeUTC} to return the current timestamp, calling very fast OS API.
-You may consider using {\f1\fs20 TUnixTime} especially if the timestamp is likely to be handled in third-party clients following this encoding. In the Delphi world, {\f1\fs20 TDateTime} or {\f1\fs20 TTimeLog} types could be preferred.
+An alternative {\f1\fs20 @*TUnixMSTime@} type is also available, which stores the date/time as a 64-bit encoded number of {\i milliseconds} since the Unix Epoch, i.e. 1970-01-01 00:00:00 UTC. Milliseconds resolution may be handy in some cases, especially when {\f1\fs20 TTimeLog} second resolution is not enough, and you want a more standard encoding than Delphi's {\f1\fs20 TDateTime}.
+You may consider using {\f1\fs20 TUnixTime} and {\f1\fs20 TUnixMSTime} especially if the timestamp is likely to be handled by third-party clients following this C/C#/Java/JavaScript encoding. In the Delphi world, {\f1\fs20 TDateTime}, {\f1\fs20 TDateTimeMS} or {\f1\fs20 TTimeLog} types could be preferred.
 :176  Time Zones
 One common problem when handling dates and times, is that common time is shown and entered as {\i local}, whereas the computer should better use non-geographic information - especially on a Client-Server architecture, where both ends may not be on the same physical region.
 A {\i @**time zone@} is a region that observes a uniform standard time for legal, commercial, and social purposes. Time zones tend to follow the boundaries of countries and their subdivisions because it is convenient for areas in close commercial or other communication to keep the same time. Most of the time zones on land are offset from {\i Coordinated Universal Time} (@**UTC@) by a whole number of hours, or minutes. Even worse, some countries use daylight saving time for part of the year, typically by changing clocks by an hour, twice every year.
@@ -2253,6 +2256,7 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\f1\fs20 @*TModTime@}|INTEGER|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 @*TCreateTime@}|INTEGER|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 @*TUnixTime@}|INTEGER|timestamp stored as second-based Unix Time (i.e. the 64-bit number of seconds since 1970-01-01 00:00:00 UTC)
+|{\f1\fs20 @*TUnixMSTime@}|INTEGER|timestamp stored as millisecond-based Unix Time (i.e. the 64-bit number of milliseconds since 1970-01-01 00:00:00 UTC)
 |{\f1\fs20 @*TSQLRecord@}|INTEGER|32-bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - 64-bit under {\i Win64}
 |{\f1\fs20 @*TID@}|INTEGER|64-bit {\f1\fs20 RowID} pointing to another record, but without any information about the corresponding table
 |{\f1\fs20 @*TSQLRecordMany@}|nothing|data is stored in a separate {\i pivot} table; this is a particular case of {\f1\fs20 TSQLRecord}: it won't contain {\f1\fs20 pointer(RowID)}, but an instance)
@@ -2322,7 +2326,7 @@ For additional information about @*UTF-8@ handling in the framework, see @32@.
 As alternatives, {\f1\fs20 @*TTimeLog@ / @**TModTime@ / @**TCreateTime@} offer a proprietary fast {\f1\fs20 Int64} date time format, which will map the {\f1\fs20 @*TTimeLogBits@} record type, as defined in {\f1\fs20 SynCommons.pas} unit.
 This format will be very fast for comparing dates or convert into/from text, and will be stored as INTEGER in the database, therefore more efficiently than plain ISO 8601 text as for {\f1\fs20 TDateTime} fields.
 In practice, {\f1\fs20 TModTime} and {\f1\fs20 TCreateTime} values are inter-exchangeable with {\f1\fs20 TTimeLog}. They are just handled with a special care by the ORM, so that their associated field value will be updated with the current UTC timestamp, for every {\f1\fs20 TSQLRecord} modification (for {\f1\fs20 TModTime}), or at entry creation (for {\f1\fs20 TCreateTime}). The time value stored is in fact the UTC timestamp, as returned from the current REST Server: in fact, when any REST client perform a connection, it will retrieve any time offset from the REST Server, which will be used to store a consistent time value across all Clients.
-You may also define a {\f1\fs20 @*TUnixTime@} property, which will store the number of seconds since 1970-01-01 00:00:00 UTC as INTEGER in the database, and serialized as 64-bit JSON number. This encoding has the benefit of being handled by {\i SQlite3} date/time functions, and interoperable with most third-party languages.
+You may also define a {\f1\fs20 @*TUnixTime@} property, which will store the number of seconds since 1970-01-01 00:00:00 UTC as INTEGER in the database, and serialized as 64-bit JSON number - or {\f1\fs20 @*TUnixMSTime@} if you expect milliseconds resolution. This encoding has the benefit of being handled by {\i SQlite3} date/time functions, and interoperable with most third-party languages.
 :  TSessionUserID field
 If you define a {\f1\fs20 @**TSessionUserID@} published property, this field will be automatically filled at creation or modification of the {\f1\fs20 TSQLRecord} with the current {\f1\fs20 TSQLAuthUser.ID} value of the active session. If no session has been initialized from the client side, {\f1\fs20 0} will be stored.
 By design, and similar to {\f1\fs20 @*TModTime@} fields, you should use the @*ORM@ PUT/POST @*CRUD@ methods to compute this field value: manual SQL statements (like {\f1\fs20 UPDATE Table SET Column=0}) won't set its content. Also, it is up to the client to fill the {\f1\fs20 TSessionUserID} fields before sending their content to the server - the Delphi and cross-platform ORM clients will perform this assignment.
@@ -2589,7 +2593,7 @@ Any {\f1\fs20 @*TDateTime@} bound parameter shall better be specified using {\f1
 ! aRec.CreateAndFillPrepare(Client,'Datum>=?',[DateToSQL(2012,5,4)]);
 ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[DateTimeToSQL(Now)]);
 ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[TimeLogToSQL(Client.ServerTimestamp)]);
-For {\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@ / @*TUnixTime@} kind of properties, please use the underlying {\f1\fs20 Int64} value as bound parameter.
+For {\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@ / @*TUnixTime@ / @*TUnixMSTime@} kind of properties, please use the underlying {\f1\fs20 Int64} value as bound parameter.
 As stated previously, @*BLOB@ (i.e. {\f1\fs20 sftBlob} or {\f1\fs20 @*TSQLRawBlob@}) properties are handled separately, via dedicated {\f1\fs20 RetrieveBlob} and {\f1\fs20 UpdateBlob} method calls (or their global {\f1\fs20 RetrieveBlobFields} / {\f1\fs20 UpdateBlobFields} twins). In fact, BLOB data is expected to be potentially big (more than a few MB). But you can specify a small BLOB content using an explicit conversion to the corresponding TEXT format, by calling {\f1\fs20 @*BinToBase64WithMagic@()} overloaded functions when preparing an UPDATE query, or by defining a {\f1\fs20 TByteDynArray} published field instead of {\f1\fs20 TSQLRawBlob}.\line See also {\f1\fs20 @*ForceBlobTransfert@} and {\f1\fs20 ForceBlobTransfertTable[]} properties of {\f1\fs20 TSQLRestClientURI}.
 Note that there was a {\i breaking change} about the {\f1\fs20 TSQLRecord.Create / FillPrepare  / CreateAndFillPrepare} and {\f1\fs20 TSQLRest.OneFieldValue / MultiFieldValues} methods: for historical reasons, they expected parameters to be marked as {\f1\fs20 %} in the SQL WHERE clause, and inlined via {\f1\fs20 :(...):} as stated @61@ - since revision 1.17 of the framework, those methods expect parameters marked as {\f1\fs20 ?} and with no {\f1\fs20 :(...):}. Due to this {\i breaking change}, user code review is necessary if you want to upgrade the engine from 1.16 or previous. In all cases, using {\f1\fs20 ?} is less confusing for new users, and more close to the usual way of preparing database queries - e.g. as stated @27@. Both {\f1\fs20 TSQLRestClient.ExecuteFmt / ListFmt} methods are not affected by this change, since they are just wrappers to the {\f1\fs20 FormatUTF8()} function.
 For the most complex codes, you may want to prepare ahead the WHERE clause of the ORM request. You may use the overloaded {\f1\fs20 FormatUTF8()} function as such:
@@ -3445,7 +3449,7 @@ In order to make this easy, a dedicated set of classes are available in the {\f1
 \TSynValidate\TSynFilterOrValidate
 \TSynFilter\TSynFilterOrValidate
 \
-{\f1\fs20 @*TSQLRecord@} field content {\i filtering} is handled in the {\f1\fs20 TSQLRecord. Filter} virtual method, or via some {\f1\fs20 TSQLFilter} classes. They will {\i transform} the object fields following some rules, e.g. forcing uppercase/lowercase, or triming text spaces.
+{\f1\fs20 @*TSQLRecord@} field content {\i filtering} is handled in the {\f1\fs20 TSQLRecord. Filter} virtual method, or via some {\f1\fs20 TSQLFilter} classes. They will {\i transform} the object fields following some rules, e.g. forcing uppercase/lowercase, or trimming text spaces.
 {\f1\fs20 TSQLRecord} field content {\i validation} is handled in the {\f1\fs20 TSQLRecord. Validate} virtual method, or via some {\f1\fs20 TSQLValidate} classes. Here the object fields will be checked against a set of rules, and report any invalid content.
 Some "standard" classes are already defined in the {\f1\fs20 SynCommons.pas} and {\f1\fs20 mORMot.pas} units, covering most common usage:
 \graph HierTSynFilters Default filters and Validation classes hierarchy
@@ -4074,7 +4078,7 @@ This framework uses a compiled version of the official {\i SQLite3} library sour
 - Locking of the database at the record level ({\i SQLite3} only handles file-level locking);
 - Of course, the main enhancement added to the {\i SQLite3} engine is that it can be deployed in a @*stand-alone@ or @*Client-Server@ architecture, whereas the default {\i SQLite3} library works only in stand-alone mode.
 From the technical point of view, here are the current compilation options used for building the {\i SQLite3} engine:
-- Uses @*ISO 8601@:2004 format to properly handle date/time values in TEXT field, or in faster and smaller {\f1\fs20 Int64} custom types ({\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@} or {\f1\fs20 @*TUnixTime@});
+- Uses @*ISO 8601@:2004 format to properly handle date/time values in TEXT field, or in faster and smaller {\f1\fs20 Int64} custom types: {\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@} or {\f1\fs20 @*TUnixTime@} / {\f1\fs20 @*TUnixMSTime@};
 - {\i SQLite3} library unit was compiled including @*RTREE@ extension for doing very fast range queries;
 - It can include @*FTS@3/FTS4 @*full text@ search engine (MATCH operator), with integrated @*SQL@ optimized ranking function;
 - The framework makes use only of newest API ({\f1\fs20 sqlite3_prepare_v2}) and follows latest {\i SQLite3} official documentation;
@@ -6076,7 +6080,7 @@ A similar feature is tested for the {\f1\fs20 CreatedAt} published field, which 
 :120  Database-first ORM
 As we have just seen, the following line initializes the ORM to let {\f1\fs20 TSQLRecordPeopleExt} data be accessed via SQL, over an external database connection {\f1\fs20 fProperties}:
 !VirtualTableExternalRegister(fExternalModel,TSQLRecordPeopleExt,fProperties,'PeopleExternal');
-We also customized the name of the external table, from its default {\f1\fs20 'PeopleExt'} (computed by timing {\f1\fs20 TSQLRecord} prefix from {\f1\fs20 TSQLRecordPeopleExt}) into {\f1\fs20 'PeopleExternal'}.
+We also customized the name of the external table, from its default {\f1\fs20 'PeopleExt'} (computed by trimming {\f1\fs20 TSQLRecord} prefix from {\f1\fs20 TSQLRecordPeopleExt}) into {\f1\fs20 'PeopleExternal'}.
 In addition to table name @**mapping@, the ORM is also able to map the {\f1\fs20 TSQLRecord} published properties names to any custom database column name. It is in fact very common that most tables on existing databases to not have very explicit column naming, which may sounds pretty weird when mapped directly as {\f1\fs20 TSQLRecord} property names. Even the @*primary key@s of your existing database won't match the ORM's requirement of naming it as {\f1\fs20 ID}. All this should be setup as expected.
 By default, for a {\i code-driven} approach, internal property names will match the external table column names - see @%%TSQLRecordPeopleExtDefaultMapping@
 You can customize this default mapping, writing e.g.
@@ -6563,6 +6567,7 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 @*TModTime@}|int64|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 @*TCreateTime@}|int64|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 @*TUnixTime@}|datetime|seconds since Unix epoch
+|{\f1\fs20 @*TUnixMSTime@}|datetime|milliseconds since Unix epoch
 |{\f1\fs20 @*TSQLRecord@}|int32|32-bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - is 64-bit on {\i Win64}
 |{\f1\fs20 @*TID@}|int32/int64|{\f1\fs20 RowID} pointing to another record - this kind of property is 64-bit compatible, so can handle values up to 9,223,372,036,854,775,808
 |{\f1\fs20 @*TSQLRecordMany@}|nothing|data is stored in a separate {\i pivot} table; for MongoDB, you should better use {\i data sharding}, and an embedded sub-document
@@ -6872,7 +6877,7 @@ Therefore, the writer callback could be:
 In the above code, the {\f1\fs20 cardinal} field named {\f1\fs20 Timestamp} is type-casted to a {\f1\fs20 Int64}: in fact, as stated by the documentation of the {\f1\fs20 AddJSONEscape} method, an {\f1\fs20 array of const} will handle by default any {\f1\fs20 cardinal} as an {\f1\fs20 integer} value (this is a limitation of the {\i Delphi} compiler). By forcing the type to be an {\f1\fs20 Int64}, the expected {\f1\fs20 cardinal} value will be transmitted, and not a wrongly negative versions for numbers {\f1\fs20 > $7fffffff}.
 On the other side, the corresponding reader callback will be like:
 !class function TTestServiceOrientedArchitecture.CustomReader(P: PUTF8Char;
-!  var aValue; out aValid: Boolean): PUTF8Char;
+!  var aValue; out aValid: Boolean; aCustomVariantOptions: PDocVariantOptions): PUTF8Char;
 !var V: TSQLRestCacheEntryValue absolute aValue;
 !    Values: array[0..2] of TValuePUTF8Char;
 !begin
@@ -9148,7 +9153,7 @@ Similarly, you may add a dependency to the VCL, via a reference to the {\f1\fs20
 !!  Vcl.Forms,
 !  mORMot,
 !  ...
-If you later want to use {\f1\fs20 @*FMX@}, or {\f1\fs20 LCL} (from @*Lazarus@) in your application, or want to use your {\f1\fs20 MyDataModel} unit on a pure server application without any GUI, you are stuck. The new {\i Windows @*Nano Server@} architecture, which targets the @*Cloud@ and won't offer any GUI to the server applications, will even be very sensitive to the dependency chain of the executable.
+If you later want to use {\f1\fs20 @*FMX@}, or {\f1\fs20 LCL} (from @*Lazarus@) in your application, or want to use your {\f1\fs20 MyDataModel} unit on a pure server application without any GUI, hosted on Windows - or even better on Linux/BSD - you are stuck.
 Note that if you are used to developed in RAD mode, the units generated by the IDE wizards come with some default references in the {\f1\fs20 uses} clause of the generated {\f1\fs20 .pas} file. So take care of not introducing any coupling to your own business code!
 As a general rule, our ORM/SOA framework source code tries to avoid such dependencies. All OS-specificities are centralized in our {\f1\fs20 SynCommons.pas} unit, and there is no dependency to the VCL when it is not mandatory, e.g. in {\f1\fs20 mORMot.pas}.
 Following the RAD approach, you may start from your UI, i.e. defining the needed classes in the unit where you visual form (may be VCL or FMX) is defined. Don't follow this tempting, but dangerous path!
@@ -12708,7 +12713,7 @@ Internal partials (one of the {\f1\fs20 SynMustache} extensions), can be defined
 !  // now html='1'#$A'234','internal partials'
 :    Expression Helpers
 {\i @**Expression Helper@s} are an extension to the standard {\i Mustache} definition. They allow to define your own set of functions which will be called during the rendering, to transform one value from the context into a value to be rendered.
-{\f1\fs20 TSynMustache.HelpersGetStandardList} will return a list of standard static helpers, able to convert {\f1\fs20 @*TDateTime@} or {\f1\fs20 @*TTimeLog@} values into text, or convert any value into its @*JSON@ representation. The current list of registered helpers are {\f1\fs20 DateTimeToText}, {\f1\fs20 DateToText}, {\f1\fs20 DateFmt}, {\f1\fs20 TimeLogToText}, {\f1\fs20 BlobToBase64}, {\f1\fs20 JSONQuote}, {\f1\fs20 JSONQuoteURI}, {\f1\fs20 ToJSON}, {\f1\fs20 EnumTrim}, {\f1\fs20 EnumTrimRight}, {\f1\fs20 PowerOfTwo} , {\f1\fs20 Equals}, {\f1\fs20 If} and {\f1\fs20 WikiToHtml}. For instance, {\f1\fs20 \{\{TimeLogToText CreatedAt\}\}} will convert a {\f1\fs20 TCreateTime} field value into ready-to-be-displayed text.
+{\f1\fs20 TSynMustache.HelpersGetStandardList} will return a list of standard static helpers, able to convert {\f1\fs20 @*TDateTime@} or {\f1\fs20 @*TTimeLog@} values into text, or convert any value into its @*JSON@ representation. The current list of registered helpers are {\f1\fs20 DateTimeToText}, {\f1\fs20 DateToText}, {\f1\fs20 DateFmt}, {\f1\fs20 TimeLogToText}, {\f1\fs20 BlobToBase64}, {\f1\fs20 JSONQuote}, {\f1\fs20 JSONQuoteURI}, {\f1\fs20 ToJSON}, {\f1\fs20 EnumTrim}, {\f1\fs20 EnumTrimRight}, {\f1\fs20 PowerOfTwo} , {\f1\fs20 Equals}, {\f1\fs20 If}, {\f1\fs20 MarkdownToHtml}, {\f1\fs20 SimpleToHtml} and {\f1\fs20 WikiToHtml}. For instance, {\f1\fs20 \{\{TimeLogToText CreatedAt\}\}} will convert a {\f1\fs20 TCreateTime} field value into ready-to-be-displayed text.
 The mustache tag syntax is  {\f1\fs20 \{\{helpername value\}\}}. The supplied {\f1\fs20 value} parameter may be a variable name in the current context, or could be a constant number ({\f1\fs20 \{\{helpername 123\}\}}), a constant JSON string ({\f1\fs20 \{\{helpername "constant text"\}\}}), a JSON array ({\f1\fs20 \{\{helpername [1,2,3]\}\}}) or a JSON object ({\f1\fs20 \{\{helpername \{name:"john",age:24\}\}\}}). The value could be also a comma-seperated set of values, which will be translated into a corresponding JSON array, the values being extracted from the current context, as with {\f1\fs20 \{\{DateFmt DateValue,"dd/mm/yyy"\}\}}.
 You could call recursively the helpers, just like you nest functions: {\f1\fs20 \{\{helper1 helper2 value\}\}} will call {\f1\fs20 helper2} with the supplied {\f1\fs20 value}, which result will be passed as value to {\f1\fs20 helper1}.
 But you can create your own list of registered {\i Expression Helpers}, even including some business logic, to compute any data during rendering, via {\f1\fs20 TSynMustache.HelperAdd} methods.
@@ -12759,6 +12764,8 @@ This latest syntax may it pretty convenient to work with. Of course, since {\i M
 ${{#isNumber6}} Welcome, number six! {{/isNumber6}}
 ${{#showLoyaltyMessage}} Thanks for your income: your loyalty will be rewarded. {{/#showLoyaltyMessage}}
 ${{#showWarning}} Warning: {{info}} {{/#showWarning}}
+Helpers can be used to convert some {\i @*wiki@} or {\i @*markdown@} content into plain HTML, for instance, in the MVC blog sample, a {\f1\fs20 ContentHtml} boolean flag defines if a content (here the {\f1\fs20 abstract} text field) is already HTML-encoded, or if it needs to be converted via the {\f1\fs20 WikiToHtml} helper:
+${{#ContentHtml}}{{{abstract}}}{{/ContentHtml}}{{^ContentHtml}}{{{WikiToHtml abstract}}}{{/ContentHtml}}
 The framework also offers some built-in optional {\i Helpers} tied to its @*ORM@, if you create a MVC @*web application@ using {\f1\fs20 mORMotMVC.pas} - see @108@ - you can register a set of {\i Expression Helpers} to let your {\i Mustache} view retrieve a given {\f1\fs20 TSQLRecord}, from its ID, or display a given instance fields in an auto-generated table.
 For instance, you may write:
 ! aMVCMustacheView.RegisterExpressionHelpersForTables(aRestServer,[TSQLMyRecord]);
@@ -16427,6 +16434,13 @@ Don't forget to select the {\i trunk} versions for both FPC and Lazarus versions
 Those revisions are currently used for building our production projects, so are expected to be properly tested and supported.
 Then build the FPC and Lazarus binaries directly from the latest sources. One big advantage of {\i fpcupdeluxe} is that you can very easily install cross-compilers for the CPU / OS combinations enumerated at @202@.
 You could install {\i mORMot} using {\i fpcupdeluxe}, but we recommend you clone our @https://github.com/synopse/mORMot repository, and setup the expected project paths, as detailed above at @113@.
+If you don't want to define a given version, the current {\i trunk} should/could work, if it didn't include any regression at the time you get it - this is why we provide "supported" SVN revisions.\line If you want to use the {\i FPC trunk}, please modify line #262 in {\f1\fs20 Synopse.inc} to enable the {\f1\fs20 FPC_PROVIDE_ATTR_TABLE} conditional and support the latest trunk RTTI changes:
+!  {$if not defined(VER3_0) and not defined(VER3_2) and not defined(VER2)}
+!!    {$define FPC_PROVIDE_ATTR_TABLE} // to be defined since SVN 42356-42411
+!    // on compilation error in SynFPCTypInfo, undefine the above conditional
+!    // see https://lists.freepascal.org/pipermail/fpc-announce/2019-July/000612.html
+!  {$ifend}
+Sadly, there is no official conditional available to have this RTTI change detected. You need to define globally this conditional.
 :  Missing RTTI for interfaces in old FPC 2.6
 Sadly, if you use a somewhat old revision of FPC, you may have to face some long-time unresolved FPC compiler-level restriction/issue, which did not supply the needed {\f1\fs20 interface} RTTI, which was available since Delphi 6 - see @http://bugs.freepascal.org/view.php?id=26774 \line As a consequence, SOA, mock/stub and MVC framework features will not work directly with older FPC revisions.
 You could upgrade to a more recent FPC - we encourage you to @203@ - or we will propose here a workaround to compile such {\i mORMot} applications with oldest FPC. The trick is to use Delphi to generate one unit containing the needed information.
@@ -18449,7 +18463,7 @@ But please do not forget to put somewhere in your credit window or documentation
 For instance, if you select the MPL license, here are the requirements:
 - You accept the license terms with no restriction - see @http://www.mozilla.org/MPL/2.0/FAQ.html for additional information;
 - You have to publish any modified unit (e.g. {\f1\fs20 SynTaskDialog.pas}) in a public web site (e.g. {\f1\fs20 http://SoftwareCompany.com/MPL}), with a description of applied modifications, and no removal of the original license header in source code;
-- You make appear some notice available in the program (About box, documentation, online help), stating e.g.\line {\i This software uses some third-party code of the Synopse mORMot framework (C) 2019 Arnaud Bouchez - {\f1\fs20 https://synopse.info} - under Mozilla Public License 1.1; modified source code is available at {\f1\fs20 http://SoftwareCompany.com/MPL}.}
+- You make appear some notice available in the program (About box, documentation, online help), stating e.g.\line {\i This software uses some third-party code of the Synopse mORMot framework (C) 2020 Arnaud Bouchez - {\f1\fs20 https://synopse.info} - under Mozilla Public License 1.1; modified source code is available at {\f1\fs20 http://SoftwareCompany.com/MPL}.}
 : Derivate Open Source works
 If you want to include part of the framework source code in your own open-source project, you may publish it with a comment similar to this one (as included in the great {\i DelphiWebScript} project by Eric Grange - @http://code.google.com/p/dwscript ):
 ${
@@ -18462,7 +18476,7 @@ $
 $    Sample based on official mORMot's sample
 $    "SQLite3\Samples\09 - HttpApi web server\HttpApiServer.dpr"
 $
-$    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+$    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
 $      Synopse Informatique - https://synopse.info
 $
 $    Original tri-license: MPL 1.1/GPL 2.0/LGPL 2.1

@@ -6,7 +6,7 @@ unit dddInfraApps;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit dddInfraApps;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -45,11 +45,8 @@ unit dddInfraApps;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.18
-  - first public release, corresponding to Synopse mORMot Framework 1.18
-
   TODO:
-   - store settings in database
+   - store settings in database, or a centralized service?
    - allow to handle authentication via a centralized service or REST server
 
 }
@@ -843,7 +840,7 @@ var
 begin
   tix := GetTickCount64 + TimeoutMS;
   repeat
-    sleep(50);
+    SleepHiRes(50);
     result := Daemon <> nil;
   until result or (GetTickCount64 > tix);
 end;
@@ -959,12 +956,12 @@ var
     end
     else begin
       error := GetLastError;
-      msg := FormatUTF8('Error % "%" occured with',
+      msg := FormatUTF8('Error % [%] occured with',
         [error, StringToUTF8(SysErrorMessage(error))]);
       TextColor(ccLightRed);
       ExitCode := 1; // notify error to caller batch
     end;
-    msg := FormatUTF8('% "%" (%) on Service "%"',
+    msg := FormatUTF8('% [%] (%) on Service [%]',
       [msg, param, cmdText, fSettings.ServiceName]);
     writeln(msg);
     AppendToTextFile(ExeVersion.User + ' ' +msg,
@@ -1346,7 +1343,7 @@ begin
   Terminate;
   timeOut := GetTickCount64 + 10000;
   repeat // wait until properly disconnected from remote TCP server
-    Sleep(10);
+    SleepHiRes(10);
   until (fMonitoring.State = tpsDisconnected) or (GetTickCount64 > timeOut);
   inherited Destroy;
   if fMonitoring.fOwner=self then
@@ -1495,7 +1492,7 @@ begin
       else if fPerformConnection then
         ExecuteConnect
       else
-        sleep(100);
+        SleepHiRes(100);
       if Terminated then
         break;
       try
@@ -1555,7 +1552,7 @@ begin
     fRest.LogClass.Add.Log(sllDebug, 'Shutdown: % will stop any communication ' +
       'with %:%', [ClassType, fHost, fPort], self);
     if andTerminate and not Terminated then begin
-      sleep(100);
+      SleepHiRes(100);
       Terminate;
       WaitFor;
     end;
@@ -1659,7 +1656,7 @@ function TDDDSynCrtSocket.DataInPending(aTimeOut: integer): integer;
 begin
   fSafe.Lock;
   try
-    result := fSocket.SockInPending(aTimeOut,true); // aSocketForceCheck=true
+    result := fSocket.SockInPending(aTimeOut,{aPendingAlsoInSocket=}true);
   finally
     fSafe.UnLock;
   end;
@@ -1761,7 +1758,7 @@ begin
     if (result <> 0) or ((fOwner <> nil) and TSQLRestThread(fOwner).Terminated)
       or (aTimeOut = 0) then
       break;
-    sleep(1); // emulate blocking process, just like a regular socket
+    SleepHiRes(1); // emulate blocking process, just like a regular socket
     if (fOwner <> nil) and TSQLRestThread(fOwner).Terminated then
       break;
   until GetTickCount64 > endTix; // warning: 10-16 ms resolution under Windows
@@ -1878,9 +1875,8 @@ begin
   finally
     fSafe.UnLock; // wait outside the instance lock
   end;
-  while (waitMS > 0) and not ((fOwner <> nil) and TSQLRestThread(fOwner).Terminated)
-    do begin
-    sleep(1); // do not use GetTickCount64 (poor resolution under Windows)
+  while (waitMS > 0) and not ((fOwner <> nil) and TSQLRestThread(fOwner).Terminated) do begin
+    SleepHiRes(1); // do not use GetTickCount64 (poor resolution under Windows)
     dec(waitMS);
   end;
 end;

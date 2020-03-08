@@ -6,7 +6,7 @@ unit dddInfraEmailer;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit dddInfraEmailer;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -44,9 +44,6 @@ unit dddInfraEmailer;
   the terms of any one of the MPL, the GPL or the LGPL.
 
   ***** END LICENSE BLOCK *****
-
-  Version 1.18
-  - first public release, corresponding to Synopse mORMot Framework 1.18
 
 }
 
@@ -358,7 +355,7 @@ begin
     readln(fSocket.SockIn^,Res);
   until (Length(Res)<4)or(Res[4]<>'-');
   if not IdemPChar(pointer(Res),pointer(Answer)) then
-    raise ECrtSocket.CreateFmt('returned "%s", expecting "%s"',[Res,Answer]);
+    raise ECrtSocket.CreateFmt('returned [%s], expecting [%s]',[Res,Answer]);
 end;
 
 procedure TSMTPServerSocketConnection.Exec(const Command,
@@ -406,8 +403,8 @@ begin
       result := ''; // for success
     except
       on E: Exception do
-        result := FormatUTF8('%.SendEmail(%:%) server failure "%" (%)',
-          [self,fOwner.Address,fOwner.Port,E.Message,E]);
+        result := FormatUTF8('%.SendEmail(%:%) server failure % [%]',
+          [self,fOwner.Address,fOwner.Port,E,E.Message]);
     end;
 end;
 

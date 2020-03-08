@@ -6,7 +6,7 @@ unit SynPdf;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynPdf;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -73,222 +73,6 @@ unit SynPdf;
     Easy to use yet powerful help authoring environment which can generate
     various documentation formats from a single source.
   Thanks for your contribution!
-
-
-
-  Version 1.7
-  - first public release, corresponding to SQLite3 Framework 1.7
-
-  Version 1.7.2
-  - can use the Windows Uniscribe API to render Ordering and Shaping of the text
-    (see USE_UNISCRIBE conditional below)
-
-  Version 1.7.3
-  - issue corrected in TPdfEnum.DrawBitmap() method - occured e.g. when drawing
-    a bitmap using a VCLCanvas
-  - rare issue corrected in TPdfWrite.AddUnicodeHexTextUniScribe() method
-
-  Version 1.7.4
-  - added TPdfBox with Width and Height properties
-  - minor corrections in Uniscribe part of the rendering engine
-
-  Version 1.7.4.RTL
-  - added RightToLeftText property in TPdfCanvas (Uniscribe-only)
-  - handle ETO_RTLREADING option (Uniscribe-only) in VCLCanvas/TMetaFile
-
-  Version 1.8
-  - font substitution if the font is not existing in the system (worse case
-    will use Arial for all fonts)
-  - now handle ETO_GLYPH_INDEX in metafile rendering
-
-  Version 1.8.1 - features added by contribution of REDDWARF / ONDREJ - THANKS!
-  - new feature: allow forced JPEG compression for graphics
-  - new feature: UNDERLINE + STRIKEOUT support (also in RICH TEXT and rotated text !)
-  - new USE_SYNGDIPLUS conditional if you want to use the default jpeg unit
-    instead of our SynGdiPlus (but you loose TIF, PNG, and GIF support)
-  - enhanced: PenWidth changed to Single -> better precision (e.g. for underlined text)
-  - fix issue: Rotated text was misplaced for some angles
-  - some small fixes about FillRect() + scaling, and move/line stroke
-  - REDDWARF / ONDREJ made a very good work - I had very few thinks to rewrite
-
-  Version 1.8.2
-  - added optional XOff,YOff parameters to RenderMetaFile()
-
-  Version 1.8.3
-  - now handle EMR_STRETCHDIBITS (used in Html2Pdf)
-  - fix strike out line position (was too low)
-
-  Version 1.8.4
-  - fixed TextWidth() and TextMeasure()
-
-  Version 1.8.5
-  - fixed font enumeration problem (triggered with asiatic windows)
-
-  Version 1.8.6
-  - system font enumeration is now stored using UTF-8, and any non ASCII font
-    name will used in the PDF content the official Postscript name extracted
-    from its TrueType font content
-  - optional charset parameter is now available in TPdfCanvas.SetFont: this
-    was needed in case of TMetaFile rendering to fix some encoding problems
-
-  Version 1.8.7
-  - bitmap embedding fix - see https://synopse.info/forum/viewtopic.php?pid=237
-  - now initializes the Gdi+ library if necessary
-
-  Version 1.8.8
-  - fix small issue with font orientation in metafile enumeration
-
-  Version 1.10
-  - new TPdfImage.CreateJpegDirect method and PixelWidth/PixelHeight properties
-
-  Version 1.11
-  - unit won't need Printers unit any more (so can get rid of Forms and others)
-  - source code modified to be 7 bit Ansi (so will work with all encodings)
-
-  Version 1.12
-  - can now generate PDF/A-1 files if the new PDFA1 property is set to true
-  - new CreateLink and CreateBookMark methods for TPdfDocument, to easily
-    handle bookmarks and links
-  - new CreateOutline method for TPdfDocument, for direct outline adding
-  - new TPdfPage.PageLandscape and TPdfDocument.DefaultPageLandscape properties
-  - can use EMR_GDICOMMENT to embedd some SynPDF related data (like bookmarks,
-    links, and document outline) in the source TMetaFile - used by TSQLite3Pages
-  - new TPdfTextString class, used to handle Unicode parameters (e.g. in
-    TPdfInfo, which properties are now handling unicode encoding as expected)
-  - new CreateOrGetImage method to easily add a bitmap to the page, with
-    internal caching: if the same bitmap content is sent more than once, only
-    one TPDFImage will be used (used for emf enumeration, e.g. SQLite3Pages)
-  - now handle justified text from metafile (i.e. call to SetTextJustification
-    Windows API will change the PDF word space as expected)
-  - Uniscribe API now made public (and documented as such), for TRenderPages
-  - fixed memory leak in TPdfOutlineRoot.Create
-  - fixed issue in TPdfDocumentGDI.VCLCanvasSize
-  - fixed issue with fixed-width font unicode characters display
-  - FontSub.dll library is loaded only once for the whole application
-
-  Version 1.13
-  - code modifications to compile with Delphi 5 compiler
-  - added horizontal scaling for GDI enumeration in case of text kerning (could
-    occur for small fonts)
-  - fixed "Save when closing with Acrobat Reader X" - thanks to Ondrej
-  - fixed clipping problems and vertical font positioning issue in GDI
-    enumeration - thanks to Ondrej for those corrections!
-
-  Version 1.14
-  - new SetCMYKFillColor and SetCMYKStrokeColor methods for TPdfCanvas
-  - now handles EMR_POLYBEZIER* commands in conversion from meta file content
-  - fixed EZeroDivided error when enumerating SetWindowExtEx(szlExtent(0,0))
-  - some enhancements for better PDF/A-1 conformance to the standard: now
-    includes the ICC profile for RGB pictures; corrected /Link flag and XML
-    metadata; new header with 8 bit characters; correct outlines and other
-    minor issues: now pass www.pdf-tools.com/pdf/pdfa-online-pruefen.aspx test
-
-  Version 1.15
-  - unit now tested with Delphi XE2 (32 Bit)
-
-  Version 1.16
-  - includes new TSynAnsiConvert classes for handling Ansi charsets
-  - do not stop TMetaFile enumeration in case of invalid EMF content (e.g.
-    if the EMR_SELECTOBJECT refers to an out-of-range object): this is
-    the default behavior of GDI and GDI+ renders (and our SynGdiPlus), so
-    we'll stay to it - may fix issue with some badly formatted objects - also
-    made the TMetaFile rendering stronger to badly formated EMF input
-  - fixed issue in TPdfDocument.CreateOrGetImage about guessing if a bitmap is
-    to be reused as a pdf object
-  - added TPdfDocument.ForceNoBitmapReuse property
-  - added a "Decimals: cardinal=6" parameter to TPdfCanvas.ConcatToCTM
-  - TPdfCanvas.SetDash parameter is now an array of integer
-  - set PDF_MAX_FONTSIZE limit to 2000 - should be big enough in practice
-  - fixed an issue when handling bitmap palette
-  - fixed an issue when the first time a font was used is as Unicode
-  - fixed a potential GPF issue in function HashOf() in PUREPASCAL mode (used
-    to reuse any existing bitmap content within the PDF document)
-
-  Version 1.17
-  - new TPdfDocument.UseFontFallBack property (enabled by default) and
-    associated FontFallBackName property (set to 'Arial Unicode MS' by default),
-    used to define if the PDF document will handle "font fallback" for characters
-    not existing in the current font: it will avoid rendering block/square
-    symbols instead of the correct characters (e.g. for Chinese text)
-  - now handle device or bitmap fonts as the most close true-type font available
-  - speed-up of internal true-type fonts list (using binary search)
-  - SynPdf unit can now link to standard ZLib.pas unit if you want to use SynPdf
-    stand-alone and do not need SynZip.pas + deflate.obj + trees.obj
-    (but SQLite3Commons.pas main unit of mORMot will need SynZip, so it is
-    enabled by default for use within the framework)
-
-  Version 1.18
-  - BREAKING CHANGE of TPdfCanvas.RenderMetaFile() by spliting Scale parameter
-    into specific ScaleX, ScaleY values
-  - major speed up of TPdfCanvas.RenderMetaFile() by caching printer resolution
-  - implemented 40 bit and 128 bit security - see TPdfEncryption.New()
-  - introducing TPdfDocument.SaveToStreamDirectBegin/PageFlush/End methods,
-    able to render all page content directly to the destination stream/file,
-    therefore reducing the memory use to a minimal value for huge content - used
-    e.g. in TPdfDocumentGDI.SaveToStream() and TGDIPages.ExportPDFStream()
-  - TPdfDocumentGDI will now compress (via our SynLZ algorithm) all its page
-    content (TMetaFile) for efficiency
-  - TPdfDocumentGDI.SaveToStreamDirectPageFlush overridden method could be used
-    to reduce the used memory even more, by-passing page content compression
-  - therefore, TPdfDocumentGDI will use much less resource and memory with no
-    swaping to disk (tested with 200,000 simple text pages)
-  - reduced generated file size, with optional PDFGeneratePDF15File property
-  - embedd ttc fonts [d2d6953fb3] - thanks David Mead (MDW) for the patch
-  - fixed incorrect Postscript font name retrieval e.g. for Asiatic fonts
-  - fixed potential GPF issue in TPdfWrite.AddUnicodeHex and TPdfWrite.AddHex
-  - fixed compilation warnings regarding Delphi XE3 regressions
-  - fixed text color process in TPdfEnum
-  - handle inverted y-axis for TPdfEnum.TextOut (used e.g. for MM_LOMETRIC
-    compatible rendering as reported by [52c37cc5a14] and fixed by Florian)
-  - fixed mixed portrait/landscape page rendering within a same document
-  - fixed invalid ScriptShape() API error when UniScribe is true
-  - use TSynAnsiConvert class for internal multi-byte conversion (better speed)
-  - Several fixes and enhancements by Sinisa (sinisav):
-    - fixes are mostly for embeded metafiles
-    - added World Transformation matrix
-    - fixed scaling objects (bitmaps, pen, text)
-    - fixed text positioning
-    - added region/clipping support
-    - added graphics/mapping mode
-    - add new enum items: EMR_POLYPOLYGON, EMR_POLYPOLYLINE, EMR_POLYPOLYGON16,
-      EMR_POLYPOLYLINE16, EMR_GRADIENTFILL, EMR_MODIFYWORLDTRANSFORM, EMR_EXTCREATEPEN,
-      EMR_SETMITERLIMIT, EMR_SETMETARGN, EMR_EXTSELECTCLIPRGN, EMR_INTERSECTCLIPRECT,
-      EMR_SETMAPMODE, EMR_BEGINPATH, EMR_ENDPATH, EMR_ABORTPATH, EMR_CLOSEFIGURE,
-      EMR_FILLPATH, EMR_STROKEPATH, EMR_STROKEANDFILLPATH, EMR_SETPOLYFILLMODE,
-      EMR_SETSTRETCHBLTMODE, EMR_SETARCDIRECTION, EMR_POLYLINETO, EMR_POLYLINETO16,
-    - fixed EMR_POLYBEZIER* and moveto action (new way to mark when processed - when
-      coordinates are set to use Point(0,0) )
-    - fixed null pen and not stroke
-    - few more issues still remains (gradient fill, some text size issues...)
-  - added EMR_POLYDRAW, EMR_POLYDRAW16 process (from CoMPi proposal - thanks!)
-  - added EMR_FILLRGN process (from RyanC proposal - thanks for the feedback!)
-  - some fixes and added EMR_TRANSPARENTBLT + mirrored bitmaps (patch from Chaa)
-  - added EMR_SETBKMODE/EMR_SETBKCOLOR process - see ticket [487767008a]
-  - fix for EMR_SET*COLOR clNone color rendering (patch from vmkmg)
-  - fixed SYMBOL_CHARSET kind of fonts (e.g. bullets from Symbol font)
-  - fixed EMR_TEXTOUT rotated text positioning (patch pkrott)
-  - added PdfCoord() function
-  - increased allowed number of EMR_SAVEDC/EMR_RESTOREDC pairs during rendering
-  - handle SetTextAlign(TA_UPDATECP) command for feature request [a8d7393af1]
-  - fix vertical text alignment and line drawing (patch from ddemars - thanks!)
-  - introducing TPdfDocumentGDI.UseMetaFileTextPositioning instead of former
-    UseSetTextJustification property: now you can force exact font kerning
-    positioning for each character, via tpExactTextCharacterPositining; this
-    parameter has been also added to TPdfCanvas.RenderMetaFile() - it will
-    produce bigger pdf file size, but will fulfill feature request [7d6a3a3f0f]
-  - fixed text clipping - thanks Pierre for the patch!
-  - added TPdfDocumentGDI.UseMetaFileTextClipping property and corresponding
-    optional parameter to TPdfCanvas.RenderMetaFile()
-  - added vpEnforcePrintScaling to TPdfViewerPreferences set - forcing PDF 1.6 -
-    thanks MChaos for the proposal!
-  - added Harald Simon's patch for EMR_BITBLT/EMR_STRETCHBLT
-  - added PDF Group Content methods for creating layered content - thanks
-    Harald for the patch! see SynPdfLayers.dpr in sample 05
-  - added TPdfFormWithCanvas class - thanks Harald! see SynPdfFormCanvas.dpr
-  - EMR_INTERSECTCLIPRECT fix supplied by Marsh - but patch disabled by default
-  - huge UniScribe fixes supplied by Mehrdad Momeni (nosa) - THANKS A LOT!
-  - enhanced clipping process by Achim Kalwa
-  - added Support for ARC ARCTO PIE and CHORD - thanks ProHolz for the patch
 
 }
 
@@ -1032,9 +816,6 @@ type
   protected
     function SpaceNotNeeded: boolean; override;
     procedure InternalWriteTo(W: TPdfWrite); override;
-  public
-    /// simple creator, replacing every % in Fmt by the corresponding Args[]
-    constructor CreateFmt(Fmt: PAnsiChar; const Args: array of Integer);
   end;
 
   /// a PDF object, storing a textual value with no encryption
@@ -3899,36 +3680,6 @@ end;
 
 { TPdfRawText }
 
-constructor TPdfRawText.CreateFmt(Fmt: PAnsiChar; const Args: array of Integer);
-var s, tmp: PDFString;
-    PDeb: PAnsiChar;
-    A: integer;
-begin
-  if high(Args)<0 then
-    s := Fmt else begin
-    A := 0;
-    while Fmt^<>#0 do begin
-      if Fmt^<>'%' then begin
-        PDeb := Fmt;
-        while (Fmt^<>'%') and (Fmt^<>#0) do inc(Fmt);
-        SetString(tmp,PDeb,Fmt-PDeb);
-        s := s+tmp;
-      end;
-      if Fmt^=#0 then break;
-      inc(Fmt);
-      if A<=high(Args) then begin
-        Str(Args[A],tmp);
-        s := s+tmp;
-        inc(A);
-      end else begin
-        s := s+Fmt;
-        break;
-      end;
-    end;
-  end;
-  inherited Create(s);
-end;
-
 procedure TPdfRawText.InternalWriteTo(W: TPdfWrite);
 begin
   W.Add(FValue);
@@ -4698,27 +4449,20 @@ end;
 
 function TPdfWrite.AddEscapeContent(const Text: RawByteString): TPdfWrite;
 {$ifdef USE_PDFSECURITY}
-var tmp: PAnsiChar;
-    L: integer;
-    buf: array[byte] of AnsiChar;
+var tmp: TSynTempBuffer;
 {$endif USE_PDFSECURITY}
 begin
+  if Text<>'' then
 {$ifdef USE_PDFSECURITY}
-  if (Text<>'') and (fDoc.fEncryption<>nil) then begin
-    L := length(Text);
-    if L<sizeof(buf) then
-      tmp := buf else
-      GetMem(tmp,L);
-    try
-      fDoc.fEncryption.EncodeBuffer(pointer(Text)^,tmp^,L);
-      result := AddEscape(tmp,L);
-    finally
-      if tmp<>buf then
-        Freemem(tmp);
-    end;
-  end else
+    if fDoc.fEncryption<>nil then begin
+      tmp.Init(length(Text));
+      fDoc.fEncryption.EncodeBuffer(pointer(Text)^,tmp.buf^,tmp.len);
+      AddEscape(tmp.buf,tmp.len);
+      tmp.Done;
+    end else
 {$endif USE_PDFSECURITY}
-  result := AddEscape(pointer(Text),length(Text));
+    AddEscape(pointer(Text),length(Text));
+  result := self;
 end;
 
 function TPdfWrite.AddEscape(Text: PAnsiChar; TextLen: integer): TPdfWrite;
@@ -4952,15 +4696,15 @@ begin
 end;
 var L: Integer;
 {$ifdef USE_PDFSECURITY}
-    tmp: TWordDynArray;
+    sectmp: TSynTempBuffer;
 {$endif USE_PDFSECURITY}
 begin
   if WideCharCount>0 then begin
 {$ifdef USE_PDFSECURITY}
     if fDoc.fEncryption<>nil then begin
-      SetLength(tmp,WideCharCount);
-      fDoc.fEncryption.EncodeBuffer(PW^,pointer(tmp)^,WideCharCount*2);
-      PW := pointer(tmp);
+      sectmp.Init(WideCharCount*2);
+      fDoc.fEncryption.EncodeBuffer(PW^,sectmp.buf^,WideCharCount*2);
+      PW := sectmp.buf;
     end;
 {$endif USE_PDFSECURITY}
     repeat
@@ -4975,6 +4719,10 @@ begin
       inc(B,L*4);
       dec(WideCharCount,L);
     until WideCharCount=0;
+{$ifdef USE_PDFSECURITY}
+    if fDoc.fEncryption<>nil then
+      sectmp.Done;
+{$endif USE_PDFSECURITY}
   end;
   result := self;
 end;
@@ -5592,9 +5340,9 @@ begin
   Result:= StrToIntDef(Buffer, GetACP);
 end;
 
-constructor TPdfDocument.Create(AUseOutlines: Boolean=false; ACodePage: integer=0;
-  APDFA1: boolean=false{$ifdef USE_PDFSECURITY}; AEncryption: TPdfEncryption=nil{$endif});
-var LFont: TLogFontW; // either TLogFontA or TLogFontW idem as TRawUTF8List
+constructor TPdfDocument.Create(AUseOutlines: Boolean; ACodePage: integer;
+  APDFA1: boolean{$ifdef USE_PDFSECURITY}; AEncryption: TPdfEncryption{$endif});
+var LFont: TLogFontW; // TLogFontW to add to FTrueTypeFonts array as UTF-8
     i: integer;
 begin
   fPDFA1 := APDFA1;
@@ -5618,7 +5366,7 @@ begin
   EnumFontFamiliesExW(FDC, LFont, @EnumFontsProcW, PtrInt(@FTrueTypeFonts), 0);
   QuickSortRawUTF8(FTrueTypeFonts,length(FTrueTypeFonts),nil,@StrIComp);
   FCompressionMethod := cmFlateDecode; // deflate by default
-  fBookMarks := TRawUTF8List.Create;
+  fBookMarks := TRawUTF8List.Create([fCaseSensitive,fNoDuplicate]);
   fMissingBookmarks := TRawUTF8List.Create;
   FUseOutlines := AUseOutlines;
   fUseFontFallBack := true;
@@ -5804,8 +5552,7 @@ function TPdfDocument.CreateLink(const ARect: TPdfRect; const aBookmarkName: Raw
 var aDest: TPdfDestination;
 begin
   result := CreateAnnotation(asLink,ARect,BorderStyle,BorderWidth);
-  with fBookmarks do
-    aDest := TPdfDestination(Objects[IndexOf(aBookmarkName)]);
+  aDest := fBookmarks.GetObjectFrom(aBookmarkName);
   if aDest=nil then
     fMissingBookmarks.AddObject(aBookmarkName,result) else
     result.AddItem('Dest',aDest.GetValue);
@@ -5844,11 +5591,11 @@ begin
   aDest.Top := Round(TopPosition);
   fBookMarks.AddObject(aBookmarkName,aDest);
   with fMissingBookmarks do
-  for i := Count-1 downto 0 do
-    if Get(i)=aBookmarkName then begin
-      TPdfDictionary(Objects[i]).AddItem('Dest',aDest.GetValue);
-      Delete(i);
-    end;
+    for i := Count-1 downto 0 do
+      if Strings[i]=aBookmarkName then begin
+        TPdfDictionary(Objects[i]).AddItem('Dest',aDest.GetValue);
+        Delete(i);
+      end;
 end;
 
 procedure TPdfDocument.NewDoc;
@@ -6246,7 +5993,7 @@ end;
 function TPdfDocument.GetEmbeddedTTFIgnore: TRawUTF8List;
 begin
   if fEmbeddedTTFIgnore=nil then
-    fEmbeddedTTFIgnore := TRawUTF8List.Create;
+    fEmbeddedTTFIgnore := TRawUTF8List.Create([fCaseSensitive,fNoDuplicate]);
   result := fEmbeddedTTFIgnore;
 end;
 
@@ -6333,9 +6080,6 @@ type
     FirstNameRecord: TNameRecord;
   end;
 
-function TPdfDocument.TTFFontPostcriptName(aFontIndex: integer; AStyle: TPdfFontStyles;
-  AFont: TPdfFontTrueType): PDFString;
-// see http://www.microsoft.com/typography/OTSPEC/name.htm
 function TrueTypeFontName(const aFontName: RawUTF8; AStyle: TPdfFontStyles): PDFString;
 var i: Integer;
 begin // from PDF 1.3 #5.5.2
@@ -6343,6 +6087,8 @@ begin // from PDF 1.3 #5.5.2
   for i := length(result) downto 1 do
     if (Result[i]<=' ') or (Result[i]>=#127) then
       Delete(result,i,1); // spaces and not ASCII chars are removed
+  if not IsAnsiCompatible(aFontName) then // unique non-void font name
+    result := result+PDFString(CardinalToHexLower(CRC32string(aFontName)));
   if pfsItalic in AStyle then
     if pfsBold in AStyle then
       result := result+',BoldItalic' else
@@ -6350,6 +6096,10 @@ begin // from PDF 1.3 #5.5.2
     if pfsBold in AStyle then
       result := result+',Bold';
 end;
+
+function TPdfDocument.TTFFontPostcriptName(aFontIndex: integer; AStyle: TPdfFontStyles;
+  AFont: TPdfFontTrueType): PDFString;
+// see http://www.microsoft.com/typography/OTSPEC/name.htm
 const NAME_POSTCRIPT = 6;
 var fName: TWordDynArray;
     name: ^TNameFmt4;
@@ -6359,9 +6109,10 @@ var fName: TWordDynArray;
     PW: pointer;
 begin
   aFontName := FTrueTypeFonts[aFontIndex];
-  result := TrueTypeFontName(aFontName,AStyle);
-  if IsAnsiCompatible(aFontName) or (AFont=nil) then
+  if IsAnsiCompatible(aFontName) or (AFont=nil) then begin
+    result := TrueTypeFontName(aFontName,AStyle);
     exit; // no need to search for the PostScript name field in TTF content
+  end;
   name := GetTTFData(GetDCWithFont(AFont),'name',fName);
   if (name=nil) or (name^.format<>0) then
     exit;
@@ -6377,8 +6128,8 @@ begin
         inc(PByte(PW));
         SwapBuffer(PW,L);   // convert from big-endian at correct odd offset
       end;
-      SetLength(result,L);
-      RawUnicodeToWinPChar(pointer(Result),PW,L);
+      RawUnicodeToUtf8(PW,L,aFontName);
+      result := TrueTypeFontName(aFontName,AStyle); // adjust name and style
       exit;
     end else
     inc(Rec);
@@ -9807,7 +9558,6 @@ begin
   else
     R^.iType := R^.iType; // for debug purpose (breakpoint)
   end;
-
   case R^.iType of
     EMR_RESTOREDC,
     EMR_SETWINDOWEXTEX,
@@ -10269,7 +10019,6 @@ begin
     if not DC[nDC].pen.null then
       Canvas.Stroke;
   end;
-
   with DC[nDC], Canvas do begin
     FViewSize := ViewSize;
     FViewOrg := ViewOrg;
@@ -10338,7 +10087,6 @@ begin
       MM_ANISOTROPIC:
         ;  // TBD
     end;
-
     if FWinSize.cx=0 then // avoid EZeroDivide
       FFactorX := 1.0 else
       FFactorX := Abs(FViewSize.cx / FWinSize.cx);
@@ -10358,7 +10106,6 @@ begin
           WorldTransform := Custom^;
       end;
     end;
-
     // use transformation
     ScaleXForm := WorldTransform;
     FWorldFactorX := WorldTransform.eM11;
@@ -11232,8 +10979,8 @@ end;
 
 initialization
   {$ifdef USE_SYNGDIPLUS}
-  // initialize the Gdi+ library if necessary
-  if Gdip=nil then
+  // initialize Gdi+ if necessary (and possible, i.e. not from a dll)
+  if (Gdip=nil) and not IsLibrary then
     Gdip := TGDIPlus.Create('gdiplus.dll');
   {$endif}
 

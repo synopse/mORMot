@@ -6,7 +6,7 @@ unit SynDBMidasVCL;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDBMidasVCL;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -46,16 +46,6 @@ unit SynDBMidasVCL;
   the terms of any one of the MPL, the GPL or the LGPL.
 
   ***** END LICENSE BLOCK *****
-
-  Version 1.18
-  - first public release, corresponding to Synopse mORMot Framework 1.18,
-    which is an extraction from former SynDBVCL.pas unit (which is faster
-    but read/only)
-  - introducing TSynDBDataSet (under Delphi), which allows to apply updates:
-    will be used now for overloaded ToClientDataSet() functions result
-  - BREAKING CHANGE: QueryToClientDataSet() and StatementToClientDataSet()
-    renamed as overloaded functions ToClientDataSet()
-
 
 }
 

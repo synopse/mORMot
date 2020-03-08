@@ -6,7 +6,7 @@ unit SynCrossPlatformSpecific;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynCrossPlatformSpecific;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -47,10 +47,8 @@ unit SynCrossPlatformSpecific;
   ***** END LICENSE BLOCK *****
 
 
-  Version 1.18
-  - first public release, corresponding to mORMot Framework 1.18
-  - each operating system will have its own API calls in this single unit
-  - would compile with Delphi for any platform (including NextGen for mobiles),
+  Each operating system will have its own API calls in this single unit
+  Should compile with Delphi for any platform (including NextGen for mobiles),
     with FPC 2.7 or Kylix, and with SmartMobileStudio 2.2
 
 }
@@ -634,6 +632,7 @@ begin
   fLock := TMutex.Create;
   fConnection := TIdHTTP.Create(nil);
   fOpaqueConnection := fConnection;
+  fConnection.UseNagle := False; 
   fConnection.HTTPOptions := fConnection.HTTPOptions+[hoKeepOrigProtocol];
   fConnection.ConnectTimeout := fParameters.ConnectionTimeOut;
   fConnection.ReadTimeout := fParameters.ReceiveTimeout;

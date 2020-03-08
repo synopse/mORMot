@@ -6,6 +6,7 @@ uses
   {$I SynDprUses.inc}  // use FastMM4 on older Delphi, or set FPC threads
   SysUtils,
   SynCommons,          // framework core
+  SynTable,
   SynLog,              // logging features
   mORMot,              // RESTful server & ORM
   SynSQLite3Static,    // staticaly linked SQLite3 engine

@@ -6,7 +6,7 @@ unit mORMotDDD;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotDDD;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -45,9 +45,6 @@ unit mORMotDDD;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.18
-  - first public release, corresponding to Synopse mORMot Framework 1.18
-
 }
 
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
@@ -57,7 +54,11 @@ interface
 uses
 {$ifdef MSWINDOWS}
   Windows,
-{$endif}
+{$else}
+  {$ifdef FPC}
+  SynFPCLinux,
+  {$endif FPC}
+{$endif MSWINDOWS}
   SysUtils,
   Classes,
   Contnrs,
@@ -1290,7 +1291,7 @@ begin
   if (aAggregate=nil) or (fRest=nil) or (fTable=nil) then
     raise EDDDRepository.CreateUTF8(self,'Invalid %.Create(nil)',[self]);
   fAggregate.Init(aAggregate);
-  fPropsMapping.Init(aTable,RawUTF8(aAggregate.ClassName),aRest,false);
+  fPropsMapping.Init(aTable,RawUTF8(aAggregate.ClassName),aRest,false,[]);
   fPropsMapping.MapFields(['ID','####']); // no ID/RowID for our aggregates
   fPropsMapping.MapFields(TableAggregatePairs);
   fAggregateRTTI := TSQLPropInfoList.Create(aAggregate, GetAggregateRTTIOptions);
@@ -2119,7 +2120,7 @@ begin
   fDaemon.Rest.BeginCurrentThread(self);
   try
     repeat
-      sleep(fProcessIdleDelay);
+      SleepHiRes(fProcessIdleDelay);
       try
         try
           repeat
@@ -2186,7 +2187,6 @@ constructor TDDDMonitoredDaemon.Create(aRest: TSQLRest);
 begin
   fProcessIdleDelay := 50;
   fProcessLock := TAutoLocker.Create;
-  fProcessTimer.Start;
   if fProcessThreadCount<1 then
     fProcessThreadCount := 1 else
   if fProcessThreadCount>20 then
@@ -2279,7 +2279,7 @@ begin
   SetLength(fProcess,fProcessThreadCount);
   for i := 0 to fProcessThreadCount-1 do
     fProcess[i] := fProcessClass.Create(self,i);
-  sleep(1); // some time to actually start the threads
+  SleepHiRes(1); // some time to actually start the threads
 end;
 
 
@@ -2303,7 +2303,7 @@ begin
         fProcessLock.Leave;
       end;
       repeat
-        sleep(5);
+        SleepHiRes(5);
         allfinished := true;
         fProcessLock.Enter;
         try
@@ -2672,7 +2672,7 @@ begin
         res := Stop(status);
       if res=cqrsSuccess then begin
         if cmd=8 then
-          Sleep(200); // leave some time between stop and start
+          SleepHiRes(200); // leave some time between stop and start
         if cmd<>7 then
           res := Start;
         if res=cqrsSuccess then

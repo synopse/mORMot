@@ -6,7 +6,7 @@ unit SynDBOracle;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDBOracle;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -46,100 +46,6 @@ unit SynDBOracle;
   the terms of any one of the MPL, the GPL or the LGPL.
 
   ***** END LICENSE BLOCK *****
-
-  Version 1.15
-  - first public release, corresponding to mORMot framework 1.15
-
-  Version 1.16
-  - LONG columns will be handled as ftUTF8 fields, truncated to 32 KB of text
-    (fix error ORA-00932 at OCI client level)
-  - we found out that a computed column is returned as SQLT_NUM with Scale=0 even
-    if it is numeric with decimals (OCI 11.2 bug) -> so SQLT_INT trick is disabled
-  - fixed issue when using transactions methods with Oracle
-
-  Version 1.17
-  - now NLS_LANG environnement variable or current thread local will be used by
-    TSQLDBOracleConnectionProperties.Create if supplied code page parameter is 0
-  - now TSQLDBOracleConnectionProperties.Create constructor can be used directly
-  - previous TSQLDBOracleConnectionProperties reintroduced constructor renamed
-    CreateWithCodePage, to specify the code page to be used
-  - fixed issue with SQL requests containing '' and parameters
-  - fixed issue with SQLT_BIN/RAW kind of columns
-  - fixed issue with SQLT_IBFLOAT/SQLT_IBDOUBLE kind of columns
-  - fixed issue with CLOB/NCLOB/NVARCHAR kind of columns (including charset)
-  - added TSQLDBOracleStatement.ColumnToVarData() overridden method, for faster
-    process from mORMot external tables (i.e. SQLite3DB)
-  - fixed issue with TDateTime parameter (SQLT_DAT replaced by SQLT_TIMESTAMP)
-  - fixed issue with NULL parameter (avoid ORA-01024 error)
-  - fixed random issue when converting a SQLT_DATE result column value
-  - force ftCurrency content to be returned with '.' as decimal separator (as
-    expected by JSON), even with any other NLS_LANG encoding
-  - enhance OUT and IN/OUT bound parameters handling (for stored procedures),
-    with dedicated exceptions for any unhandled kind of parameter
-  - generated logging level reduced to the necessary (but with timing)
-  - added TSQLDBOracleStatement.ColumnBlobBytes method to retrieve TBytes BLOBs
-  - speed up of TSQLDBOracleStatement.ColumnInt() and Prepare() methods
-  - fixed issue in TSQLDBOracleStatement.ColumnToVarData() when retrieving date
-  - fixed issue in TSQLDBOracleStatement.Prepare() for some kinds of columns
-  - fixed issue in TSQLDBOracleStatement.ExecutePrepared at SQLT_LVC binding
-  - fixed BLOB memory leak in TSQLDBOracleStatement.FreeHandles
-    time fields from Oracle as external virtual tables
-  - fixed issue when NLS_DATE_FORMAT is not ISO-8601: since mORMot's ORM will
-    send date/time as ISO-8601 text, we now force proper NLS_DATE_FORMAT
-  - TOracleDate will now handle Cent=Year=Month=Day=Hour=Main=Sec=0 as TDateTime(0)
-  - new TOracleDate.From/ToIso8601 methods for direct SQLT_DAT handling
-  - code refactoring, especially about error handling and ODBC integration
-
-  Version 1.18
-  - implements Oracle server-side statement caching for a major performance
-    improvement e.g. for one row queries
-  - implements array binding of values as OCI_OBJECT, e.g. for an IN clause -
-    thanks mpv for the patch!
-  - avoid integer overflow in TOracleDate.ToIso8601() method in some cases
-  - now "" date/time values are not bound as null but as TOracleDate(0)
-    for array DML binding statements
-  - now you can use BLOB parameters for array DML binding statements (if all
-    the sent content is not > 32 MB after aligment to the biggest data block)
-  - force TOracleDate.ToDateTime to ignore any date before 30 Dec 1899 (i.e. any
-    TDateTime result < 0), to avoid e.g. wrong DecodeTime() computation from
-    retrieved value
-  - added SQLT_INTERVAL_YM/SQLT_INTERVAL_DS column support (as JSON text)
-  - added SynDBOracleOCIpath global variable to force oci.dll folder
-  - will search for OracleInstantClient\oci.dll in executable sub-folder (can be
-    used e.g. for Win64)
-  - enhance logging at connection to specify the client version, database name
-    and charset/codepage
-  - removed CreateWithCodePage() constructor: now the charset will be retrieved
-    at connection, and used for CHAR/NVARCHAR2 fields - see ticket [a6a639ec43]
-  - added some WIN1252 charset aliases for DB (ISO-8859-1/15)
-  - force ftCurrency to use '.' as decimal separator in returned SQLT_STR buffer
-    (as expected by JSON) - previous fix in 1.17 revision did not work
-  - added TSQLDBOracleConnectionProperties.ExtractTnsName() class method
-  - when a column charset does not match the connection value, log a warning and
-    force connection-level code page instead of raising an Exception
-  - fixed ticket [4c68975022] about broken SQL statement when logging active
-  - fixed ticket [545fbe7579] about TSQLDBConnection.LastErrorMessage not reset
-  - fixed ticket [5df9d39858] about NULL bindings in TSQLDBOracleStatement
-  - fixed ticket [aff1352239] to identify 9999-12-31 dates as valid
-  - fixed ticket [73aec05724] about potential BLOB/CURSOR resource leaks
-  - fixed ticket [e9cab7cd97] about OCI_SUCCESS_WITH_INFO not returning any data
-  - enhanced exception text message as requested by [5c37964b57d]
-  - fixed truncated error message in TSQLDBOracleLib.HandleError() method
-  - exception during Commit should leave transaction state - see [ca035b8f0da]
-  - allow to return NULL columns (ex. "SELECT one, two, NULL AS three FROM table")
-  - fix potential ORA-24333 error when using stored procedures
-  - strip error text constants to decrease the generated .exe size by about 16KB
-  - create environment with OCI_EVENTS + OCI_THREADED for ticket [7f23c8d8d4],
-    and adding TSQLDBOracleConnectionProperties.EnvironmentInitializationMode
-  - added TSQLDBOracleConnectionProperties.RowsPrefetchSize property
-  - TSQLDBOracleStatement now logs execution time instead of instance life time
-  - remove unneeded TSQLDBOracleStatement.Prepare() Enter/Leave logs
-  - replaced confusing TVarData by a new dedicated TSQLVar memory structure,
-    shared with SynDB and mORMot units (includes methods refactoring)
-  - fixed column descriptor memory leak in case UseCache=true
-  - add ability to use the Secure External Password Store for Credentials
-  - add ability to ignore ORA-01453 during TSQLDBOracleConnection.StartTransaction
-    by adding TSQLDBOracleConnectionProperties.IgnoreORA01453OnStartTransaction
 
 }
 
@@ -174,7 +80,8 @@ type
   {$A-}
   /// memory structure used to store a date and time in native Oracle format
   // - follow the SQLT_DAT column type layout
-  {$ifdef UNICODE}TOracleDate = record{$else}TOracleDate = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TOracleDate = record
+    {$else}TOracleDate = object{$endif}
     Cent, Year, Month, Day, Hour, Min, Sec: byte;
     /// convert an Oracle date and time into Delphi TDateTime
     // - this method will ignore any date before 30 Dec 1899 (i.e. any
@@ -219,6 +126,7 @@ type
     /// initialize fForeignKeys content with all foreign keys of this DB
     // - used by GetForeignKey method
     procedure GetForeignKeys; override;
+    procedure PasswordChanged(const ANewPassword: RawUTF8);
   public
     /// initialize the connection properties
     // - we don't need a database name parameter for Oracle connection: only
@@ -238,7 +146,9 @@ type
     /// extract the TNS listener name from a Oracle full connection string
     // - e.g. ExtractTnsName('1.2.3.4:1521/dbname') returns 'dbname'
     class function ExtractTnsName(const aServerName: RawUTF8): RawUTF8;
-    procedure PasswordChanged(const ANewPassword: RawUTF8);
+    /// determine if the SQL statement can be cached
+    // - always returns false, to force server-side caching only on this driver
+    function IsCachable(P: PUTF8Char): boolean; override;
     function SQLLimitClause(AStmt: TSynTableStatement): TSQLDBDefinitionLimitClause; override;
   published
     /// returns the Client version e.g. 'oci.dll rev. 11.2.0.1'
@@ -321,16 +231,12 @@ type
     /// return TRUE if Connect has been already successfully called
     function IsConnected: boolean; override;
     /// initialize a new SQL query statement for the given connection
-    // - the caller should free the instance after use
-    function NewStatement: TSQLDBStatement; override;
-    /// initialize a new SQL query statement for the given connection
     // - if UseCache=true, this overridden implementation will use server-side
     // Oracle statement cache - in this case, StatementCacheSize will define
-    // how many statements are to be cached
-    // - this method should return nil in case of error, or a prepared statement
-    // instance in case of success (with default RaiseExceptionOnError=false)
-    function NewStatementPrepared(const aSQL: RawUTF8;
-      ExpectResults: Boolean; RaiseExceptionOnError: Boolean=false): ISQLDBStatement; override;
+    // how many statements are to be cached - not that IsCachable() has been
+    // overriden to return false, so statement cache on client side is disabled
+    // - the caller should free the instance after use
+    function NewStatement: TSQLDBStatement; override;
     /// begin a Transaction for this connection
     // - current implementation do not support nested transaction with those
     // methods: exception will be raised in such case
@@ -600,7 +506,7 @@ begin
     PInteger(@self)^ := 0;
     exit; // invalid ISO-8601 text -> store as null date
   end;
-  Y := (Value shr (6+6+5+5+4)) and 4095;
+  Y := Value shr (6+6+5+5+4);
   Cent := (Y div 100)+100;
   Year := (Y mod 100)+100;
   Month := ((Value32 shr (6+6+5+5)) and 15)+1;
@@ -1618,7 +1524,7 @@ begin
       msg := 'OCI_CONTINUE';
   end;
   if LogLevelNoRaise<>sllNone then
-    SynDBLog.Add.Log(LogLevelNoRaise,msg) else
+    SynDBLog.Add.Log(LogLevelNoRaise,msg,self) else
     if Stmt=nil then
       raise ESQLDBOracle.CreateUTF8('% error: %',[self,msg]) else
       raise ESQLDBOracle.CreateUTF8('% error: %',[Stmt,msg]);
@@ -1653,7 +1559,7 @@ begin
         if Conn.PasswordChange then
           Exit;
     if LogLevelNoRaise<>sllNone then
-      SynDBLog.Add.Log(LogLevelNoRaise,msg) else
+      SynDBLog.Add.Log(LogLevelNoRaise,msg,self) else
       if Stmt=nil then
         raise ESQLDBOracle.CreateUTF8('% error: %',[self,msg]) else
         raise ESQLDBOracle.CreateUTF8('% error: %',[Stmt,msg]);
@@ -1836,6 +1742,11 @@ begin
     result := copy(aServerName,i+1,100);
 end;
 
+function TSQLDBOracleConnectionProperties.IsCachable(P: PUTF8Char): boolean;
+begin
+  result := false;
+end;
+
 constructor TSQLDBOracleConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUTF8);
 begin
@@ -1877,8 +1788,8 @@ end;
 
 procedure TSQLDBOracleConnectionProperties.PasswordChanged(const ANewPassword: RawUTF8);
 begin
+  SynDBLog.Add.Log(sllDB, 'PasswordChanged called',self);
   fPassWord := ANewPassword;
-  SynDBLog.Add.Log(sllDB, 'Password to database account was changed.');
   if Assigned(FOnPasswordChanged) then
     FOnPasswordChanged(Self);
 end;
@@ -1919,7 +1830,7 @@ const
     type_Varchar2ListName: RawUTF8 = 'ODCIVARCHAR2LIST';
     type_Credential: array[boolean] of integer = (OCI_CRED_RDBMS,OCI_CRED_EXT);
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Connect'{$endif});
+  Log := SynDBLog.Enter(self,'Connect');
   Disconnect; // force fTrans=fError=fServer=fContext=nil
   Props := Properties as TSQLDBOracleConnectionProperties;
   with OCI do
@@ -2011,7 +1922,7 @@ end;
 constructor TSQLDBOracleConnection.Create(aProperties: TSQLDBConnectionProperties);
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Create'{$endif});
+  Log := SynDBLog.Enter(self,'Create');
   if not aProperties.InheritsFrom(TSQLDBOracleConnectionProperties) then
     raise ESQLDBOracle.CreateUTF8('Invalid %.Create(%)',[self,aProperties]);
   OCI.RetrieveVersion;
@@ -2033,7 +1944,7 @@ begin
   finally
     if (fError<>nil) and (OCI<>nil) then
     with OCI do begin
-      Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Disconnect'{$endif});
+      Log := SynDBLog.Enter(self,'Disconnect');
       if fTrans<>nil then begin
         // close any opened session
         HandleFree(fTrans,OCI_HTYPE_TRANS);
@@ -2061,33 +1972,8 @@ end;
 function TSQLDBOracleConnection.NewStatement: TSQLDBStatement;
 begin
   result := TSQLDBOracleStatement.Create(self);
-end;
-
-function TSQLDBOracleConnection.NewStatementPrepared(const aSQL: RawUTF8;
-  ExpectResults: Boolean; RaiseExceptionOnError: Boolean=false): ISQLDBStatement;
-var Stmt: TSQLDBOracleStatement;
-begin
-  fErrorMessage := '';
-  Stmt := nil;
-  try
-    Stmt := TSQLDBOracleStatement.Create(self);
-    if fProperties.UseCache then
-      Stmt.fUseServerSideStatementCache := true;
-    Stmt.Prepare(aSQL,ExpectResults);
-    result := Stmt;
-  except
-    on E: Exception do begin
-      with SynDBLog.Add do
-        if [sllSQL,sllDB,sllException,sllError]*Family.Level<>[] then
-          LogLines(sllSQL,pointer(Stmt.SQLWithInlinedParams),self,'--');
-      Stmt.Free;
-      if RaiseExceptionOnError then
-        raise;
-      fErrorException := PPointer(E)^;
-      StringToUTF8(E.Message,fErrorMessage);
-      result := nil;
-    end;
-  end;
+  if fProperties.UseCache then // client-side cache is disabled in this unit
+    TSQLDBOracleStatement(result).fUseServerSideStatementCache := true;
 end;
 
 function TSQLDBOracleConnection.PasswordChange: Boolean;
@@ -2117,7 +2003,7 @@ end;
 procedure TSQLDBOracleConnection.StartTransaction;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'StartTransaction'{$endif});
+  Log := SynDBLog.Enter(self,'StartTransaction');
   if TransactionCount>0 then
     raise ESQLDBOracle.CreateUTF8('Invalid %.StartTransaction: nested '+
       'transactions are not supported by the Oracle driver',[self]);
@@ -2242,7 +2128,7 @@ begin
   if V=nil then // column is NULL
     result := 0 else
     case C^.ColumnType of // optimized for ToDataSet() in SynDBVCL.pas
-    ftDouble:   result := PDouble(V)^;
+    ftDouble:   result := unaligned(PDouble(V)^);
     ftInt64:    result := PInt64(V)^;
     ftCurrency: begin
       PInt64(@Curr)^ := StrToCurr64(V); // handle '.5' - not GetExtended()
@@ -2304,7 +2190,7 @@ begin // dedicated version to avoid as much memory allocation than possible
            WR.Add(PInt64(V)^) else
            WR.AddNoJSONEscape(V); // already as SQLT_STR
        ftDouble:
-         WR.AddDouble(PDouble(V)^);
+         WR.AddDouble(unaligned(PDouble(V)^));
        ftCurrency:
          WR.AddFloatStr(V); // already as SQLT_STR
        ftDate:
@@ -2529,7 +2415,8 @@ begin
   try
     fTimeElapsed.Resume;
     FreeHandles(false);
-    SynDBLog.Add.Log(sllDB,'% row(s) in %',[TotalRowsRetrieved,fTimeElapsed.Stop],self);
+    SynDBLog.Add.Log(sllDB,'Destroy: stats = % row(s) in %',
+      [TotalRowsRetrieved,fTimeElapsed.Stop],self);
   finally
     inherited;
   end;
@@ -2539,7 +2426,7 @@ constructor TSQLDBOracleStatement.CreateFromExistingStatement(
   aConnection: TSQLDBConnection; aStatement: POCIStmt);
 begin
   Create(aConnection);
-  with fTimeElapsed do if Started then Resume else Start;
+  fTimeElapsed.Resume;
   try
     fStatement := aStatement;
     try
@@ -2650,7 +2537,7 @@ const
   MAX_INLINED_PARAM_SIZE = 32*1024*1024;
 
 procedure TSQLDBOracleStatement.ExecutePrepared;
-var i,j: integer;
+var i,j: PtrInt;
     Env: POCIEnv;
     Context: POCISvcCtx;
     Type_List: POCIType;
@@ -2671,9 +2558,9 @@ var i,j: integer;
     num_val: OCINumber;
     tmp: RawUTF8;
     str_val: POCIString;
-    {$ifdef CPU64}
-    isStringHacked: boolean;
-    {$endif}
+    {$ifdef FPC_64}
+    wasStringHacked: TByteDynArray;
+    {$endif FPC_64}
 label txt;
 begin
   if (fStatement=nil) then
@@ -2684,7 +2571,7 @@ begin
       tmp := SQLWithInlinedParams;
       Log(sllSQL,tmp,self,2048);
     end;
-  with fTimeElapsed do if Started then Resume else Start;
+  fTimeElapsed.Resume;
   try
     ociArraysCount := 0;
     Env := (Connection as TSQLDBOracleConnection).fEnv;
@@ -2698,9 +2585,6 @@ begin
           [self,fPreparedParamsCount,fParamCount]);
       if not fExpectResults then
         fRowCount := 1; // to avoid ORA-24333 error
-      {$ifdef CPU64}
-      isStringHacked := false;
-      {$endif}
       if (fParamCount>0) then
       if (fParamsArrayCount>0) and not fExpectResults then begin
         // 1.1. Array DML binding
@@ -2878,7 +2762,7 @@ begin
                     goto txt; // IN huge integers will be managed as text
                   end else begin
                   VDBType := SQLT_FLT; // OUT values will be converted as double
-                  PDouble(oData)^ := VInt64;
+                  unaligned(PDouble(oData)^) := VInt64;
                 end;
             ftDouble:
               VDBType := SQLT_FLT;
@@ -2888,7 +2772,7 @@ begin
                 goto txt; // input-only currency values will be managed as text
               end else begin
                 VDBType := SQLT_FLT; // OUT values will be converted as double
-                PDouble(oData)^ := PCurrency(oData)^;
+                unaligned(PDouble(oData)^) := PCurrency(oData)^;
               end;
             ftDate:
               if VInOut=paramIn then begin
@@ -2913,25 +2797,25 @@ begin
               if VInOut<>paramIn then
                 raise ESQLDBOracle.CreateUTF8(
                   '%.ExecutePrepared: Unexpected OUT blob parameter #%',[self,i+1]) else begin
-              {$ifdef CPU64}
-              if Length(VData) > MaxInt then
-                raise ESQLDBOracle.CreateUTF8(
-                  '%.ExecutePrepared: Maximum blob parameter length exceeded for parameter #%',[self,i+1]);
-              {$endif}
               oLength := Length(VData);
               if oLength<2000 then begin
                 VDBTYPE := SQLT_BIN;
                 oData := pointer(VData);
               end else begin
-                VDBTYPE := SQLT_LVB;
-                {$ifdef CPU64}
-                // Oracle expect SQLT_LVB layout as raw data prepended by int32 data length
-                // in case of CPU64 TSQLDBParam.VData is a String and length is stored as SizeInt = Int64 (not int32)
-                // I (mpv) dont like DIRTY hack below, but currently do not now how do did it better
-                // Line below copy string length to the HI bytes of TStrRec.length. Length is restored leter
-                PInteger(Pointer(PtrInt(VData)-sizeof(Integer)))^ := PInteger(Pointer(PtrInt(VData)-sizeof(PtrInt)))^;
-                isStringHacked := true;
-                {$endif}
+                VDBTYPE := SQLT_LVB; // layout: raw data prepended by int32 len
+                {$ifdef FPC_64}
+                // in case of FPC+CPU64 TSQLDBParam.VData is a RawByteString and
+                // length is stored as SizeInt = Int64 (not int32) -> patch
+                // (no patch needed for Delphi, in which len is always longint)
+                if Length(VData)>MaxInt then
+                  raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared: % blob length ' +
+                    'exceeds max size for parameter #%',[self,KB(oLength),i+1]);
+                UniqueString(VData); // for thread-safety
+                PInteger(PtrInt(VData)-sizeof(Integer))^ := oLength;
+                if wasStringHacked=nil then
+                  SetLength(wasStringHacked,fParamCount shr 3+1);
+                SetBitPtr(pointer(wasStringHacked),i); // for unpatching below
+                {$endif FPC_64}
                 oData := Pointer(PtrInt(VData)-sizeof(Integer));
                 Inc(oLength,sizeof(Integer));
               end;
@@ -2957,16 +2841,14 @@ begin
       FetchTest(Status); // error + set fRowCount+fCurrentRow+fRowFetchedCurrent
       Status := OCI_SUCCESS; // mark OK for fBoundCursor[] below
     finally
-      {$ifdef CPU64}
-      if isStringHacked then // restore hacked strings length ASAP
+      {$ifdef FPC_64}
+      if wasStringHacked<>nil then // restore patched strings length ASAP
         for i := 0 to fParamCount-1 do
-          with fParams[i] do
-            if (VInOut=paramIn) and (VType=ftBlob) and (Length(VData)>2000) then
-              // actually Length(VData) is a huge number here. Reset last 4 byte to 0
-              PInteger(Pointer(PtrInt(VData)-sizeof(Integer)))^ := 0;
-      {$endif}
+          if GetBitPtr(pointer(wasStringHacked),i) then
+            PInteger(PtrInt(fParams[i].VData)-sizeof(Integer))^ := 0;
+      {$endif FPC_64}
       for i := 0 to ociArraysCount-1 do
-        OCI.Check(nil,self,OCI.ObjectFree(Env, fError, ociArrays[i], OCI_OBJECTFREE_FORCE), fError);
+        OCI.Check(nil,self,OCI.ObjectFree(Env, fError, ociArrays[i], OCI_OBJECTFREE_FORCE), fError, false, sllError);
       // 3. release and/or retrieve OUT bound parameters
       if fParamsArrayCount>0 then
       for i := 0 to fParamCount-1 do
@@ -2981,13 +2863,13 @@ begin
             fBoundCursor[i] := PPointer(@VInt64)^; // available via BoundCursor()
           end else // on error, release bound statement resource
             if OCI.HandleFree(PPointer(@VInt64)^,OCI_HTYPE_STMT)<>OCI_SUCCESS then
-              SynDBLog.Add.Log(sllError,'SQLT_RSET param release');
+              SynDBLog.Add.Log(sllError,'ExecutePrepared: SQLT_RSET param release',self);
       ftInt64:
         if VDBType=SQLT_FLT then // retrieve OUT integer parameter
-          VInt64 := trunc(PDouble(@VInt64)^);
+          VInt64 := trunc(unaligned(PDouble(@VInt64)^));
       ftCurrency:
         if VDBType=SQLT_FLT then // retrieve OUT currency parameter
-          PCurrency(@VInt64)^ := PDouble(@VInt64)^;
+          PCurrency(@VInt64)^ := unaligned(PDouble(@VInt64)^);
       ftDate:
         case VDBType of
         SQLT_DAT: // retrieve OUT date parameter
@@ -2995,7 +2877,7 @@ begin
         SQLT_TIMESTAMP: begin // release OCIDateTime resource
           oOCIDateTime := PPointer(VData)^;
           if OCI.DescriptorFree(oOCIDateTime,OCI_DTYPE_TIMESTAMP)<>OCI_SUCCESS then
-            SynDBLog.Add.Log(sllError,'OCI_DTYPE_TIMESTAMP param release');
+            SynDBLog.Add.Log(sllError,'ExecutePrepared: OCI_DTYPE_TIMESTAMP param release',self);
           VData := '';
         end;
         end;
@@ -3067,10 +2949,10 @@ begin
             case ColumnValueDBType of
             SQLT_CLOB, SQLT_BLOB:
               if OCI.DescriptorFree(P^,OCI_DTYPE_LOB)<>OCI_SUCCESS then
-                SynDBLog.Add.Log(sllError,'Invalid Blob Release');
+                SynDBLog.Add.Log(sllError,'FreeHandles: Invalid Blob Release',self);
             SQLT_RSET:
               if OCI.HandleFree(P^,OCI_HTYPE_STMT)<>OCI_SUCCESS then
-                SynDBLog.Add.Log(sllError,'Invalid Cursor Release');
+                SynDBLog.Add.Log(sllError,'FreeHandles: Invalid Cursor Release',self);
             else raise ESQLDBOracle.CreateUTF8(
               '%.FreeHandles: Wrong % type for inlined column %',
               [self,ColumnValueDBType,ColumnName]);
@@ -3275,7 +3157,7 @@ begin
           ColumnValueDBSize := sizeof(POCIStmt);
           include(ColumnLongTypes,hasCURS);
         end;
-        else raise ESQLDBOracle.CreateUTF8('% - Column "%": unknown type %',
+        else raise ESQLDBOracle.CreateUTF8('% - Column [%]: unknown type %',
           [self,ColumnName,oType]);
         end;
         inc(RowSize,ColumnValueDBSize);
@@ -3292,10 +3174,10 @@ begin
               if (ColumnValueDBCharSet<>oCharSet) and
                  not SimilarCharSet(ColumnValueDBCharSet,oCharSet) then
                 // log a warning, but use the connection-level code page
-                SynDBLog.Add.Log(sllWarning,'Column "%" has % (%) charset - expected % (%) '+
-                  '-> possible data loss',[ColumnName,
-                   ColumnValueDBCharSet,OracleCharSetName(ColumnValueDBCharSet),
-                   oCharSet,OracleCharSetName(oCharSet)]);
+                SynDBLog.Add.Log(sllWarning,'Column [%] has % (%) charset - '+
+                  'expected % (%) -> possible data loss',[ColumnName,
+                  ColumnValueDBCharSet,OracleCharSetName(ColumnValueDBCharSet),
+                  oCharSet,OracleCharSetName(oCharSet)],self);
           end;
           SQLCS_NCHAR: // NVARCHAR2 -> set max UTF-8 bytes from chars
             if ColumnValueInlined then begin
@@ -3307,7 +3189,7 @@ begin
       end;
       // avoid memory leak for cached statement
       if DescriptorFree(oHandle, OCI_DTYPE_PARAM)<>OCI_SUCCESS then
-        SynDBLog.Add.Log(sllError, 'Invalid column descriptor release');
+        SynDBLog.Add.Log(sllError, 'Invalid column descriptor release',self);
     end;
     assert(fColumn.Count=integer(ColCount));
     // 3. Dispatch data in row buffer
@@ -3377,9 +3259,9 @@ end;
 procedure TSQLDBOracleStatement.Prepare(const aSQL: RawUTF8;
   ExpectResults: Boolean);
 var oSQL: RawUTF8;
-    Env: POCIEnv;
+    env: POCIEnv;
 begin
-  with fTimeElapsed do if Started then Resume else Start;
+  fTimeElapsed.Resume;
   try
     try
       if (fStatement<>nil) or (fColumnCount>0) then
@@ -3388,20 +3270,20 @@ begin
       inherited Prepare(aSQL,ExpectResults); // set fSQL + Connect if necessary
       fPreparedParamsCount := ReplaceParamsByNames(aSQL,oSQL);
       // 2. prepare statement
-      Env := (Connection as TSQLDBOracleConnection).fEnv;
+      env := (Connection as TSQLDBOracleConnection).fEnv;
       with OCI do begin
-        HandleAlloc(Env,fError,OCI_HTYPE_ERROR);
+        HandleAlloc(env,fError,OCI_HTYPE_ERROR);
         if fUseServerSideStatementCache then begin
           if StmtPrepare2(TSQLDBOracleConnection(Connection).fContext,fStatement,
             fError,pointer(oSQL),length(oSQL),nil,0,OCI_NTV_SYNTAX,OCI_PREP2_CACHE_SEARCHONLY) = OCI_SUCCESS then
-            SynDBLog.Add.Log(sllDebug, 'Statement cache HIT')
+            SynDBLog.Add.Log(sllDebug,'Prepare: Statement cache HIT',self)
           else begin
             Check(nil,self,StmtPrepare2(TSQLDBOracleConnection(Connection).fContext,fStatement,
               fError,pointer(oSQL),length(oSQL),nil,0,OCI_NTV_SYNTAX,OCI_DEFAULT),fError);
-            SynDBLog.Add.Log(sllDebug, 'Statement cache miss');
+            SynDBLog.Add.Log(sllDebug,'Prepare: Statement cache miss',self);
           end;
         end else begin
-          HandleAlloc(Env,fStatement,OCI_HTYPE_STMT);
+          HandleAlloc(env,fStatement,OCI_HTYPE_STMT);
           Check(nil,self,StmtPrepare(fStatement,fError,pointer(oSQL),length(oSQL),
             OCI_NTV_SYNTAX,OCI_DEFAULT),fError);
         end;

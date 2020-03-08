@@ -5,7 +5,7 @@ unit SynGSSAPIAuth;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -24,7 +24,7 @@ unit SynGSSAPIAuth;
 
   The Initial Developer of the Original Code is Chaa.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -44,8 +44,6 @@ unit SynGSSAPIAuth;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.18
-  - initial release, as an alternative to SynSSPIAuth.pas for Linux servers
 }
 
 {$I Synopse.inc} // define HASINLINE and other compatibility switches

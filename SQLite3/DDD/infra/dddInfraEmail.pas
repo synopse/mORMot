@@ -6,7 +6,7 @@ unit dddInfraEmail;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit dddInfraEmail;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -44,9 +44,6 @@ unit dddInfraEmail;
   the terms of any one of the MPL, the GPL or the LGPL.
 
   ***** END LICENSE BLOCK *****
-
-  Version 1.18
-  - first public release, corresponding to Synopse mORMot Framework 1.18
 
 }
 
@@ -425,7 +422,7 @@ begin
     msg := Template.ComputeMessage(context,aTemplate.FileName);
     if msg='' then
       CqrsSetResultMsg(cqrsInvalidContent,
-        'Impossible to render template "%"',[aTemplate.FileName],result) else
+        'Impossible to render template [%]',[aTemplate.FileName],result) else
       if EMailer.SendEmail(TRawUTF8DynArrayFrom([aEmail]),
           aTemplate.SenderEmail,aTemplate.Subject,'',msg)=cqrsSuccess then
         if Rest.AddOrUpdate(EmailValidation)=0 then

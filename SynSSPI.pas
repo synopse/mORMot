@@ -5,7 +5,7 @@ unit SynSSPI;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -24,7 +24,7 @@ unit SynSSPI;
 
   The Initial Developer of the Original Code is Chaa.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -44,17 +44,13 @@ unit SynSSPI;
 
   ***** END LICENSE BLOCK *****
 
-
-
-  Version 1.18
-  - initial release, with code split from SynSSPIAuth.pas
-  - has no external unit dependency, so can be used e.g. by SynCrtSock
-
 }
 
 {$I Synopse.inc} // define HASINLINE and other compatibility switches
 
 interface
+
+{$ifdef MSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
 
 uses
   Windows,
@@ -97,7 +93,8 @@ type
   TSecContextDynArray = array of TSecContext;
 
   /// defines a SSPI buffer
-  {$ifdef UNICODE}TSecBuffer = record{$else}TSecBuffer = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TSecBuffer = record
+    {$else}TSecBuffer = object{$endif}
   public
     cbBuffer: Cardinal;
     BufferType: Cardinal;
@@ -107,7 +104,8 @@ type
   PSecBuffer = ^TSecBuffer;
 
   /// describes a SSPI buffer
-  {$ifdef UNICODE}TSecBufferDesc = record{$else}TSecBufferDesc = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TSecBufferDesc = record
+    {$else}TSecBufferDesc = object{$endif}
   public
     ulVersion: Cardinal;
     cBuffers: Cardinal;
@@ -580,5 +578,11 @@ begin
   FreeSecurityContext(fContext.CtxHandle);
   FreeCredentialsContext(fContext.CredHandle);
 end;
+
+{$else}
+
+implementation // compiles as void unit for non-Windows
+
+{$endif MSWINDOWS}
 
 end.

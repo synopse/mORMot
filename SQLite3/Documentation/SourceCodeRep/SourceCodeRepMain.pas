@@ -68,7 +68,7 @@ type
     fGitExe: TFileName;
     fGitRepository: TFileName;
     function Exec(const folder, exe, arg1, arg2, arg3, arg4, arg5: TFileName;
-      exeisshell: boolean=true): boolean;
+      exeisshell: boolean=true; wait: boolean=true): boolean;
     procedure ReadStatus;
   public
     { Public declarations }
@@ -100,7 +100,6 @@ const
 {$else}
 const
   SHELL = '.sh';
-  SHELLEXE = '/usr/bin/gnome-terminal';
   GITDEF = '/usr/bin/git';
 var
   REPFOSSIL: TFileName;
@@ -109,7 +108,7 @@ var
 {$endif}
 
 function TMainForm.Exec(const folder, exe, arg1, arg2, arg3, arg4, arg5: TFileName;
-  exeisshell: boolean): boolean;
+  exeisshell, wait: boolean): boolean;
 var
   bak, path: TFileName;
   {$ifdef MSWINDOWS}
@@ -131,8 +130,7 @@ begin
     path := exe;
   screen.Cursor := crHourGlass;
   try
-    result := RunProcess(q(path), q(arg1),
-      {wait=}true, q(arg2), q(arg3), q(arg4), q(arg5)) = 0;
+    result := RunProcess(path, q(arg1), wait, q(arg2), q(arg3), q(arg4), q(arg5)) = 0;
   finally
     if bak <> '' then
       SetCurrentDir(bak);
@@ -169,7 +167,9 @@ begin
   REPFOSSIL := dev + 'fossil/lib';
   REPLIB := dev + 'lib';
   REPGITHUB := dev + 'github/';
-{$endif}
+  btnFossilShell.caption := 'Fossil diff';
+  btnGitShell.caption := 'Git diff';
+{$endif MSWINDOWS}
   fBatPath := ExeVersion.ProgramFilePath;
   if not FileExists(fBatPath + 'FossilStatus' + SHELL) then // from exe sub-folder?
     fBatPath := ExtractFilePath(ExcludeTrailingPathDelimiter(fBatPath));
@@ -240,7 +240,7 @@ begin
   inc(VersionNumber);
   VersionText := '''' + VERSION + '.' + UInt32ToUtf8(VersionNumber) + ''''#13#10;
   FileFromString(VersionText, fDevPath + PathDelim +'SynopseCommit.inc');
-  FileFromString(VersionText, fFossilRepository + PathDelim +'SynopseCommit.inc');
+  FileFromString(VersionText, fFossilRepository + PathDelim + 'SynopseCommit.inc');
   DescFile := fBatPath + 'desc.txt';
   FileFromString('{' + ToUTF8(VersionNumber) + '} ' + Desc, DescFile);
   Exec(fFossilRepository, 'FossilCommit', DescFile, IntToStr(ord(chkFossilPush.Checked)), fFossilRepository, '', '');
@@ -250,8 +250,8 @@ end;
 procedure TMainForm.btnGitSynchClick(Sender: TObject);
 var
   Desc, status: string;
-  DescFile, BatchFile: TFileName;
-  i: integer;
+  DescFile, BatchFile, GitHub: TFileName;
+  i,n: integer;
 begin
   Desc := trim(mmoDescription.Text);
   if Desc = '' then begin
@@ -291,6 +291,19 @@ begin
   end;
   DescFile := fBatPath + 'desc.txt';
   FileFromString(Desc, DescFile);
+  GitHub := ExtractFilePath(fGitRepository);
+  n := 0;
+  if (Sender = btnGitAll) or (Sender = btnSynProject) then
+    inc(n,SynchFolders(fFossilRepository, GitHub + 'SynProject', true, true, true));
+  if (Sender = btnGitAll) or (Sender = btnSynPdf) then
+    inc(n,SynchFolders(fFossilRepository, GitHub + 'SynPDF', false, true, true));
+  if (Sender = btnGitAll) or (Sender = btnDMustache) then
+    inc(n,SynchFolders(fFossilRepository, GitHub + 'dmustache', false, true, true));
+  if (Sender = btnGitAll) or (Sender = btnLVCL) then
+    inc(n,SynchFolders(fFossilRepository, GitHub + 'LVCL', false, true, true));
+  if (Sender = btnGitAll) or (Sender = btnGitSynch) then
+    inc(n,SynchFolders(fFossilRepository, GitHub + 'mORMot', true, true, true));
+  {$I-} Writeln(n,' file(s) synched to GitHub'#13#10); {$I+}
   if Sender = btnGitAll then
     BatchFile := 'GitCommitAll'
   else if Sender = btnSynProject then
@@ -316,12 +329,20 @@ end;
 
 procedure TMainForm.btnGitShellClick(Sender: TObject);
 begin
+  {$ifdef MSWINDOWS}
   Exec(fGitRepository, SHELLEXE, '', '', '', '', '');
+  {$else}
+  Exec(fGitRepository, '/usr/bin/meld', fGitRepository, fDevPath, '', '', '', false, false);
+  {$endif}
 end;
 
 procedure TMainForm.btnFossilShellClick(Sender: TObject);
 begin
+  {$ifdef MSWINDOWS}
   Exec(fFossilRepository, SHELLEXE, '', '', '', '', '');
+  {$else}
+  Exec(fFossilRepository, '/usr/bin/meld', fFossilRepository, fDevPath, '', '', '', false, false);
+  {$endif}
 end;
 
 procedure TMainForm.btnTestsClick(Sender: TObject);

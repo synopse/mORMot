@@ -208,30 +208,30 @@ object MainForm: TMainForm
     TabOrder = 14
   end
   object chkCopyLink: TCheckBox
-    Left = 496
+    Left = 480
     Height = 23
     Top = 480
-    Width = 113
+    Width = 93
     Anchors = [akLeft, akBottom]
-    Caption = 'and copy link'
+    Caption = '+copy link'
     TabOrder = 15
   end
   object chkFossilPush: TCheckBox
     Left = 168
     Height = 23
-    Top = 452
-    Width = 86
+    Top = 455
+    Width = 66
     Anchors = [akLeft, akBottom]
-    Caption = 'and push'
+    Caption = '+push'
     TabOrder = 16
   end
   object chkFossilPull: TCheckBox
     Left = 230
     Height = 23
-    Top = 452
-    Width = 79
+    Top = 455
+    Width = 59
     Anchors = [akLeft, akBottom]
-    Caption = 'and pull'
+    Caption = '+pull'
     TabOrder = 17
   end
 end

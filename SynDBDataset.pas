@@ -6,7 +6,7 @@ unit SynDBDataset;
 {
   This file is part of Synopse framework.
 
-  Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+  Synopse framework. Copyright (C) 2020 Arnaud Bouchez
   Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDBDataset;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -45,9 +45,6 @@ unit SynDBDataset;
   the terms of any one of the MPL, the GPL or the LGPL.
 
   ***** END LICENSE BLOCK *****
-
-  Version 1.18
-  - first public release, corresponding to mORMot framework 1.18
 
 }
 
@@ -602,7 +599,7 @@ begin
         SynTable.ftDouble:
           if aArrayIndex>=0 then
             P.AsFloat := GetExtended(pointer(VArray[aArrayIndex])) else
-            P.AsFloat := PDouble(@VInt64)^;
+            P.AsFloat := unaligned(PDouble(@VInt64)^);
         SynTable.ftCurrency:
           if aArrayIndex>=0 then
             P.AsCurrency := StrToCurrency(pointer(VArray[aArrayIndex])) else
@@ -661,7 +658,7 @@ begin
       {$else}
       aParam.VInt64 := trunc(Par.AsFloat);
       {$endif}
-    SynTable.ftDouble:  PDouble(@aParam.VInt64)^ := Par.AsFloat;
+    SynTable.ftDouble:  unaligned(PDouble(@aParam.VInt64)^) := Par.AsFloat;
     SynTable.ftCurrency:PCurrency(@aParam.VInt64)^ := Par.AsCurrency;
     SynTable.ftDate:    PDateTime(@aParam.VInt64)^ := Par.AsDateTime;
     SynTable.ftUTF8:    aParam.VData := StringToUTF8(Par.AsString);

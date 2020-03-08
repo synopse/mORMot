@@ -5,7 +5,7 @@ unit SynBz;
 {
     This file is part of Synopse BZ2 Compression.
 
-    Synopse Synopse BZ2 Compression. Copyright (C) 2019 Arnaud Bouchez
+    Synopse Synopse BZ2 Compression. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -24,7 +24,7 @@ unit SynBz;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -103,7 +103,8 @@ uses
 type
   TBZAlloc = function(AppData: Pointer; Items, Size: Cardinal): Pointer; stdcall;
   TBZFree = procedure(AppData, Block: Pointer); stdcall;
-  TBZStreamRec = object
+  {$ifdef USERECORDWITHMETHODS}TBZStreamRec = record
+    {$else}TBZStreamRec = object{$endif}
     next_in: PAnsiChar;
     avail_in: Integer;
     total_in: Int64;

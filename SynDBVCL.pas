@@ -6,7 +6,7 @@ unit SynDBVCL;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDBVCL;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -45,18 +45,6 @@ unit SynDBVCL;
   the terms of any one of the MPL, the GPL or the LGPL.
 
   ***** END LICENSE BLOCK *****
-
-  Version 1.17
-  - first public release, corresponding to Synopse mORMot Framework 1.17
-
-  Version 1.18
-  - BREAKING CHANGE: QueryToDataSet() and StatementToDataSet() renamed
-    as overloaded functions ToDataSet()
-  - now uses read/only TSynVirtualDataSet class for much faster process
-    and lower resource use - see SynDBMidasVCL.pas unit if you need
-  	a TClientDataset writable (but slower) instance
-  - introducing TSynDBSQLDataSet as a re-usable TDataSet for queries
-
 
 }
 
@@ -317,7 +305,7 @@ begin
       result := @fTemp64;
     end;
     SynTable.ftCurrency: begin // ftFloat expects a DOUBLE value
-      PDouble(@fTemp64)^ := PCurrency(result)^;
+      unaligned(PDouble(@fTemp64)^) := PCurrency(result)^;
       result := @fTemp64;
     end;
     SynTable.ftUTF8, SynTable.ftBlob:

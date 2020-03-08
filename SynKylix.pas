@@ -4,7 +4,7 @@ unit SynKylix;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -23,7 +23,7 @@ unit SynKylix;
 
   The Initial Developer of the Original Code is Arnaud Bouchez
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -41,10 +41,6 @@ unit SynKylix;
   the terms of any one of the MPL, the GPL or the LGPL.
 
   ***** END LICENSE BLOCK *****
-
-
-  Version 1.18
-  - initial revision, corresponding to functions not available in LibC.pas
 
 }
 
@@ -395,7 +391,7 @@ end;
 procedure SleepHiRes(ms: cardinal);
 begin
   if ms=0 then
-    sched_yield else
+    usleep(1) else // sched_yield() is buggy on multi CPU
     usleep(ms shl 10); // from ms to us
 end;
 

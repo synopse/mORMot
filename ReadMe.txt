@@ -2,7 +2,7 @@
   Synopse mORMot framework
 
 An Open Source Client-Server ORM/SOA framework
- (c) 2008-2019 Synopse Informatique
+ (c) 2008-2020 Synopse Informatique
   https://synopse.info
   http://mormot.net
 
@@ -22,6 +22,7 @@ Contributors
   Cheemeng
   CoMPi
   Damien (ddemars)
+  Darian Miller
   Daniel Kuettner
   David Mead (MDW)
   Delphinium (louisyeow)
@@ -43,12 +44,14 @@ Contributors
   Kevin Chen
   Lagodny
   Leon Oosthuizen
+  Macc2010
   Maciej Izak (hnb)
   Marcos Douglas B. Santos (mdbs99)
   Mario Moretti
   Marius Maximus (mariuszekpl)
   Martin Eckes
   Martin Suer
+  Maxim Masiutin
   Mazinsw
   MChaos
   Miab3

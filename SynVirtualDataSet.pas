@@ -6,7 +6,7 @@ unit SynVirtualDataSet;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynVirtualDataSet;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -48,10 +48,6 @@ unit SynVirtualDataSet;
   the terms of any one of the MPL, the GPL or the LGPL.
 
   ***** END LICENSE BLOCK *****
-
-  Version 1.18
-  - first public release, corresponding to Synopse mORMot Framework 1.18
-
 
 }
 
@@ -915,7 +911,7 @@ begin
           ftInt64:
             VariantToInt64(Values[ndx],fTemp64);
           ftDouble,SynTable.ftDate:
-            VariantToDouble(Values[ndx],PDouble(@fTemp64)^);
+            VariantToDouble(Values[ndx],unaligned(PDouble(@fTemp64)^));
           ftUTF8: begin
             VariantToUTF8(Values[ndx],fTempUTF8,wasString);
             result := pointer(fTempUTF8);

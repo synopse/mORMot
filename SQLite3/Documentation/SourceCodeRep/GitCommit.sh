@@ -12,11 +12,6 @@ echo mORMot repository
 echo -----------------
 
 cd $2
-$3 pull
-
-rsync -av --update --existing $1/* $2
-#rsync -av --update --existing $5/*.o* $2
-
 $3 add .
 $3 commit -a --file=$4
 $3 push

@@ -44,29 +44,6 @@ program TestSQL3;
 
   ***** END LICENSE BLOCK *****
 
-
-  Version 1.13
-  - code modifications to compile with Delphi 5 compiler (no ORM code compiles
-    yet: so only low-level units like SynCommons / SynCrypto / SynPdf are tested)
-  - note: in order to be able to use http.sys server under Vista or Seven,
-    first compile then execute TestSQL3Register.dpr (need Administrator rights)
-
-  Version 1.15
-  - all tests passed with Delphi XE2 (32 Bit)
-  - SynSQLite3 logic extracted from SQLite3 unit
-  - enhanced tests about external database handling
-  - tests renamed to match the new "mORMot" framework name
-
-  Version 1.16
-  - all tests are now implemented in a separated SQLite3SelfTests unit -
-    this is requested by Delphi XE2 background compiler issues
-
-  Version 1.18
-  - renamed SQLite3*.pas units to mORMot*.pas
-  - included Windows 64 bit regression tests (and potential FullDebugMode)
-  - all tests passed with Delphi XE3 up to 10.1 Berlin for Win32 and Win64 platforms
-
-
   this application has EnableMemoryLeakReporting conditional defined in its
   Project/Options -> we can therefore ensure that our mORMot Client/Server
   framework classes have no memory leak
@@ -77,7 +54,9 @@ program TestSQL3;
   - if you do not plan to use LVCL, do not refers to these libraries
     (which works only for Delphi 7)
   - first line of uses clause must be  {$I SynDprUses.inc}  to enable FastMM4
-    on older versions of Delphi *)
+    on older versions of Delphi
+
+*)
 
 {$ifdef Linux}
   {$ifdef FPC_CROSSCOMPILING}
@@ -95,7 +74,7 @@ program TestSQL3;
 {$endif}
 
 uses
-  {$ifdef KYLIX3} // strip down to the minimum files including /
+  {$ifdef KYLIX3} // strip down to the minimum files needed
     FastMM4,
     ECCProcess in 'Samples/33 - ECC/ECCProcess.pas',
     mORMotSelfTests;
@@ -113,13 +92,16 @@ uses
     SynLizard in '..\SynLizard.pas',
     SynCrypto in '..\SynCrypto.pas',
     SynEcc in '..\SynEcc.pas',
+    SynSSPI in '..\SynSSPI.pas',
+    SynSSPIAuth in '..\SynSSPIAuth.pas',
     SynCrtSock in '..\SynCrtSock.pas',
-    SynBidirSock in '..\SynBiDirSock.pas',
+    SynBidirSock in '..\SynBidirSock.pas',
     {$ifdef USELIBCURL}
       SynCurl in '..\SynCurl.pas',
     {$endif USELIBCURL}
     //SynOpenSSL,
     SynCommons in '..\SynCommons.pas',
+    SynTable in '..\SynTable.pas',
     SynLog in '..\SynLog.pas',
     SynTests in '..\SynTests.pas',
     {$ifndef DELPHI5OROLDER}
@@ -131,6 +113,7 @@ uses
           mORMotMVC in 'mORMotMVC.pas',
           mORMotDDD in 'mORMotDDD.pas',
           dddDomAuthInterfaces in 'DDD\dom\dddDomAuthInterfaces.pas',
+          dddDomCountry in 'DDD\dom\dddDomCountry.pas',
           dddDomUserTypes in 'DDD\dom\dddDomUserTypes.pas',
           dddDomUserInterfaces in 'DDD\dom\dddDomUserInterfaces.pas',
           dddDomUserCQRS in 'DDD\dom\dddDomUserCQRS.pas',
@@ -148,7 +131,6 @@ uses
           SynSMAPI in '..\SynSMAPI.pas',
           SynSM in '..\SynSM.pas',
         {$endif CPU64}
-        SynTable in '..\SynTable.pas',
         SynBigTable in '..\SynBigTable.pas',
       {$endif MSWINDOWS}
       SynSQLite3 in '..\SynSQLite3.pas',
@@ -175,14 +157,12 @@ uses
       {$endif FPC}
       SynDB in '..\SynDB.pas',
       SynDBSQLite3 in '..\SynDBSQLite3.pas',
-      {$ifdef MSWINDOWS}
-        SynDBOracle in '..\SynDBOracle.pas',
-        SynOleDB in '..\SynOleDB.pas',
-        SynDBODBC in '..\SynDBODBC.pas',
-        {$ifdef USEZEOS}
-          SynDBZeos in '..\SynDBZeos.pas',
-        {$endif}
-      {$endif MSWINDOWS}
+      SynDBOracle in '..\SynDBOracle.pas',
+      SynOleDB in '..\SynOleDB.pas',
+      SynDBODBC in '..\SynDBODBC.pas',
+      {$ifdef USEZEOS}
+        SynDBZeos in '..\SynDBZeos.pas',
+      {$endif}
       {$ifndef DELPHI5OROLDER}
         SynDBRemote in '..\SynDBRemote.pas',
         mORMotDB in 'mORMotDB.pas',
@@ -191,6 +171,7 @@ uses
     {$endif LVCL}
     SynZip in '..\SynZip.pas',
     SynProtoRTSPHTTP in '..\SynProtoRTSPHTTP.pas',
+    SynProtoRelay in '..\SynProtoRelay.pas',
     SynSelfTests in '..\SynSelfTests.pas',
     mORMotSelfTests in 'mORMotSelfTests.pas';
   {$endif KYLIX3}

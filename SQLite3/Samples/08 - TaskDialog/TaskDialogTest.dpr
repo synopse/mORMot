@@ -17,6 +17,7 @@ uses
   {$else}
   SynTaskDialog,
   {$endif}
+  SynCommons,
   mORMot,
   mORMotUILogin;
 

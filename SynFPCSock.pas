@@ -6,7 +6,7 @@ unit SynFPCSock;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -27,7 +27,7 @@ unit SynFPCSock;
   Portions created by Lukas Gebauer are Copyright (C) 2003.
   All Rights Reserved.
 
-  Portions created by Arnaud Bouchez are Copyright (C) 2019 Arnaud Bouchez.
+  Portions created by Arnaud Bouchez are Copyright (C) 2020 Arnaud Bouchez.
   All Rights Reserved.
 
   Contributor(s):
@@ -51,9 +51,6 @@ unit SynFPCSock;
     *************************************
 
   Shared by Kylix and FPC for all POSIX systems.
-
-  Version 1.18
-  - initial release
 
 }
 
@@ -96,7 +93,7 @@ uses
   Unix,
   {$ifdef Linux}
   Linux, // for epoll support
-  {$endif}
+  {$endif Linux}
   termio,
   netdb,
   Sockets, // most definitions are inlined in SynFPCSock to avoid Lazarus problems with Sockets.pp
@@ -108,7 +105,7 @@ uses
   KernelIoctl,
   SynKylix,
   {$endif}
-  {$endif}
+  {$endif FPC}
   SyncObjs,
   Classes;
 
@@ -240,7 +237,7 @@ const
   WSAEFAULT = ESysEFAULT;
   WSAEINVAL = ESysEINVAL;
   WSAEMFILE = ESysEMFILE;
-  WSAEWOULDBLOCK = ESysEWOULDBLOCK;
+  WSAEWOULDBLOCK = ESysEWOULDBLOCK; // =WSATRY_AGAIN/ESysEAGAIN on POSIX
   WSAEINPROGRESS = ESysEINPROGRESS;
   WSAEALREADY = ESysEALREADY;
   WSATRY_AGAIN = ESysEAGAIN;
@@ -440,8 +437,8 @@ type
                     sin_zero: array[0..7] of Char);
           AF_INET6:(sin6_port:     word; // see sockaddr_in6
                     sin6_flowinfo: cardinal;
-      	    	      sin6_addr:     TInAddr6;
-      		          sin6_scope_id: cardinal);
+      	    	    sin6_addr:     TInAddr6;
+      		    sin6_scope_id: cardinal);
           AF_UNIX: (sun_path: array[0..{$ifdef SOCK_HAS_SINLEN}103{$else}107{$endif}] of Char);
           );
   end;
@@ -564,7 +561,7 @@ type
   PEPollData = ^TEPollData;
 
   /// epoll descriptor data structure
-  TEPollEvent = {$ifdef CPU64}packed{$endif} record
+  TEPollEvent = {$ifdef CPUX64}packed{$endif} record
     events: cardinal;
     data: TEpollData;
   end;
@@ -1164,7 +1161,7 @@ begin
           x := 1;
         end else
           x := Resolvename(name,a4) else
-        x := 1;
+          x := 1;
       for n := 1  to x do
         IpList.Add(netaddrToStr(a4[n]));
     end;

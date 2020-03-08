@@ -9,7 +9,7 @@ interface
 
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -28,7 +28,7 @@ interface
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -127,7 +127,8 @@ type
   TFreeShortCutSet = set of ord('A')..ord('Z');
 
   /// a simple object to get one char shortcuts from caption value
-  {$ifdef UNICODE}TFreeShortCut = record{$else}TFreeShortCut = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TFreeShortCut = record
+    {$else}TFreeShortCut = object{$endif}
   public
     /// bit set for already used short cut, from 'A' to 'Z'
     Values: TFreeShortCutSet;
@@ -479,7 +480,8 @@ type
   // custom buttons to a previously created one by TSQLLister.SetToolBar()
   // - simply set the associated objects via the Init() method, then call
   // AddToolBar() for every toolbar which need to be created
-  {$ifdef UNICODE}TSQLCustomToolBar = record{$else}TSQLCustomToolBar = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}TSQLCustomToolBar = record
+    {$else}TSQLCustomToolBar = object{$endif}
   public
     Page: TSynPage;
     ActionHints: string;
@@ -2367,7 +2369,7 @@ begin
     result := TSQLRecord.CaptionName(@Action) else
     if Obj.InheritsFrom(TSQLRecord) then
       result := TSQLRecord(Obj).CaptionName else
-      result := TSQLRecord.CaptionNameFromRTTI(PPointer(PtrInt(Obj.ClassType)+vmtClassName)^);
+      result := TSQLRecord.CaptionNameFromRTTI(ClassNameShort(Obj));
   if Index>=0 then
     result := result+' '+IntToStr(Index);
 end;

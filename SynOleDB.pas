@@ -6,7 +6,7 @@ unit SynOleDB;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynOleDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -57,68 +57,13 @@ unit SynOleDB;
   - or take a look at latest patches from Oracle support, and pray it's fixed ;)
     https://stackoverflow.com/a/6661058
 
-
-  Version 1.14
-  - first public release, corresponding to SQLite3 Framework 1.14
-
-  Version 1.15
-  - SynDB unit extracted from previous SynOleDB.pas
-  - several fixes and speed enhancements
-  - made the code compatible with Delphi 5
-  - TOleDBStatement class now follows the prepared statement pattern introduced
-    with its parent TSQLDBStatement
-  - now able to retrieve table names and column information from OleDB metadata
-    including GetTableNames, GetFields, GetFieldDefinitions and GetForeignKey
-    methods - able to use faster direct SQL retrieval (e.g. for Oracle / MS SQL)
-
-  Version 1.16
-  - add some reference to https://synopse.info/fossil/tktview?name=213544b2f5
-    in case of wrong implementation of multi-thread connection (within the
-    THttpServerGeneric mORMot server, for instance)
-
-  Version 1.17
-  - fix issue (depending on OleDB Provider) about ordinal binding error
-  - fix issue about void string parameter binding
-  - fix issue in TOleDBStatement.BindCurrency() method
-  - fix retrieval of table and field metadata, for tables without schema
-    (e.g. Jet/MSAccess database)
-  - added TOleDBJetConnectionProperties kind of connection to direct
-    access of Microsoft Jet databases (.mdb files)
-  - added corresponding IsJetFile() function
-  - added FieldSize optional parameter to TOleDBStatement.ColumnType()
-    method (used e.g. by SynDBVCL to provide the expected field size on TDataSet)
-  - added TOleDBConnectionProperties.CreateDatabase able to create a database
-    from the supplied connection string (used e.g. to initialize .mdb files)
-  - code refactoring, especially about error handling and ODBC integration
-  - CoInit and CoUninit made public for user convenience, e.g. when using
-    custom COM objects in a mORMot multi-thread servers
-
-  Version 1.18
-  - SQL statements with no results will now be cached to increase speed
-  - TOleDBMSSQLConnectionProperties provider changed to more stable SQLNCLI10
-  - added TOleDBMSSQL2005ConnectionProperties, TOleDBMSSQL2008ConnectionProperties
-    and TOleDBMSSQL2012ConnectionProperties classes to specify every available
-    MS SQL Server providers SQLNCLI, SQLNCLI10 or SQLNCLI11
-  - now trim any spaces when retrieving database schema text values
-  - added TOleDBStatement.UpdateCount overridden method (dc proposal)
-  - fixed ticket [4c68975022] about broken SQL statement when logging active
-  - fixed ticket [a24cbd30e3] about 64 bit compilation
-  - now works as expected under Win64 (a lot of previous code was Win32 specific)
-  - fixed issue when binding NULL parameters with some DB providers (e.g. Jet)
-  - fixed issue in TOleDBConnectionProperties.ColumnTypeNativeToDB() about
-    unrecognized column type when table schema is retrieved from SQL
-  - fixed issue when running TOleDBStatement.Step(true)
-  - fixed issue [e8c211062e] when binding NULL values in multi INSERT statements
-  - exception during Commit should leave transaction state - see [ca035b8f0da]
-  - fixed logging SQL content of external OleDB statements
-  - added TOleDBStatement.BindArray for `array of Int64` & `array of RawUFT8`
-    binding for `select` statements( via additional TABLE variable)
-  - added TOleDBInformixConnectionProperties - by EMartin
 }
 
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
+
+{$ifdef MSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
 
 uses
   Windows,
@@ -1314,7 +1259,7 @@ end;
 { TOleDBStatement }
 
 procedure TOleDBStatement.BindTextU(Param: Integer; const Value: RawUTF8;
-  IO: TSQLDBParamInOutType=paramIn);
+  IO: TSQLDBParamInOutType);
 begin
   if (Value='') and fConnection.Properties.StoreVoidStringAsNull then
     CheckParam(Param,ftNull,IO) else
@@ -1352,13 +1297,13 @@ begin
 end;
 
 procedure TOleDBStatement.BindBlob(Param: Integer; Data: pointer; Size: integer;
-  IO: TSQLDBParamInOutType=paramIn);
+  IO: TSQLDBParamInOutType);
 begin
   SetString(CheckParam(Param,ftBlob,IO)^.VBlob,PAnsiChar(Data),Size);
 end;
 
 procedure TOleDBStatement.Bind(Param: Integer; Value: double;
-  IO: TSQLDBParamInOutType=paramIn);
+  IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param,ftDouble,IO)^.VInt64 := PInt64(@Value)^;
 end;
@@ -1382,23 +1327,23 @@ begin
     for i := 0 to high(Values) do
       if StoreVoidStringAsNull and (Values[i]='') then
         VArray[i] := 'null' else
-        QuotedStr(pointer(Values[i]),'''',VArray[i]);
+        QuotedStr(Values[i],'''',VArray[i]);
 end;
 
 procedure TOleDBStatement.Bind(Param: Integer; Value: Int64;
-  IO: TSQLDBParamInOutType=paramIn);
+  IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param,ftInt64,IO)^.VInt64 := Value;
 end;
 
 procedure TOleDBStatement.BindCurrency(Param: Integer; Value: currency;
-  IO: TSQLDBParamInOutType=paramIn);
+  IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param,ftCurrency,IO)^.VInt64 := PInt64(@Value)^;
 end;
 
 procedure TOleDBStatement.BindDateTime(Param: Integer; Value: TDateTime;
-  IO: TSQLDBParamInOutType=paramIn);
+  IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param,ftDate,IO)^.VInt64 := PInt64(@Value)^;
 end;
@@ -1471,7 +1416,7 @@ begin
 {$else}
     Int32ToUtf8(Status,msg);
 {$endif}
-  SynDBLog.Add.Log(sllError,'Invalid "%" status for column "%" at row % for %',
+  SynDBLog.Add.Log(sllError,'Invalid [%] status for column [%] at row % for %',
     [msg,Column^.ColumnName,fCurrentRow,fSQL],self);
 end;
 
@@ -1770,7 +1715,7 @@ begin
     result := VType;
     case VType of
       ftInt64:     Value := {$ifdef DELPHI5OROLDER}integer{$endif}(VInt64);
-      ftDouble:    Value := PDouble(@VInt64)^;
+      ftDouble:    Value := unaligned(PDouble(@VInt64)^);
       ftCurrency:  Value := PCurrency(@VInt64)^;
       ftDate:      Value := PDateTime(@VInt64)^;
       ftUTF8:      Value := VText; // returned as WideString/OleStr variant
@@ -1867,7 +1812,7 @@ begin
         for i := 0 to fParamCount-1 do
           case fParams[i].VType of
             ftUnknown: raise EOleDBException.CreateUTF8(
-              '%.Execute: missing #% bound parameter for "%"',[self,i+1,fSQL]);
+              '%.Execute: missing #% bound parameter for [%]',[self,i+1,fSQL]);
           end;
         P := pointer(fParams);
         SetLength(fParamBindings,fParamCount);
@@ -2272,7 +2217,7 @@ begin
         end;
       end;
       else raise EOleDBException.CreateUTF8(
-        '%.Execute: wrong column "%" (%) for "%"',[self,aName,
+        '%.Execute: wrong column [%] (%) for [%]',[self,aName,
           GetEnumName(TypeInfo(TSQLDBFieldType),ord(Col^.ColumnType))^,fSQL]);
       end;
       inc(nfo);
@@ -2594,7 +2539,7 @@ begin
         result := true;
       except
       end;
-    SynDBLog.Add.Log(sllDB,'CreateDatabase for "%" returned %',[ConnectionString,ord(result)]);
+    SynDBLog.Add.Log(sllDB,'CreateDatabase for [%] returned %',[ConnectionString,ord(result)]);
   finally
     DB := null;
     Catalog := nil;
@@ -3240,4 +3185,11 @@ finalization
   if OleDBCoinitialized<>0 then
     SynDBLog.Add.Log(sllError,'Missing TOleDBConnection.Destroy call = %',
       OleDBCoInitialized);
+
+{$else}
+
+implementation
+
+{$endif MSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
+
 end.

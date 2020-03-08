@@ -6,7 +6,7 @@ unit PasZip;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
     This library is free software; you can redistribute it and/or modify it
@@ -35,13 +35,6 @@ unit PasZip;
     and some critical part rewrite
    - .zip reading from file, resource or direct memory - Windows only
    - .zip write into a file (new .zip creation, not update) - Windows only
-
-
-   Version 1.18
-   - enhanced compatibility with new targets and compilers (Win32, Win64,
-     Delphi 2009+, FPC)
-   - even more refactoring, and fixes
-   - .zip supported for Windows only
 
 }
 

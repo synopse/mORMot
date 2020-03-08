@@ -23,6 +23,7 @@ uses
   Windows,
   SysUtils,
   SynCommons,
+  SynTable,
   SynZip,
   SynCrtSock,
   SynSM,

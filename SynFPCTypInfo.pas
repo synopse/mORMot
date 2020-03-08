@@ -6,7 +6,7 @@ unit SynFPCTypInfo;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynFPCTypInfo;
 
   The Initial Developer of the Original Code is Alfred Glaenzer.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -46,11 +46,8 @@ unit SynFPCTypInfo;
 
   ***** END LICENSE BLOCK *****
 
-
-  Version 1.18
-  - initial revision
-  - unit created to avoid polluting the SynCommons.pas/mORMot.pas namespace
-    with overloaded typinfo.pp types
+  Unit created to avoid polluting the SynCommons.pas/mORMot.pas namespace
+  with overloaded typinfo.pp types.
 
 }
 
@@ -72,16 +69,21 @@ type
 
 {$ifdef HASALIGNTYPEDATA}
 function AlignTypeData(p: pointer): pointer; inline;
+function AlignTypeDataClean(p: pointer): pointer; inline;
 {$else}
 type
   AlignTypeData = pointer;
+  AlignTypeDataClean = pointer;
 {$endif HASALIGNTYPEDATA}
+
 
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
 function AlignToPtr(p: pointer): pointer; inline;
+function AlignPTypeInfo(p: pointer): pointer; inline;
 {$else FPC_REQUIRES_PROPER_ALIGNMENT}
 type
   AlignToPtr = pointer;
+  AlignPTypeInfo = pointer;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 type
@@ -93,7 +95,6 @@ type
 {$ifdef FPC_NEWRTTI}
   PFPCRecInitData = TypInfo.PRecInitData;
 
-function GetFPCRecInitData(AlignedTypeData: Pointer): PFPCRecInitData;
 {$endif FPC_NEWRTTI}
 
 procedure FPCDynArrayClear(var a: Pointer; TypeInfo: Pointer);
@@ -106,15 +107,15 @@ procedure FPCRecordAddRef(var Data; TypeInfo : pointer);
 implementation
 
 procedure FPCDynArrayClear(var a: Pointer; TypeInfo: Pointer);
-  [external name 'FPC_DYNARRAY_CLEAR'];
+  external name 'FPC_DYNARRAY_CLEAR';
 procedure FPCFinalizeArray(p: Pointer; TypeInfo: Pointer; elemCount: PtrUInt);
-  [external name 'FPC_FINALIZE_ARRAY'];
+  external name 'FPC_FINALIZE_ARRAY';
 procedure FPCFinalize(Data: Pointer; TypeInfo: Pointer);
-  [external name 'FPC_FINALIZE'];
+  external name 'FPC_FINALIZE';
 procedure FPCRecordCopy(const Source; var Dest; TypeInfo: pointer);
-  [external name 'FPC_COPY'];
+  external name 'FPC_COPY';
 procedure FPCRecordAddRef(var Data; TypeInfo : pointer);
-  [external name 'FPC_ADDREF'];
+  external name 'FPC_ADDREF';
 
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} // copied from latest typinfo.pp
 function AlignToPtr(p: pointer): pointer;
@@ -134,10 +135,11 @@ begin
 {$ifdef VER3_0}
   result := Pointer(align(p,SizeOf(Pointer)));
 {$else VER3_0}
-  result := Pointer(align(p,PtrInt(@TAlignCheck(nil^).q)))
+    result := Pointer(align(p,PtrInt(@TAlignCheck(nil^).q)));
 {$endif VER3_0}
   {$ifdef FPC_PROVIDE_ATTR_TABLE}
-  inc(PFPCAttributeTable(result)); // ignore attributes table
+    inc(PByte(result),SizeOf(PFPCAttributeTable)); // ignore attributes table
+    result := Pointer(align(result,PtrInt(@TAlignCheck(nil^).q)));
   {$endif FPC_PROVIDE_ATTR_TABLE}
 end;
 {$else}
@@ -145,22 +147,50 @@ end;
 function AlignTypeData(p: pointer): pointer;
 begin
   result := p;
-  inc(PFPCAttributeTable(result)); // ignore attributes table
+  inc(PByte(result),SizeOf(PFPCAttributeTable)); // ignore attributes table
 end;
 {$endif FPC_PROVIDE_ATTR_TABLE}
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
-{$ifdef FPC_NEWRTTI}
-function GetFPCRecInitData(AlignedTypeData: Pointer): PFPCRecInitData;
-begin
-  {$ifdef FPC_PROVIDE_ATTR_TABLE}
-  dec(PFPCAttributeTable(AlignedTypeData)); // un-adjust AlignTypeData() above
-  {$endif FPC_PROVIDE_ATTR_TABLE}
-  if TypInfo.PTypeData(AlignedTypeData)^.RecInitInfo=nil then
-    result := AlignedTypeData else // no RecInitData, but regular list of fields
-    result := TypInfo.PTypeData(AlignedTypeData)^.RecInitData;
-end;
-{$endif FPC_NEWRTTI}
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} // copied from latest typinfo.pp
 
+function AlignTypeDataClean(p: pointer): pointer;
+{$packrecords c}
+  type
+    TAlignCheck = record // match RTTI TTypeInfo definition
+      b : byte;    // = TTypeKind
+      q : qword;   // = this is where the PTypeData begins
+    end;
+{$packrecords default}
+begin
+  {$ifdef VER3_0}
+    result := Pointer(align(p,SizeOf(Pointer)));
+  {$else VER3_0}
+    result := Pointer(align(p,PtrInt(@TAlignCheck(nil^).q)));
+  {$endif VER3_0}
+end;
+
+function AlignPTypeInfo(p: pointer): pointer; inline;
+{$packrecords c}
+  type
+    TAlignCheck = record
+      b : byte;
+      p : pointer;
+    end;
+{$packrecords default}
+begin
+  Result := Pointer(align(p,PtrInt(@TAlignCheck(nil^).p)))
+
+end;
+
+{$else}
+{$ifdef HASALIGNTYPEDATA}
+function AlignTypeDataClean(p: pointer): pointer;
+begin
+  result := p;
+end;
+{$endif HASALIGNTYPEDATA}
+
+{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 end.

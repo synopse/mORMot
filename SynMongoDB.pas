@@ -6,7 +6,7 @@ unit SynMongoDB;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,14 +25,13 @@ unit SynMongoDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
   - BBackSoon
   - Sabbiolina
   - Zed
-
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -48,16 +47,10 @@ unit SynMongoDB;
 
   ***** END LICENSE BLOCK *****
 
-  Version 1.18
-  - first public release, corresponding to mORMot Framework 1.18
-    and feature request [0fee1d995c]
-
-
   TODO:
   - handle BULK commands support for MongoDB >=2.6 for faster writes
     see http://blog.mongodb.org/post/84922794768
-  - GridFS support
-
+  - GridFS support ?
 
 }
 
@@ -86,7 +79,6 @@ uses
   SynLog;
 
 
-
 { ************ BSON (Binary JSON) process }
 
 type
@@ -96,8 +88,9 @@ type
   TDecimal128Bits = record
     case integer of
     0: (lo, hi: QWord);
-    1: (b: array[0..15] of byte);
-    2: (c: array[0..3] of cardinal);
+    1: (l, h: Int64);
+    2: (b: array[0..15] of byte);
+    3: (c: array[0..3] of cardinal);
   end;
   /// points to a 128-bit decimal binary
   PDecimal128Bits = ^TDecimal128Bits;
@@ -126,11 +119,8 @@ type
   // explicitly on native language value representation (e.g. currency, TBCD or
   // any BigNumber library) - use ToCurr/FromCurr or ToText/FromText to make
   // the appropriate safe conversions
-  {$ifndef UNICODE}
-  TDecimal128 = object
-  {$else}
-  TDecimal128 = record
-  {$endif}
+  {$ifdef USERECORDWITHMETHODS}TDecimal128 = record
+    {$else}TDecimal128 = object{$endif}
   public
     /// the raw binary storage
     Bits: TDecimal128Bits;
@@ -284,11 +274,8 @@ type
   // creation time, so ease sharding and BTREE storage
   // - match betObjectID TBSONElementType
   {$A-}
-  {$ifndef UNICODE}
-  TBSONObjectID = object
-  {$else}
-  TBSONObjectID = record
-  {$endif}
+  {$ifdef USERECORDWITHMETHODS}TBSONObjectID = record
+    {$else}TBSONObjectID = object{$endif}
     /// big-endian 4-byte value representing the seconds since the Unix epoch
     // - time is expressed in Coordinated Universal Time (UTC), not local time
     UnixCreateTime: cardinal;
@@ -470,13 +457,8 @@ type
   // - see http://bsonspec.org/#/specification
   // - this structure has been optimized to map the BSON binary content,
   // without any temporary memory allocation (the SAX way)
-  {$ifndef UNICODE}
-  TBSONElement = object
-  protected
-  {$else}
-  TBSONElement = record
-  private
-  {$endif}
+  {$ifdef USERECORDWITHMETHODS}TBSONElement = record private
+    {$else}TBSONElement = object protected{$endif}
     /// used internally to set the TBSONElement content, once Kind has been set
     procedure FromBSON(bson: PByte);
   public
@@ -644,13 +626,8 @@ type
 
   /// data structure used for iterating over a BSON binary buffer
   // - is just a wrapper around a PByte value, to be used with a TBSONDocument
-  {$ifndef UNICODE}
-  TBSONIterator = object
-  protected
-  {$else}
-  TBSONIterator = record
-  private
-  {$endif}
+  {$ifdef USERECORDWITHMETHODS}TBSONIterator = record private
+    {$else}TBSONIterator = object protected{$endif}
     fBson: PByte;
   public
     /// map the current item, after the Next method did return TRUE
@@ -824,10 +801,12 @@ type
 const
   /// fake BSON element type which compares lower than all other possible values
   // - element type sounds to be stored as shortint, so here $ff=-1<0=betEOF
-  betMinKey = TBSONElementType($ff);
+  // - defined as an integer to circumvent a compilation issue with FPC trunk
+  betMinKey = $ff;
   /// fake BSON element type which compares higher than all other possible values
   // - element type sounds to be stored as shortint, so here betInt64=$12<$7f
-  betMaxKey = TBSONElementType($7f);
+  // - defined as an integer to circumvent a compilation issue with FPC trunk
+  betMaxKey = $7f;
 
   /// kind of elements which will store a RawByteString/RawUTF8 content
   // within its TBSONVariant kind
@@ -955,7 +934,7 @@ function BSONFieldSelector(const FieldNamesCSV: RawUTF8): TBSONDocument; overloa
 // - will create the BSON binary without any temporary TDocVariant storage, by
 // calling JSONBufferToBSONDocument() on a temporary copy of the supplied JSON
 function BSON(const JSON: RawUTF8; kind: PBSONElementType=nil): TBSONDocument; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifndef ISDELPHI20092010}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// store some object content, supplied as (extended) JSON and parameters,
 // into BSON encoded binary
@@ -1515,13 +1494,8 @@ type
   // response, and navigate within all nested documents
   // - several TMongoReplyCursor instances may map the same TMongoReply content
   // - you can safely copy one TMongoReplyCursor instance to another
-  {$ifndef UNICODE}
-  TMongoReplyCursor = object
-  protected
-  {$else}
-  TMongoReplyCursor = record
-  private
-  {$endif}
+  {$ifdef USERECORDWITHMETHODS}TMongoReplyCursor = record private
+    {$else}TMongoReplyCursor = object protected{$endif}
     fReply: TMongoReply;
     fRequestID: integer;
     fResponseTo: integer;
@@ -1907,7 +1881,7 @@ type
   TMongoClient = class
   protected
     fConnectionString: RawUTF8;
-    fDatabases: TRawUTF8ListHashed;
+    fDatabases: TRawUTF8List;
     fConnections: TMongoConnectionDynArray;
     fReadPreference: TMongoClientReplicaSetReadPreference;
     fWriteConcern: TMongoClientWriteConcern;
@@ -2051,7 +2025,7 @@ type
   protected
     fClient: TMongoClient;
     fName: RawUTF8;
-    fCollections: TRawUTF8ListHashed;
+    fCollections: TRawUTF8List;
     function GetCollection(const Name: RawUTF8): TMongoCollection;
     function GetCollectionOrCreate(const Name: RawUTF8): TMongoCollection;
     function GetCollectionOrNil(const Name: RawUTF8): TMongoCollection;
@@ -2725,7 +2699,7 @@ begin
   ZeroFill(@result); // set result.VType=varEmpty and result.VAny=nil
   case Kind of
   betFloat:
-    res.VDouble := PDouble(Element)^;
+    res.VDouble := unaligned(PDouble(Element)^);
   betString:
     FastSetString(RawUTF8(res.VAny),Data.Text,Data.TextLen);
   betJS, betDeprecatedSymbol:
@@ -2763,7 +2737,7 @@ begin
   betBoolean:
     result := PByte(Element)^;
   betFloat:
-    result := Trunc(PDouble(Element)^);
+    result := Trunc(unaligned(PDouble(Element)^));
   betInt32:
     result := PInteger(Element)^;
   betInt64:
@@ -2784,7 +2758,7 @@ end;
 begin
   case Kind of
   betFloat:
-    ExtendedToStr(PDouble(Element)^,DOUBLE_PRECISION,result);
+    ExtendedToStr(unaligned(PDouble(Element)^),DOUBLE_PRECISION,result);
   betString:
     FastSetString(result,Data.Text,Data.TextLen);
   betInt32:
@@ -2827,24 +2801,24 @@ end;
 procedure TBSONElement.AddMongoJSON(W: TTextWriter; Mode: TMongoJSONMode);
 label bin,regex;
 begin
-  case Kind of
-  betFloat:
-    W.AddDouble(PDouble(Element)^);
-  betString, betJS, betDeprecatedSymbol: begin
+  case integer(Kind) of
+  ord(betFloat):
+    W.AddDouble(unaligned(PDouble(Element)^));
+  ord(betString), ord(betJS), ord(betDeprecatedSymbol): begin
     W.Add('"');
     W.AddJSONEscape(Data.Text,Data.TextLen);
     W.Add('"');
   end;
-  betDoc, betArray:
+  ord(betDoc), ord(betArray):
     BSONListToJSON(Data.DocList,Kind,W,Mode);
-  betObjectID: begin
+  ord(betObjectID): begin
     W.AddShort(BSON_JSON_OBJECTID[false,Mode]);
     W.AddBinToHex(Element,SizeOf(TBSONObjectID));
     W.AddShort(BSON_JSON_OBJECTID[true,Mode]);
   end;
-  betDeprecatedUndefined:
+  ord(betDeprecatedUndefined):
     W.AddShort(BSON_JSON_UNDEFINED[Mode=modMongoShell]);
-  betBinary:
+  ord(betBinary):
     case Mode of
     modNoMongo:
       W.WrBase64(Data.Blob,Data.BlobLen,true);
@@ -2863,7 +2837,7 @@ begin
       W.AddShort('")');
     end;
     end;
-  betRegEx:
+  ord(betRegEx):
     case Mode of
     modNoMongo:
 bin:W.WrBase64(Element,ElementBytes,true);
@@ -2884,37 +2858,37 @@ regex:  W.AddShort(BSON_JSON_REGEX[0]);
         W.AddShort(BSON_JSON_REGEX[2]);
       end;
     end;
-  betDeprecatedDbptr:
+  ord(betDeprecatedDbptr):
     goto bin; // no specific JSON construct for this deprecated item
-  betJSScope:
+  ord(betJSScope):
     goto bin; // no specific JSON construct for this item yet
-  betTimestamp:
+  ord(betTimestamp):
     goto bin; // internal content will always be written as raw binary
-  betBoolean:
+  ord(betBoolean):
     W.Add(PBoolean(Element)^);
-  betDateTime: begin
+  ord(betDateTime): begin
     W.AddShort(BSON_JSON_DATE[Mode,false]);
     W.AddUnixMSTime(Element,false);
     W.AddShort(BSON_JSON_DATE[Mode,true]);
   end;
-  betNull:
+  ord(betNull):
     W.AddShort('null');
-  betInt32:
+  ord(betInt32):
     W.Add(PInteger(Element)^);
-  betInt64:
+  ord(betInt64):
     W.Add(PInt64(Element)^);
-  betDecimal128: begin
+  ord(betDecimal128): begin
     W.AddShort(BSON_JSON_DECIMAL[false,Mode]);
     PDecimal128(Element)^.AddText(W);
     W.AddShort(BSON_JSON_DECIMAL[true,Mode]);
   end;
+  betMinKey:
+    W.AddShort(BSON_JSON_MINKEY[Mode=modMongoShell]);
+  betMaxKey:
+    W.AddShort(BSON_JSON_MAXKEY[Mode=modMongoShell]);
   else
-  if Kind=betMinKey then
-    W.AddShort(BSON_JSON_MINKEY[Mode=modMongoShell]) else
-  if Kind=betMaxKey then
-    W.AddShort(BSON_JSON_MAXKEY[Mode=modMongoShell]) else
     raise EBSONException.CreateUTF8('TBSONElement.AddMongoJSON: unexpected type %',
-      [ord(Kind)]);
+      [integer(Kind)]);
   end;
 end;
 
@@ -2942,7 +2916,7 @@ begin
     Kind := ELEMKIND[aVarData.VType];
     case Kind of
     betFloat:
-      PDouble(Element)^ := double(aValue);
+      unaligned(PDouble(Element)^) := double(aValue);
     betDateTime:
       PUnixMSTime(Element)^ := DateTimeToUnixMSTime(aVarData.VDate);
     betBoolean:
@@ -3087,10 +3061,10 @@ begin
     exit;
   end;
   Kind := TBSONElementType(BSON^);
-  case ord(Kind) of
+  case integer(Kind) of
   ord(betEOF):
     result := false;
-  ord(betFloat)..ord(betDecimal128),ord(betMinKey),ord(betMaxKey): begin
+  ord(betFloat)..ord(betDecimal128),betMinKey,betMaxKey: begin
     inc(BSON);
     Name := PUTF8Char(BSON);
     NameLen := StrLen(PUTF8Char(BSON));
@@ -3201,7 +3175,7 @@ begin
           W.AddNoJSONEscape(item.Name,item.NameLen);
           W.Add(':');
         end else
-          W.AddFieldName(item.Name,item.NameLen);
+          W.AddProp(item.Name,item.NameLen);
         item.AddMongoJSON(W,Mode);
         W.Add(',');
       end;
@@ -3230,9 +3204,10 @@ end;
 function BSONToJSON(BSON: PByte; Kind: TBSONElementType; ExpectedBSONLen: integer;
   Mode: TMongoJSONMode): RawUTF8;
 var W: TTextWriter;
+    tmp: TTextWriterStackBuffer;
 begin
   BSONParseLength(BSON,ExpectedBSONLen);
-  W := TTextWriter.CreateOwnedStream;
+  W := TTextWriter.CreateOwnedStream(tmp);
   try
     BSONListToJSON(BSON,Kind,W,Mode);
     W.SetText(result);
@@ -3257,8 +3232,9 @@ end;
 
 function VariantSaveMongoJSON(const Value: variant; Mode: TMongoJSONMode): RawUTF8;
 var W: TTextWriter;
+    tmp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream;
+  W := TTextWriter.CreateOwnedStream(tmp);
   try
     AddMongoJSON(Value,W,Mode);
     W.SetText(result);
@@ -3382,11 +3358,11 @@ begin
 end;
 
 procedure TBSONWriter.BSONWriteDateTime(const name: RawUTF8; const value: TDateTime);
-var UnixTime: TUnixMSTime;
+var ms: TUnixMSTime;
 begin
-  UnixTime := DateTimeToUnixMSTime(value);
+  ms := DateTimeToUnixMSTime(value);
   BSONWrite(name,betDateTime);
-  Write8(UnixTime);
+  Write8(ms);
 end;
 
 procedure TBSONWriter.BSONWrite(const name: RawUTF8; Data: pointer; DataLen: integer);
@@ -3592,7 +3568,7 @@ end;
 
 procedure TBSONWriter.BSONWriteDoc(const doc: TDocVariantData);
 var Name: RawUTF8;
-    i: integer;
+    i: PtrInt;
 begin
   BSONDocumentBegin;
   if TVarData(doc).VType>varNull then // null,empty will write {}
@@ -3613,7 +3589,7 @@ end;
 
 procedure TBSONWriter.BSONWriteProjection(const FieldNamesCSV: RawUTF8);
 var FieldNames: TRawUTF8DynArray;
-    i: integer;
+    i: PtrInt;
 begin
   CSVToRawUTF8DynArray(pointer(FieldNamesCSV),FieldNames);
   BSONDocumentBegin;
@@ -4072,10 +4048,10 @@ const
 {$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF} // avoid hints with CompareMemFixed() inlining
 function TBSONVariant.TryJSONToVariant(var JSON: PUTF8Char;
   var Value: variant; EndOfObject: PUTF8Char): boolean;
+// warning: code should NOT modify JSON buffer in-place, unless it returns true
 var bsonvalue: TBSONVariantData absolute Value;
     varvalue: TVarData absolute Value;
-// warning: code should NOT modify JSON buffer in-place, unless it returns true
-  procedure Return(kind: TBSONElementType; P: PUTF8Char; GotoEndOfObject: AnsiChar='}');
+  procedure Return(kind: TBSONElementType; P: PUTF8Char; GotoEndOfObject: AnsiChar);
   begin
     if GotoEndOfObject<>#0 then
       while P^<>GotoEndOfObject do
@@ -4099,6 +4075,12 @@ var bsonvalue: TBSONVariantData absolute Value;
       varvalue.VType := varDate;
     end;
     result := true;
+  end;
+  procedure ReturnInt(kindint: integer; P: PUTF8Char; GotoEndOfObject: AnsiChar);
+  {$ifdef HASINLINE}inline;{$endif} // redirection function to circumvent FPC trunk limitation
+  var kind: TBSONElementType absolute kindint;
+  begin
+    Return(kind,P,GotoEndOfObject);
   end;
   procedure TryDate(P: PUTF8Char; GotoEndOfObject: AnsiChar);
   var L: integer;
@@ -4208,18 +4190,18 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
     if P[0]='$' then
     case P[1] of
     'u': if CompareMemFixed(P+2,@BSON_JSON_UNDEFINED[false][5],10) then
-           Return(betDeprecatedUndefined,P+12);
-    'm': if CompareMemFixed(P+2,@BSON_JSON_MINKEY[false][5],7) then
-           Return(betMinKey,P+9) else
-         if CompareMemFixed(P+2,@BSON_JSON_MAXKEY[false][5],7) then
-           Return(betMaxKey,P+9);
+           Return(betDeprecatedUndefined,P+12,'}');
+    'm': if CompareMemFixed(P+1,@BSON_JSON_MINKEY[false][4],8) then
+           ReturnInt(betMinKey,P+9,'}') else
+         if CompareMemFixed(P+1,@BSON_JSON_MAXKEY[false][4],8) then
+           ReturnInt(betMaxKey,P+9,'}');
     'o': if PInteger(P+2)^=PInteger(@BSON_JSON_OBJECTID[false,modMongoStrict][5])^ then
            TryObjectID(P+6,'}');
-    'd': if CompareMemFixed(P+2,@BSON_JSON_DATE[modMongoStrict,false][5],5) then
+    'd': if CompareMemSmall(P+2,@BSON_JSON_DATE[modMongoStrict,false][5],5) then
            TryDate(P+7,'}');
-    'r': if CompareMemFixed(P+2,@BSON_JSON_REGEX[0][5],6) then
+    'r': if CompareMemFixed(P,@BSON_JSON_REGEX[0][3],8) then
            TryRegExStrict(P+8);
-    'n': if CompareMemFixed(P+2,@BSON_JSON_DECIMAL[false,modMongoStrict][5],14) then
+    'n': if CompareMemFixed(P,@BSON_JSON_DECIMAL[false,modMongoStrict][3],16) then
            TryDecimal(P+16,'}');
     end;
   end;
@@ -4227,9 +4209,9 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
   'U': if StrCompIL(JSON+1,@BSON_JSON_UNDEFINED[true][2],8)=0 then
          Return(betDeprecatedUndefined,JSON+8,#0);
   'M': if StrCompIL(JSON+1,@BSON_JSON_MINKEY[true][2],5)=0 then
-         Return(betMinKey,JSON+5,#0) else
+         ReturnInt(betMinKey,JSON+5,#0) else
        if StrCompIL(JSON+1,@BSON_JSON_MAXKEY[true][2],7)=0 then
-         Return(betMaxKey,JSON+5,#0);
+         ReturnInt(betMaxKey,JSON+5,#0);
   'O': if StrCompIL(JSON+1,@BSON_JSON_OBJECTID[false,modMongoShell][2],8)=0 then
          TryObjectID(JSON+9,')');
   'N': if StrCompIL(JSON+1,@BSON_JSON_NEWDATE[1],8)=0 then
@@ -4759,8 +4741,9 @@ end;
 
 function TMongoRequest.ToJSON(Mode: TMongoJSONMode): RawUTF8;
 var W: TTextWriter;
+    tmp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream;
+  W := TTextWriter.CreateOwnedStream(tmp);
   try
     ToJSON(W,Mode);
     W.SetText(result);
@@ -5122,10 +5105,11 @@ end;
 function TMongoReplyCursor.ToJSON(Mode: TMongoJSONMode; WithHeader: boolean;
   MaxSize: Cardinal): RawUTF8;
 var W: TTextWriter;
+    tmp: TTextWriterStackBuffer;
 begin
   if (fReply='') or (DocumentCount<=0) then
     result := 'null' else begin
-    W := TTextWriter.CreateOwnedStream;
+    W := TTextWriter.CreateOwnedStream(tmp);
     try
       FetchAllToJSON(W,Mode,WithHeader,MaxSize);
       W.SetText(result);
@@ -5241,9 +5225,10 @@ end;
 function TMongoConnection.GetJSONAndFree(Query: TMongoRequestQuery; Mode: TMongoJSONMode): RawUTF8;
 var W: TTextWriter;
     ReturnAsJSONArray: boolean;
+    tmp: TTextWriterStackBuffer;
 begin
   ReturnAsJSONArray := Query.NumberToReturn>1;
-  W := TTextWriter.CreateOwnedStream;
+  W := TTextWriter.CreateOwnedStream(tmp);
   try
     if ReturnAsJSONArray then
       W.Add('[');
@@ -5636,7 +5621,7 @@ begin
       fConnectionString := FormatUTF8('%,%:%',[fConnectionString,secHost[i],Port]);
     end;
   end;
-  fDatabases := TRawUTF8ListHashed.Create(true);
+  fDatabases := TRawUTF8List.Create([fObjectsOwned,fNoDuplicate,fCaseSensitive]);
 end;
 
 destructor TMongoClient.Destroy;
@@ -5722,14 +5707,14 @@ function TMongoClient.Open(const DatabaseName: RawUTF8): TMongoDatabase;
 begin
   if self=nil then
     result := nil else begin
-    result := TMongoDatabase(fDatabases.GetObjectByName(DatabaseName));
+    result := fDatabases.GetObjectFrom(DatabaseName);
     if result=nil then begin // not already opened -> try now from primary host
       if not fConnections[0].Opened then begin
         fConnections[0].Open;
         AfterOpen;
       end;
       result := TMongoDatabase.Create(Self,DatabaseName);
-      fDatabases.AddObject(DatabaseName,result);
+      fDatabases.AddObjectUnique(DatabaseName,@result);
     end;
   end;
 end;
@@ -5745,7 +5730,7 @@ var digest: RawByteString;
 begin
   if (self=nil) or (DatabaseName='') or (UserName='') or (PassWord='') then
     raise EMongoException.CreateUTF8('Invalid %.OpenAuth("%") call',[self,DatabaseName]);
-  result := TMongoDatabase(fDatabases.GetObjectByName(DatabaseName));
+  result := fDatabases.GetObjectFrom(DatabaseName);
   if result=nil then  // not already opened -> try now from primary host
   try // note: authentication works on a single database per socket connection
     if not fConnections[0].Opened then
@@ -5766,7 +5751,7 @@ begin
       raise;
     end;
     result := TMongoDatabase.Create(Self,DatabaseName);
-    fDatabases.AddObject(DatabaseName,result);
+    fDatabases.AddObjectUnique(DatabaseName,@result);
   finally
     FillZero(digest);
   end;
@@ -5941,11 +5926,12 @@ constructor TMongoDatabase.Create(aClient: TMongoClient;
 var colls: TBSONIterator;
     full,db,coll: RawUTF8;
     resp,batch: variant;
+    mc: TMongoCollection;
     ndx: Integer;
 begin
   fClient := aClient;
   fName := aDatabaseName;
-  fCollections := TRawUTF8ListHashed.Create(true);
+  fCollections := TRawUTF8List.Create([fObjectsOwned,fNoDuplicate,fCaseSensitive]);
   if fClient.ServerBuildInfoNumber<3000000 then begin
     if colls.Init(Client.Connections[0].GetBSONAndFree(TMongoRequestQuery.Create(
       aDatabaseName+'.system.namespaces',null,'name',maxInt))) then
@@ -5956,9 +5942,10 @@ begin
         split(full,'.',db,coll);
         if db<>aDatabaseName then
           raise EMongoConnectionException.CreateUTF8(
-            '%.Create: invalid "%" collection name for DB "%"',
+            '%.Create: invalid [%] collection name for DB [%]',
             [self,full,aDatabaseName],Client.Connections[0]);
-        fCollections.AddObject(coll,TMongoCollection.Create(self,coll));
+        mc := TMongoCollection.Create(self,coll);
+        fCollections.AddObjectUnique(coll,@mc);
       end;
     end;
   end else begin
@@ -5966,8 +5953,10 @@ begin
     if _Safe(resp)^.GetValueByPath('cursor.firstBatch',batch) then
       with _Safe(batch)^ do
       for ndx := 0 to Count-1 do
-        if _Safe(Values[ndx]).GetAsRawUTF8('name',coll) then
-          fCollections.AddObject(coll,TMongoCollection.Create(self,coll));
+        if _Safe(Values[ndx]).GetAsRawUTF8('name',coll) then begin
+          mc := TMongoCollection.Create(self,coll);
+          fCollections.AddObjectUnique(coll,@mc);
+        end;
   end;
 end;
 
@@ -6013,7 +6002,7 @@ begin
   if result=nil then
     if self<>nil then begin
       result := TMongoCollection.Create(self,Name);
-      fCollections.AddObject(Name,result);
+      fCollections.AddObjectUnique(Name,@result);
     end;
 end;
 
@@ -6021,7 +6010,7 @@ function TMongoDatabase.GetCollectionOrNil(const Name: RawUTF8): TMongoCollectio
 begin
   if self=nil then
     result := nil else
-    result := TMongoCollection(fCollections.GetObjectByName(Name));
+    result := fCollections.GetObjectFrom(Name);
 end;
 
 function TMongoDatabase.RunCommand(const command: variant;
@@ -6146,7 +6135,7 @@ begin
   result := fDatabase.RunCommand(BSONVariant('{drop:?}',[],[Name]),res);
   Database.Client.Log.Log(sllTrace,'Drop("%")->%',[Name,res],self);
   if result='' then
-    Database.fCollections.Delete(fDatabase.fCollections.IndexOf(Name));
+    Database.fCollections.Delete(Name);
 end;
 
 procedure TMongoCollection.EnsureIndex(const Keys, Options: variant);
@@ -6574,7 +6563,8 @@ begin
   result := r64;
 end;
 
-procedure append(var dest: PUTF8Char; var dig: PByte; digits: PtrInt); {$ifdef HASINLINE}inline;{$endif}
+procedure append(var dest: PUTF8Char; var dig: PByte; digits: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
 begin
   if digits>0 then
     repeat
@@ -6597,7 +6587,7 @@ var dest: PUTF8Char;
     _128: THash128Rec;
 begin
   dest := @Buffer;
-  if Int64(Bits.hi)<0 then begin
+  if Bits.h<0 then begin
     dest^ := '-';
     inc(dest);
   end;

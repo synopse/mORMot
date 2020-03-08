@@ -20,6 +20,7 @@ uses
   SysUtils,
   SynCrtSock,
   SynCommons,
+  SynTable,
   SynLog,
   mORMot,
   SynSQLite3,
@@ -27,8 +28,8 @@ uses
   mORMotSQLite3,
   mORMotHttpServer,
   mORMotMVC,
-  MVCModel,
-  MVCViewModel;
+  MVCModel in 'MVCModel.pas',
+  MVCViewModel in 'MVCViewModel.pas';
 
 var aModel: TSQLModel;
     aServer: TSQLRestServerDB;
