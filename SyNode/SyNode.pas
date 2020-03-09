@@ -761,8 +761,9 @@ var process: PJSRootedObject;
     FStartupPath: TFileName;
     {$IFDEF Unix}
     I, Cnt: Integer;
-    EnvStr: string;
-    Parts: TStringArray;
+    EnvStr: RawUTF8;
+    eName, eVal: RawUTF8;
+    uName: SynUnicode;
     {$ELSE}
     L: PtrInt;
     EnvBlock, P, pEq: PWideChar;
@@ -788,9 +789,9 @@ begin
     Cnt := GetEnvironmentVariableCount;
     for I := 1 to Cnt do begin
       EnvStr := GetEnvironmentString(I);
-      Parts := EnvStr.Split('=', TStringSplitOptions.ExcludeEmpty);
-      if (Length(Parts) = 2) and (Trim(Parts[0]) <> '') then begin
-        env.ptr.DefineUCProperty(cx, StringToSynUnicode(Trim(Parts[0])), cx.NewJSString(Trim(Parts[1])).ToJSVal,
+      Split(EnvStr, '=', eName, eVal);
+      if (eName <> '') then begin
+        env.ptr.DefineUCProperty(cx, UTF8ToSynUnicode(eName), cx.NewJSString(eVal).ToJSVal,
           JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY, nil, nil);
       end
     end;
