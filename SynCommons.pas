@@ -25086,6 +25086,7 @@ asm // warning: may read up to 15 bytes beyond the string itself
 end;
 
 procedure YearToPChar(Y: PtrUInt; P: PUTF8Char);
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=Y, edx=P
         push    edx
         mov     ecx, eax
