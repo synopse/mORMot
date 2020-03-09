@@ -7028,7 +7028,7 @@ type
     /// contains the parameters used for sorting
     fSortParams: TSQLTableSortParams;
     /// contains the TSQLRecord instances created by NewRecord method
-    fOwnedRecords: TObjectList;
+    fOwnedRecords: TSynObjectList;
     /// if the TSQLRecord is the owner of this table, i.e. if it must free it
     fOwnerMustFree: Boolean;
     /// current cursor row (1..RowCount), as set by the Step() method
@@ -10383,7 +10383,7 @@ type
     class function GUID2TypeInfo(const aGUID: TGUID): PTypeInfo; overload;
     /// returns the list of all declared TInterfaceFactory
     // - as used by SOA and mocking/stubing features of this unit
-    class function GetUsedInterfaces: TObjectListLocked;
+    class function GetUsedInterfaces: TSynObjectListLocked;
     /// add some TInterfaceFactory instances from their GUID
     class procedure AddToObjArray(var Obj: TInterfaceFactoryObjArray;
        const aGUIDs: array of TGUID);
@@ -12129,7 +12129,7 @@ type
   protected
     fPublishSignature: boolean;
     fConnectionID: Int64;
-    fFakeCallbacks: TObjectListLocked; // TInterfacedObjectFakeServer instances
+    fFakeCallbacks: TSynObjectListLocked; // TInterfacedObjectFakeServer instances
     fOnCallbackReleasedOnClientSide: TOnCallbackReleased;
     fOnCallbackReleasedOnServerSide: TOnCallbackReleased;
     fCallbackOptions: TServiceCallbackOptions;
@@ -12752,7 +12752,7 @@ type
     fServerTimestampCacheTix: cardinal;
     fServerTimestampCacheValue: TTimeLogBits;
     fServices: TServiceContainer;
-    fPrivateGarbageCollector: TObjectList;
+    fPrivateGarbageCollector: TSynObjectList;
     fRoutingClass: TSQLRestServerURIContextClass;
     fBackgroundTimer: TSQLRestBackgroundTimer;
     fOnDecryptBody, fOnEncryptBody: TNotifyRestBody;
@@ -12997,7 +12997,7 @@ type
     /// a local "Garbage collector" list, for some classes instances which must
     // live during the whole TSQLRestServer process
     // - is used internally by the class, but can be used for business code
-    property PrivateGarbageCollector: TObjectList read fPrivateGarbageCollector;
+    property PrivateGarbageCollector: TSynObjectList read fPrivateGarbageCollector;
   public
     /// get the row count of a specified table
     // - returns -1 on error
@@ -14290,7 +14290,7 @@ type
   private
   protected
     fServer: TSQLRestServer;
-    fChild: TList;
+    fChild: TSynList;
     fChildCount: integer;
     fPipeName: TFileName;
     procedure InternalExecute; override;
@@ -15849,7 +15849,7 @@ type
     // - the very same TSQLRestStorage is handled in fStaticData
     fStaticVirtualTable: TSQLRestDynArray;
     /// in-memory storage of TAuthSession instances
-    fSessions: TObjectListLocked;
+    fSessions: TSynObjectListLocked;
     fSessionsDeprecatedTix: cardinal;
     /// used to compute genuine TAuthSession.ID cardinal value
     fSessionCounter: cardinal;
@@ -16696,7 +16696,7 @@ type
 
     /// read-only access to the internal list of sessions
     // - ensure you protect its access calling Sessions.Lock/Sessions.Unlock
-    property Sessions: TObjectListLocked read fSessions;
+    property Sessions: TSynObjectListLocked read fSessions;
     /// read-only access to the list of registered server-side authentication
     // methods, used for session creation
     // - note that the exact number or registered services in this list is
@@ -17061,7 +17061,7 @@ type
     function UpdateOne(ID: TID; const Values: TSQLVarDynArray): boolean; overload; virtual;
   end;
 
-  /// class able to handle a O(1) hashed-based search of a property in a TList
+  /// class able to handle a O(1) hashed-based search of a property
   // - used e.g. to hash TSQLRestStorageInMemory field values
   TSQLRestStorageInMemoryUnique = class
   protected
@@ -17342,7 +17342,7 @@ type
     class procedure DoIndexEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     /// low-level TFindWhereEqualEvent callback setting PPointer(aDest)^ := aRec.CreateCopy
     class procedure DoCopyEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
-    /// low-level TFindWhereEqualEvent callback calling TList(aDest).Add(aRec)
+    /// low-level TFindWhereEqualEvent callback calling TSynList(aDest).Add(aRec)
     class procedure DoAddToListEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     /// read-only access to the TSQLRecord values, storing the data
     // - this returns directly the item class instance stored in memory: if you
@@ -17658,12 +17658,12 @@ type
     /// write any modification into file
     // - do nothing if file name was not assigned
     procedure UpdateToFile; virtual;
-    /// clear all internal TObjectList content
+    /// clear all internal storage content
     procedure DropDatabase; virtual;
-    /// direct access to the storage TObjectList storage instances
+    /// direct access to the storage instances
     // - you can then access to Storage[Table].Count and Storage[Table].Items[]
     property Storage[aTable: TSQLRecordClass]: TSQLRestStorageInMemory read GetStorage;
-    /// direct access to the storage TObjectList storage instances
+    /// direct access to the storage instances
     // - you can then access via Storage[TableIndex].Count and Items[]
     property Storages: TSQLRestStorageInMemoryDynArray read fStorage;
   published
@@ -20477,12 +20477,12 @@ end;
 {$endif}
 
 type // those classes will be used to register globally some classes for JSON
-  TJSONSerializerRegisteredClassAbstract = class(TList)
+  TJSONSerializerRegisteredClassAbstract = class(TSynList)
   protected
     fLastClass: TClass;
     fSafe: TSynLocker;
   public
-    constructor Create;
+    constructor Create; override;
     destructor Destroy; override;
   end;
 
@@ -26213,7 +26213,7 @@ begin
   end;
   result := RecordType.Create;
   if fOwnedRecords=nil then
-    fOwnedRecords := TObjectList.Create;
+    fOwnedRecords := TSynObjectList.Create;
   fOwnedRecords.Add(result);
 end;
 
@@ -33851,7 +33851,7 @@ constructor TSQLRest.Create(aModel: TSQLModel);
 var cmd: TSQLRestServerURIContextCommand;
 begin
   inherited Create;
-  fPrivateGarbageCollector := TObjectList.Create;
+  fPrivateGarbageCollector := TSynObjectList.Create;
   fModel := aModel;
   for cmd := Low(cmd) to high(cmd) do
     fAcquireExecution[cmd] := TSQLRestAcquireExecution.Create;
@@ -38137,7 +38137,7 @@ begin
   // specific server initialization
   fStatLevels := SERVERDEFAULTMONITORLEVELS;
   fVirtualTableDirect := true; // faster direct Static call by default
-  fSessions := TObjectListLocked.Create; // needed by AuthenticationRegister() below
+  fSessions := TSynObjectListLocked.Create; // needed by AuthenticationRegister() below
   fSQLAuthUserClass := TSQLAuthUser;
   fSQLAuthGroupClass := TSQLAuthGroup;
   fModel := aModel;
@@ -43516,7 +43516,7 @@ constructor TSQLRestServerNamedPipe.Create(aServer: TSQLRestServer;
 begin
   fServer := aServer;
   fPipeName := PipeName;
-  fChild := TList.Create;
+  fChild := TSynList.Create;
   inherited Create(aServer,false,false);
 end;
 
@@ -43590,7 +43590,7 @@ begin
     fMasterThreadChildIndex := IndexOf(nil); // get free position in fChild[]
     if fMasterThreadChildIndex<0 then
       fMasterThreadChildIndex := Add(self) else
-      Items[fMasterThreadChildIndex] := self;
+      List[fMasterThreadChildIndex] := self;
   end;
   fPipe := aPipe;
 {$ifdef LVCL}
@@ -43604,7 +43604,7 @@ destructor TSQLRestServerNamedPipeResponse.Destroy;
 begin
   if fMasterThread<>nil then
     with fMasterThread do begin
-      fChild[fMasterThreadChildIndex] := nil;
+      fChild.List[fMasterThreadChildIndex] := nil; // free position in list
       InterlockedDecrement(fChildCount);
     end;
   inherited;
@@ -45478,7 +45478,7 @@ var P: TSQLPropInfo;
     WhereValueString, SetValueString, SetValueJson: RawUTF8;
     i, WhereFieldIndex: PtrInt;
     SetValueWasString: boolean;
-    match: TList;
+    match: TSynList;
     rec: TSQLRecord;
 begin
   result := false;
@@ -45512,7 +45512,7 @@ begin
     UnQuoteSQLStringVar(pointer(WhereValue),WhereValueString) else
     WhereValueString := WhereValue;
   // search indexes, then apply updates
-  match := TList.Create;
+  match := TSynList.Create;
   StorageLock(true,'EngineUpdateField');
   try
     // find matching match[]
@@ -45815,7 +45815,7 @@ end;
 function TSQLRestStorageInMemory.SearchField(const FieldName, FieldValue: RawUTF8;
   out ResultID: TIDDynArray): boolean;
 var n, WhereField,i: integer;
-    match: TList;
+    match: TSynList;
 begin
   result := false;
   if (self=nil) or (fCount=0) then
@@ -45827,7 +45827,7 @@ begin
       exit;
     inc(WhereField); // FindWhereEqual() expects index = RTTI+1
   end;
-  match := TList.Create;
+  match := TSynList.Create;
   try
     StorageLock(false,'SearchField');
     try
@@ -45898,7 +45898,7 @@ class procedure TSQLRestStorageInMemory.DoAddToListEvent(aDest: pointer;
   aRec: TSQLRecord; aIndex: integer);
 begin
   if aDest<>nil then
-    TList(aDest).Add(aRec);
+    TSynList(aDest).Add(aRec);
 end;
 
 class procedure TSQLRestStorageInMemory.DoInstanceEvent(aDest: pointer;
@@ -53717,12 +53717,12 @@ begin
 end;
 
 var
-  InterfaceFactoryCache: TObjectListLocked;
+  InterfaceFactoryCache: TSynObjectListLocked;
 
 procedure EnterInterfaceFactoryCache;
 begin
   if InterfaceFactoryCache=nil then
-    GarbageCollectorFreeAndNil(InterfaceFactoryCache,TObjectListLocked.Create);
+    GarbageCollectorFreeAndNil(InterfaceFactoryCache,TSynObjectListLocked.Create);
   InterfaceFactoryCache.Safe.Lock;
 end;
 
@@ -53734,7 +53734,7 @@ begin
     raise EInterfaceFactoryException.CreateUTF8('%.Get(nil)',[self]);
   EnterInterfaceFactoryCache;
   try
-    F := @InterfaceFactoryCache.List[0];
+    F := pointer(InterfaceFactoryCache.List);
     for i := 1 to InterfaceFactoryCache.Count do
        if F^.fInterfaceTypeInfo=aInterface then begin
         result := F^;
@@ -53776,7 +53776,7 @@ var i,ga: PtrInt;
 begin
   if InterfaceFactoryCache<>nil then begin
     InterfaceFactoryCache.Safe.Lock;
-    F := @InterfaceFactoryCache.List[0];
+    F := pointer(InterfaceFactoryCache.List);
     ga := GUID32.a;
     for i := 1 to InterfaceFactoryCache.Count do
     with PGUID32(@F^.fInterfaceIID)^ do
@@ -53841,7 +53841,7 @@ begin
   if (InterfaceFactoryCache<>nil) and (L<>0) then begin
     InterfaceFactoryCache.Safe.Lock;
     try
-      F := @InterfaceFactoryCache.List[0];
+      F := pointer(InterfaceFactoryCache.List);
       for i := 1 to InterfaceFactoryCache.Count do
         if IdemPropName(F^.fInterfaceTypeInfo^.Name,pointer(aInterfaceName),L) then begin
           result := F^;
@@ -53854,7 +53854,7 @@ begin
   end;
 end;
 
-class function TInterfaceFactory.GetUsedInterfaces: TObjectListLocked;
+class function TInterfaceFactory.GetUsedInterfaces: TSynObjectListLocked;
 begin
   result := InterfaceFactoryCache;
 end;
@@ -57221,8 +57221,8 @@ begin
   if self=nil then
     exit;
   if fFakeCallbacks=nil then
-    fFakeCallbacks := TObjectListLocked.Create(false);
-  fFakeCallbacks.SafeAdd(aFakeInstance);
+    fFakeCallbacks := TSynObjectListLocked.Create(false);
+  fFakeCallbacks.Add(aFakeInstance);
 end;
 
 procedure TServiceContainerServer.FakeCallbackRemove(aFakeInstance: TObject);

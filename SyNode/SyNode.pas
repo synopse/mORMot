@@ -368,7 +368,7 @@ type
     FMaxPerEngineMemory: Cardinal;
     FMaxNurseryBytes: Cardinal;
     FMaxRecursionDepth: Cardinal;
-    FEnginePool: TObjectListLocked;
+    FEnginePool: TSynObjectListLocked;
     FRemoteDebuggerThread: TThread;
     FContentVersion: Cardinal;
     FOnNewEngine: TEngineEvent;
@@ -1145,7 +1145,7 @@ constructor TSMEngineManager.Create(const aCoreModulesPath: RawUTF8; aEngineClas
 begin
   FMaxPerEngineMemory := 32*1024*1024;
   FMaxRecursionDepth := 32;
-  FEnginePool := TObjectListLocked.Create(true);
+  FEnginePool := TSynObjectListLocked.Create(true);
   if aEngineClass <> nil then
     FEngineClass := aEngineClass
   else

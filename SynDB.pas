@@ -2149,7 +2149,7 @@ type
   // connection pool
   TSQLDBConnectionPropertiesThreadSafe = class(TSQLDBConnectionProperties)
   protected
-    fConnectionPool: TObjectList;
+    fConnectionPool: TSynObjectList;
     fLatestConnectionRetrievedInPool: integer;
     fConnectionCS: TRTLCriticalSection;
     fThreadingMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode;
@@ -6229,7 +6229,7 @@ end;
 constructor TSQLDBConnectionPropertiesThreadSafe.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUTF8);
 begin
-  fConnectionPool := TObjectList.Create;
+  fConnectionPool := TSynObjectList.Create;
   fLatestConnectionRetrievedInPool := -1;
   InitializeCriticalSection(fConnectionCS);
   inherited Create(aServerName,aDatabaseName,aUserID,aPassWord);

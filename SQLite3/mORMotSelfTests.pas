@@ -137,7 +137,7 @@ type // mORMot.pas unit doesn't compile with Delphi 5 yet
 {$else}
 procedure TTestSynopsemORMotFramework._mORMot;
 begin
-  //AddCase(TTestDDDSharedUnits);
+  //AddCase(TTestExternalDatabase);
   //exit; // (*
   AddCase([TTestFileBased,TTestFileBasedMemoryMap,TTestFileBasedWAL]);
   AddCase(TTestMemoryBased);

@@ -6204,6 +6204,58 @@ type
   end;
   {$M-}
 
+  /// simple and efficient TList, without any notification
+  // - regular TList has an internal notification mechanism which slows down
+  // basic process, and can't be easily inherited
+  // - stateless methods (like Add/Clear/Exists/Remove) are defined as virtual
+  // since can be overriden e.g. by TSynObjectListLocked to add a TSynLocker
+  TSynList = class(TSynPersistent)
+  protected
+    fCount: integer;
+    fList: TPointerDynArray;
+    function Get(index: Integer): pointer; {$ifdef HASINLINE} inline; {$endif}
+  public
+    /// add one item to the list
+    function Add(item: pointer): integer; virtual;
+    /// delete all items of the list
+    procedure Clear; virtual;
+    /// delete one item from the list
+    procedure Delete(index: integer); virtual;
+    /// fast retrieve one item in the list
+    function IndexOf(item: pointer): integer; virtual;
+    /// fast check if one item exists in the list
+    function Exists(item: pointer): boolean; virtual;
+    /// fast delete one item in the list
+    function Remove(item: pointer): integer; virtual;
+    /// how many items are stored in this TList instance
+    property Count: integer read fCount;
+    /// low-level access to the items stored in this TList instance
+    property List: TPointerDynArray read fList;
+    /// low-level array-like access to the items stored in this TList instance
+    // - warning: if index is out of range, will return nil and won't raise
+    // any exception
+    property Items[index: Integer]: pointer read Get; default;
+  end;
+
+  /// simple and efficient TObjectList, without any notification
+  TSynObjectList = class(TSynList)
+  protected
+    fOwnObjects: boolean;
+  public
+    /// initialize the object list
+    constructor Create(aOwnObjects: boolean=true); reintroduce;
+    /// delete one object from the list
+    procedure Delete(index: integer); override;
+    /// delete all objects of the list
+    procedure Clear; override;
+    /// delete all objects of the list in reverse order
+    // - for some kind of processes, owned objects should be removed from the
+    // last added to the first
+    procedure ClearFromLast; virtual;
+    /// finalize the store items
+    destructor Destroy; override;
+  end;
+
   /// allow to add cross-platform locking methods to any class instance
   // - typical use is to define a Safe: TSynLocker property, call Safe.Init
   // and Safe.Done in constructor/destructor methods, and use Safe.Lock/UnLock
@@ -7987,7 +8039,7 @@ type
   TJSONRecordAbstract = class
   protected
     /// internal storage of TJSONCustomParserRTTI instances
-    fItems: TObjectList;
+    fItems: TSynObjectList;
     fRoot: TJSONCustomParserRTTI;
     fOptions: TJSONCustomParserSerializationOptions;
     function AddItem(const aPropertyName: RawUTF8; aPropertyType: TJSONCustomParserRTTIType;
@@ -9292,37 +9344,40 @@ type
     function FindLocked(aInfo: pointer): TPointerClassHashed;
   end;
 
-  /// add locking methods to a standard TObjectList
-  // - this class overrides the regular TObjectList, and do not share any code
-  // with the TObjectListHashedAbstract/TObjectListHashed classes
+  /// add locking methods to a TSynObjectList
+  // - this class overrides the regular TSynObjectList, and do not share any
+  // code with the TObjectListHashedAbstract/TObjectListHashed classes
   // - caller has to call the Safe.Lock/Unlock methods by hand to protect the
-  // execution of regular TObjectList methods (like Add/Remove/Count...),
-  // or use the SafeAdd/SafeRemove/SafeExists/SafeCount wrapper methods
-  TObjectListLocked = class(TObjectList)
+  // execution of regular TObjectList methods (like Delete/Items/Count...),
+  // but Add/Clear/Remove overriden methods will be thread-safe
+  TSynObjectListLocked = class(TSynObjectList)
   protected
     fSafe: TSynLocker;
   public
     /// initialize the list instance
-    // - the stored TObject instances will be owned by this TObjectListLocked,
+    // - the stored TObject instances will be owned by this TSynObjectListLocked,
     // unless AOwnsObjects is set to false
-    constructor Create(AOwnsObjects: Boolean=true); reintroduce;
+    constructor Create(aOwnsObjects: boolean=true); reintroduce;
     /// release the list instance (including the locking resource)
     destructor Destroy; override;
-    /// Add an TObject instance using the global critical section
-    function SafeAdd(AObject: TObject): integer;
-    /// find and delete a TObject instance using the global critical section
-    function SafeRemove(AObject: TObject): integer;
-    /// find a TObject instance using the global critical section
-    function SafeExists(AObject: TObject): boolean;
-    /// returns the number of instances stored using the global critical section
-    function SafeCount: integer;
-    /// delete all items of the list using global critical section
-    procedure SafeClear;
+    /// add one item to the list using the global critical section
+    function Add(item: pointer): integer; override;
+    /// delete all items of the list using the global critical section
+    procedure Clear; override;
+    /// delete all items of the list in reverse order, using the global critical section
+    procedure ClearFromLast; override;
+    /// fast delete one item in the list
+    function Remove(item: pointer): integer; override;
+    /// check an item using the global critical section
+    function Exists(item: pointer): boolean; override;
     /// the critical section associated to this list instance
     // - could be used to protect shared resources within the internal process
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: TSynLocker read fSafe;
   end;
+
+  /// deprecated class name, for backward compatibility only
+  TObjectListLocked = TSynObjectListLocked;
 
   /// possible values used by TRawUTF8List.Flags
   TRawUTF8ListFlags = set of (
@@ -13447,7 +13502,7 @@ var
   // !  Version := TFileVersion.Create(InstanceFileName,DefaultVersion32);
   // !  GarbageCollector.Add(Version);
   // - see also GarbageCollectorFreeAndNil() as an alternative
-  GarbageCollector: TObjectList;
+  GarbageCollector: TSynObjectList;
 
   /// set to TRUE when the global "Garbage collector" are beeing freed
   GarbageCollectorFreeing: boolean;
@@ -16653,7 +16708,7 @@ uses
 
 var
   // internal list of TSynAnsiConvert instances
-  SynAnsiConvertList: TObjectList = nil;
+  SynAnsiConvertList: TSynObjectList = nil;
 
 // some constants used for UTF-8 conversion, including surrogates
 const
@@ -17000,7 +17055,7 @@ class function TSynAnsiConvert.Engine(aCodePage: cardinal): TSynAnsiConvert;
 var i: integer;
 begin
   if SynAnsiConvertList=nil then begin
-    GarbageCollectorFreeAndNil(SynAnsiConvertList,TObjectList.Create);
+    GarbageCollectorFreeAndNil(SynAnsiConvertList,TSynObjectList.Create);
     CurrentAnsiConvert := TSynAnsiConvert.Engine(GetACP);
     WinAnsiConvert := TSynAnsiConvert.Engine(CODEPAGE_US) as TSynAnsiFixedWidth;
     UTF8AnsiConvert := TSynAnsiConvert.Engine(CP_UTF8) as TSynAnsiUTF8;
@@ -43672,7 +43727,7 @@ end;
 
 constructor TJSONRecordAbstract.Create;
 begin
-  fItems := TObjectList.Create;
+  fItems := TSynObjectList.Create;
 end;
 
 function TJSONRecordAbstract.AddItem(const aPropertyName: RawUTF8;
@@ -52291,6 +52346,156 @@ begin
 end;
 
 
+{ TSynList }
+
+function TSynList.Add(item: pointer): integer;
+begin
+  result := ObjArrayAddCount(fList,item,fCount);
+end;
+
+procedure TSynList.Clear;
+begin
+  fList := nil;
+  fCount := 0;
+end;
+
+procedure TSynList.Delete(index: integer);
+begin
+  PtrArrayDelete(fList,index,@fCount);
+  if (fCount>64) and (length(fList)>fCount*2) then
+    SetLength(fList,fCount); // reduce capacity when half list is void
+end;
+
+function TSynList.Exists(item: pointer): boolean;
+begin
+  result := PtrUIntScanExists(pointer(fList),fCount,PtrUInt(item));
+end;
+
+function TSynList.Get(index: Integer): pointer;
+begin
+  if cardinal(index)<cardinal(fCount) then
+    result := fList[index] else
+    result := nil;
+end;
+
+function TSynList.IndexOf(item: pointer): integer;
+begin
+  result := PtrUIntScanIndex(pointer(fList),fCount,PtrUInt(item));
+end;
+
+function TSynList.Remove(item: Pointer): integer;
+begin
+  result := PtrUIntScanIndex(pointer(fList),fCount,PtrUInt(item));
+  if result>=0 then
+    Delete(result);
+end;
+
+
+{ TSynObjectList }
+
+constructor TSynObjectList.Create(aOwnObjects: boolean);
+begin
+  fOwnObjects := aOwnObjects;
+  inherited Create;
+end;
+
+procedure TSynObjectList.Delete(index: integer);
+begin
+  if cardinal(index)>=cardinal(fCount) then
+    exit;
+  if fOwnObjects then
+    TObject(fList[index]).Free;
+  inherited Delete(index);
+end;
+
+procedure TSynObjectList.Clear;
+begin
+  if fOwnObjects then
+    RawObjectsClear(pointer(fList),fCount);
+  inherited Clear;
+end;
+
+procedure TSynObjectList.ClearFromLast;
+var i: PtrInt;
+begin
+  if fOwnObjects then
+    for i := fCount-1 downto 0 do
+      TObject(fList[i]).Free;
+  inherited Clear;
+end;
+
+destructor TSynObjectList.Destroy;
+begin
+  Clear;
+  inherited Destroy;
+end;
+
+
+{ TSynObjectListLocked }
+
+constructor TSynObjectListLocked.Create(AOwnsObjects: Boolean);
+begin
+  inherited Create(AOwnsObjects);
+  fSafe.Init;
+end;
+
+destructor TSynObjectListLocked.Destroy;
+begin
+  inherited Destroy;
+  fSafe.Done;
+end;
+
+function TSynObjectListLocked.Add(item: pointer): integer;
+begin
+  Safe.Lock;
+  try
+    result := inherited Add(item);
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TSynObjectListLocked.Remove(item: pointer): integer;
+begin
+  Safe.Lock;
+  try
+    result := inherited Remove(item);
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TSynObjectListLocked.Exists(item: pointer): boolean;
+begin
+  Safe.Lock;
+  try
+    result := inherited Exists(item);
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+procedure TSynObjectListLocked.Clear;
+begin
+  Safe.Lock;
+  try
+    inherited Clear;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+procedure TSynObjectListLocked.ClearFromLast;
+begin
+  Safe.Lock;
+  try
+    inherited ClearFromLast;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+
 { ****************** text buffer and JSON functions and classes ********* }
 
 { TTextWriter }
@@ -58700,71 +58905,6 @@ begin
 end;
 
 
-{ TObjectListLocked }
-
-constructor TObjectListLocked.Create(AOwnsObjects: Boolean);
-begin
-  inherited Create(AOwnsObjects);
-  fSafe.Init;
-end;
-
-destructor TObjectListLocked.Destroy;
-begin
-  inherited Destroy;
-  fSafe.Done;
-end;
-
-function TObjectListLocked.SafeAdd(AObject: TObject): integer;
-begin
-  Safe.Lock;
-  try
-    result := Add(AObject);
-  finally
-    Safe.UnLock;
-  end;
-end;
-
-function TObjectListLocked.SafeRemove(AObject: TObject): integer;
-begin
-  Safe.Lock;
-  try
-    result := Remove(AObject);
-  finally
-    Safe.UnLock;
-  end;
-end;
-
-function TObjectListLocked.SafeExists(AObject: TObject): boolean;
-begin
-  Safe.Lock;
-  try
-    result := IndexOf(AObject)>=0;
-  finally
-    Safe.UnLock;
-  end;
-end;
-
-function TObjectListLocked.SafeCount: integer;
-begin
-  Safe.Lock;
-  try
-    result := Count;
-  finally
-    Safe.UnLock;
-  end;
-end;
-
-procedure TObjectListLocked.SafeClear;
-begin
-  Safe.Lock;
-  try
-    Clear;
-  finally
-    Safe.UnLock;
-  end;
-end;
-
-
 { TSynDictionary }
 
 const
@@ -60080,19 +60220,19 @@ const
   COMPRESS_SYNLZ = 1;
 
 var
-  SynCompressAlgos: TObjectList;
+  SynCompressAlgos: TSynObjectList;
 
 constructor TAlgoCompress.Create;
 var existing: TAlgoCompress;
 begin
   inherited Create;
   if SynCompressAlgos=nil then
-    GarbageCollectorFreeAndNil(SynCompressAlgos,TObjectList.Create(true)) else begin
-      existing := Algo(AlgoID);
-      if existing<>nil then
-        raise ESynException.CreateUTF8('%.Create: AlgoID=% already registered by %',
-          [self,AlgoID,existing.ClassType]);
-    end;
+    GarbageCollectorFreeAndNil(SynCompressAlgos,TSynObjectList.Create) else begin
+    existing := Algo(AlgoID);
+    if existing<>nil then
+      raise ESynException.CreateUTF8('%.Create: AlgoID=% already registered by %',
+        [self,AlgoID,existing.ClassType]);
+  end;
   SynCompressAlgos.Add(self);
 end;
 
@@ -60133,8 +60273,9 @@ begin
   if AlgoID<=COMPRESS_SYNLZ then // COMPRESS_STORED is handled as SynLZ
     result := AlgoSynLZ else begin
     if SynCompressAlgos<>nil then begin
-      ptr := @SynCompressAlgos.List[1]; // ignore List[0] = AlgoSynLZ
-      for i := 2 to SynCompressAlgos.Count  do
+      ptr := pointer(SynCompressAlgos.List);
+      inc(ptr); // ignore List[0] = AlgoSynLZ
+      for i := 2 to SynCompressAlgos.Count do
         if ptr^.AlgoID=AlgoID then begin
           result := ptr^;
           exit;
@@ -61394,10 +61535,11 @@ begin
 end;
 
 var
-  GarbageCollectorFreeAndNilList: TList;
+  GarbageCollectorFreeAndNilList: TSynList;
 
 procedure GarbageCollectorFree;
 var i: integer;
+    po: PObject;
 begin
   if GarbageCollectorFreeing then
     exit; // when already called before finalization
@@ -61411,8 +61553,9 @@ begin
   end;
   for i := GarbageCollectorFreeAndNilList.Count-1 downto 0 do // LIFO
   try
-    if PObject(GarbageCollectorFreeAndNilList.List[i])^<>nil then
-      FreeAndNil(PObject(GarbageCollectorFreeAndNilList.List[i])^);
+    po := GarbageCollectorFreeAndNilList.List[i];
+    if (po<>nil) and (po^<>nil) then
+      FreeAndNil(po^);
   except
     on E: Exception do
       ; // just ignore exceptions in client code destructors
@@ -61769,8 +61912,9 @@ end;
 
 initialization
   // initialization of global variables
-  GarbageCollectorFreeAndNilList := TList.Create;
-  GarbageCollectorFreeAndNil(GarbageCollector,TObjectList.Create);
+  {$ifdef CPU32DELPHI} Pointer(@FillCharFast) := SystemFillCharAddress; {$endif CPUX64}
+  GarbageCollectorFreeAndNilList := TSynList.Create;
+  GarbageCollectorFreeAndNil(GarbageCollector,TSynObjectList.Create);
   // initialization of internal dynamic functions and tables
   InitializeCriticalSection(GlobalCriticalSection);
   InitFunctionsRedirection;
