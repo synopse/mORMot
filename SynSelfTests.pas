@@ -845,7 +845,7 @@ type
     fModel: TSQLModel;
     fDatabase: TSQLRestServerDB;
     fTestClass: TSQLRestClass;
-    fThreads: TObjectList;
+    fThreads: TSynObjectList;
     fRunningThreadCount: integer;
     fHttpServer: TSQLHttpServer;
     fMinThreads: integer;
@@ -19125,7 +19125,7 @@ procedure TTestMultiThreadProcess.CreateThreadPool;
 var i: integer;
 begin
   fModel := TSQLModel.Create([TSQLRecordPeople]);
-  fThreads := TObjectList.Create;
+  fThreads := TSynObjectList.Create;
   for i := 1 to fMaxThreads do
     fThreads.Add(TTestMultiThreadProcessThread.Create(self,i));
   Check(fThreads.Count=fMaxThreads);

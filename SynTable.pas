@@ -3443,7 +3443,7 @@ type
   TBlockingProcessPool = class(TSynPersistent)
   protected
     fClass: TBlockingProcessPoolItemClass;
-    fPool: TObjectListLocked;
+    fPool: TSynObjectListLocked;
     fCallCounter: TBlockingProcessPoolCall; // set TBlockingProcessPoolItem.Call
   public
     /// initialize the pool, for a given implementation class
@@ -4569,9 +4569,9 @@ type
     // - you should call OrderedIndexRefresh method to ensure it is sorted
     OrderedIndexNotSorted: boolean;
     /// all TSynValidate instances registered per each field
-    Filters: TObjectList;
+    Filters: TSynObjectList;
     /// all TSynValidate instances registered per each field
-    Validates: TObjectList;
+    Validates: TSynObjectList;
     /// low-level binary comparison used by IDSort and TSynTable.IterateJSONValues
     // - P1 and P2 must point to the values encoded in our SBF compact binary format
     {$ifdef SORTCOMPAREMETHOD}
@@ -6854,12 +6854,12 @@ begin
 end;
 
 function TSynTableFieldProperties.AddFilterOrValidate(aFilter: TSynFilterOrValidate): TSynFilterOrValidate;
-procedure Add(var List: TObjectList);
-begin
-  if List=nil then
-    List := TObjectList.Create;
-  List.Add(result);
-end;
+  procedure Add(var List: TSynObjectList);
+  begin
+    if List=nil then
+      List := TSynObjectList.Create;
+    List.Add(result);
+  end;
 begin
   result := aFilter;
   if (self=nil) or (result=nil) then
@@ -15875,7 +15875,7 @@ begin
   if aClass=nil then
     fClass := TBlockingProcessPoolItem else
     fClass := aClass;
-  fPool := TObjectListLocked.Create(true);
+  fPool := TSynObjectListLocked.Create;
 end;
 
 const

@@ -2687,7 +2687,7 @@ type
     fLog: TSynLogClass;
     {$endif}
     /// store TSQLDataBaseSQLFunction instances
-    fSQLFunctions: TObjectList;
+    fSQLFunctions: TSynObjectList;
     function GetUseCache: boolean;
     procedure SetUseCache(const Value: boolean);
     procedure SetBusyTimeout(const ms: Integer);
@@ -3903,7 +3903,7 @@ begin
     fIsMemory := true else
     fFileNameWithoutPath := ExtractFileName(fFileName);
   fPassword := aPassword;
-  fSQLFunctions := TObjectList.Create;
+  fSQLFunctions := TSynObjectList.Create;
   result := DBOpen;
   if result<>SQLITE_OK then
     raise ESQLite3Exception.Create(fDB,result,'DBOpen');

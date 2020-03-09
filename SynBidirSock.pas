@@ -1043,7 +1043,7 @@ type
   // any Sec-WebSocket-Protocol application content
   TWebSocketServer = class(THttpServer)
   protected
-    fWebSocketConnections: TObjectListLocked;
+    fWebSocketConnections: TSynObjectListLocked;
     fProtocols: TWebSocketProtocolList;
     fSettings: TWebSocketProcessSettings;
     /// validate the WebSockets handshake, then call Context.fProcess.ProcessLoop()
@@ -3153,7 +3153,7 @@ begin
   fSocketClass := TWebSocketServerSocket;
   fThreadRespClass := TWebSocketServerResp;
   // initialize protocols and connections
-  fWebSocketConnections := TObjectListLocked.Create(false);
+  fWebSocketConnections := TSynObjectListLocked.Create({owned=}false);
   fProtocols := TWebSocketProtocolList.Create;
   fSettings.SetDefaults;
   fSettings.HeartbeatDelay := 20000;
@@ -3173,12 +3173,12 @@ begin
   Context.fProcess := TWebSocketProcessServer.Create(
     ClientSock,protocol,Context.ConnectionID,Context,fSettings,fProcessName);
   Context.fProcess.fServerResp := Context;
-  fWebSocketConnections.SafeAdd(Context);
+  fWebSocketConnections.Add(Context);
   try
     Context.fProcess.ProcessLoop;  // run main blocking loop
   finally
     FreeAndNil(Context.fProcess); // notify end of WebSockets
-    fWebSocketConnections.SafeRemove(Context);
+    fWebSocketConnections.Remove(Context);
   end;
 end;
 
@@ -3211,7 +3211,7 @@ end;
 
 function TWebSocketServer.WebSocketConnections: integer;
 begin
-  result := fWebSocketConnections.SafeCount;
+  result := fWebSocketConnections.Count;
 end;
 
 type

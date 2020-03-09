@@ -326,7 +326,7 @@ type
     // it is an index to the corresponding published method, and the Strings[]
     // contains the associated failure message
     fFailed: TStringList;
-    fTestCase: TObjectList;
+    fTestCase: TSynObjectList;
     fAssertions: integer;
     fAssertionsFailed: integer;
     fCurrentMethod, fCurrentMethodIndex: integer;
@@ -945,7 +945,7 @@ constructor TSynTests.Create(const Ident: string);
 begin
   inherited Create(Ident);
   fFailed := TStringList.Create;
-  fTestCase := TObjectList.Create;
+  fTestCase := TSynObjectList.Create;
   fSafe.Init;
 end;
 

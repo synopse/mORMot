@@ -2305,12 +2305,12 @@ type
 var
   /// internal list of registered TSynLogFamily
   // - up to MAX_SYNLOGFAMILY+1 families may be defined
-  SynLogFamily: TObjectList = nil;
+  SynLogFamily: TSynList = nil;
 
   /// internal list of created TSynLog instance, one per each log file on disk
   // - do not use directly - necessary for inlining TSynLogFamily.SynLog method
   // - also used by AutoFlushProc() to get a global list of TSynLog instances
-  SynLogFileList: TObjectListLocked = nil;
+  SynLogFileList: TSynObjectListLocked = nil;
 
 threadvar
   /// each thread can access to its own TSynLogFile
@@ -3148,7 +3148,7 @@ constructor TSynLogFamily.Create(aSynLog: TSynLogClass);
 begin
   fSynLogClass := aSynLog;
   if SynLogFamily=nil then
-    GarbageCollectorFreeAndNil(SynLogFamily,TList.Create);
+    GarbageCollectorFreeAndNil(SynLogFamily,TSynList.Create);
   fIdent := SynLogFamily.Add(self);
   fDestinationPath := ExeVersion.ProgramFilePath; // use .exe path
   fDefaultExtension := '.log';
@@ -3172,7 +3172,7 @@ function TSynLogFamily.CreateSynLog: TSynLog;
 var i: integer;
 begin
   if SynLogFileList=nil then
-    GarbageCollectorFreeAndNil(SynLogFileList,TObjectListLocked.Create);
+    GarbageCollectorFreeAndNil(SynLogFileList,TSynObjectListLocked.Create);
   SynLogFileList.Safe.Lock;
   try
     result := fSynLogClass.Create(self);

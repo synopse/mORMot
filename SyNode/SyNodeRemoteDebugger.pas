@@ -73,8 +73,8 @@ type
   TSMRemoteDebuggerThread = class(TThread)
   private
     fThreadInWork: Integer;
-    fDebuggers: TObjectListLocked;
-    fCommunicationThreads: TObjectListLocked;
+    fDebuggers: TSynObjectListLocked;
+    fCommunicationThreads: TSynObjectListLocked;
     fCurThreadIndex: integer;
     fPort: SockString;
     fManager: TSMEngineManager;
@@ -164,8 +164,8 @@ type
 
 constructor TSMRemoteDebuggerThread.Create(aManager: TSMEngineManager; const aPort: SockString);
 begin
-  fDebuggers := TObjectListLocked.Create(true);
-  fCommunicationThreads := TObjectListLocked.Create(false);
+  fDebuggers := TSynObjectListLocked.Create(true);
+  fCommunicationThreads := TSynObjectListLocked.Create(false);
   FNeedPauseOnFirstStep := false;
   fCurThreadIndex := 0;
   fThreadInWork := 0;
@@ -184,7 +184,7 @@ begin
     i := fCommunicationThreads.Count;
     while i > 0 do begin
       Dec(i);
-      TSMRemoteDebuggerCommunicationThread(fCommunicationThreads[i]).Terminate;
+      TSMRemoteDebuggerCommunicationThread(fCommunicationThreads.List[i]).Terminate;
       fCommunicationThreads.Delete(i);
     end;
   finally
@@ -245,7 +245,7 @@ begin
           try
             while fCommunicationThreads.count > 0 do begin
               threadsCnt := fCommunicationThreads.Count;
-              thread := TSMRemoteDebuggerCommunicationThread(fCommunicationThreads[threadsCnt - 1]);
+              thread := TSMRemoteDebuggerCommunicationThread(fCommunicationThreads.List[threadsCnt - 1]);
               fCommunicationThreads.Delete(threadsCnt - 1);
               thread.SetTerminated;
             end;
@@ -290,10 +290,10 @@ begin
     try
       if aEng <> nil then begin
         for I := 0 to fDebuggers.Count - 1 do
-          if TSMDebugger(fDebuggers[i]).fNameForDebug = aEng.nameForDebug then begin
+          if TSMDebugger(fDebuggers.List[i]).fNameForDebug = aEng.nameForDebug then begin
             // todo
-            TSMDebugger(fDebuggers[i]).fSmThreadID := curThreadID;
-            TSMDebugger(fDebuggers[i]).InitializeDebuggerCompartment(aEng, FNeedPauseOnFirstStep);
+            TSMDebugger(fDebuggers.List[i]).fSmThreadID := curThreadID;
+            TSMDebugger(fDebuggers.List[i]).InitializeDebuggerCompartment(aEng, FNeedPauseOnFirstStep);
             exit;
           end;
         fDebuggers.Add(TSMDebugger.Create(self, aEng));
@@ -319,7 +319,7 @@ begin
     fDebuggers.Safe.Lock;
     try
       for I := 0 to fDebuggers.Count - 1 do
-        if TSMDebugger(fDebuggers[i]).fSmThreadID = curThreadID then begin
+        if TSMDebugger(fDebuggers.List[i]).fSmThreadID = curThreadID then begin
           if aEng<>nil then begin
             cx := aEng.cx;
             cmpDbg := cx.EnterCompartment(aEng.GlobalObjectDbg.ptr);
@@ -337,7 +337,7 @@ begin
             aEng.CancelExecution;
           end else
             raise ESMException.Create('internal error: no engine');
-          TSMDebugger(fDebuggers[i]).fSmThreadID := 0;
+          TSMDebugger(fDebuggers.List[i]).fSmThreadID := 0;
           exit;
         end;
     finally
@@ -484,7 +484,7 @@ begin
         try
           Writer.AddShort('{"from":"root","tabs":[');
           for I := 0 to fParent.fDebuggers.Count - 1 do begin
-            debugger := TSMDebugger(fParent.fDebuggers[i]);
+            debugger := TSMDebugger(fParent.fDebuggers.List[i]);
             engine := fParent.fManager.EngineForThread(debugger.fSmThreadID);
             if engine <> nil then begin
               Writer.AddShort('{"actor":"');
@@ -521,8 +521,8 @@ begin
       fParent.fDebuggers.Safe.Lock;
       try
         for I := 0 to fParent.fDebuggers.Count-1 do
-          if TSMDebugger(fParent.fDebuggers[i]).fIndex = debuggerIndex then begin
-            fDebugger := TSMDebugger(fParent.fDebuggers[i]);
+          if TSMDebugger(fParent.fDebuggers.List[i]).fIndex = debuggerIndex then begin
+            fDebugger := TSMDebugger(fParent.fDebuggers.List[i]);
             break;
           end;
         if (fDebugger = nil) or (fDebugger.fCommunicationThread <> nil) then begin
