@@ -6266,7 +6266,8 @@ type
   // - internal padding is used to safely store up to 7 values protected
   // from concurrent access with a mutex, so that SizeOf(TSynLocker)>128
   // - for object-level locking, see TSynPersistentLock which owns one such
-  // instance, or call low-level NewSynLocker function then DoneAndFreemem
+  // instance, or call low-level fSafe := NewSynLocker in your constructor,
+  // then fSafe^.DoneAndFreemem in your destructor
   TSynLocker = object
   protected
     fSection: TRTLCriticalSection;
@@ -6285,7 +6286,7 @@ type
     procedure SetPointer(Index: integer; const Value: Pointer);
     function GetUTF8(Index: integer): RawUTF8;
     procedure SetUTF8(Index: integer; const Value: RawUTF8);
-    {$endif}
+    {$endif NOVARIANTS}
   public
     /// internal padding data, also used to store up to 7 variant values
     // - this memory buffer will ensure no CPU cache line mixup occurs
@@ -6314,6 +6315,9 @@ type
     // - should have been initiazed with a NewSynLocker call
     procedure DoneAndFreeMem;
     /// lock the instance for exclusive access
+    // - this method is re-entrant from the same thread (you can nest Lock/UnLock
+    // calls in the same thread), but would block any other Lock attempt in
+    // another thread
     // - use as such to avoid race condition (from a Safe: TSynLocker property):
     // ! Safe.Lock;
     // ! try
@@ -6341,6 +6345,8 @@ type
     // !   end;
     function TryLockMS(retryms: integer): boolean;
     /// release the instance for exclusive access
+    // - each Lock/TryLock should have its exact UnLock opposite, so a
+    // try..finally block is mandatory for safe code
     procedure UnLock; {$ifdef HASINLINE}inline;{$endif}
     /// will enter the mutex until the IUnknown reference is released
     // - could be used as such under Delphi:
@@ -6369,7 +6375,8 @@ type
     property IsLocked: boolean read fLocked;
     /// returns true if the Init method has been called for this mutex
     // - is only relevant if the whole object has been previously filled with 0,
-    // i.e. as part of a class, but may not be accurate when allocated on stack
+    // i.e. as part of a class or as global variable, but won't be accurate
+    // when allocated on stack
     property IsInitialized: boolean read fInitialized;
     {$ifndef NOVARIANTS}
     /// safe locked access to a Variant value
@@ -9347,9 +9354,12 @@ type
   /// add locking methods to a TSynObjectList
   // - this class overrides the regular TSynObjectList, and do not share any
   // code with the TObjectListHashedAbstract/TObjectListHashed classes
-  // - caller has to call the Safe.Lock/Unlock methods by hand to protect the
-  // execution of regular TObjectList methods (like Delete/Items/Count...),
-  // but Add/Clear/Remove overriden methods will be thread-safe
+  // - you need to call the Safe.Lock/Unlock methods by hand to protect the
+  // execution of index-oriented methods (like Delete/Items/Count...): the
+  // list content may change in the background, so using indexes is thread-safe
+  // - on the other hand, Add/Clear/ClearFromLast/Remove stateless methods have
+  // been overriden in this class to call Safe.Lock/Unlock, and therefore are
+  // thread-safe and protected to any background change
   TSynObjectListLocked = class(TSynObjectList)
   protected
     fSafe: TSynLocker;
@@ -9371,7 +9381,8 @@ type
     /// check an item using the global critical section
     function Exists(item: pointer): boolean; override;
     /// the critical section associated to this list instance
-    // - could be used to protect shared resources within the internal process
+    // - could be used to protect shared resources within the internal process,
+    // for index-oriented methods like Delete/Items/Count...
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: TSynLocker read fSafe;
   end;
