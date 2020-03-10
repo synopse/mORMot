@@ -3884,7 +3884,7 @@ begin // you can override this class then call ConnectionAdd
   if Terminated then
     result := false else begin
     aConnection := fStreamClass.Create(aRemoteIP);
-    result := ConnectionAdd(aSocket, aConnection);
+    result := ConnectionAdd(aSocket,aConnection);
   end;
 end;
 

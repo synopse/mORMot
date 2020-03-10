@@ -266,7 +266,9 @@ begin
   try
     sock := TProxySocket.Create(nil);
     try
-      sock.InitRequest(aSocket,aRemoteIP);
+      sock.AcceptRequest(aSocket,nil);
+      sock.RemoteIP := aRemoteIP;
+      sock.CreateSockIn; // faster header process (released below once not needed)
       if (sock.GetRequest({withBody=}false, {headertix=}0)=grHeaderReceived) and
          (sock.URL <> '') then begin
         if log<>nil then
