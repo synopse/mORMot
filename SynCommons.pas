@@ -13328,7 +13328,7 @@ function GetTickCount64: Int64;
 // - note: under XP, we observed ERROR_NO_SYSTEM_RESOURCES problems when calling
 // FileRead() for chunks bigger than 32MB on files opened with this flag,
 // so it would use regular FileOpen() on this deprecated OS
-// - under POSIX, calls plain fpOpen(FileName, O_RDONLY) which would avoid a
+// - under POSIX, calls plain fpOpen(FileName,O_RDONLY) which would avoid a
 // syscall to fpFlock() which is not needed here
 // - is used e.g. by StringFromFile() and TSynMemoryStreamMapped.Create()
 function FileOpenSequentialRead(const FileName: string): Integer;
@@ -26697,9 +26697,24 @@ begin
   {$endif MSWINDOWS}
 end;
 
+type
+{$ifdef FPC} // FPC TFileStream doesn't have per-handle constructor like Delphi
+  TFileStreamFromHandle = class(THandleStream)
+  public
+    destructor Destroy; override;
+  end;
+
+destructor TFileStreamFromHandle.Destroy;
+begin
+  FileClose(Handle); // otherwise file is still opened
+end;
+{$else}
+  TFileStreamFromHandle = TFileStream;
+{$endif FPC}
+
 function FileStreamSequentialRead(const FileName: string): THandleStream;
 begin
-  result := THandleStream.Create(FileOpenSequentialRead(FileName));
+  result := TFileStreamFromHandle.Create(FileOpenSequentialRead(FileName));
 end;
 
 function Elapsed(var PreviousTix: Int64; Interval: Integer): Boolean;
