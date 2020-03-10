@@ -2278,13 +2278,13 @@ procedure MoveFast(const src; var dst; cnt: PtrInt);
 // - on non-Intel CPUs, it will fallback to the default RTL FillChar()
 // - note: Delphi x86_64 is far from efficient: even ERMS was wrongly
 // introduced in latest updates
-var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte);
+var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) {$ifdef FPC} = FillChar {$endif};
 
 /// our fast version of move()
 // - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available),
 // or optimized X87 assembly implementation for older CPUs
 // - on non-Intel CPUs, it will fallback to the default RTL Move()
-var MoveFast: procedure(const Source; var Dest; Count: PtrInt);
+var MoveFast: procedure(const Source; var Dest; Count: PtrInt) {$ifdef FPC} = Move {$endif};
 
 {$endif CPUX64}
 {$endif ABSOLUTEPASCAL}

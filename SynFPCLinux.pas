@@ -517,7 +517,7 @@ begin // not inlined to avoid try..finally UnicodeString protection
     cchCount2 := StrLen(lpString2);
   SetString(U2,lpString2,cchCount2);
   result := widestringmanager.CompareUnicodeStringProc(U1,U2,TCompareOptions(dwCmpFlags))+2;
-end;
+end; // caller would make -2 to get regular -1/0/1 comparison values
 
 function GetFileSize(hFile: cInt; lpFileSizeHigh: PDWORD): DWORD;
 var FileInfo: TStat;
