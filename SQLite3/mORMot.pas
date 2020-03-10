@@ -14285,16 +14285,22 @@ type
     Sender: TServiceFactoryServer; Instance: TInterfacedObject) of object;
 
 {$ifdef MSWINDOWS}
+  TSQLRestServerNamedPipeResponse = class;
+
   /// Server thread accepting connections from named pipes
   TSQLRestServerNamedPipe = class(TSQLRestThread)
   private
   protected
     fServer: TSQLRestServer;
-    fChild: TSynList;
-    fChildCount: integer;
+    fChild: array of TSQLRestServerNamedPipeResponse;
+    fChildRunning: integer;
     fPipeName: TFileName;
     procedure InternalExecute; override;
   public
+    /// register a new response thread
+    procedure AddChild(new: TSQLRestServerNamedPipeResponse);
+    /// unregister a new response thread
+    procedure RemoveChild(new: TSQLRestServerNamedPipeResponse);
     /// create the server thread
     constructor Create(aServer: TSQLRestServer; const PipeName: TFileName); reintroduce;
     /// release all associated memory, and wait for all
@@ -14311,13 +14317,12 @@ type
     fServer: TSQLRestServer;
     fPipe: cardinal;
     fMasterThread: TSQLRestServerNamedPipe;
-    fMasterThreadChildIndex: Integer;
     procedure InternalExecute; override;
   public
     /// create the child connection thread
     constructor Create(aServer: TSQLRestServer; aMasterThread: TSQLRestServerNamedPipe;
       aPipe: cardinal); reintroduce;
-    /// release all associated memory, and decrement fMasterThread.fChildCount
+    /// release all associated memory, and decrement fMasterThread.fChildRunning
     destructor Destroy; override;
   end;
 
@@ -26191,7 +26196,7 @@ end;
 destructor TSQLTable.Destroy;
 begin
   fOwnedRecords.Free;
-  inherited;
+  inherited Destroy;
 end;
 
 function TSQLTable.QueryRecordType: TSQLRecordClass;
@@ -27781,7 +27786,7 @@ begin
   // go to start of object
   P := GotoNextNotSpace(Buffer);
   if IsNotExpandedBuffer(P,Buffer+BufferLen,fFieldCount,fRowCount) then begin
-    // A. Not Expanded format
+    // A. Not Expanded (more optimized) format as array of values
 (* {"fieldCount":9,"values":["ID","Int","Test","Unicode","Ansi","ValFloat","ValWord",
     "ValDate","Next",0,0,"abcde+?ef+?+?","abcde+?ef+?+?","abcde+?ef+?+?",
     3.14159265300000E+0000,1203,"2009-03-10T21:19:36",0,..],"rowCount":20} *)
@@ -27811,7 +27816,7 @@ begin
       end;
     end;
   end else begin
-    // B. Expanded format
+    // B. Expanded format as array of objects (each with field names)
 (* [{"ID":0,"Int":0,"Test":"abcde+?ef+?+?","Unicode":"abcde+?ef+?+?","Ansi":
     "abcde+?ef+?+?","ValFloat": 3.14159265300000E+0000,"ValWord":1203,
     "ValDate":"2009-03-10T21:19:36","Next":0},{..}] *)
@@ -37980,7 +37985,7 @@ begin
     FileClose(Pipe);
     exit; // only one pipe server with this name at once
   end;
-  fExportServerNamedPipeThread := TSQLRestServerNamedPipe.Create(self, PipeName);
+  fExportServerNamedPipeThread := TSQLRestServerNamedPipe.Create(self,PipeName);
   NoAJAXJSON := true; // use smaller JSON size in this not HTTP use (never AJAX)
   sleep(10); // allow the background thread to start
   result := true; // success
@@ -43516,23 +43521,19 @@ constructor TSQLRestServerNamedPipe.Create(aServer: TSQLRestServer;
 begin
   fServer := aServer;
   fPipeName := PipeName;
-  fChild := TSynList.Create;
   inherited Create(aServer,false,false);
 end;
 
 destructor TSQLRestServerNamedPipe.Destroy;
 var i: integer;
 begin
-  for i := 0 to fChild.Count-1 do // close any still opened pipe
-    if fChild[i]<>nil then begin
-      {writeln('fChildCount=',fChildCount,' TSQLRestServerNamedPipeResponse=',
-        integer(TSQLRestServerNamedPipeResponse),'.Terminated=',
-        BoolToStr(TSQLRestServerNamedPipeResponse(fChild[i]).Terminated,true));}
-      TSQLRestServerNamedPipeResponse(fChild[i]).Terminate;
-    end;
-  while fChildCount>0 do
-    SleepHiRes(64); // wait for all TSQLRestServerNamedPipeResponse.Destroy
-  fChild.Free;
+  if fChildRunning>0 then begin
+    for i := 0 to length(fChild)-1 do // close any still opened pipe
+      if fChild[i]<>nil then
+        fChild[i].Terminate;
+    while fChildRunning>0 do
+      SleepHiRes(64); // wait for all TSQLRestServerNamedPipeResponse.Destroy
+  end;
   inherited;
 end;
 
@@ -43564,7 +43565,6 @@ begin // see http://msdn.microsoft.com/en-us/library/aa365588(v=VS.85).aspx
       if PeekNamedPipe(aPipe,nil,0,nil,@Available,nil) then
         if (Available>=4) then begin
           // PeekNamedPipe() made an implicit ConnectNamedPipe(aPipe,nil)
-          InterlockedIncrement(fChildCount);
           TSQLRestServerNamedPipeResponse.Create(fServer,self,aPipe);
           aPipe := 0; // aPipe will be closed in TSQLRestServerNamedPipeResponse
           break;
@@ -43578,6 +43578,28 @@ begin // see http://msdn.microsoft.com/en-us/library/aa365588(v=VS.85).aspx
   end;
 end;
 
+procedure TSQLRestServerNamedPipe.AddChild(new: TSQLRestServerNamedPipeResponse);
+var i: integer;
+begin
+  InterlockedIncrement(fChildRunning);
+  i := ObjArrayFind(fChild,nil); // any free slot?
+  if i<0 then
+    ObjArrayAdd(fChild,new) else
+    fChild[i] := new;
+end;
+
+procedure TSQLRestServerNamedPipe.RemoveChild(new: TSQLRestServerNamedPipeResponse);
+var i: integer;
+begin
+  if self=nil then
+    exit;
+  new.fMasterThread := self;
+  i := ObjArrayFind(fChild,new);
+  if i>=0 then
+    fChild[i] := nil; // reuse slot
+  InterlockedDecrement(fChildRunning);
+end;
+
 
 { TSQLRestServerNamedPipeResponse }
 
@@ -43585,28 +43607,19 @@ constructor TSQLRestServerNamedPipeResponse.Create(aServer: TSQLRestServer;
   aMasterThread: TSQLRestServerNamedPipe; aPipe: cardinal);
 begin
   fServer := aServer;
-  fMasterThread := aMasterThread;
-  with fMasterThread.fChild do begin
-    fMasterThreadChildIndex := IndexOf(nil); // get free position in fChild[]
-    if fMasterThreadChildIndex<0 then
-      fMasterThreadChildIndex := Add(self) else
-      List[fMasterThreadChildIndex] := self;
-  end;
   fPipe := aPipe;
 {$ifdef LVCL}
   FOnTerminate := fServer.EndCurrentThread;
 {$endif}
+  fMasterThread := aMasterThread;
+  fMasterThread.AddChild(self);
   FreeOnTerminate := true;
   inherited Create(fServer,false,false);
 end;
 
 destructor TSQLRestServerNamedPipeResponse.Destroy;
 begin
-  if fMasterThread<>nil then
-    with fMasterThread do begin
-      fChild.List[fMasterThreadChildIndex] := nil; // free position in list
-      InterlockedDecrement(fChildCount);
-    end;
+  fMasterThread.RemoveChild(self);
   inherited;
 end;
 
@@ -43627,7 +43640,7 @@ begin
   Sleeper := 0;
   ClientTimeOut64 := GetTickCount64+30*60*1000; // disconnect after 30 min idle
   try
-    while not Terminated do
+    while not Terminated and not fMasterThread.Terminated do
     if // (WaitForSingleObject(fPipe,200)=WAIT_OBJECT_0)  = don't wait
        PeekNamedPipe(fPipe,nil,0,nil,@Available,nil) and (Available>=4) then begin
       FileRead(fPipe,Code,4);
@@ -46802,7 +46815,7 @@ function TSQLRestServerFullMemory.EngineAdd(TableModelIndex: integer;
   const SentData: RawUTF8): TID;
 begin
   result := fStorage[TableModelIndex].EngineAdd(TableModelIndex,SentData);
-  InternalState := InternalState+1;
+  inc(InternalState);
 end;
 
 function TSQLRestServerFullMemory.EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8;
