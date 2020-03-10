@@ -26743,7 +26743,7 @@ asm {$ifdef CPU64DELPHI} .noframe {$endif}
 end; // we don't check for ismultithread global since lock is cheap on new CPUs
 {$else}
 begin // fallback to pure pascal version for ARM
-  result := {$ifdef FPC_64}InterLockedDecrement64{$else}InterLockedDecrement{$endif}(refcnt)=0;
+  result := {$ifdef FPC_64}InterLockedDecrement64{$else}InterLockedDecrement{$endif}(refcnt)<=0;
 end;
 {$endif CPUINTEL}
 
@@ -44734,46 +44734,6 @@ end;
 
 { TSynInvokeableVariantType }
 
-procedure TSynInvokeableVariantType.Lookup(var Dest: TVarData; const Instance: TVarData;
-  FullName: PUTF8Char);
-var handler: TSynInvokeableVariantType;
-    v, tmp: TVarData; // PVarData wouldn't store e.g. RowID/count
-    vt: cardinal;
-    itemName: ShortString;
-begin
-  PInteger(@Dest)^ := varEmpty; // left to Unassigned if not found
-  v := Instance;
-  repeat
-    vt := v.VType;
-    if vt<>varByRef or varVariant then
-      break;
-    v := PVarData(v.VPointer)^;
-  until false;
-  repeat
-    if vt and VTYPE_STATIC=0 then
-      exit; // we need a complex type to lookup
-    GetNextItemShortString(FullName,itemName,'.');
-    if itemName[0] in [#0,#255] then
-      exit;
-    itemName[ord(itemName[0])+1] := #0; // ensure is ASCIIZ
-    if not FindSynVariantType(vt,handler) then
-      exit;
-    tmp := v; // v will be modified in-place
-    PInteger(@v)^ := varEmpty; // IntGet() would clear it otherwise!
-    if not handler.IntGet(v,tmp,@itemName[1],ord(itemName[0])) then
-      exit; // property not found
-    repeat
-      vt := v.VType;
-      if vt<>varByRef or varVariant then
-        break;
-      v := PVarData(v.VPointer)^;
-    until false;
-    if (vt=cardinal(DocVariantVType)) and (TDocVariantData(v).VCount=0) then
-      v.VType := varNull; // recognize void TDocVariant as null
-  until FullName=nil;
-  Dest := v;
-end;
-
 function TSynInvokeableVariantType.IterateCount(const V: TVarData): integer;
 begin
   result := -1; // this is not an array
@@ -44924,27 +44884,73 @@ end;
 var // owned by Variants.pas as TInvokeableVariantType/TCustomVariantType
   SynVariantTypes: array of TSynInvokeableVariantType;
 
-function TSynInvokeableVariantType.FindSynVariantType(aVarType: Word;
-  out CustomType: TSynInvokeableVariantType): boolean;
+function FindSynVariantTypeFromVType(aVarType: cardinal): TSynInvokeableVariantType;
+  {$ifdef HASINLINE}inline;{$endif}
 var i: integer;
     t: ^TSynInvokeableVariantType;
 begin
-  if aVarType=VarType then begin
-    CustomType := self;
-    result := true;
-    exit;
-  end;
   t := pointer(SynVariantTypes);
-  for i := 1 to length(TObjectDynArray(t)) do
-    if t^.VarType=aVarType then begin
-      CustomType := t^;
-      result := true;
+  for i := 1 to length(TObjectDynArray(t)) do begin
+    result := t^;
+    if result.VarType=aVarType then
       exit;
-    end else
     inc(t);
-  result := false;
+  end;
+  result := nil;
 end;
 
+function TSynInvokeableVariantType.FindSynVariantType(aVarType: Word;
+  out CustomType: TSynInvokeableVariantType): boolean;
+begin
+  if aVarType=VarType then
+    CustomType := self else
+    CustomType := FindSynVariantTypeFromVType(VarType);
+  result := CustomType<>nil;
+end;
+
+procedure TSynInvokeableVariantType.Lookup(var Dest: TVarData; const Instance: TVarData;
+  FullName: PUTF8Char);
+var handler: TSynInvokeableVariantType;
+    v, tmp: TVarData; // PVarData wouldn't store e.g. RowID/count
+    vt: cardinal;
+    itemName: ShortString;
+begin
+  PInteger(@Dest)^ := varEmpty; // left to Unassigned if not found
+  v := Instance;
+  repeat
+    vt := v.VType;
+    if vt<>varByRef or varVariant then
+      break;
+    v := PVarData(v.VPointer)^;
+  until false;
+  repeat
+    if vt and VTYPE_STATIC=0 then
+      exit; // we need a complex type to lookup
+    GetNextItemShortString(FullName,itemName,'.');
+    if itemName[0] in [#0,#255] then
+      exit;
+    itemName[ord(itemName[0])+1] := #0; // ensure is ASCIIZ
+    if vt=VarType then
+      handler := self else begin
+      handler := FindSynVariantTypeFromVType(vt);
+      if handler=nil then
+        exit;
+    end;
+    tmp := v; // v will be modified in-place
+    PInteger(@v)^ := varEmpty; // IntGet() would clear it otherwise!
+    if not handler.IntGet(v,tmp,@itemName[1],ord(itemName[0])) then
+      exit; // property not found
+    repeat
+      vt := v.VType;
+      if vt<>varByRef or varVariant then
+        break;
+      v := PVarData(v.VPointer)^;
+    until false;
+    if (vt=cardinal(DocVariantVType)) and (TDocVariantData(v).VCount=0) then
+      v.VType := varNull; // recognize void TDocVariant as null
+  until FullName=nil;
+  Dest := v;
+end;
 
 procedure GetJSONToAnyVariant(var Value: variant; var JSON: PUTF8Char;
   EndOfObject: PUTF8Char; Options: PDocVariantOptions; AllowDouble: boolean);

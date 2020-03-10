@@ -5029,7 +5029,7 @@ begin
   result := Len=0;
   if (self=nil) or (fSock<=0) or (Len<=0) or (P=nil) then
     exit;
-  endtix := 0;
+  endtix := {$ifdef MSWINDOWS}GetTick64{$else}0{$endif};
   repeat
     {$ifdef MSWINDOWS}
     if fSecure.Initialized then
@@ -5044,8 +5044,10 @@ begin
       inc(PByte(P),sent);
     end else if WSAIsFatalError then
       exit; // fatal socket error
+    {$ifndef MSWINDOWS}
     if endtix=0 then // measure time elapsed only if write was not finished
       endtix := GetTick64+TimeOut else
+    {$endif}
       if GetTick64>endtix then
         exit; // identify timeout as error
     SleepHiRes(1);
@@ -5262,7 +5264,7 @@ begin
   if (self<>nil) and (fSock>0) and (Buffer<>nil) and (Length>0) then begin
     expected := Length;
     Length := 0;
-    start := 0;
+    start := {$ifdef MSWINDOWS}GetTick64{$else}0{$endif};
     repeat
       read := expected-Length;
       {$ifdef MSWINDOWS}
@@ -5288,8 +5290,9 @@ begin
           break; // good enough for now
         inc(PByte(Buffer),read);
       end;
+      {$ifndef MSWINDOWS}
       if start=0 then // measure time elapsed only if read was not finished
-        start := GetTick64 else begin
+        start := GetTick64 else {$endif} begin
         diff := GetTick64-start;
         if diff>=TimeOut then begin
           {$ifdef SYNCRTDEBUGLOW}
@@ -12304,7 +12307,7 @@ begin
   byte(notif.events) := 0;
   if (timeoutMS<0) or fTerminated then
     exit;
-  start := 0;
+  start := {$ifdef MSWINDOWS}GetTick64{$else}0{$endif};
   repeat
     // non-blocking search within fPoll[]
     EnterCriticalSection(fPollLock);
@@ -12329,8 +12332,9 @@ begin
     // wait a little for something to happen
     if fTerminated or (timeoutMS=0) then
       exit;
+    {$ifndef MSWINDOWS}
     if start=0 then // measure time elapsed only if we wait
-      start := GetTick64 else begin
+      start := GetTick64 else {$endif} begin
       elapsed := GetTick64-start; // allow multi-threaded process
       if elapsed>timeoutMS then
         exit else
