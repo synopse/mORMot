@@ -19651,7 +19651,7 @@ begin
   EnterCriticalSection(Safe.fSection);
   try
     Values.SetCount(0); // Values.Clear
-    Values.Rehash;
+    Values.Hasher.Clear;
   finally
     LeaveCriticalSection(Safe.fSection);
   end;
@@ -51012,7 +51012,7 @@ begin
   if not(canHash in State) then begin
     n := DynArray^.Count;
     if n<CountTrigger then begin
-      result := Scan(Elem); // may trigger ReHash -> canHash
+      result := Scan(Elem); // may trigger ReHash and set canHash
       if result>=0 then
         exit; // item found
       if not(canHash in State) then begin
@@ -58123,7 +58123,7 @@ begin
         end;
         fValues.Clear;
         if fNoDuplicate in fFlags then
-          fValues.ReHash;
+          fValues.Hasher.Clear;
         Changed;
       end else begin // resize
         if capa<fCount then begin // resize down
@@ -59075,7 +59075,7 @@ begin
   fSafe.Lock;
   try
     fKeys.Clear;
-    fKeys.ReHash; // mandatory to avoid GPF
+    fKeys.Hasher.Clear; // mandatory to avoid GPF
     fValues.Clear;
     if fSafe.Padding[DIC_TIMESEC].VInteger>0 then
       fTimeOuts.Clear;

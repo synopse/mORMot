@@ -1754,7 +1754,7 @@ begin
   Check(FileFromString(Content,'test.ini'),'test.ini');
   Check(FileSynLZ('test.ini','test.ini.synlz',$ABA51051),'synLZ');
   if CheckFailed(FileUnSynLZ('test.ini.synlz','test2.ini',$ABA51051),'unSynLZ') then
-    Exit;
+    exit;
   S := StringFromFile('test2.ini');
   Check(S=Content,'test2.ini');
   Content := 'abc'#13#10'def'#10'ghijkl'#13'1234567890';
@@ -2876,7 +2876,7 @@ begin // slower than FillChar, faster than for loop, but fast enough for testing
   result := true;
 end;
 
-function BufIncreasing(P: PByteArray; n: PtrInt; b: byte): boolean;
+function IsBufIncreasing(P: PByteArray; n: PtrInt; b: byte): boolean;
 var i: PtrInt;
 begin
   result := false;
@@ -2952,7 +2952,7 @@ var buf: RawByteString;
      P := pointer(buf);
      for i := 0 to length(buf)-1 do
        P[i] := i; // fills with 0,1,2,...
-     Check(BufIncreasing(p,length(buf),0));
+     Check(IsBufIncreasing(p,length(buf),0));
      len := 1;
      moved := 0;
      timer.Start;
@@ -2965,7 +2965,7 @@ var buf: RawByteString;
        inc(len);
      until moved+len>=length(buf);
      NotifyTestSpeed(msg,1,moved,@timer);
-     Check(BufIncreasing(p,moved,1));
+     Check(IsBufIncreasing(p,moved,1));
      checkEqual(Hash32(buf),2284147540);
      // forward and backward overlapped moves on small buffers
      elapsed := 0;
@@ -16144,7 +16144,6 @@ begin
 end;
 
 
-
 procedure TTestSQLite3Engine._TSQLRestClientDB;
 var V,V2: TSQLRecordPeople;
     VA: TSQLRecordPeopleArray;
@@ -16425,27 +16424,28 @@ begin
     VD.Free;
   end;
 end;
-function Test(T: TSQLTable): boolean;
+function TestTable(T: TSQLTable): boolean;
 var aR,aF: integer;
+    db: TSQLTable;
 begin
   result := false;
   if T=nil then
     exit;
-  with TSQLTableDB.Create(Demo,[],Req,true) do
+  db := TSQLTableDB.Create(Demo,[],Req,true);
   try
-    if (RowCount<>T.RowCount) or (FieldCount<>T.FieldCount) then begin
+    if (db.RowCount<>T.RowCount) or (db.FieldCount<>T.FieldCount) then begin
       Check(False);
       exit;
     end;
-    for aR := 0 to RowCount do // compare all result values
-      for aF := 0 to FieldCount-1 do
-        if StrComp(pointer(Get(aR,aF)),pointer(T.Get(aR,aF)))<>0 then begin
+    for aR := 0 to db.RowCount do // compare all result values
+      for aF := 0 to db.FieldCount-1 do
+        if StrComp(pointer(db.Get(aR,aF)),pointer(T.Get(aR,aF)))<>0 then begin
          Check(False);
          exit;
        end;
     result := true;
   finally
-    Free;
+    db.Free;                                  
     T.Free;
   end;
 end;
@@ -16467,7 +16467,7 @@ begin
     TestVirtual(ClientDist,false,'Remote Virtual Table access via SQLite',TSQLRecordDali2);
     TestVirtual(ClientDist,true,'Remote Direct Virtual Table',TSQLRecordDali1);
     TestVirtual(ClientDist,true,'Remote Direct Virtual Table',TSQLRecordDali2);
-    Check(Test(ClientDist.List([TSQLRecordPeople],'*',s)),'through URI and JSON');
+    Check(TestTable(ClientDist.List([TSQLRecordPeople],'*',s)),'through URI and JSON');
     for i := 0 to high(IntArray) do begin
       Check(ClientDist.RetrieveBlob(TSQLRecordPeople,IntArray[i],'Data',Data));
       Check((length(Data)=4) and (PInteger(pointer(Data))^=IntArray[i]));
@@ -16537,411 +16537,414 @@ begin
   {$endif}
   VP := TSQLRecordCustomProps.Create;
   V2 := nil;
-  if ClassType<>TTestMemoryBased then begin
-    DeleteFile('dali1.json');
-    DeleteFile('dali2.data');
-  end;
-  Demo.RegisterSQLFunction(TypeInfo(TIntegerDynArray),@SortDynArrayInteger,
-    'MyIntegerDynArrayContains');
-  ModelC := TSQLModel.Create(
-    [TSQLRecordPeople, TSQLFTSTest,
-     TSQLASource, TSQLADest, TSQLADests, TSQLRecordPeopleArray
-     {$ifndef LVCL}, TSQLRecordPeopleObject{$endif},
-     TSQLRecordDali1,TSQLRecordDali2, TSQLRecordCustomProps],'root');
-  ModelC.VirtualTableRegister(TSQLRecordDali1,TSQLVirtualTableJSON);
-  ModelC.VirtualTableRegister(TSQLRecordDali2,TSQLVirtualTableBinary);
   try
-    Client := TSQLRestClientDB.Create(ModelC,nil,Demo,TSQLRestServerTest,true);
+    if ClassType<>TTestMemoryBased then begin
+      DeleteFile('dali1.json');
+      DeleteFile('dali2.data');
+    end;
+    Demo.RegisterSQLFunction(TypeInfo(TIntegerDynArray),@SortDynArrayInteger,
+      'MyIntegerDynArrayContains');
+    ModelC := TSQLModel.Create(
+      [TSQLRecordPeople, TSQLFTSTest,
+       TSQLASource, TSQLADest, TSQLADests, TSQLRecordPeopleArray
+       {$ifndef LVCL}, TSQLRecordPeopleObject{$endif},
+       TSQLRecordDali1,TSQLRecordDali2, TSQLRecordCustomProps],'root');
+    ModelC.VirtualTableRegister(TSQLRecordDali1,TSQLVirtualTableJSON);
+    ModelC.VirtualTableRegister(TSQLRecordDali2,TSQLVirtualTableBinary);
     try
-      Client.Server.DB.Synchronous := smOff;
-      Client.Server.DB.LockingMode := lmExclusive;
-      with Client.Server.Model do
-        for i := 0 to high(Tables) do
-          if not CheckFailed(GetTableIndex(Tables[i])=i) then
-            Check(GetTableIndex(Tables[i].SQLTableName)=i);
-      // direct client access test
-      Client.Server.CreateMissingTables; // NEED Dest,Source,Dests,...
-      Check(Client.SetUser('User','synopse')); // use default user
-      DaVinci := 'da Vin'+_uE7+'i';
-      Check(Client.Retrieve('LastName='''+DaVinci+'''',V));
-      Check(V.FirstName='Leonardo1');
-      Check(V.LastName=DaVinci);
-      Check(V.YearOfBirth=1452);
-      Check(V.YearOfDeath=1519);
-      checks(false,Client,'Retrieve');
-      Check(V.ID=6,'check RETRIEVE/GET');
-      Check(Client.Delete(TSQLRecordPeople,V.ID),'check DELETE');
-      Check(not Client.Retrieve(V.ID,V),'now this record must not be available');
-      Check(Client.Add(V,true)>0,'check ADD/PUT');
-      checks(false,Client,'check created value is well retrieved');
-      checks(false,Client,'check caching');
-      V2 := V.CreateCopy as TSQLRecordPeople;
-      Check(V2.SameValues(V));
-      V2.Free;
-      V2 := TSQLRecordPeople.Create(Client,V.ID);
-      Check(V2.SameValues(V));
-      Check(Client.Retrieve(V.ID,V2,true),'with LOCK');
-      Check(V2.SameValues(V));
-      V.FirstName := 'Leonard';
-      Check(Client.Update(V));
-      Check(Client.UnLock(V),'unlock');
-      checks(true,Client,'check UPDATE/POST');
-      if Client.SessionUser=nil then // only if has the right for EngineExecute
-        Check(Client.Execute('VACUUM;'),'check direct Execute()') else
-        Check(Client.Server.Execute('VACUUM;'));
-      Check(V2.FirstName='Leonardo1');
-      Check(not V2.SameValues(V),'V and V2 must differ');
-      Check(Client.UpdateFromServer([V2],Refreshed));
-      Check(Refreshed,'V2 value will be synchronized with V');
-      Check(V2.SameValues(V));
-      Check(Client.UpdateFromServer([V2],Refreshed));
-      Check(not Refreshed);
-      Req := StringReplace(Req,'*',
-        Client.Model.Props[TSQLRecordPeople].SQL.TableSimpleFields[true,false],[]);
-      s := 'LastName=''M'+_uF4+'net'' ORDER BY FirstName';
-      J := Client.List([TSQLRecordPeople],'*',s);
-      Check(Client.UpdateFromServer([J],Refreshed));
-      Check(not Refreshed);
-      Check(Test(J),'incorrect TSQLTableJSON');
-      Check(Client.OneFieldValues(TSQLRecordPeople,'ID','LastName=:("Dali"):',IntArray));
-      Check(length(IntArray)=1001);
-      for i := 0 to high(IntArray) do
-        Check(Client.OneFieldValue(TSQLRecordPeople,'LastName',IntArray[i])='Dali');
-      List := Client.RetrieveList(TSQLRecordPeople,'Lastname=?',['Dali'],'ID,LastName');
-      if not CheckFailed(List<>nil) then begin
-        Check(List.Count=Length(IntArray));
-        for i := 0 to List.Count-1 do
-        with TSQLRecordPeople(List.List[i]) do begin
-          Check(ID=IntArray[i]);
-          Check(LastName='Dali');
-          Check(FirstName='');
-        end;
-        List.Free;
-      end;
-      Client.Server.SessionsSaveToFile('sessions.data');
-      Client.Server.SessionsLoadFromFile('sessions.data',false);
-      Check(Client.TransactionBegin(TSQLRecordPeople)); // for UpdateBlob() below
-      for i := 0 to high(IntArray) do begin
-        Check(Client.RetrieveBlob(TSQLRecordPeople,IntArray[i],'Data',Data));
-        Check(Length(Data)=sizeof(BlobDali));
-        Check(CompareMem(pointer(Data),@BlobDali,sizeof(BlobDali)));
-        Check(Client.RetrieveBlob(TSQLRecordPeople,IntArray[i],'Data',DataS));
-        Check((DataS.Size=4) and (PCardinal(DataS.Memory)^=$E7E0E961));
-        DataS.Free;
-        Check(Client.UpdateBlob(TSQLRecordPeople,IntArray[i],'Data',@IntArray[i],4));
-        Check(Client.RetrieveBlob(TSQLRecordPeople,IntArray[i],'Data',Data));
-        Check((length(Data)=4) and (PInteger(pointer(Data))^=IntArray[i]));
-        V2.fID := IntArray[i]; // debug use - do NOT set ID in your programs!
-        Check(V2.DataAsHex(Client)=SynCommons.BinToHex(Data));
-        a := Random;
-        b := Random;
-        Check(SameValue(TSQLRecordPeople.Sum(Client,a,b,false),a+b,1E-10));
-        Check(SameValue(TSQLRecordPeople.Sum(Client,a,b,true),a+b,1E-10));
-      end;
-      Client.Commit;
-      Check(Client.TransactionBegin(TSQLRecordPeopleArray));
-      V2.FillPrepare(Client,'LastName=:("Dali"):');
-      n := 0;
-      while V2.FillOne do begin
-        VA.FillFrom(V2); // fast copy some content from TSQLRecordPeople
-        inc(n);
-        if n and 31=0 then begin
-          VA.UTF8 := '';
-          VA.DynArray('Ints').Add(n);
-          Curr := n*0.01;
-          VA.DynArray(2).Add(Curr);
-          FV.Major := n;
-          FV.Minor := n+2000;
-          FV.Release := n+3000;
-          FV.Build := n+4000;
-          str(n,FV.Main);
-          str(n+1000,FV.Detailed);
-          VA.DynArray('FileVersion').Add(FV);
-        end else
-          str(n,VA.fUTF8);
-        {$ifdef PUBLISHRECORD}
-        VA.fRec.nPhrase := n;
-        VA.fRec.nCol := n*2;
-        VA.fRec.hits[2].docs_with_hits := n*3;
-        {$endif PUBLISHRECORD}
-        Check(Client.Add(VA,true)=n);
-      end;
-      Client.Commit;
-      {$ifndef LVCL}
-      if Client.TransactionBegin(TSQLRecordPeopleObject) then
+      Client := TSQLRestClientDB.Create(ModelC,nil,Demo,TSQLRestServerTest,true);
       try
-        V2.FillPrepare(Client,'LastName=:("Morse"):');
+        Client.Server.DB.Synchronous := smOff;
+        Client.Server.DB.LockingMode := lmExclusive;
+        with Client.Server.Model do
+          for i := 0 to high(Tables) do
+            if not CheckFailed(GetTableIndex(Tables[i])=i) then
+              Check(GetTableIndex(Tables[i].SQLTableName)=i);
+        // direct client access test
+        Client.Server.CreateMissingTables; // NEED Dest,Source,Dests,...
+        Check(Client.SetUser('User','synopse')); // use default user
+        DaVinci := 'da Vin'+_uE7+'i';
+        Check(Client.Retrieve('LastName='''+DaVinci+'''',V));
+        Check(V.FirstName='Leonardo1');
+        Check(V.LastName=DaVinci);
+        Check(V.YearOfBirth=1452);
+        Check(V.YearOfDeath=1519);
+        checks(false,Client,'Retrieve');
+        Check(V.ID=6,'check RETRIEVE/GET');
+        Check(Client.Delete(TSQLRecordPeople,V.ID),'check DELETE');
+        Check(not Client.Retrieve(V.ID,V),'now this record must not be available');
+        Check(Client.Add(V,true)>0,'check ADD/PUT');
+        checks(false,Client,'check created value is well retrieved');
+        checks(false,Client,'check caching');
+        V2 := V.CreateCopy as TSQLRecordPeople;
+        Check(V2.SameValues(V));
+        V2.Free;
+        V2 := TSQLRecordPeople.Create(Client,V.ID);
+        Check(V2.SameValues(V));
+        Check(Client.Retrieve(V.ID,V2,true),'with LOCK');
+        Check(V2.SameValues(V));
+        V.FirstName := 'Leonard';
+        Check(Client.Update(V));
+        Check(Client.UnLock(V),'unlock');
+        checks(true,Client,'check UPDATE/POST');
+        if Client.SessionUser=nil then // only if has the right for EngineExecute
+          Check(Client.Execute('VACUUM;'),'check direct Execute()') else
+          Check(Client.Server.Execute('VACUUM;'));
+        Check(V2.FirstName='Leonardo1');
+        Check(not V2.SameValues(V),'V and V2 must differ');
+        Check(Client.UpdateFromServer([V2],Refreshed));
+        Check(Refreshed,'V2 value will be synchronized with V');
+        Check(V2.SameValues(V));
+        Check(Client.UpdateFromServer([V2],Refreshed));
+        Check(not Refreshed);
+        Req := StringReplace(Req,'*',
+          Client.Model.Props[TSQLRecordPeople].SQL.TableSimpleFields[true,false],[]);
+        s := 'LastName=''M'+_uF4+'net'' ORDER BY FirstName';
+        J := Client.List([TSQLRecordPeople],'*',s);
+        Check(Client.UpdateFromServer([J],Refreshed));
+        Check(not Refreshed);
+        Check(TestTable(J),'incorrect TSQLTableJSON');
+        Check(Client.OneFieldValues(TSQLRecordPeople,'ID','LastName=:("Dali"):',IntArray));
+        Check(length(IntArray)=1001);
+        for i := 0 to high(IntArray) do
+          Check(Client.OneFieldValue(TSQLRecordPeople,'LastName',IntArray[i])='Dali');
+        List := Client.RetrieveList(TSQLRecordPeople,'Lastname=?',['Dali'],'ID,LastName');
+        if not CheckFailed(List<>nil) then begin
+          Check(List.Count=Length(IntArray));
+          for i := 0 to List.Count-1 do
+          with TSQLRecordPeople(List.List[i]) do begin
+            Check(ID=IntArray[i]);
+            Check(LastName='Dali');
+            Check(FirstName='');
+          end;
+          List.Free;
+        end;
+        Client.Server.SessionsSaveToFile('sessions.data');
+        Client.Server.SessionsLoadFromFile('sessions.data',false);
+        Check(Client.TransactionBegin(TSQLRecordPeople)); // for UpdateBlob() below
+        for i := 0 to high(IntArray) do begin
+          Check(Client.RetrieveBlob(TSQLRecordPeople,IntArray[i],'Data',Data));
+          Check(Length(Data)=sizeof(BlobDali));
+          Check(CompareMem(pointer(Data),@BlobDali,sizeof(BlobDali)));
+          Check(Client.RetrieveBlob(TSQLRecordPeople,IntArray[i],'Data',DataS));
+          Check((DataS.Size=4) and (PCardinal(DataS.Memory)^=$E7E0E961));
+          DataS.Free;
+          Check(Client.UpdateBlob(TSQLRecordPeople,IntArray[i],'Data',@IntArray[i],4));
+          Check(Client.RetrieveBlob(TSQLRecordPeople,IntArray[i],'Data',Data));
+          Check((length(Data)=4) and (PInteger(pointer(Data))^=IntArray[i]));
+          V2.fID := IntArray[i]; // debug use - do NOT set ID in your programs!
+          Check(V2.DataAsHex(Client)=SynCommons.BinToHex(Data));
+          a := Random;
+          b := Random;
+          Check(SameValue(TSQLRecordPeople.Sum(Client,a,b,false),a+b,1E-10));
+          Check(SameValue(TSQLRecordPeople.Sum(Client,a,b,true),a+b,1E-10));
+        end;
+        Client.Commit;
+        Check(Client.TransactionBegin(TSQLRecordPeopleArray));
+        V2.FillPrepare(Client,'LastName=:("Dali"):');
         n := 0;
         while V2.FillOne do begin
-          VO.FillFrom(V2); // fast copy some content from TSQLRecordPeople
+          VA.FillFrom(V2); // fast copy some content from TSQLRecordPeople
           inc(n);
-          VO.Persistent.One.Color := n+100;
-          VO.Persistent.One.Length := n;
-          VO.Persistent.One.Name := Int32ToUtf8(n);
           if n and 31=0 then begin
-            VO.UTF8.Add(VO.Persistent.One.Name);
-            with VO.Persistent.Coll.Add do begin
-              Color := n+1000;
-              Length := n*2;
-              Name := Int32ToUtf8(n*3);
-            end;
-          end;
-          Check(Client.Add(VO,true)=n);
+            VA.UTF8 := '';
+            VA.DynArray('Ints').Add(n);
+            Curr := n*0.01;
+            VA.DynArray(2).Add(Curr);
+            FV.Major := n;
+            FV.Minor := n+2000;
+            FV.Release := n+3000;
+            FV.Build := n+4000;
+            str(n,FV.Main);
+            str(n+1000,FV.Detailed);
+            VA.DynArray('FileVersion').Add(FV);
+          end else
+            str(n,VA.fUTF8);
+          {$ifdef PUBLISHRECORD}
+          VA.fRec.nPhrase := n;
+          VA.fRec.nCol := n*2;
+          VA.fRec.hits[2].docs_with_hits := n*3;
+          {$endif PUBLISHRECORD}
+          Check(Client.Add(VA,true)=n);
         end;
         Client.Commit;
-      except
-        Client.RollBack;
-      end;
-      {$endif LVCL}
-      TestFTS3(Client);
-      TestDynArray(Client);
-      {$ifndef LVCL}
-      TestObject(Client);
-      {$endif}
-      InternalTestMany(self,Client);
-      // RegisterVirtualTableModule(TSQLVirtualTableJSON) done above
-      TestVirtual(Client,false,'Virtual Table access via SQLite 1',TSQLRecordDali1);
-      TestVirtual(Client,false,'Virtual Table access via SQLite 1',TSQLRecordDali2);
-      TestVirtual(Client,true,'Direct Virtual Table access 1',TSQLRecordDali1);
-      TestVirtual(Client,true,'Direct Virtual Table access 2',TSQLRecordDali2);
-      // remote client access test (via named pipes)
-      {$ifdef MSWINDOWS}
-      Check(Client.Server.ExportServerNamedPipe('Test'),'declare Test server');
-      TestClientDist(TSQLRestClientURINamedPipe.Create(ModelC,'Test'));
-      {$endif}
-      // check custom properties content
-      {$ifndef LVCL}
-      if Client.TransactionBegin(TSQLRecordPeopleObject) then
-      try
-        V2.FillPrepare(Client,'LastName=:("Morse"):');
-        n := 0;
-        while V2.FillOne do begin
-          VP.FillFrom(V2); // fast copy some content from TSQLRecordPeople
-          inc(n);
-          VP.fGUID.D1 := n;
-          {$ifdef PUBLISHRECORD}
-          VP.fGUIDXE6.D1 := n shl 1;
-          {$endif}
-          Check(Client.Add(VP,true)=n);
-        end;
-        Client.Commit;
-        VP.FillPrepare(Client);
-        while VP.FillOne do begin
-          check(VP.LastName='Morse');
-          check(Integer(VP.GUID.D1)=VP.ID);
-          {$ifdef PUBLISHRECORD}
-          check(Integer(VP.GUIDXE6.D1)=VP.ID shl 1);
-          {$endif}
-        end;
-      except
-        Client.RollBack;
-      end;
-      {$endif}
-      // test backup API
-      BackupFN := Format('backupbackground%s.dbsynlz',[ClassName]);
-      deleteFile(BackupFN);
-      BackupTimer.Start;
-      Check(Client.DB.BackupBackground(BackupFN,1024,0,OnBackupProgress,true)); 
-      // test per-one and batch requests
-      if ClassType=TTestMemoryBased then begin // time consuming, so do it once
-        Server := TSQLRestServerTest.Create(TSQLModel.Create([TSQLRecordPeople]),false);
+        {$ifndef LVCL}
+        if Client.TransactionBegin(TSQLRecordPeopleObject) then
         try
-          Server.Model.Owner := Server; // we just use TSQLRecordPeople here
-          Server.NoAJAXJSON := true;
-          DeleteFile('People.json');
-          DeleteFile('People.data');
-          Server.StaticDataCreate(TSQLRecordPeople,'People.data',true);
-          json := Demo.ExecuteJSON('SELECT * From People');
-          aStatic := Server.StaticDataServer[TSQLRecordPeople] as TSQLRestStorageInMemory;
-          Check(aStatic<>nil);
-          aStatic.LoadFromJSON(json); // test Add() and JSON fast loading
-          for i := 0 to aStatic.Count-1 do begin
-            Check(Client.Retrieve(aStatic.ID[i],V),'test statement+bind speed');
-            Check(V.SameRecord(aStatic.Items[i]),'static retrieve');
-          end;
-          // test our 'REST-minimal' SELECT statement SQL engine
-          Direct('/root/People?select=%2A&where=id%3D012',$96F68454);
-          Direct('/root/People?select=%2A&where=id%3D:(012):',$96F68454);
-          Direct('/root/People?select=%2A&where=LastName%3D%22M%C3%B4net%22',$BBDCF3A6);
-          Direct('/root/People?select=%2A&where=YearOfBirth%3D1873',$AF4BCA94);
-          Direct('/root/People?select=%2A',$17AE45E3);
-          Direct('/root/People?select=%2A&where=YearOfBirth%3D1873&startindex=10&results=20',$453C7201);
-          Server.URIPagingParameters.SendTotalRowsCountFmt := ',"Total":%';
-          Direct('/root/People?select=%2A&where=YearOfBirth%3D1873&startindex=10&results=2',$79AFDD53);
-          Server.NoAJAXJSON := false;
-          Direct('/root/People?select=%2A&where=YearOfBirth%3D1873&startindex=10&results=2',
-            $69FDAF5D,'User-Agent: Ajax');
-          Server.NoAJAXJSON := true;
-          Server.URIPagingParameters.SendTotalRowsCountFmt := '';
-          // test Retrieve() and Delete()
-          Server.ExportServer; // initialize URIRequest() with the aStatic database
-          USEFASTMM4ALLOC := true; // getmem() is 2x faster than GlobalAlloc()
-          ClientDist := TSQLRestClientURIDll.Create(ModelC,URIRequest);
-          try
-            SetLength(IntArray,(aStatic.Count-1)shr 2);
-            for i := 0 to high(IntArray) do begin
-              IntArray[i] := aStatic.ID[i*4];
-              Check(ClientDist.Retrieve(IntArray[i],V));
-              Check(V.SameRecord(aStatic.Items[i*4]));
-            end;
-            Check(V.FillPrepare(Client,IntArray));
-            for i := 0 to High(IntArray) do begin
-              Check(V.FillOne);
-              Check(V.ID=IntArray[i]);
-              Check(V.SameRecord(aStatic.Items[i*4]));
-            end;
-            V.FillClose; // so that BatchUpdate(V) below will set all fields
-            if ClientDist.TransactionBegin(TSQLRecordPeople) then
-            try
-              for i := 0 to high(IntArray) do
-                Check(ClientDist.Delete(TSQLRecordPeople,IntArray[i]));
-              for i := 0 to high(IntArray) do
-                Check(not ClientDist.Retrieve(IntArray[i],V));
-              for i := 0 to aStatic.Count-1 do begin
-                Check(ClientDist.Retrieve(aStatic.ID[i],V));
-                V.YearOfBirth := Random(MaxInt)-Random(MaxInt);
-                Check(ClientDist.Update(V));
-                Check(ClientDist.Retrieve(aStatic.ID[i],V));
-                Check(V.SameRecord(aStatic.Items[i]));
+          V2.FillPrepare(Client,'LastName=:("Morse"):');
+          n := 0;
+          while V2.FillOne do begin
+            VO.FillFrom(V2); // fast copy some content from TSQLRecordPeople
+            inc(n);
+            VO.Persistent.One.Color := n+100;
+            VO.Persistent.One.Length := n;
+            VO.Persistent.One.Name := Int32ToUtf8(n);
+            if n and 31=0 then begin
+              VO.UTF8.Add(VO.Persistent.One.Name);
+              with VO.Persistent.Coll.Add do begin
+                Color := n+1000;
+                Length := n*2;
+                Name := Int32ToUtf8(n*3);
               end;
-              ClientDist.Commit;
-            except
-              ClientDist.RollBack;
-            end else
-              Check(False,'TransactionBegin');
-            // test BATCH sequence usage
-            if ClientDist.TransactionBegin(TSQLRecordPeople) then
+            end;
+            Check(Client.Add(VO,true)=n);
+          end;
+          Client.Commit;
+        except
+          Client.RollBack;
+        end;
+        {$endif LVCL}
+        TestFTS3(Client);
+        TestDynArray(Client);
+        {$ifndef LVCL}
+        TestObject(Client);
+        {$endif}
+        InternalTestMany(self,Client);
+        // RegisterVirtualTableModule(TSQLVirtualTableJSON) done above
+        TestVirtual(Client,false,'Virtual Table access via SQLite 1',TSQLRecordDali1);
+        TestVirtual(Client,false,'Virtual Table access via SQLite 1',TSQLRecordDali2);
+        TestVirtual(Client,true,'Direct Virtual Table access 1',TSQLRecordDali1);
+        TestVirtual(Client,true,'Direct Virtual Table access 2',TSQLRecordDali2);
+        // remote client access test (via named pipes)
+        {$ifdef MSWINDOWS}
+        Check(Client.Server.ExportServerNamedPipe('Test'),'declare Test server');
+        TestClientDist(TSQLRestClientURINamedPipe.Create(ModelC,'Test'));
+        {$endif}
+        // check custom properties content
+        {$ifndef LVCL}
+        if Client.TransactionBegin(TSQLRecordPeopleObject) then
+        try
+          V2.FillPrepare(Client,'LastName=:("Morse"):');
+          n := 0;
+          while V2.FillOne do begin
+            VP.FillFrom(V2); // fast copy some content from TSQLRecordPeople
+            inc(n);
+            VP.fGUID.D1 := n;
+            {$ifdef PUBLISHRECORD}
+            VP.fGUIDXE6.D1 := n shl 1;
+            {$endif}
+            Check(Client.Add(VP,true)=n);
+          end;
+          Client.Commit;
+          VP.FillPrepare(Client);
+          while VP.FillOne do begin
+            check(VP.LastName='Morse');
+            check(Integer(VP.GUID.D1)=VP.ID);
+            {$ifdef PUBLISHRECORD}
+            check(Integer(VP.GUIDXE6.D1)=VP.ID shl 1);
+            {$endif}
+          end;
+        except
+          Client.RollBack;
+        end;
+        {$endif}
+        // test backup API
+        BackupFN := Format('backupbackground%s.dbsynlz',[ClassName]);
+        deleteFile(BackupFN);
+        BackupTimer.Start;
+        Check(Client.DB.BackupBackground(BackupFN,1024,0,OnBackupProgress,true)); 
+        // test per-one and batch requests
+        if ClassType=TTestMemoryBased then begin // time consuming, so do it once
+          Server := TSQLRestServerTest.Create(TSQLModel.Create([TSQLRecordPeople]),false);
+          try
+            Server.Model.Owner := Server; // we just use TSQLRecordPeople here
+            Server.NoAJAXJSON := true;
+            DeleteFile('People.json');
+            DeleteFile('People.data');
+            Server.StaticDataCreate(TSQLRecordPeople,'People.data',true);
+            json := Demo.ExecuteJSON('SELECT * From People');
+            aStatic := Server.StaticDataServer[TSQLRecordPeople] as TSQLRestStorageInMemory;
+            Check(aStatic<>nil);
+            aStatic.LoadFromJSON(json); // test Add() and JSON fast loading
+            for i := 0 to aStatic.Count-1 do begin
+              Check(Client.Retrieve(aStatic.ID[i],V),'test statement+bind speed');
+              Check(V.SameRecord(aStatic.Items[i]),'static retrieve');
+            end;
+            // test our 'REST-minimal' SELECT statement SQL engine
+            Direct('/root/People?select=%2A&where=id%3D012',$96F68454);
+            Direct('/root/People?select=%2A&where=id%3D:(012):',$96F68454);
+            Direct('/root/People?select=%2A&where=LastName%3D%22M%C3%B4net%22',$BBDCF3A6);
+            Direct('/root/People?select=%2A&where=YearOfBirth%3D1873',$AF4BCA94);
+            Direct('/root/People?select=%2A',$17AE45E3);
+            Direct('/root/People?select=%2A&where=YearOfBirth%3D1873&startindex=10&results=20',$453C7201);
+            Server.URIPagingParameters.SendTotalRowsCountFmt := ',"Total":%';
+            Direct('/root/People?select=%2A&where=YearOfBirth%3D1873&startindex=10&results=2',$79AFDD53);
+            Server.NoAJAXJSON := false;
+            Direct('/root/People?select=%2A&where=YearOfBirth%3D1873&startindex=10&results=2',
+              $69FDAF5D,'User-Agent: Ajax');
+            Server.NoAJAXJSON := true;
+            Server.URIPagingParameters.SendTotalRowsCountFmt := '';
+            // test Retrieve() and Delete()
+            Server.ExportServer; // initialize URIRequest() with the aStatic database
+            USEFASTMM4ALLOC := true; // getmem() is 2x faster than GlobalAlloc()
+            ClientDist := TSQLRestClientURIDll.Create(ModelC,URIRequest);
             try
-              Check(ClientDist.BatchStart(TSQLRecordPeople,5000));
-              n := 0;
-              for i := 0 to aStatic.Count-1 do
-                if i and 7=0 then begin
-                  IntArray[n] := aStatic.ID[i];
+              SetLength(IntArray,(aStatic.Count-1)shr 2);
+              for i := 0 to high(IntArray) do begin
+                IntArray[i] := aStatic.ID[i*4];
+                Check(ClientDist.Retrieve(IntArray[i],V));
+                Check(V.SameRecord(aStatic.Items[i*4]));
+              end;
+              Check(V.FillPrepare(Client,IntArray));
+              for i := 0 to High(IntArray) do begin
+                Check(V.FillOne);
+                Check(V.ID=IntArray[i]);
+                Check(V.SameRecord(aStatic.Items[i*4]));
+              end;
+              V.FillClose; // so that BatchUpdate(V) below will set all fields
+              if ClientDist.TransactionBegin(TSQLRecordPeople) then
+              try
+                for i := 0 to high(IntArray) do
+                  Check(ClientDist.Delete(TSQLRecordPeople,IntArray[i]));
+                for i := 0 to high(IntArray) do
+                  Check(not ClientDist.Retrieve(IntArray[i],V));
+                for i := 0 to aStatic.Count-1 do begin
+                  Check(ClientDist.Retrieve(aStatic.ID[i],V));
+                  V.YearOfBirth := Random(MaxInt)-Random(MaxInt);
+                  Check(ClientDist.Update(V));
+                  Check(ClientDist.Retrieve(aStatic.ID[i],V));
+                  Check(V.SameRecord(aStatic.Items[i]));
+                end;
+                ClientDist.Commit;
+              except
+                ClientDist.RollBack;
+              end else
+                Check(False,'TransactionBegin');
+              // test BATCH sequence usage
+              if ClientDist.TransactionBegin(TSQLRecordPeople) then
+              try
+                Check(ClientDist.BatchStart(TSQLRecordPeople,5000));
+                n := 0;
+                for i := 0 to aStatic.Count-1 do
+                  if i and 7=0 then begin
+                    IntArray[n] := aStatic.ID[i];
+                    inc(n);
+                  end;
+                for i := 0 to n-1 do
+                  // note that here a warning does make sense, since Server.DB=nil
+                  Check(ClientDist.BatchDelete(IntArray[i])=i);
+                nupd := 0;
+                for i := 0 to aStatic.Count-1 do
+                  if i and 7<>0 then begin // not yet deleted in BATCH mode
+                     Check(ClientDist.Retrieve(aStatic.ID[i],V));
+                     V.YearOfBirth := 1800+nupd;
+                     Check(ClientDist.BatchUpdate(V)=nupd+n);
+                     inc(nupd);
+                   end;
+                V.LastName := 'New';
+                for i := 0 to 1000 do begin
+                  V.FirstName := RandomUTF8(10);
+                  V.YearOfBirth := i+1000;
+                  Check(ClientDist.BatchAdd(V,true)=n+nupd+i);
+                end;
+                Check(ClientDist.BatchSend(Results)=200);
+                Check(Length(Results)=9260);
+                ClientDist.Commit;
+                for i := 0 to n-1 do
+                  Check(not ClientDist.Retrieve(IntArray[i],V),'BatchDelete');
+                for i := 0 to high(Results) do
+                  if i<nupd+n then
+                    Check(Results[i]=200) else begin
+                    Check(Results[i]>0);
+                    ndx := aStatic.IDToIndex(Results[i]);
+                    Check(ndx>=0);
+                    with TSQLRecordPeople(aStatic.Items[ndx]) do begin
+                      Check(LastName='New','BatchAdd');
+                      Check(YearOfBirth=1000+i-nupd-n);
+                    end;
+                  end;
+                for i := 0 to aStatic.Count-1 do
+                  with TSQLRecordPeople(aStatic.Items[i]) do
+                    if LastName='New' then
+                      break else
+                      Check(YearOfBirth=1800+i,'BatchUpdate');
+              except
+                ClientDist.RollBack;
+              end else
+                Check(False,'TransactionBegin');
+              // test BATCH update from partial FillPrepare
+              V.FillPrepare(ClientDist,'LastName=?',['New'],'ID,YearOfBirth');
+              if ClientDist.TransactionBegin(TSQLRecordPeople) then
+              try
+                Check(ClientDist.BatchStart(TSQLRecordPeople));
+                n := 0;
+                V.LastName := 'NotTransmitted';
+                while V.FillOne do begin
+                  Check(V.LastName='NotTransmitted');
+                  Check(V.YearOfBirth=n+1000);
+                  V.YearOfBirth := n;
+                  if n and 3=0 then
+                    // will update only V.YearOfBirth specifically
+                    ClientDist.BatchUpdate(V,
+                      TSQLRecordPeople.RecordProps.FieldBitsFromCSV('YearOfBirth')) else
+                    // will update only V.YearOfBirth as in previous FillPrepare
+                    ClientDist.BatchUpdate(V);
                   inc(n);
                 end;
-              for i := 0 to n-1 do
-                // note that here a warning does make sense, since Server.DB=nil
-                Check(ClientDist.BatchDelete(IntArray[i])=i);
-              nupd := 0;
-              for i := 0 to aStatic.Count-1 do
-                if i and 7<>0 then begin // not yet deleted in BATCH mode
-                   Check(ClientDist.Retrieve(aStatic.ID[i],V));
-                   V.YearOfBirth := 1800+nupd;
-                   Check(ClientDist.BatchUpdate(V)=nupd+n);
-                   inc(nupd);
-                 end;
-              V.LastName := 'New';
-              for i := 0 to 1000 do begin
-                V.FirstName := RandomUTF8(10);
-                V.YearOfBirth := i+1000;
-                Check(ClientDist.BatchAdd(V,true)=n+nupd+i);
-              end;
-              Check(ClientDist.BatchSend(Results)=200);
-              Check(Length(Results)=9260);
-              ClientDist.Commit;
-              for i := 0 to n-1 do
-                Check(not ClientDist.Retrieve(IntArray[i],V),'BatchDelete');
-              for i := 0 to high(Results) do
-                if i<nupd+n then
-                  Check(Results[i]=200) else begin
-                  Check(Results[i]>0);
-                  ndx := aStatic.IDToIndex(Results[i]);
-                  Check(ndx>=0);
-                  with TSQLRecordPeople(aStatic.Items[ndx]) do begin
-                    Check(LastName='New','BatchAdd');
-                    Check(YearOfBirth=1000+i-nupd-n);
-                  end;
-                end;
-              for i := 0 to aStatic.Count-1 do
-                with TSQLRecordPeople(aStatic.Items[i]) do
-                  if LastName='New' then
-                    break else
-                    Check(YearOfBirth=1800+i,'BatchUpdate');
-            except
-              ClientDist.RollBack;
-            end else
-              Check(False,'TransactionBegin');
-            // test BATCH update from partial FillPrepare
-            V.FillPrepare(ClientDist,'LastName=?',['New'],'ID,YearOfBirth');
-            if ClientDist.TransactionBegin(TSQLRecordPeople) then
-            try
-              Check(ClientDist.BatchStart(TSQLRecordPeople));
+                Check(n=1001);
+                SetLength(Results,0);
+                Check(ClientDist.BatchSend(Results)=200);
+                Check(length(Results)=1001);
+                for i := 0 to high(Results) do
+                  Check(Results[i]=200);
+                ClientDist.Commit;
+              except
+                ClientDist.RollBack;
+              end else
+                Check(False,'TransactionBegin');
+              V.FillPrepare(ClientDist,'LastName=?',['New'],'YearOfBirth');
               n := 0;
-              V.LastName := 'NotTransmitted';
               while V.FillOne do begin
                 Check(V.LastName='NotTransmitted');
-                Check(V.YearOfBirth=n+1000);
-                V.YearOfBirth := n;
-                if n and 3=0 then
-                  // will update only V.YearOfBirth specifically
-                  ClientDist.BatchUpdate(V,
-                    TSQLRecordPeople.RecordProps.FieldBitsFromCSV('YearOfBirth')) else
-                  // will update only V.YearOfBirth as in previous FillPrepare
-                  ClientDist.BatchUpdate(V);
+                Check(V.YearOfBirth=n);
+                V.YearOfBirth := 1000;
                 inc(n);
               end;
-              Check(n=1001);
-              SetLength(Results,0);
-              Check(ClientDist.BatchSend(Results)=200);
-              Check(length(Results)=1001);
-              for i := 0 to high(Results) do
-                Check(Results[i]=200);
-              ClientDist.Commit;
-            except
-              ClientDist.RollBack;
-            end else
-              Check(False,'TransactionBegin');
-            V.FillPrepare(ClientDist,'LastName=?',['New'],'YearOfBirth');
-            n := 0;
-            while V.FillOne do begin
-              Check(V.LastName='NotTransmitted');
-              Check(V.YearOfBirth=n);
-              V.YearOfBirth := 1000;
-              inc(n);
+              Check(n=length(Results));
+              V.FillClose;
+              V.LastName := 'last';
+              V.FirstName := 'first';
+              V.fID := 4294967297;
+              Check(ClientDist.Add(V,true,True)=V.ID);
+              V.ClearProperties;
+              ClientDist.Retrieve(4294967297,V);
+              Check(V.FirstName='first');
+              Check(V.ID=4294967297);
+            finally
+              ClientDist.Free;
             end;
-            Check(n=length(Results));
-            V.FillClose;
-            V.LastName := 'last';
-            V.FirstName := 'first';
-            V.fID := 4294967297;
-            Check(ClientDist.Add(V,true,True)=V.ID);
-            V.ClearProperties;
-            ClientDist.Retrieve(4294967297,V);
+            aStatic.UpdateFile; // force People.data file content write
+            aStatic.ReloadFromFile;
+            Check(aStatic.Retrieve(11,V),'reload from people.data');
+            Check(V.FirstName='Jane1');
+            Check(aStatic.Retrieve(4294967297,V));
             Check(V.FirstName='first');
-            Check(V.ID=4294967297);
+            aStatic.FileName := 'People.json';
+            aStatic.BinaryFile := false;
+            aStatic.Modified := true;
+            aStatic.UpdateFile; // force People.json file content write
+            aStatic.ReloadFromFile;
+            Check(aStatic.Retrieve(11,V),'reload from people.json');
+            Check(V.FirstName='Jane1');
+            Check(aStatic.Retrieve(4294967297,V));
+            Check(V.FirstName='first');
+            aStatic.Delete(TSQLRecordPeople,4294967297);
+            aStatic.UpdateFile;
           finally
-            ClientDist.Free;
+            {$ifdef MSWINDOWS}
+            USEFASTMM4ALLOC := false;
+            {$endif}
+            Server.Free;
           end;
-          aStatic.UpdateFile; // force People.data file content write
-          aStatic.ReloadFromFile;
-          Check(aStatic.Retrieve(11,V),'reload from people.data');
-          Check(V.FirstName='Jane1');
-          Check(aStatic.Retrieve(4294967297,V));
-          Check(V.FirstName='first');
-          aStatic.FileName := 'People.json';
-          aStatic.BinaryFile := false;
-          aStatic.Modified := true;
-          aStatic.UpdateFile; // force People.json file content write
-          aStatic.ReloadFromFile;
-          Check(aStatic.Retrieve(11,V),'reload from people.json');
-          Check(V.FirstName='Jane1');
-          Check(aStatic.Retrieve(4294967297,V));
-          Check(V.FirstName='first');
-          aStatic.Delete(TSQLRecordPeople,4294967297);
-          aStatic.UpdateFile;
-        finally
-          {$ifdef MSWINDOWS}
-          USEFASTMM4ALLOC := false;
-          {$endif}
-          Server.Free;
         end;
+        Client.DB.BackupBackgroundWaitUntilFinished;
+      finally
+        Client.Free;
       end;
-      Client.DB.BackupBackgroundWaitUntilFinished;
     finally
-      Client.Free;
+      ModelC.Free;
     end;
   finally
-    ModelC.Free;
     V.Free;
     V2.Free;
     VA.Free;

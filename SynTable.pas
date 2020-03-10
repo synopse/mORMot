@@ -17092,7 +17092,7 @@ end;
 procedure TSynTimeZone.LoadFromBuffer(const Buffer: RawByteString);
 begin
   fZones.LoadFromBinary(AlgoSynLZ.Decompress(Buffer),{nohash=}true);
-  fZones.ReHash(false);
+  fZones.ReHash;
   FreeAndNil(fIds);
   FreeAndNil(fDisplays);
 end;
