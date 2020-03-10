@@ -43315,19 +43315,19 @@ end;
 
 procedure TJSONCustomParserRTTI.FinalizeNestedArray(var Data: PtrUInt);
 var i: integer;
-    Rec: PDynArrayRec;
+    p: PDynArrayRec;
     ItemData: PByte;
 begin
   if Data=0 then
     exit;
   ItemData := pointer(Data);
-  Rec := pointer(Data);
-  dec(PtrUInt(Rec),SizeOf(TDynArrayRec));
+  p := pointer(Data);
+  dec(p);
   Data := 0;
-  if (Rec^.refCnt>=0) and RefCntDecFree(Rec^.refCnt) then begin
-    for i := 1 to Rec.length do
+  if (p^.refCnt>=0) and RefCntDecFree(p^.refCnt) then begin
+    for i := 1 to p^.length do
       FinalizeNestedRecord(ItemData);
-    FreeMem(Rec);
+    FreeMem(p);
   end;
 end;
 
@@ -43346,17 +43346,20 @@ end;
 procedure TJSONCustomParserRTTI.ReAllocateNestedArray(var Data: PtrUInt;
   NewLength: integer);
 var OldLength: integer;
+    p: PDynArrayRec;
 begin
-  if Data=0 then
+  p := pointer(Data);
+  if p=nil then
     raise ESynException.CreateUTF8('%.ReAllocateNestedArray(nil)',[self]);
-  dec(Data,SizeOf(TDynArrayRec));
-  ReAllocMem(pointer(Data),SizeOf(TDynArrayRec)+fNestedDataSize*NewLength);
-  OldLength := PDynArrayRec(Data)^.length;
+  dec(p);
+  ReAllocMem(p,SizeOf(p^)+fNestedDataSize*NewLength);
+  OldLength := p^.length;
   if NewLength>OldLength then
-    FillCharFast(PByteArray(Data)[SizeOf(TDynArrayRec)+fNestedDataSize*OldLength],
+    FillCharFast(PByteArray(p)[SizeOf(p^)+fNestedDataSize*OldLength],
       fNestedDataSize*(NewLength-OldLength),0);
-  PDynArrayRec(Data)^.length := NewLength;
-  inc(Data,SizeOf(TDynArrayRec));
+  p^.length := NewLength;
+  inc(p);
+  Data := PtrUInt(p);
 end;
 
 function TJSONCustomParserRTTI.ReadOneLevel(var P: PUTF8Char; var Data: PByte;
@@ -48191,7 +48194,7 @@ begin
   if Value<>nil then begin
     p := Value^;
     if p<>nil then begin
-      dec(PtrUInt(p),SizeOf(TDynArrayRec));
+      dec(p);
       if (p^.refCnt>=0) and RefCntDecFree(p^.refCnt) then begin
         if ElemTypeInfo<>nil then
           FastFinalizeArray(Value^,ElemTypeInfo,p^.length);
@@ -50084,7 +50087,7 @@ begin // this method is faster than default System.DynArraySetLength() function
   // check that new array length is not just a finalize in disguise
   if NewLength=0 then begin
     if p<>nil then begin // FastDynArrayClear() with ObjArray support
-      dec(PtrUInt(p),SizeOf(TDynArrayRec));
+      dec(p);
       if (p^.refCnt>=0) and RefCntDecFree(p^.refCnt) then begin
         if OldLength<>0 then
           if ElemType<>nil then
@@ -61946,7 +61949,6 @@ end;
 
 initialization
   // initialization of internal dynamic functions and tables
-  InitializeCriticalSection(GlobalCriticalSection);
   InitFunctionsRedirection;
   InitializeCriticalSection(GlobalCriticalSection);
   GarbageCollectorFreeAndNilList := TSynList.Create;
