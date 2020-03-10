@@ -2258,8 +2258,8 @@ function StrLenPas(S: pointer): PtrInt;
 var StrLen: function(S: pointer): PtrInt = StrLenPas;
 
 {$ifdef ABSOLUTEPASCAL}
-var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) = FillChar;
-var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
+var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte);
+var MoveFast: procedure(const Source; var Dest; Count: PtrInt);
 {$else}
 {$ifdef CPUX64} // will define its own self-dispatched SSE2/AVX functions
 type
@@ -61945,13 +61945,12 @@ begin
 end;
 
 initialization
-  // initialization of global variables
-  {$ifdef CPU32DELPHI} Pointer(@FillCharFast) := SystemFillCharAddress; {$endif CPUX64}
-  GarbageCollectorFreeAndNilList := TSynList.Create;
-  GarbageCollectorFreeAndNil(GarbageCollector,TSynObjectList.Create);
   // initialization of internal dynamic functions and tables
   InitializeCriticalSection(GlobalCriticalSection);
   InitFunctionsRedirection;
+  InitializeCriticalSection(GlobalCriticalSection);
+  GarbageCollectorFreeAndNilList := TSynList.Create;
+  GarbageCollectorFreeAndNil(GarbageCollector,TSynObjectList.Create);
   InitSynCommonsConversionTables;
   RetrieveSystemInfo;
   SetExecutableVersion(0,0,0,0);
