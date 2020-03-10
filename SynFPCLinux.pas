@@ -376,6 +376,10 @@ function clock_gettime(ID: cardinal; r: ptimespec): Integer;
   cdecl external 'libc.so' name 'clock_gettime';
 function clock_getres(ID: cardinal; r: ptimespec): Integer;
   cdecl external 'libc.so' name 'clock_getres';
+{$else}
+// we use a libc clock_gettime function here because it's use vDSO (avoid syscall)
+// while FPC by default is compiled without FPC_USE_LIBC defined and do a syscall for clock_gettime
+function clock_gettime(clk_id : clockid_t; tp: ptimespec) : cint;  cdecl; external name 'clock_gettime';
 {$endif BSD}
 
 function GetTickCount64: Int64;
