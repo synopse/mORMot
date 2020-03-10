@@ -46713,7 +46713,7 @@ begin
 end;
 
 procedure TSQLRestServerFullMemory.LoadFromFile;
-var S: TFileStream;
+var S: THandleStream;
 begin
   if (fFileName='') or not FileExists(fFileName) then
     exit;

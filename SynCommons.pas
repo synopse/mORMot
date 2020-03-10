@@ -13328,14 +13328,16 @@ function GetTickCount64: Int64;
 // - note: under XP, we observed ERROR_NO_SYSTEM_RESOURCES problems when calling
 // FileRead() for chunks bigger than 32MB on files opened with this flag,
 // so it would use regular FileOpen() on this deprecated OS
-// - under POSIX, calls plain FileOpen(FileName,fmOpenRead or fmShareDenyNone)
+// - under POSIX, calls plain fpOpen(FileName, O_RDONLY) which would avoid a
+// syscall to fpFlock() which is not needed here
 // - is used e.g. by StringFromFile() and TSynMemoryStreamMapped.Create()
 function FileOpenSequentialRead(const FileName: string): Integer;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// returns a TFileStream optimized for one pass file reading
-// - will use FileOpenSequentialRead(), i.e. FILE_FLAG_SEQUENTIAL_SCAN
-function FileStreamSequentialRead(const FileName: string): TFileStream;
+// - will use FileOpenSequentialRead(), i.e. FILE_FLAG_SEQUENTIAL_SCAN under
+// Windows, and plain fpOpen(FileName, O_RDONLY) on POSIX
+function FileStreamSequentialRead(const FileName: string): THandleStream;
 
 /// check if the current timestamp, in ms, matched a given period
 // - will compare the current GetTickCount64 to the supplied PreviousTix
@@ -26688,17 +26690,16 @@ begin
     result := CreateFile(pointer(FileName),GENERIC_READ,
       FILE_SHARE_READ or FILE_SHARE_WRITE,nil, // same as fmShareDenyNone
       OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN,0) else
-  {$endif MSWINDOWS}
     result := FileOpen(FileName,fmOpenRead or fmShareDenyNone);
+  {$else}
+    // SysUtils.FileOpen = fpOpen + fpFlock - assuming FileName is UTF-8
+    result := fpOpen(pointer(FileName), O_RDONLY);
+  {$endif MSWINDOWS}
 end;
 
-function FileStreamSequentialRead(const FileName: string): TFileStream;
+function FileStreamSequentialRead(const FileName: string): THandleStream;
 begin
-  {$ifdef DELPHI5ORFPC}
-  result := TFileStream.Create(FileName,fmOpenRead or fmShareDenyNone);
-  {$else}
-  result := TFileStream.Create(FileOpenSequentialRead(FileName));
-  {$endif}
+  result := THandleStream.Create(FileOpenSequentialRead(FileName));
 end;
 
 function Elapsed(var PreviousTix: Int64; Interval: Integer): Boolean;
@@ -60000,7 +60001,7 @@ end;
 
 function FileSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
 var src,dst: RawByteString;
-    S,D: TFileStream;
+    S,D: THandleStream;
     Head: TSynLZHead;
     Count,Max: Int64;
 begin
@@ -60057,7 +60058,7 @@ end;
 
 function FileUnSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
 var src,dst: RawByteString;
-    S,D: TFileStream;
+    S,D: THandleStream;
     Count: Int64;
     Head: TSynLZHead;
 begin
