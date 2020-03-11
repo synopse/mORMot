@@ -1341,7 +1341,7 @@ type
     fReqQueue: THandle;
     /// contain list of THttpApiServer cloned instances
     fClones: THttpApiServers;
-    // if fClones=nil, fOwner contains the main THttpApiServer instance
+    // if cloned, fOwner contains the main THttpApiServer instance
     fOwner: THttpApiServer;
     /// list of all registered URL
     fRegisteredUnicodeUrl: array of SynUnicode;
@@ -8794,22 +8794,11 @@ begin
 end;
 
 destructor THttpApiServer.Destroy;
-{$ifdef LVCL}
-var i: integer;
-{$endif}
 begin
-  {$ifdef LVCL}
   Terminate; // for Execute to be notified about end of process
-  {$endif}
   try
-    if (fClones<>nil) and (Http.Module<>0) then // fClones=nil for clone threads
+    if (fOwner=nil) and (Http.Module<>0) then // fOwner<>nil for cloned threads
       DestroyMainThread;
-    {$ifdef LVCL}
-    for i := 1 to 500 do
-      if fExecuteFinished then
-        break else
-        SleepHiRes(10);
-    {$endif}
   finally
     inherited Destroy;
   end;
