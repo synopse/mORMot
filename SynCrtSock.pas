@@ -8768,7 +8768,7 @@ var i: integer;
 begin
   if fReqQueue<>0 then begin
     for i := 0 to length(fClones)-1 do
-      fClones[i].Terminate;
+      fClones[i].Terminate; // for CloseHandle() below to finish Execute
     if Http.Version.MajorVersion>1 then begin
      if fUrlGroupID<>0 then begin
        Http.RemoveUrlFromUrlGroup(fUrlGroupID,nil,HTTP_URL_FLAG_REMOVE_ALL);

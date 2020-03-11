@@ -39951,9 +39951,9 @@ function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
         lea     r11, qword ptr[rax + 1]
         movzx   ecx, word ptr[rdi + rax * 2]
         {$ifdef win64}
-        cmp     cx, r8w
+        cmp     ecx, r8d
         {$else}
-        cmp     cx, dx // 'cmp cx,Value' is silently rejected by Darwin asm
+        cmp     ecx, edx // 'cmp cx,Value' is silently rejected by Darwin asm
         {$endif win64}
         je      @ok
         cmovg   R, r10
