@@ -407,7 +407,7 @@ begin // here we follow the steps and content stated by https://goo.gl/CX6VA3
         get.SockRecvLn(text);
         test.Check(text = 'HTTP/1.0 200 OK');
         get.GetHeader;
-        test.Check(get.ConnectionClose);
+        test.Check(connectionClose in get.HeaderFlags);
         test.Check(get.SockConnected);
         test.Check(get.ContentType = RTSP_MIME);
       end;

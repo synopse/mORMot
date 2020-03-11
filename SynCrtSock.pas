@@ -522,10 +522,6 @@ type
   // standard gzip/deflate or custom (synlzo/synlz) protocols
   THttpSocket = class(TCrtSocket)
   protected
-    /// true if the TRANSFER-ENCODING: CHUNKED was set in headers
-    fChunked: boolean;
-    /// to call GetBody only once
-    fBodyRetrieved: boolean;
     /// used by RegisterCompress method
     fCompress: THttpSocketCompressRecDynArray;
     /// set by RegisterCompress method
@@ -535,6 +531,8 @@ type
     /// same as HeaderGetValue('CONTENT-ENCODING'), but retrieved during Request
     // and mapped into the fCompress[] array
     fContentCompress: integer;
+    /// to call GetBody only once
+    fBodyRetrieved: boolean;
     /// cache for HeaderGetText
     fHeaderText: SockString;
     /// compress the data, adding corresponding headers via SockSend()
@@ -571,10 +569,10 @@ type
     ContentType: SockString;
     /// same as HeaderGetValue('UPGRADE'), but retrieved during Request
     Upgrade: SockString;
-    /// same as HeaderGetValue('CONNECTION')='Close', but retrieved during Request
-    ConnectionClose: boolean;
-    /// same as HeaderGetValue('CONNECTION-UPGRADE')<>'', but retrieved during Request
-    ConnectionUpgrade: boolean;
+    /// same as HeaderGetValue('X-POWERED-BY'), but retrieved during Request
+    XPoweredBy: SockString;
+    /// map the presence of some HTTP headers, but retrieved during Request
+    HeaderFlags: set of(transferChuked, connectionClose, connectionUpgrade, connectionKeepAlive);
     /// retrieve the HTTP headers into Headers[] and fill most properties below
     procedure GetHeader;
     /// retrieve the HTTP body (after uncompression if necessary) into Content
@@ -6655,7 +6653,7 @@ begin
   Content := '';
   {$I-}
   // direct read bytes, as indicated by Content-Length or Chunked
-  if fChunked then begin // we ignore the Length
+  if transferChuked in HeaderFlags then begin // we ignore the Length
     LContent := 0; // current read position in Content
     repeat
       if SockIn<>nil then begin
@@ -6719,31 +6717,30 @@ var s,c: SockString;
     P: PAnsiChar;
 begin
   fHeaderText := '';
-  fChunked := false;
+  HeaderFlags := [];
   fBodyRetrieved := false;
   fContentCompress := -1;
   integer(fCompressAcceptHeader) := 0;
   ContentType := '';
   Upgrade := '';
   ContentLength := -1;
-  ConnectionClose := false;
-  ConnectionUpgrade := false;
   ServerInternalState := 0;
   n := 0;
   repeat
     SockRecvLn(s);
     if s='' then
       break; // headers end with a void line
-    if length(Headers)<=n then
-      SetLength(Headers,n+n shr 3+16);
-    Headers[n] := s;
-    inc(n);
-    P := pointer(s);
+    P := pointer(s); // P := nil below to store in Headers[]
     case IdemPCharArray(P,['CONTENT-', 'TRANSFER-ENCODING: CHUNKED', 'CONNECTION: ',
-      'ACCEPT-ENCODING:', 'UPGRADE:', 'SERVER-INTERNALSTATE:']) of
+      'ACCEPT-ENCODING:', 'UPGRADE:', 'SERVER-INTERNALSTATE:', 'X-POWERED-BY']) of
     0: case IdemPCharArray(P+8,['LENGTH:', 'TYPE:', 'ENCODING:']) of
        0: ContentLength := GetCardinal(P+16);
-       1: trimcopy(s,14,255,ContentType);
+       1: begin
+            trimcopy(s,14,255,ContentType);
+            if (ContentType<>'') and
+               not IdemPChar(pointer(ContentType),'APPLICATION/JSON') then
+              P := nil; // is searched by HEADER_CONTENT_TYPE_UPPER later on
+          end;
        2: if fCompress<>nil then begin
             trimcopy(s,18,255,c);
             for i := 0 to high(fCompress) do
@@ -6752,16 +6749,36 @@ begin
                 break;
               end;
           end;
+       else P := nil;
        end;
-    1: fChunked := true;
-    2: case IdemPCharArray(P+12,['CLOSE', 'UPGRADE', 'KEEP-ALIVE, UPGRADE']) of
-       0:   ConnectionClose := true;
-       1,2: ConnectionUpgrade := true;
+    1: include(HeaderFlags,transferChuked);
+    2: case IdemPCharArray(P+12,['CLOSE', 'UPGRADE', 'KEEP-ALIVE']) of
+       0: include(HeaderFlags,connectionClose);
+       1: include(HeaderFlags,connectionUpgrade);
+       2: begin
+            include(HeaderFlags,connectionKeepAlive);
+            if P[22]=',' then begin
+              inc(P,23);
+              if P^=' ' then inc(P);
+              if IdemPChar(P,'UPGRADE') then
+                include(HeaderFlags,connectionUpgrade);
+            end;
+          end;
+       else P := nil;
        end;
     3: if fCompress<>nil then
-         fCompressAcceptHeader := ComputeContentEncoding(fCompress,P+16);
+         fCompressAcceptHeader := ComputeContentEncoding(fCompress,P+16) else
+         P := nil;
     4: trimcopy(s,9,255,Upgrade);
     5: ServerInternalState := GetCardinal(P+21);
+    6: XPoweredBy := s; // not in headers
+    else P := nil;
+    end;
+    if P=nil then begin // only store meaningful header
+      if length(Headers)<=n then
+        SetLength(Headers,n+n shr 3+16);
+      Headers[n] := s;
+      inc(n);
     end;
   until false;
   SetLength(Headers,n);
@@ -6937,7 +6954,7 @@ begin
           fRemoteConnectionID := GetNextItemUInt64(P);
       end;
     end;
-    if ConnectionClose then
+    if connectionClose in HeaderFlags then
       fKeepAliveClient := false;
     if (ContentLength<0) and (KeepAliveClient or (fMethod = 'GET')) then
       ContentLength := 0; // HTTP/1.1 and no content length -> no eof
@@ -6970,7 +6987,7 @@ begin
         end;
       end;
     end;
-    if withBody and not ConnectionUpgrade then begin
+    if withBody and not (connectionUpgrade in HeaderFlags) then begin
       GetBody;
       result := grBodyReceived;
     end else
@@ -7422,7 +7439,7 @@ begin
         ServerSock := nil; // THttpServerResp will own and free ServerSock
       end else begin
         // no Keep Alive = multi-connection -> process in the Thread Pool
-        if not ServerSock.ConnectionUpgrade then begin
+        if not (connectionUpgrade in ServerSock.HeaderFlags) then begin
           ServerSock.GetBody; // we need to get it now
           InterlockedIncrement(fServer.fStats[grBodyReceived]);
         end;
