@@ -8698,7 +8698,7 @@ type
 procedure THttpApiServer.Clone(ChildThreadCount: integer);
 var i: integer;
 begin
-  if (fReqQueue=0) or not Assigned(OnRequest) or (ChildThreadCount<=0) then
+  if (fReqQueue=0) or not Assigned(OnRequest) or (ChildThreadCount<=0) or (fClones<>nil) then
     exit; // nothing to clone (need a queue and a process event)
   if ChildThreadCount>256 then
     ChildThreadCount := 256; // not worth adding
@@ -8712,21 +8712,12 @@ begin
   result := Format('HTTP API %d.%d',[Http.Version.MajorVersion,Http.Version.MinorVersion]);
 end;
 
-procedure THttpApiServer.SetOnTerminate(const Event: TNotifyThreadEvent);
-var i: integer;
-begin
-  inherited SetOnTerminate(Event);
-  if fOwner=nil then
-    for i := 0 to length(fClones)-1 do
-      fClones[i].OnHttpThreadTerminate := Event;
-end;
-
 constructor THttpApiServer.Create(CreateSuspended: boolean; QueueName: SynUnicode;
   OnStart,OnStop: TNotifyThreadEvent; const ProcessName: SockString);
 var bindInfo: HTTP_BINDING_INFO;
 begin
   SetLength(fLogDataStorage,sizeof(HTTP_LOG_FIELDS_DATA)); // should be done 1st
-  inherited Create(true,OnStart,OnStop,ProcessName);
+  inherited Create({suspended=}true,OnStart,OnStop,ProcessName);
   HttpApiInitialize; // will raise an exception in case of failure
   EHttpApiServer.RaiseOnError(hInitialize,
     Http.Initialize(Http.Version,HTTP_INITIALIZE_SERVER));
@@ -8753,7 +8744,6 @@ end;
 constructor THttpApiServer.CreateClone(From: THttpApiServer);
 begin
   SetLength(fLogDataStorage,sizeof(HTTP_LOG_FIELDS_DATA));
-  inherited Create(false,From.fOnHttpThreadStart,From.fOnTerminate,From.ProcessName);
   fOwner := From;
   fReqQueue := From.fReqQueue;
   fOnRequest := From.fOnRequest;
@@ -8770,12 +8760,15 @@ begin
   SetRemoteIPHeader(From.RemoteIPHeader);
   SetRemoteConnIDHeader(From.RemoteConnIDHeader);
   fLoggingServiceName := From.fLoggingServiceName;
+  inherited Create(false,From.fOnHttpThreadStart,From.fOnTerminate,From.ProcessName);
 end;
 
 procedure THttpApiServer.DestroyMainThread;
 var i: integer;
 begin
   if fReqQueue<>0 then begin
+    for i := 0 to length(fClones)-1 do
+      fClones[i].Terminate;
     if Http.Version.MajorVersion>1 then begin
      if fUrlGroupID<>0 then begin
        Http.RemoveUrlFromUrlGroup(fUrlGroupID,nil,HTTP_URL_FLAG_REMOVE_ALL);
@@ -8793,8 +8786,9 @@ begin
       CloseHandle(fReqQueue); // will break all THttpApiServer.Execute
     end;
     fReqQueue := 0;
-    for i := 0 to high(fClones) do
+    for i := 0 to length(fClones)-1 do
       fClones[i].Free;
+    fClones := nil;
     Http.Terminate(HTTP_INITIALIZE_SERVER);
   end;
 end;
@@ -9207,15 +9201,6 @@ begin
   end;
 end;
 
-procedure THttpApiServer.RegisterCompress(aFunction: THttpSocketCompress;
-  aCompressMinSize: integer=1024);
-var i: integer;
-begin
-  inherited;
-  for i := 0 to length(fClones)-1 do
-    fClones[i].RegisterCompress(aFunction,aCompressMinSize);
-end;
-
 function THttpApiServer.GetHTTPQueueLength: Cardinal;
 var returnLength: ULONG;
 begin
@@ -9396,6 +9381,24 @@ begin
       @logInfo, SizeOf(logInfo)));
   // on success, update the actual log memory structure
   fLogData := pointer(fLogDataStorage);
+end;
+
+procedure THttpApiServer.RegisterCompress(aFunction: THttpSocketCompress;
+  aCompressMinSize: integer=1024);
+var i: integer;
+begin
+  inherited;
+  for i := 0 to length(fClones)-1 do
+    fClones[i].RegisterCompress(aFunction,aCompressMinSize);
+end;
+
+procedure THttpApiServer.SetOnTerminate(const Event: TNotifyThreadEvent);
+var i: integer;
+begin
+  inherited SetOnTerminate(Event);
+  if fOwner=nil then
+    for i := 0 to length(fClones)-1 do
+      fClones[i].OnHttpThreadTerminate := Event;
 end;
 
 procedure THttpApiServer.LogStop;
