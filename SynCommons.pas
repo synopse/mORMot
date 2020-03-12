@@ -3209,7 +3209,7 @@ function GotoNextLine(source: PUTF8Char): PUTF8Char;
 // - is likely to read some bytes after the TextEnd buffer, so GetLineSize()
 // may be preferred, e.g. on memory mapped files
 function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
-  {$ifndef CPUX64}{$ifdef FPC}inline;{$endif}{$endif}
+  {$ifndef CPUX64}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// compute the line length from source array of chars
 // - if PEnd = nil, end counting at either #0, #13 or #10
@@ -26721,7 +26721,7 @@ begin
 end;
 
 type
-{$ifdef FPC} // FPC TFileStream doesn't have per-handle constructor like Delphi
+{$ifdef DELPHI5ORFPC} // TFileStream doesn't have per-handle constructor like Delphi
   TFileStreamFromHandle = class(THandleStream)
   public
     destructor Destroy; override;
@@ -26733,7 +26733,7 @@ begin
 end;
 {$else}
   TFileStreamFromHandle = TFileStream;
-{$endif FPC}
+{$endif DELPHI5ORFPC}
 
 function FileStreamSequentialRead(const FileName: string): THandleStream;
 begin
@@ -33060,11 +33060,36 @@ begin
 end;
 {$endif CPUX64}
 
-function GetLineSize(P,PEnd: PUTF8Char): PtrUInt;
+function GetLineSize(P, PEnd: PUTF8Char): PtrUInt;
+var c: byte;
 begin
-  if PEnd=nil then
-    dec(PtrUInt(PEnd)); // to scan until end of memory
-  result := BufferLineLength(P,PEnd); // use optimized search - SSE2 on x86_64
+  {$ifdef CPUX64}
+  if PEnd <> nil then begin
+    result := BufferLineLength(P,PEnd); // use branchless SSE2 on x86_64
+    exit;
+  end;
+  result := PtrUInt(P)-1;
+  {$else}
+  result := PtrUInt(P)-1;
+  if PEnd<>nil then
+    repeat // inlined BufferLineLength()
+      inc(result);
+      if PtrUInt(result)<PtrUInt(PEnd) then begin
+        c := PByte(result)^;
+        if (c>13) or ((c<>10) and (c<>13)) then
+          continue;
+      end;
+      break;
+    until false else
+  {$endif CPUX64}
+    repeat // inlined BufferLineLength() ending at #0 for PEnd=nil
+      inc(result);
+      c := PByte(result)^;
+      if (c>13) or ((c<>0) and (c<>10) and (c<>13)) then
+        continue;
+      break;
+    until false;
+  dec(result,PtrUInt(P)); // returns length
 end;
 
 function GetNextItem(var P: PUTF8Char; Sep: AnsiChar): RawUTF8;
