@@ -44313,36 +44313,37 @@ begin
   VarClear(Value);
 end;
 
+procedure ClearVariantForString(var Value: variant); {$ifdef HASINLINE} inline; {$endif}
+var
+  v: cardinal;
+begin
+  v := TVarData(Value).VType;
+  if v = varString then
+    Finalize(RawByteString(TVarData(Value).VAny))
+  else
+    begin
+      if v and VTYPE_STATIC <> 0 then
+        VarClearProc(TVarData(Value));
+      TVarData(Value).VType := varString;
+      TVarData(Value).VAny := nil; // to avoid GPF when assigned to a RawByteString
+    end;
+end;
+
 procedure RawUTF8ToVariant(Txt: PUTF8Char; TxtLen: integer; var Value: variant);
 begin
-  with TVarData(Value) do begin
-    if cardinal(VType)<>varString then begin // in-place replacement of a RawUTF8 value
-      {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
-        VarClear(Value);
-      VType := varString;
-      VAny := nil; // avoid GPF below when assigning a string variable to VAny
-    end;
-    FastSetString(RawUTF8(VString),Txt,TxtLen);
-  end;
+  ClearVariantForString(Value);
+  FastSetString(RawUTF8(TVarData(Value).VString), Txt, TxtLen);
 end;
 
 procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: variant);
 begin
-  with TVarData(Value) do begin
-    if cardinal(VType)<>varString then begin // in-place replacement of a RawUTF8 value
-      {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
-        VarClear(Value);
-      VType := varString;
-      VAny := nil; // avoid GPF below when assigning a string variable to VAny
-      if Txt='' then
-        exit;
-    end;
-    RawByteString(VAny) := Txt;
-    {$ifdef HASCODEPAGE}
-    if (Txt<>'') and (StringCodePage(Txt)=CP_RAWBYTESTRING) then
-      SetCodePage(RawByteString(VAny),CP_UTF8,false); // force explicit UTF-8
-    {$endif}
-  end;
+  ClearVariantForString(Value);
+  if Txt='' then
+    exit;
+  RawByteString(TVarData(Value).VAny) := Txt;
+  {$ifdef HASCODEPAGE} // force explicit UTF-8
+  SetCodePage(RawByteString(TVarData(Value).VAny),CP_UTF8,false);
+  {$endif HASCODEPAGE}
 end;
 
 procedure FormatUTF8ToVariant(const Fmt: RawUTF8; const Args: array of const;
@@ -44359,19 +44360,16 @@ end;
 procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: TVarData;
   ExpectedValueType: cardinal);
 begin
+  if ExpectedValueType=varString then begin
+    RawUTF8ToVariant(Txt,variant(Value));
+    exit;
+  end;
   {$ifndef FPC}if Value.VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(variant(Value));
   Value.VType := ExpectedValueType;
   Value.VAny := nil; // avoid GPF below
   if Txt<>'' then
   case ExpectedValueType of
-    varString: begin
-      RawByteString(Value.VAny) := Txt;
-      {$ifdef HASCODEPAGE}
-      if (Txt<>'') and (StringCodePage(Txt)=CP_RAWBYTESTRING) then
-        SetCodePage(RawByteString(Value.VAny),CP_UTF8,false); // force explicit UTF-8
-      {$endif}
-    end;
     varOleStr:
       UTF8ToWideString(Txt,WideString(Value.VAny));
     {$ifdef HASVARUSTRING}

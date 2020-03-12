@@ -7033,8 +7033,8 @@ begin
   result := LibC.Recv(sock,buf^,buflen,0);
   {$else}
   result := fpRecv(sock,buf,buflen,0);
-  {$endif}
-  {$endif}
+  {$endif KYLIX3}
+  {$endif MSWINDOWS}
 end;
 
 function AsynchSend(sock: TSocket; buf: pointer; buflen: integer): integer;
