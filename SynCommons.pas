@@ -32578,7 +32578,7 @@ begin
     exit;
   if up<>nil then
     while up^<>#0 do begin
-      while p<=' ' do // trim white space
+      while p^<=' ' do // trim white space
         if p^=#0 then
           exit else
         inc(p);
