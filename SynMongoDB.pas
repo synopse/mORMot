@@ -5800,7 +5800,7 @@ begin // caller should have made fConnections[0].Open
   end else begin
     // SCRAM-SHA-1
     // https://tools.ietf.org/html/rfc5802#section-5
-    user := StringReplaceAll(StringReplaceAll(UserName,'=','=3D'),',','=2C');
+    user := StringReplaceAll(UserName,['=','=3D', ',','=2C']);
     TAESPRNG.Main.FillRandom(rnd);
     nonce := BinToBase64(@rnd,sizeof(rnd));
     FormatUTF8('n=%,r=%',[user,nonce],first);

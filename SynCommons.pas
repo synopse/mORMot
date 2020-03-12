@@ -3081,8 +3081,11 @@ function StringReplaceAllProcess(const S, OldPattern, NewPattern: RawUTF8;
   found: integer): RawUTF8;
 
 /// fast version of StringReplace(S, OldPattern, NewPattern,[rfReplaceAll]);
-function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
+function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// fast version of several cascaded StringReplaceAll()
+function StringReplaceAll(const S: RawUTF8; const OldNewPatternPairs: array of RawUTF8): RawUTF8; overload;
 
 /// fast replace of a specified char by a given string
 function StringReplaceChars(const Source: RawUTF8; OldChar, NewChar: AnsiChar): RawUTF8;
@@ -25836,6 +25839,16 @@ begin
       result := S else
       result := StringReplaceAllProcess(S,OldPattern,NewPattern,found);
   end;
+end;
+
+function StringReplaceAll(const S: RawUTF8; const OldNewPatternPairs: array of RawUTF8): RawUTF8;
+var n,i: integer;
+begin
+  result := S;
+  n := high(OldNewPatternPairs);
+  if (n>0) and (n and 1=1) then
+    for i := 0 to n shr 1 do
+      result := StringReplaceAll(result,OldNewPatternPairs[i*2],OldNewPatternPairs[i*2+1]);
 end;
 
 function StringReplaceTabs(const Source,TabText: RawUTF8): RawUTF8;

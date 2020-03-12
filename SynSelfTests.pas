@@ -4713,7 +4713,7 @@ procedure TTestLowLevelCommon._UTF8;
     Check(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W))=W);
     {$endif}
   end;
-  procedure tc(const S: RawUTF8; start,count: PtrInt);
+  procedure CheckTrimCopy(const S: RawUTF8; start,count: PtrInt);
   var t: RawUTF8;
   begin
     trimcopy(s,start,count,t);
@@ -5066,27 +5066,32 @@ begin
   Check(StringReplaceAll('abcabcabc','bc','B')='aBaBaB');
   Check(StringReplaceAll('abcabcabc','bc','bcd')='abcdabcdabcd');
   Check(StringReplaceAll('abcabcabc','c','C')='abCabCabC');
+  Check(StringReplaceAll('abcabcabc',[])='abcabcabc');
+  Check(StringReplaceAll('abcabcabc',['c'])='abcabcabc');
+  Check(StringReplaceAll('abcabcabc',['c','C'])='abCabCabC');
+  Check(StringReplaceAll('abcabcabc',['c','C','a'])='abcabcabc');
+  Check(StringReplaceAll('abcabcabc',['c','C','toto','titi','ab','AB'])='ABCABCABC');
   for i := -10 to 50 do
     for j := -10 to 50 do begin
-      tc('',i,j);
-      tc('1',i,j);
-      tc('1 ',i,j);
-      tc(' 1',i,j);
-      tc('   1',i,j);
-      tc('1   ',i,j);
-      tc('1',i,j);
-      tc('12',i,j);
-      tc('123',i,j);
-      tc(' 234',i,j);
-      tc(' 234 ',i,j);
-      tc(' 2 4',i,j);
-      tc(' 2 4 ',i,j);
-      tc('  3    ',i,j);
-      tc('  3   7  ',i,j);
-      tc(' 234 6',i,j);
-      tc('234 67 ',i,j);
-      tc(' 234 67 ',i,j);
-      tc(' 234 67 ',i,maxInt);
+      CheckTrimCopy('',i,j);
+      CheckTrimCopy('1',i,j);
+      CheckTrimCopy('1 ',i,j);
+      CheckTrimCopy(' 1',i,j);
+      CheckTrimCopy('   1',i,j);
+      CheckTrimCopy('1   ',i,j);
+      CheckTrimCopy('1',i,j);
+      CheckTrimCopy('12',i,j);
+      CheckTrimCopy('123',i,j);
+      CheckTrimCopy(' 234',i,j);
+      CheckTrimCopy(' 234 ',i,j);
+      CheckTrimCopy(' 2 4',i,j);
+      CheckTrimCopy(' 2 4 ',i,j);
+      CheckTrimCopy('  3    ',i,j);
+      CheckTrimCopy('  3   7  ',i,j);
+      CheckTrimCopy(' 234 6',i,j);
+      CheckTrimCopy('234 67 ',i,j);
+      CheckTrimCopy(' 234 67 ',i,j);
+      CheckTrimCopy(' 234 67 ',i,maxInt);
     end;
 end;
 

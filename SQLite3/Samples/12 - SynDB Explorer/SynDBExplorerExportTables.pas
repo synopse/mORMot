@@ -87,7 +87,7 @@ begin
             Rows := aProps.NewThreadSafeStatement;
             try
               Rows.Execute(SQL,true);
-              Table := StringReplaceAll(StringReplaceAll(Table,' ',''),'-','');
+              Table := StringReplaceAll(Table,[' ','' ,'-','']);
               inc(result,Conn.NewTableFromRows(Table,Rows,true));
             finally
               Rows.Free;
