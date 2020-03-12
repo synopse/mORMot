@@ -32941,33 +32941,39 @@ end;
 {$ifdef FPC}{$push}{$endif}
 {$WARNINGS OFF} // some Delphi compilers do not analyze well code below
 function GotoNextLine(source: PUTF8Char): PUTF8Char;
+label
+  _0, _1, _2, _3; // ugly but faster
 begin
+  result := source;
   if source<>nil then
     repeat
-      if source[0]>#13 then
-        if source[1]>#13 then
-          if source[2]>#13 then
-            if source[3]>#13 then begin
-              inc(source,4);
-              continue;
-            end else
-            inc(source,3) else
-          inc(source,2) else
-        inc(source);
-      case source^ of
-        #0: result := nil;
-        #10: result := source+1;
-        #13: if source[1]=#10 then result := source+2 else result := source+1;
-        else begin
-          inc(source);
-          continue;
-        end;
+      if result[0]<#13 then
+        goto _0
+      else if result[1]<#13 then
+        goto _1
+      else if result[2]<#13 then
+        goto _2
+      else if result[3]<#13 then
+        goto _3
+      else begin
+        inc(result, 4);
+        continue;
+      end;
+_3:   inc(result);
+_2:   inc(result);
+_1:   inc(result);
+_0:   case result^ of
+      #0: result := nil;
+      #10: inc(result);
+      #13: if result[1]=#10 then inc(result,2) else inc(result);
+      else begin
+        inc(result);
+        continue;
+      end;
       end;
       exit;
-    until false else
-    result := source;
+    until false
 end;
-{$ifdef FPC}{$pop}{$else}{$WARNINGS ON}{$endif}
 
 function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
 {$ifdef CPUX64}
