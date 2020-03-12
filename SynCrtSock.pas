@@ -5148,10 +5148,14 @@ begin
     cspSocketError:
       result := -1; // indicates broken/closed socket
     end; // cspNoData will leave result=0
+  {$ifdef Windows}
+  // under Unix SockReceivePending use poll(fSocket) and if data available
+  // ioctl syscall is redundant
   if aPendingAlsoInSocket then
     // also includes data in socket bigger than TTextRec's buffer
     if (IOCtlSocket(Sock,FIONREAD,insocket)=0) and (insocket>0) then
       inc(result,insocket);
+  {$endif}
 end;
 
 destructor TCrtSocket.Destroy;
@@ -6922,7 +6926,7 @@ begin
     CreateSockIn;
     // abort now with no exception if socket is obviously broken
     if fServer<>nil then begin
-      pending := SockInPending(100,{alsosocket=}true);
+     pending := SockInPending(100,{alsosocket=}true);
       if (pending<0) or (fServer=nil) or fServer.Terminated then
         exit;
     end;
@@ -7003,7 +7007,11 @@ const SHUT_: array[boolean] of integer = (SHUT_RD, SHUT_RDWR);
 begin
   if sock<=0 then
     exit;
-  Shutdown(sock,SHUT_[rdwr]); // SHUT_RD doesn't unlock accept() on Linux
+  {$ifdef UNIX}
+  // at last under UNIX close() is enough. For example nginx don't call shutdown
+  if rdwr then
+  {$endif}
+    Shutdown(sock,SHUT_[rdwr]); // SHUT_RD doesn't unlock accept() on Linux
   CloseSocket(sock); // SO_LINGER usually set to 5 or 10 seconds
 end;
 
