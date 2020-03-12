@@ -33871,7 +33871,7 @@ var A, n: PtrInt;
 begin
   result := '';
   n := high(NameValuePairs);
-  if n>0 then begin
+  if (n>0) and (n and 1=1) then begin
     for A := 0 to n shr 1 do begin
       VarRecToUTF8(NameValuePairs[A*2],name);
       if not IsUrlValid(pointer(name)) then
@@ -45630,13 +45630,14 @@ begin
 end;
 
 procedure TDocVariantData.AddNameValuesToObject(const NameValuePairs: array of const);
-var n,arg: integer;
+var n,arg: PtrInt;
     tmp: variant;
 begin
-  n := length(NameValuePairs) shr 1;
-  if (n=0) or (dvoIsArray in VOptions) then
+  n := length(NameValuePairs);
+  if (n=0) or (n and 1=1) or (dvoIsArray in VOptions) then
     exit; // nothing to add
   include(VOptions,dvoIsObject);
+  n := n shr 1;
   if length(VValue)<VCount+n then begin
     SetLength(VValue,VCount+n);
     SetLength(VName,VCount+n);
@@ -61472,8 +61473,9 @@ procedure SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
 var name: RawUTF8;
 begin
   FormatUTF8(Format,Args,name);
-  name := StringReplaceAll(StringReplaceAll(StringReplaceAll(StringReplaceAll(StringReplaceAll(
-    name,'TSQLRest',''),'TSQL',''),'TWebSocket','WS'),'TSyn',''),'Thread','');
+  name := StringReplaceAll(name,['TSQLRest','', 'TSQL','', 'TWebSocket','WS',
+    'TSyn','', 'Thread','', 'Process','', 'Background','Bgd', 'Server','Svr',
+    'Client','Clt', 'WebSocket','WS', 'Timer','Tmr', 'Thread','Thd']);
   SetThreadNameInternal(ThreadID,name);
 end;
 
