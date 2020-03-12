@@ -3214,7 +3214,9 @@ function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
 /// compute the line length from source array of chars
 // - if PEnd = nil, end counting at either #0, #13 or #10
 // - otherwise, end counting at either #13 or #10
+// - just a wrapper around BufferLineLength() checking PEnd=nil case
 function GetLineSize(P,PEnd: PUTF8Char): PtrUInt;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns true if the line length from source array of chars is not less than
 // the specified count
@@ -4913,11 +4915,16 @@ type
 
   /// internal integer type used for string/dynarray header reference counters
   TRefCnt = {$ifdef FPC}SizeInt{$else}longint{$endif};
+  /// internal pointer integer type used for string/dynarray header reference counters
   PRefCnt = ^TRefCnt;
 
   /// internal integer type used for string header length field
   TStrLen = {$ifdef FPC}SizeInt{$else}longint{$endif};
+  /// internal pointer integer type used for string header length field
   PStrLen = ^TStrLen;
+
+  /// internal pointer integer type used for dynamic array header length field
+  PDALen = PPtrInt;
 
 {$ifdef FPC}
   /// map the Delphi/FPC dynamic array header (stored before each instance)
@@ -4937,10 +4944,13 @@ type
 
 const
   /// cross-compiler negative offset to TStrRec.length field
+  // - to be used inlined e.g. as PStrLen(p-_STRLEN)^
   _STRLEN = SizeOf(TStrLen);
   /// cross-compiler negative offset to TDynArrayRec.high/length field
+  // - to be used inlined e.g. as PDALen(PtrUInt(Values)-_DALEN)^{$ifdef FPC}+1{$endif}
   _DALEN = SizeOf(PtrInt);
   /// cross-compiler negative offset to TDynArrayRec.refCnt field
+  // - to be used inlined e.g. as PRefCnt(PtrUInt(Values)-_DAREFCNT)^
   _DAREFCNT = Sizeof(TRefCnt)+_DALEN;
 
 function ToText(k: TDynArrayKind): PShortString; overload;
@@ -11853,10 +11863,10 @@ procedure FillZero(var secret: RawByteString); overload;
 procedure FillZero(var secret: RawUTF8); overload;
   {$ifdef FPC}inline;{$endif}
 
-  /// fill all bytes of a memory buffer with zero
-  // - is expected to be used with a constant count from SizeOf() so that
-  // inlining make it more efficient than FillCharFast(..,...,0):
-  // ! FillZero(variable,SizeOf(variable));
+/// fill all bytes of a memory buffer with zero
+// - is expected to be used with a constant count from SizeOf() so that
+// inlining make it more efficient than FillCharFast(..,...,0):
+// ! FillZero(variable,SizeOf(variable));
 procedure FillZero(var dest; count: PtrInt); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -20499,8 +20509,8 @@ type
 function Deref(Info: PTypeInfoStored): PTypeInfo; // for Delphi and newer FPC
 {$ifdef HASINLINE} inline;
 begin
-  if Info=nil then
-    result := pointer(Info) else
+  result := pointer(Info);
+  if Info<>nil then
     result := Info^;
 end;
 {$else}
@@ -20631,7 +20641,7 @@ function DynArrayLength(Value: Pointer): PtrInt;
 begin
   result := PtrInt(Value);
   if result<>0 then
-    result := PPtrInt(result-_DALEN)^{$ifdef FPC}+1{$endif};
+    result := PDALen(result-_DALEN)^{$ifdef FPC}+1{$endif};
 end;
 
 {$ifdef HASALIGNTYPEDATA}
@@ -30384,7 +30394,7 @@ var da: TDynArray;
     n: PtrInt;
 begin // caller ensured that Values<>nil, Values^<>nil and RefCnt>1
   da.Init(TypeInfo,Values^);
-  n := PPtrInt(PPtrUInt(Values)^-_DALEN)^{$ifdef FPC}+1{$endif};
+  n := PDALen(PPtrUInt(Values)^-_DALEN)^{$ifdef FPC}+1{$endif};
   da.InternalSetLength(n,n); // make copy
 end;
 
@@ -32581,7 +32591,7 @@ begin
       while p^<=' ' do // trim white space
         if p^=#0 then
           exit else
-        inc(p);
+          inc(p);
       if up^<>NormToUpperAnsi7[p^] then
         exit;
       inc(up);
@@ -33031,47 +33041,30 @@ end;
 var c: cardinal;
 begin
   result := 0;
-  dec(PtrInt(TextEnd),PtrInt(Text)); // compute TextLen
+  dec(PtrUInt(TextEnd),PtrUInt(Text)); // compute TextLen
   if TextEnd<>nil then
     repeat
       c := ord(Text[result]);
       if c>13 then begin
         inc(result);
-        if result>=PtrInt(PtrUInt(TextEnd)) then
+        if PtrUInt(result)>=PtrUInt(TextEnd) then
           break;
         continue;
       end;
       if (c=10) or (c=13) then
         break;
       inc(result);
-      if result>=PtrInt(PtrUInt(TextEnd)) then
+      if PtrUInt(result)>=PtrUInt(TextEnd) then
         break;
     until false;
 end;
 {$endif CPUX64}
 
 function GetLineSize(P,PEnd: PUTF8Char): PtrUInt;
-var c: cardinal;
 begin
   if PEnd=nil then
-    dec(PtrUInt(PEnd));
-  result := PtrUInt(P);
-  if P<>nil then
-    repeat
-      c := ord(P^);
-      if c>13 then begin
-        inc(P);
-        if P>=PEnd then
-          break;
-        continue;
-      end;
-      if (c=0) or (c=10) or (c=13) then
-        break;
-      inc(P);
-      if P>=PEnd then
-        break;
-    until false;
-  result := PtrUInt(P)-result;
+    dec(PtrUInt(PEnd)); // to scan until end of memory
+  result := BufferLineLength(P,PEnd); // use optimized search - SSE2 on x86_64
 end;
 
 function GetNextItem(var P: PUTF8Char; Sep: AnsiChar): RawUTF8;
@@ -44375,7 +44368,7 @@ begin
     varString: begin
       RawByteString(Value.VAny) := Txt;
       {$ifdef HASCODEPAGE}
-      if (Txt<>'') and  (StringCodePage(Txt)=CP_RAWBYTESTRING) then
+      if (Txt<>'') and (StringCodePage(Txt)=CP_RAWBYTESTRING) then
         SetCodePage(RawByteString(Value.VAny),CP_UTF8,false); // force explicit UTF-8
       {$endif}
     end;
@@ -45016,7 +45009,7 @@ begin
       ToBeParsed := JSON;
   t := pointer(SynVariantTypes);
   if (t<>nil) and not(dvoJSONParseDoNotTryCustomVariants in Options^) then
-    for i := {$ifdef FPC}0{$else}1{$endif} to PPtrInt(PtrUInt(t)-_DALEN)^ do
+    for i := {$ifdef FPC}0{$else}1{$endif} to PDALen(PtrUInt(t)-_DALEN)^ do
       if t^.TryJSONToVariant(ToBeParsed,Value,EndOfObject) then begin
         if not wasParsedWithinString then
           JSON := ToBeParsed;
@@ -48444,7 +48437,7 @@ begin
     if result<>0 then begin
       result := PPtrInt(result)^;
       if result<>0 then
-        result := PPtrInt(result-_DALEN)^{$ifdef FPC}+1{$endif};
+        result := PDALen(result-_DALEN)^{$ifdef FPC}+1{$endif};
     end;
   end;
 end;
@@ -48595,7 +48588,11 @@ begin // very efficient code on FPC and modern Delphi
 ok:   inc(PByte(result),PtrUInt(index)*ElemSize) else
       result := nil
   end else
-    if PtrUInt(index){$ifdef FPC}<={$else}<{$endif}PPtrUInt(PtrUInt(result)-_DALEN)^ then
+    {$ifdef FPC}
+    if PtrUInt(index)<=PPtrUInt(PtrUInt(result)-_DALEN)^ then
+    {$else}
+    if PtrUInt(index)<PPtrUInt(PtrUInt(result)-_DALEN)^ then
+    {$endif FPC}
       goto ok else
       result := nil;
 end;
@@ -50189,7 +50186,7 @@ begin
       if (delta>0) and (aCount<MINIMUM_SIZE) then
         aCount := MINIMUM_SIZE; // reserve some minimal (64) items for Add()
     end else begin
-      capa := PPtrInt(arrayptr-_DALEN)^{$ifdef FPC}+1{$endif};
+      capa := PDALen(arrayptr-_DALEN)^{$ifdef FPC}+1{$endif};
       if delta>0 then begin  // size-up
         if capa>=aCount then
           exit; // no need to grow
@@ -50203,7 +50200,7 @@ begin
   end else // no external capacity: use length()
   if arrayptr=0 then
     oldlen := arrayptr else begin
-    oldlen := PPtrInt(arrayptr-_DALEN)^{$ifdef FPC}+1{$endif};
+    oldlen := PDALen(arrayptr-_DALEN)^{$ifdef FPC}+1{$endif};
     if oldlen=aCount then
       exit;  // InternalSetLength(samecount) would make a private copy
   end;
@@ -50217,7 +50214,7 @@ begin // capacity = length(DynArray)
   if result<>0 then begin
     result := PPtrInt(result)^;
     if result<>0 then
-      result := PPtrInt(result-_DALEN)^{$ifdef FPC}+1{$endif};
+      result := PDALen(result-_DALEN)^{$ifdef FPC}+1{$endif};
   end;
 end;
 
