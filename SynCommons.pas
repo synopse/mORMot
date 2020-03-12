@@ -23965,25 +23965,27 @@ begin
 end;
 
 function StrLenPas(S: pointer): PtrInt;
+label
+  _0, _1, _2, _3; // ugly but faster
 begin
-  result := 0;
-  if S<>nil then
-  while true do
-    if PAnsiChar(S)[result+0]<>#0 then
-    if PAnsiChar(S)[result+1]<>#0 then
-    if PAnsiChar(S)[result+2]<>#0 then
-    if PAnsiChar(S)[result+3]<>#0 then
-      inc(result,4) else begin
-      inc(result,3);
-      exit;
-    end else begin
-      inc(result,2);
-      exit;
-    end else begin
-      inc(result);
-      exit;
-    end else
-      exit;
+  result := PtrUInt(S);
+  if S<>nil then begin
+    while true do
+      if PAnsiChar(result)[0]=#0 then
+        goto _0
+      else if PAnsiChar(result)[1]=#0 then
+        goto _1
+      else if PAnsiChar(result)[2]=#0 then
+        goto _2
+      else if PAnsiChar(result)[3]=#0 then
+        goto _3
+      else
+        inc(result, 4);
+_3: inc(result);
+_2: inc(result);
+_1: inc(result);
+_0: dec(result,PtrUInt(S)); // return length
+  end;
 end;
 
 function StrCompFast(Str1, Str2: pointer): PtrInt;
@@ -32938,8 +32940,6 @@ begin
   end;
 end;
 
-{$ifdef FPC}{$push}{$endif}
-{$WARNINGS OFF} // some Delphi compilers do not analyze well code below
 function GotoNextLine(source: PUTF8Char): PUTF8Char;
 label
   _0, _1, _2, _3; // ugly but faster
@@ -33043,26 +33043,17 @@ function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
         pop     rsi
 {$endif}
 end;
-{$else} {$ifdef FPC}inline;{$endif}
-var c: cardinal;
+{$else}
 begin
-  result := 0;
-  dec(PtrUInt(TextEnd),PtrUInt(Text)); // compute TextLen
-  if TextEnd<>nil then
-    repeat
-      c := ord(Text[result]);
-      if c>13 then begin
-        inc(result);
-        if PtrUInt(result)>=PtrUInt(TextEnd) then
-          break;
+  result := PtrUInt(Text)-1;
+  repeat
+    inc(result);
+    if PtrUInt(result)<PtrUInt(TextEnd) then
+      if (PByte(result)^>13) or ((PByte(result)^<>10) and (PByte(result)^<>13)) then
         continue;
-      end;
-      if (c=10) or (c=13) then
-        break;
-      inc(result);
-      if PtrUInt(result)>=PtrUInt(TextEnd) then
-        break;
-    until false;
+    break;
+  until false;
+  dec(result,PtrInt(Text)); // returns length
 end;
 {$endif CPUX64}
 
@@ -58561,7 +58552,7 @@ begin
     fSafe.Lock;
     try
       for i := aFirstIndex to fCount-1 do
-        if PosEx(aText,fValue[result])>0 then begin
+        if PosEx(aText,fValue[i])>0 then begin
           result := i;
           exit;
         end;
