@@ -2258,8 +2258,8 @@ function StrLenPas(S: pointer): PtrInt;
 var StrLen: function(S: pointer): PtrInt = StrLenPas;
 
 {$ifdef ABSOLUTEPASCAL}
-var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) = FillChar;
-var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
+var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte);
+var MoveFast: procedure(const Source; var Dest; Count: PtrInt);
 {$else}
 {$ifdef CPUX64} // will define its own self-dispatched SSE2/AVX functions
 type
@@ -2278,13 +2278,13 @@ procedure MoveFast(const src; var dst; cnt: PtrInt);
 // - on non-Intel CPUs, it will fallback to the default RTL FillChar()
 // - note: Delphi x86_64 is far from efficient: even ERMS was wrongly
 // introduced in latest updates
-var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte);
+var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) {$ifdef FPC} = FillChar {$endif};
 
 /// our fast version of move()
 // - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available),
 // or optimized X87 assembly implementation for older CPUs
 // - on non-Intel CPUs, it will fallback to the default RTL Move()
-var MoveFast: procedure(const Source; var Dest; Count: PtrInt);
+var MoveFast: procedure(const Source; var Dest; Count: PtrInt) {$ifdef FPC} = Move {$endif};
 
 {$endif CPUX64}
 {$endif ABSOLUTEPASCAL}
@@ -13328,14 +13328,16 @@ function GetTickCount64: Int64;
 // - note: under XP, we observed ERROR_NO_SYSTEM_RESOURCES problems when calling
 // FileRead() for chunks bigger than 32MB on files opened with this flag,
 // so it would use regular FileOpen() on this deprecated OS
-// - under POSIX, calls plain FileOpen(FileName,fmOpenRead or fmShareDenyNone)
+// - under POSIX, calls plain fpOpen(FileName,O_RDONLY) which would avoid a
+// syscall to fpFlock() which is not needed here
 // - is used e.g. by StringFromFile() and TSynMemoryStreamMapped.Create()
 function FileOpenSequentialRead(const FileName: string): Integer;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// returns a TFileStream optimized for one pass file reading
-// - will use FileOpenSequentialRead(), i.e. FILE_FLAG_SEQUENTIAL_SCAN
-function FileStreamSequentialRead(const FileName: string): TFileStream;
+// - will use FileOpenSequentialRead(), i.e. FILE_FLAG_SEQUENTIAL_SCAN under
+// Windows, and plain fpOpen(FileName, O_RDONLY) on POSIX
+function FileStreamSequentialRead(const FileName: string): THandleStream;
 
 /// check if the current timestamp, in ms, matched a given period
 // - will compare the current GetTickCount64 to the supplied PreviousTix
@@ -19649,7 +19651,7 @@ begin
   EnterCriticalSection(Safe.fSection);
   try
     Values.SetCount(0); // Values.Clear
-    Values.Rehash;
+    Values.Hasher.Clear;
   finally
     LeaveCriticalSection(Safe.fSection);
   end;
@@ -26688,17 +26690,31 @@ begin
     result := CreateFile(pointer(FileName),GENERIC_READ,
       FILE_SHARE_READ or FILE_SHARE_WRITE,nil, // same as fmShareDenyNone
       OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN,0) else
-  {$endif MSWINDOWS}
     result := FileOpen(FileName,fmOpenRead or fmShareDenyNone);
+  {$else}
+    // SysUtils.FileOpen = fpOpen + fpFlock - assuming FileName is UTF-8
+    result := fpOpen(pointer(FileName), O_RDONLY);
+  {$endif MSWINDOWS}
 end;
 
-function FileStreamSequentialRead(const FileName: string): TFileStream;
+type
+{$ifdef FPC} // FPC TFileStream doesn't have per-handle constructor like Delphi
+  TFileStreamFromHandle = class(THandleStream)
+  public
+    destructor Destroy; override;
+  end;
+
+destructor TFileStreamFromHandle.Destroy;
 begin
-  {$ifdef DELPHI5ORFPC}
-  result := TFileStream.Create(FileName,fmOpenRead or fmShareDenyNone);
-  {$else}
-  result := TFileStream.Create(FileOpenSequentialRead(FileName));
-  {$endif}
+  FileClose(Handle); // otherwise file is still opened
+end;
+{$else}
+  TFileStreamFromHandle = TFileStream;
+{$endif FPC}
+
+function FileStreamSequentialRead(const FileName: string): THandleStream;
+begin
+  result := TFileStreamFromHandle.Create(FileOpenSequentialRead(FileName));
 end;
 
 function Elapsed(var PreviousTix: Int64; Interval: Integer): Boolean;
@@ -26727,7 +26743,7 @@ asm {$ifdef CPU64DELPHI} .noframe {$endif}
 end; // we don't check for ismultithread global since lock is cheap on new CPUs
 {$else}
 begin // fallback to pure pascal version for ARM
-  result := {$ifdef FPC_64}InterLockedDecrement64{$else}InterLockedDecrement{$endif}(refcnt)=0;
+  result := {$ifdef FPC_64}InterLockedDecrement64{$else}InterLockedDecrement{$endif}(refcnt)<=0;
 end;
 {$endif CPUINTEL}
 
@@ -39934,7 +39950,11 @@ function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
         lea     r10, qword ptr[rax - 1] // branchless loop
         lea     r11, qword ptr[rax + 1]
         movzx   ecx, word ptr[rdi + rax * 2]
-        cmp     cx, Value
+        {$ifdef win64}
+        cmp     ecx, r8d
+        {$else}
+        cmp     ecx, edx // 'cmp cx,Value' is silently rejected by Darwin asm
+        {$endif win64}
         je      @ok
         cmovg   R, r10
         cmovl   r9, r11
@@ -43299,19 +43319,19 @@ end;
 
 procedure TJSONCustomParserRTTI.FinalizeNestedArray(var Data: PtrUInt);
 var i: integer;
-    Rec: PDynArrayRec;
+    p: PDynArrayRec;
     ItemData: PByte;
 begin
   if Data=0 then
     exit;
   ItemData := pointer(Data);
-  Rec := pointer(Data);
-  dec(PtrUInt(Rec),SizeOf(TDynArrayRec));
+  p := pointer(Data);
+  dec(p);
   Data := 0;
-  if (Rec^.refCnt>=0) and RefCntDecFree(Rec^.refCnt) then begin
-    for i := 1 to Rec.length do
+  if (p^.refCnt>=0) and RefCntDecFree(p^.refCnt) then begin
+    for i := 1 to p^.length do
       FinalizeNestedRecord(ItemData);
-    FreeMem(Rec);
+    FreeMem(p);
   end;
 end;
 
@@ -43330,17 +43350,20 @@ end;
 procedure TJSONCustomParserRTTI.ReAllocateNestedArray(var Data: PtrUInt;
   NewLength: integer);
 var OldLength: integer;
+    p: PDynArrayRec;
 begin
-  if Data=0 then
+  p := pointer(Data);
+  if p=nil then
     raise ESynException.CreateUTF8('%.ReAllocateNestedArray(nil)',[self]);
-  dec(Data,SizeOf(TDynArrayRec));
-  ReAllocMem(pointer(Data),SizeOf(TDynArrayRec)+fNestedDataSize*NewLength);
-  OldLength := PDynArrayRec(Data)^.length;
+  dec(p);
+  ReAllocMem(p,SizeOf(p^)+fNestedDataSize*NewLength);
+  OldLength := p^.length;
   if NewLength>OldLength then
-    FillCharFast(PByteArray(Data)[SizeOf(TDynArrayRec)+fNestedDataSize*OldLength],
+    FillCharFast(PByteArray(p)[SizeOf(p^)+fNestedDataSize*OldLength],
       fNestedDataSize*(NewLength-OldLength),0);
-  PDynArrayRec(Data)^.length := NewLength;
-  inc(Data,SizeOf(TDynArrayRec));
+  p^.length := NewLength;
+  inc(p);
+  Data := PtrUInt(p);
 end;
 
 function TJSONCustomParserRTTI.ReadOneLevel(var P: PUTF8Char; var Data: PByte;
@@ -44718,46 +44741,6 @@ end;
 
 { TSynInvokeableVariantType }
 
-procedure TSynInvokeableVariantType.Lookup(var Dest: TVarData; const Instance: TVarData;
-  FullName: PUTF8Char);
-var handler: TSynInvokeableVariantType;
-    v, tmp: TVarData; // PVarData wouldn't store e.g. RowID/count
-    vt: cardinal;
-    itemName: ShortString;
-begin
-  PInteger(@Dest)^ := varEmpty; // left to Unassigned if not found
-  v := Instance;
-  repeat
-    vt := v.VType;
-    if vt<>varByRef or varVariant then
-      break;
-    v := PVarData(v.VPointer)^;
-  until false;
-  repeat
-    if vt and VTYPE_STATIC=0 then
-      exit; // we need a complex type to lookup
-    GetNextItemShortString(FullName,itemName,'.');
-    if itemName[0] in [#0,#255] then
-      exit;
-    itemName[ord(itemName[0])+1] := #0; // ensure is ASCIIZ
-    if not FindSynVariantType(vt,handler) then
-      exit;
-    tmp := v; // v will be modified in-place
-    PInteger(@v)^ := varEmpty; // IntGet() would clear it otherwise!
-    if not handler.IntGet(v,tmp,@itemName[1],ord(itemName[0])) then
-      exit; // property not found
-    repeat
-      vt := v.VType;
-      if vt<>varByRef or varVariant then
-        break;
-      v := PVarData(v.VPointer)^;
-    until false;
-    if (vt=cardinal(DocVariantVType)) and (TDocVariantData(v).VCount=0) then
-      v.VType := varNull; // recognize void TDocVariant as null
-  until FullName=nil;
-  Dest := v;
-end;
-
 function TSynInvokeableVariantType.IterateCount(const V: TVarData): integer;
 begin
   result := -1; // this is not an array
@@ -44908,27 +44891,73 @@ end;
 var // owned by Variants.pas as TInvokeableVariantType/TCustomVariantType
   SynVariantTypes: array of TSynInvokeableVariantType;
 
-function TSynInvokeableVariantType.FindSynVariantType(aVarType: Word;
-  out CustomType: TSynInvokeableVariantType): boolean;
+function FindSynVariantTypeFromVType(aVarType: cardinal): TSynInvokeableVariantType;
+  {$ifdef HASINLINE}inline;{$endif}
 var i: integer;
     t: ^TSynInvokeableVariantType;
 begin
-  if aVarType=VarType then begin
-    CustomType := self;
-    result := true;
-    exit;
-  end;
   t := pointer(SynVariantTypes);
-  for i := 1 to length(TObjectDynArray(t)) do
-    if t^.VarType=aVarType then begin
-      CustomType := t^;
-      result := true;
+  for i := 1 to length(TObjectDynArray(t)) do begin
+    result := t^;
+    if result.VarType=aVarType then
       exit;
-    end else
     inc(t);
-  result := false;
+  end;
+  result := nil;
 end;
 
+function TSynInvokeableVariantType.FindSynVariantType(aVarType: Word;
+  out CustomType: TSynInvokeableVariantType): boolean;
+begin
+  if aVarType=VarType then
+    CustomType := self else
+    CustomType := FindSynVariantTypeFromVType(VarType);
+  result := CustomType<>nil;
+end;
+
+procedure TSynInvokeableVariantType.Lookup(var Dest: TVarData; const Instance: TVarData;
+  FullName: PUTF8Char);
+var handler: TSynInvokeableVariantType;
+    v, tmp: TVarData; // PVarData wouldn't store e.g. RowID/count
+    vt: cardinal;
+    itemName: ShortString;
+begin
+  PInteger(@Dest)^ := varEmpty; // left to Unassigned if not found
+  v := Instance;
+  repeat
+    vt := v.VType;
+    if vt<>varByRef or varVariant then
+      break;
+    v := PVarData(v.VPointer)^;
+  until false;
+  repeat
+    if vt and VTYPE_STATIC=0 then
+      exit; // we need a complex type to lookup
+    GetNextItemShortString(FullName,itemName,'.');
+    if itemName[0] in [#0,#255] then
+      exit;
+    itemName[ord(itemName[0])+1] := #0; // ensure is ASCIIZ
+    if vt=VarType then
+      handler := self else begin
+      handler := FindSynVariantTypeFromVType(vt);
+      if handler=nil then
+        exit;
+    end;
+    tmp := v; // v will be modified in-place
+    PInteger(@v)^ := varEmpty; // IntGet() would clear it otherwise!
+    if not handler.IntGet(v,tmp,@itemName[1],ord(itemName[0])) then
+      exit; // property not found
+    repeat
+      vt := v.VType;
+      if vt<>varByRef or varVariant then
+        break;
+      v := PVarData(v.VPointer)^;
+    until false;
+    if (vt=cardinal(DocVariantVType)) and (TDocVariantData(v).VCount=0) then
+      v.VType := varNull; // recognize void TDocVariant as null
+  until FullName=nil;
+  Dest := v;
+end;
 
 procedure GetJSONToAnyVariant(var Value: variant; var JSON: PUTF8Char;
   EndOfObject: PUTF8Char; Options: PDocVariantOptions; AllowDouble: boolean);
@@ -48169,7 +48198,7 @@ begin
   if Value<>nil then begin
     p := Value^;
     if p<>nil then begin
-      dec(PtrUInt(p),SizeOf(TDynArrayRec));
+      dec(p);
       if (p^.refCnt>=0) and RefCntDecFree(p^.refCnt) then begin
         if ElemTypeInfo<>nil then
           FastFinalizeArray(Value^,ElemTypeInfo,p^.length);
@@ -50062,7 +50091,7 @@ begin // this method is faster than default System.DynArraySetLength() function
   // check that new array length is not just a finalize in disguise
   if NewLength=0 then begin
     if p<>nil then begin // FastDynArrayClear() with ObjArray support
-      dec(PtrUInt(p),SizeOf(TDynArrayRec));
+      dec(p);
       if (p^.refCnt>=0) and RefCntDecFree(p^.refCnt) then begin
         if OldLength<>0 then
           if ElemType<>nil then
@@ -50987,7 +51016,7 @@ begin
   if not(canHash in State) then begin
     n := DynArray^.Count;
     if n<CountTrigger then begin
-      result := Scan(Elem); // may trigger ReHash -> canHash
+      result := Scan(Elem); // may trigger ReHash and set canHash
       if result>=0 then
         exit; // item found
       if not(canHash in State) then begin
@@ -58098,7 +58127,7 @@ begin
         end;
         fValues.Clear;
         if fNoDuplicate in fFlags then
-          fValues.ReHash;
+          fValues.Hasher.Clear;
         Changed;
       end else begin // resize
         if capa<fCount then begin // resize down
@@ -59050,7 +59079,7 @@ begin
   fSafe.Lock;
   try
     fKeys.Clear;
-    fKeys.ReHash; // mandatory to avoid GPF
+    fKeys.Hasher.Clear; // mandatory to avoid GPF
     fValues.Clear;
     if fSafe.Padding[DIC_TIMESEC].VInteger>0 then
       fTimeOuts.Clear;
@@ -60000,7 +60029,7 @@ end;
 
 function FileSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
 var src,dst: RawByteString;
-    S,D: TFileStream;
+    S,D: THandleStream;
     Head: TSynLZHead;
     Count,Max: Int64;
 begin
@@ -60057,7 +60086,7 @@ end;
 
 function FileUnSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
 var src,dst: RawByteString;
-    S,D: TFileStream;
+    S,D: THandleStream;
     Count: Int64;
     Head: TSynLZHead;
 begin
@@ -61923,13 +61952,11 @@ begin
 end;
 
 initialization
-  // initialization of global variables
-  {$ifdef CPU32DELPHI} Pointer(@FillCharFast) := SystemFillCharAddress; {$endif CPUX64}
+  // initialization of internal dynamic functions and tables
+  InitFunctionsRedirection;
+  InitializeCriticalSection(GlobalCriticalSection);
   GarbageCollectorFreeAndNilList := TSynList.Create;
   GarbageCollectorFreeAndNil(GarbageCollector,TSynObjectList.Create);
-  // initialization of internal dynamic functions and tables
-  InitializeCriticalSection(GlobalCriticalSection);
-  InitFunctionsRedirection;
   InitSynCommonsConversionTables;
   RetrieveSystemInfo;
   SetExecutableVersion(0,0,0,0);

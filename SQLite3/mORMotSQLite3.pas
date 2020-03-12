@@ -924,6 +924,8 @@ begin
   with fLogClass.Enter('Destroy %', [fModel.SafeRoot], self) do
   {$endif}
   try
+    if (fDB<>nil) and (fDB.InternalState=@InternalState) then
+      fDB.InternalState := nil; // avoid memory modification on free block 
     inherited Destroy;
   finally
     try

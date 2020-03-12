@@ -372,10 +372,21 @@ end;
 {$else}
 
 {$ifdef BSD}
+
 function clock_gettime(ID: cardinal; r: ptimespec): Integer;
   cdecl external 'libc.so' name 'clock_gettime';
 function clock_getres(ID: cardinal; r: ptimespec): Integer;
   cdecl external 'libc.so' name 'clock_getres';
+
+{$else}
+
+// libc's clock_gettime function uses vDSO (avoid syscall) while FPC by default
+// is compiled without FPC_USE_LIBC defined and do a syscall each time
+//   GetTickCount64 fpc    2 494 563 op/sec
+//   GetTickCount64 libc 119 919 893 op/sec
+function clock_gettime(clk_id : clockid_t; tp: ptimespec) : cint;
+  cdecl; external name 'clock_gettime';
+
 {$endif BSD}
 
 function GetTickCount64: Int64;
@@ -505,8 +516,8 @@ begin // not inlined to avoid try..finally UnicodeString protection
   if cchCount2<0 then
     cchCount2 := StrLen(lpString2);
   SetString(U2,lpString2,cchCount2);
-  result := widestringmanager.CompareUnicodeStringProc(U1,U2,TCompareOptions(dwCmpFlags));
-end;
+  result := widestringmanager.CompareUnicodeStringProc(U1,U2,TCompareOptions(dwCmpFlags))+2;
+end; // caller would make -2 to get regular -1/0/1 comparison values
 
 function GetFileSize(hFile: cInt; lpFileSizeHigh: PDWORD): DWORD;
 var FileInfo: TStat;

@@ -3186,7 +3186,7 @@ procedure TWebSocketServer.Process(ClientSock: THttpServerSocket;
   ConnectionID: THttpServerConnectionID; ConnectionThread: TSynThread);
 var err: integer;
 begin
-  if ClientSock.ConnectionUpgrade and ClientSock.KeepAliveClient and
+  if (connectionUpgrade in ClientSock.HeaderFlags) and ClientSock.KeepAliveClient and
      IdemPropNameU('GET',ClientSock.Method) and
      IdemPropNameU(ClientSock.Upgrade,'websocket') and
      ConnectionThread.InheritsFrom(TWebSocketServerResp) then begin
@@ -3409,8 +3409,8 @@ function TWebSocketServerSocket.GetRequest(withBody: boolean;
   headerMaxTix: Int64): THttpServerSocketGetRequestResult;
 begin
   result := inherited GetRequest(withBody, headerMaxTix);
-  if (result=grHeaderReceived) and ConnectionUpgrade and KeepAliveClient and
-     IdemPropNameU('GET',Method) and IdemPropNameU(Upgrade,'websocket') then
+  if (result=grHeaderReceived) and (connectionUpgrade in HeaderFlags) and
+     KeepAliveClient and IdemPropNameU('GET',Method) and IdemPropNameU(Upgrade,'websocket') then
     //writeln('!!');
 end;
 
@@ -3555,7 +3555,7 @@ begin
       prot := HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
       result := 'Invalid HTTP Upgrade Header';
       if not IdemPChar(pointer(cmd),'HTTP/1.1 101') or
-         not ConnectionUpgrade or (ContentLength>0) or
+         not (connectionUpgrade in HeaderFlags) or (ContentLength>0) or
          not IdemPropNameU(Upgrade,'websocket') or
          not aProtocol.SetSubprotocol(prot) then
         exit;
@@ -3884,7 +3884,7 @@ begin // you can override this class then call ConnectionAdd
   if Terminated then
     result := false else begin
     aConnection := fStreamClass.Create(aRemoteIP);
-    result := ConnectionAdd(aSocket, aConnection);
+    result := ConnectionAdd(aSocket,aConnection);
   end;
 end;
 

@@ -4231,7 +4231,7 @@ end;
 
 function IsCacheable(const aSQL: RawUTF8): boolean;
 begin
-  result := isSelect(pointer(aSQL)) and (PosEx(SQLDATABASE_NOCACHE, aSQL) = 0);
+  result := isSelect(pointer(aSQL)) and (PosEx(SQLDATABASE_NOCACHE,aSQL)=0);
 end;
 
 procedure TSQLDataBase.Lock(const aSQL: RawUTF8);
@@ -4734,7 +4734,7 @@ begin
   if self=nil then
     exit;
   if InternalState<>nil then
-    inc(InternalState^);
+    inc(InternalState^); 
   if fCache.Reset then
    {$ifdef WITHLOG}
     if fLog<>nil then

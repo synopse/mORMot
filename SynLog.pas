@@ -4223,7 +4223,7 @@ begin
     {$endif FPC}
     {$else}
     {$I-}
-    write(Msg, '  ');
+    write(Msg,'  ');
     ioresult;
     {$I+}
     {$endif MSWINDOWS}

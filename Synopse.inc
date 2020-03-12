@@ -178,7 +178,6 @@
   {$define HASUINT64}
   {$define HASINLINENOTX86}
   {$define NODELPHIASM}   // ignore low-level System.@LStrFromPCharLen calls
-  {$define HASAESNI}    // should be commented to test project with valgrind
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSTRING_USESTR} // FloatToText uses str() in FPC
@@ -304,7 +303,8 @@
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
       {$ifndef DARWIN}
-        {$define CPUX64ASM} // Delphi XE4 SSE asm is buggy :(
+        {$define CPUX64ASM} // Delphi XE4 or Darwin asm are buggy :(
+        {$define HASAESNI}  // SynCrypto rejected by Darwin asm
       {$endif DARWIN}
       {$define FPC_X64}   // supports AVX/AVX2/AVX512 - which Delphi doesn't
       {$ASMMODE INTEL}    // to share asm code with Delphi
@@ -322,7 +322,8 @@
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
       {$define FPC_X86}
-      {$ASMMODE INTEL} // as Delphi expects
+      {$ASMMODE INTEL}   // as Delphi expects
+      {$define HASAESNI} // should be commented to test project with valgrind
       {$ifndef FPC_PIC}
         {$define CPUX86NOTPIC} // use "absolute" instead of local register
       {$endif FPC_PIC}
