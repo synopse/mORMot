@@ -3327,26 +3327,26 @@ begin
   V := '1234567890123456'#13'1234567890123456789';
   for j := 1 to 16 do begin
     for i := j to 16 do begin
-      Check(BufferLineLength(@V[j],@V[i])=i-j);
-      Check(GetLineSize(@V[j],@V[i])=i-j);
+      CheckEqual(BufferLineLength(@V[j],@V[i]),i-j);
+      CheckEqual(GetLineSize(@V[j],@V[i]),i-j);
     end;
     for i := 17 to 34 do begin
-      Check(BufferLineLength(@V[j],@V[i])=17-j);
-      Check(GetLineSize(@V[j],@V[i])=17-j);
+      CheckEqual(BufferLineLength(@V[j],@V[i]),17-j);
+      CheckEqual(GetLineSize(@V[j],@V[i]),17-j);
     end;
-    Check(GetLineSize(@V[j],nil)=17-j);
+    CheckEqual(GetLineSize(@V[j],nil),17-j);
   end;
   V := '12345678901234561234567890123456'#10'1234567890123456789';
   for j := 1 to 32 do begin
     for i := j to 32 do begin
-      Check(BufferLineLength(@V[j],@V[i])=i-j);
-      Check(GetLineSize(@V[j],@V[i])=i-j);
+      CheckEqual(BufferLineLength(@V[j],@V[i]),i-j);
+      CheckEqual(GetLineSize(@V[j],@V[i]),i-j);
     end;
     for i := 33 to 50 do begin
-      Check(BufferLineLength(@V[j],@V[i])=33-j);
-      Check(GetLineSize(@V[j],@V[i])=33-j);
+      CheckEqual(BufferLineLength(@V[j],@V[i]),33-j);
+      CheckEqual(GetLineSize(@V[j],@V[i]),33-j);
     end;
-    Check(GetLineSize(@V[j],nil)=33-j);
+    CheckEqual(GetLineSize(@V[j],nil),33-j);
   end;
   Check(IsMatch('','',true));
   Check(not IsMatch('','toto',true));
