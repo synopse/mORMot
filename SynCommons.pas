@@ -44345,7 +44345,7 @@ begin
   else
     begin
       if v and VTYPE_STATIC <> 0 then
-        VarClearProc(TVarData(Value));
+        {$ifdef NOVARCOPYPROC}VarClear(Value){$else}VarClearProc(TVarData(Value)){$endif};
       TVarData(Value).VType := varString;
       TVarData(Value).VAny := nil; // to avoid GPF when assigned to a RawByteString
     end;
