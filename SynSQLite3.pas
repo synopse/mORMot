@@ -4032,8 +4032,7 @@ begin
     UnLock;
     {$ifdef WITHLOG}
     if not NoLog then
-      fLog.Add.Log(sllSQL,'% % returned % for %',
-        [Timer.Stop,FileNameWithoutPath,ID,aSQL],self);
+      fLog.Add.Log(sllSQL,'% % returned % for %',[Timer.Stop,FileNameWithoutPath,ID,aSQL],self);
     {$endif}
   end;
 end;
@@ -5694,7 +5693,11 @@ begin
         if fStepSynLzCompress then begin
           NotifyProgressAndContinue(backupStepSynLz);
           fn2 := ChangeFileExt(fn, '.db.tmp');
-          if not (RenameFile(fn,fn2) and TSQLDatabase.BackupSynLZ(fn2,fn,true)) then
+          DeleteFile(fn2);
+          if not RenameFile(fn,fn2)  then
+            raise ESQLite3Exception.CreateUTF8('%.Execute: RenameFile(%,%) failed',
+              [self,fn,fn2]);
+          if not TSQLDatabase.BackupSynLZ(fn2,fn,true) then
             raise ESQLite3Exception.CreateUTF8('%.Execute: BackupSynLZ(%,%) failed',
               [self,fn,fn2]);
           {$ifdef WITHLOG}
