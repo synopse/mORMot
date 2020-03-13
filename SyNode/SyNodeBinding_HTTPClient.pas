@@ -12,7 +12,7 @@ interface
 {$I Synopse.inc}
 {$I SyNode.inc}
 uses
-  SysUtils, SynCrtSock, SynCommons, SpiderMonkey;
+  SysUtils, SynCrtSock, SynCommons, SpiderMonkey, SyNode, SyNodeSimpleProto;
 
 type
   {$M+}
@@ -58,10 +58,24 @@ type
   end;
   {$M-}
 
+  { THTTPClientProtoObject }
+
+  THTTPClientProtoObject = class(TSMSimpleRTTIProtoObject)
+  public
+    function NewSMInstance(cx: PJSContext; argc: uintN; var vp: JSArgRec): TObject; override;
+  end;
+
 implementation
 
 uses
-  SynZip, SyNode, SyNodeSimpleProto, SyNodeReadWrite;
+  SynZip, SyNodeReadWrite;
+
+{ THTTPClientProtoObject }
+
+function THTTPClientProtoObject.NewSMInstance(cx: PJSContext; argc: uintN; var vp: JSArgRec): TObject;
+begin
+  Result := THTTPClient.Create();
+end;
 
 { THTTPClient }
 constructor THTTPClient.Create();
@@ -259,7 +273,7 @@ begin
   cx := aEngine.cx;
   obj := cx.NewRootedObject(cx.NewObject(nil));
   try
-    aEngine.defineClass(THTTPClient, TSMSimpleRTTIProtoObject, obj);
+    aEngine.defineClass(THTTPClient, THTTPClientProtoObject, obj);
     Result := obj.ptr.ToJSValue;
   finally
     cx.FreeRootedObject(obj);
