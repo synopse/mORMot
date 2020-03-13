@@ -5325,7 +5325,7 @@ function EnumFontsProcW(var LogFont: TLogFontW; var TextMetric: TTextMetric;
 var Temp: RawUTF8;
 begin
   with LogFont do
-    if (FontType=TRUETYPE_FONTTYPE) and (lfFaceName[0]<>'@') then begin
+    if ((FontType=DEVICE_FONTTYPE) or (FontType=TRUETYPE_FONTTYPE)) and (lfFaceName[0]<>'@') then begin
       Temp := RawUnicodeToUtf8(lfFaceName,StrLenW(lfFaceName));
       if (pointer(List)=nil) or (List[high(List)]<>Temp) then
         AddRawUTF8(List,Temp,true,true);
