@@ -3324,6 +3324,20 @@ var i,j: integer;
   end;
 
 begin
+  V := '123456789ABC'#10'DEF0zxy';
+  Check(GetLineContains(@V[1],nil,'1'));
+  Check(GetLineContains(@V[1],nil,'C'));
+  Check(GetLineContains(@V[1],nil,'89'));
+  Check(not GetLineContains(@V[1],nil,'ZX'));
+  Check(GetLineContains(@V[14],nil,'ZXY'));
+  Check(not GetLineContains(@V[1],nil,'890'));
+  Check(GetLineContains(@V[1],@V[21],'89'));
+  Check(GetLineContains(@V[14],@V[21],'ZX'));
+  Check(not GetLineContains(@V[1],@V[21],'ZX'));
+  Check(GetLineContains(@V[14],@V[21],'ZXY'));
+  Check(not GetLineContains(@V[1],@V[5],'89'));
+  Check(not GetLineContains(@V[1],@V[15],'ZXY'));
+  Check(not GetLineContains(@V[14],@V[17],'ZXY'));
   V := '1234567890123456'#13'1234567890123456789';
   for j := 1 to 16 do begin
     for i := j to 16 do begin

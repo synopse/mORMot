@@ -60906,58 +60906,66 @@ begin
     UTF8DecodeToString(fLines[aIndex],GetLineSize(fLines[aIndex],fMapEnd),result);
 end;
 
-function GetLineContains(p,pEnd, up: PUTF8Char): boolean;
-var i: PtrInt;
-    table: {$ifdef CPUX86NOTPIC}TNormTableByte absolute NormToUpperAnsi7Byte{$else}PNormTableByte{$endif};
-label Fnd;
+function GetLineContains(p, pEnd, up: PUTF8Char): boolean;
+var
+  i: PtrInt;
+  {$ifdef CPUX86NOTPIC} table: TNormTable absolute NormToUpperAnsi7Byte;
+  {$else} table: PNormTable; {$endif}
+label
+  Fnd1, LF1, Fnd2, LF2, Ok; // ugly but fast
 begin
-  {$ifndef CPUX86NOTPIC}table := @NormToUpperAnsi7Byte;{$endif}
-  if (p<>nil) and (up<>nil) then
-  if pEnd=nil then
-    repeat
-      i := ord(p^);
-      if not (AnsiChar(i) in ANSICHARNOT01310) then break;
-      inc(p);
-      if (table[i]=ord(up^)) and IdemPChar2(
-         {$ifdef CPUX86NOTPIC}@{$else}pointer{$endif}(table),p,@up[1]) then begin
-        result := true;
-        exit;
-      end;
-    until false
-  else
-  repeat // fast unrolled search
-    if p>=pEnd then break;
-    i := ord(p^);
-    if i in [10,13] then break;
-    if table[i]=ord(up^) then goto Fnd;
-    inc(p);
-    if p>=pEnd then break;
-    i := ord(p^);
-    if i in [10,13] then break;
-    if table[i]=ord(up^) then goto Fnd;
-    inc(p);
-    if p>=pEnd then break;
-    i := ord(p^);
-    if i in [10,13] then break;
-    if table[i]=ord(up^) then goto Fnd;
-    inc(p);
-    if p>=pEnd then break;
-    i := ord(p^);
-    if i in [10,13] then break;
-    if table[i]<>ord(up^) then begin
-      inc(p);
-      continue;
-    end;
-Fnd:i := 0;
-    repeat
-      inc(i);
-      if up[i]=#0 then begin
-        result := true; // found
-        exit;
-      end;
-    until table[ord(p[i])]<>ord(up[i]);
-    inc(p);
-  until false;
+  if (p<>nil) and (up<>nil) then begin
+    {$ifndef CPUX86NOTPIC} table := @NormToUpperAnsi7; {$endif}
+    if pEnd=nil then
+      repeat
+        if p^<=#13 then
+          goto LF1
+        else if table[p^]=up^ then
+          goto Fnd1;
+        inc(p);
+        continue;
+LF1:    if (p^=#0) or (p^=#13) or (p^=#10) then
+          break;
+        inc(p);
+        continue;
+Fnd1:   i := 0;
+        repeat
+          inc(i);
+          if up[i]<>#0 then
+            if up[i]=table[p[i]] then
+              continue else
+              break else begin
+Ok:         result := true; // found
+            exit;
+          end;
+        until false;
+        inc(p);
+      until false
+    else
+      repeat
+        if p>=pEnd then
+          break;
+        if p^<=#13 then
+          goto LF2
+        else if table[p^]=up^ then
+          goto Fnd2;
+        inc(p);
+        continue;
+LF2:    if (p^=#13) or (p^=#10) then
+          break;
+        inc(p);
+        continue;
+Fnd2:   i := 0;
+        repeat
+          inc(i);
+          if up[i]=#0 then
+            goto Ok;
+          if p+i>=pEnd then
+            break;
+        until up[i]<>table[p[i]];
+        inc(p);
+      until false;
+  end;
   result := false;
 end;
 
