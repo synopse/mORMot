@@ -836,10 +836,8 @@ begin
     Doc := Doc+'%15';
   Doc := Doc+#13#10;
   for i := 0 to High(Rows) do begin
-    Doc := Doc+StringReplaceAll(StringReplaceAll(StringReplaceAll(StringReplaceAll(
-      StringReplaceAll(StringReplaceAll(StringReplaceAll(StringReplaceAll(
-      Rows[i],'</td>',''),'</tr>',''),'<tr align=center>',''),
-      '</b>','}'),'</td>',''),'<b>','{\b '),'<td>','|'),'&nbsp;','')+#13#10;
+    Doc := Doc+StringReplaceAll(Rows[i], ['</td>','', '</tr>','', '<tr align=center>','',
+      '</b>','}', '</td>','', '<b>','{\b ', '<td>','|', '&nbsp;',''])+#13#10;
   end;
   Doc := Doc+'|%'#13#10;
 end;

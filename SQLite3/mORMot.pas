@@ -41743,16 +41743,19 @@ end;
 
 procedure TSQLRestServer.Timestamp(Ctxt: TSQLRestServerURIContext);
 {$ifndef NOVARIANTS}
-var info: TDocVariantData;
+  procedure DoInfo;
+  var info: TDocVariantData;
+  begin
+    info.InitFast;
+    InternalInfo(info);
+    Ctxt.Returns(info.ToJSON('','',jsonHumanReadable));
+  end;
 {$endif}
 begin
 {$ifndef NOVARIANTS}
   if IdemPropNameU(Ctxt.URIBlobFieldName,'info') and
-     not (rsoTimestampInfoURIDisable in fOptions) then begin
-    info.InitFast;
-    InternalInfo(info);
-    Ctxt.Returns(info.ToJSON('','',jsonHumanReadable));
-  end else
+     not (rsoTimestampInfoURIDisable in fOptions) then
+    DoInfo else
 {$endif}
     Ctxt.Returns(Int64ToUtf8(ServerTimestamp),HTTP_SUCCESS,TEXT_CONTENT_TYPE_HEADER);
 end;

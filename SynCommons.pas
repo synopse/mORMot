@@ -3081,8 +3081,11 @@ function StringReplaceAllProcess(const S, OldPattern, NewPattern: RawUTF8;
   found: integer): RawUTF8;
 
 /// fast version of StringReplace(S, OldPattern, NewPattern,[rfReplaceAll]);
-function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
+function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// fast version of several cascaded StringReplaceAll()
+function StringReplaceAll(const S: RawUTF8; const OldNewPatternPairs: array of RawUTF8): RawUTF8; overload;
 
 /// fast replace of a specified char by a given string
 function StringReplaceChars(const Source: RawUTF8; OldChar, NewChar: AnsiChar): RawUTF8;
@@ -3206,12 +3209,14 @@ function GotoNextLine(source: PUTF8Char): PUTF8Char;
 // - is likely to read some bytes after the TextEnd buffer, so GetLineSize()
 // may be preferred, e.g. on memory mapped files
 function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
-  {$ifndef CPUX64}{$ifdef FPC}inline;{$endif}{$endif}
+  {$ifndef CPUX64}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// compute the line length from source array of chars
 // - if PEnd = nil, end counting at either #0, #13 or #10
 // - otherwise, end counting at either #13 or #10
+// - just a wrapper around BufferLineLength() checking PEnd=nil case
 function GetLineSize(P,PEnd: PUTF8Char): PtrUInt;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns true if the line length from source array of chars is not less than
 // the specified count
@@ -4910,11 +4915,16 @@ type
 
   /// internal integer type used for string/dynarray header reference counters
   TRefCnt = {$ifdef FPC}SizeInt{$else}longint{$endif};
+  /// internal pointer integer type used for string/dynarray header reference counters
   PRefCnt = ^TRefCnt;
 
   /// internal integer type used for string header length field
   TStrLen = {$ifdef FPC}SizeInt{$else}longint{$endif};
+  /// internal pointer integer type used for string header length field
   PStrLen = ^TStrLen;
+
+  /// internal pointer integer type used for dynamic array header length field
+  PDALen = PPtrInt;
 
 {$ifdef FPC}
   /// map the Delphi/FPC dynamic array header (stored before each instance)
@@ -4934,10 +4944,13 @@ type
 
 const
   /// cross-compiler negative offset to TStrRec.length field
+  // - to be used inlined e.g. as PStrLen(p-_STRLEN)^
   _STRLEN = SizeOf(TStrLen);
   /// cross-compiler negative offset to TDynArrayRec.high/length field
+  // - to be used inlined e.g. as PDALen(PtrUInt(Values)-_DALEN)^{$ifdef FPC}+1{$endif}
   _DALEN = SizeOf(PtrInt);
   /// cross-compiler negative offset to TDynArrayRec.refCnt field
+  // - to be used inlined e.g. as PRefCnt(PtrUInt(Values)-_DAREFCNT)^
   _DAREFCNT = Sizeof(TRefCnt)+_DALEN;
 
 function ToText(k: TDynArrayKind): PShortString; overload;
@@ -11850,10 +11863,10 @@ procedure FillZero(var secret: RawByteString); overload;
 procedure FillZero(var secret: RawUTF8); overload;
   {$ifdef FPC}inline;{$endif}
 
-  /// fill all bytes of a memory buffer with zero
-  // - is expected to be used with a constant count from SizeOf() so that
-  // inlining make it more efficient than FillCharFast(..,...,0):
-  // ! FillZero(variable,SizeOf(variable));
+/// fill all bytes of a memory buffer with zero
+// - is expected to be used with a constant count from SizeOf() so that
+// inlining make it more efficient than FillCharFast(..,...,0):
+// ! FillZero(variable,SizeOf(variable));
 procedure FillZero(var dest; count: PtrInt); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -20496,8 +20509,8 @@ type
 function Deref(Info: PTypeInfoStored): PTypeInfo; // for Delphi and newer FPC
 {$ifdef HASINLINE} inline;
 begin
-  if Info=nil then
-    result := pointer(Info) else
+  result := pointer(Info);
+  if Info<>nil then
     result := Info^;
 end;
 {$else}
@@ -20628,7 +20641,7 @@ function DynArrayLength(Value: Pointer): PtrInt;
 begin
   result := PtrInt(Value);
   if result<>0 then
-    result := PPtrInt(result-_DALEN)^{$ifdef FPC}+1{$endif};
+    result := PDALen(result-_DALEN)^{$ifdef FPC}+1{$endif};
 end;
 
 {$ifdef HASALIGNTYPEDATA}
@@ -23952,25 +23965,27 @@ begin
 end;
 
 function StrLenPas(S: pointer): PtrInt;
+label
+  _0, _1, _2, _3; // ugly but faster
 begin
-  result := 0;
-  if S<>nil then
-  while true do
-    if PAnsiChar(S)[result+0]<>#0 then
-    if PAnsiChar(S)[result+1]<>#0 then
-    if PAnsiChar(S)[result+2]<>#0 then
-    if PAnsiChar(S)[result+3]<>#0 then
-      inc(result,4) else begin
-      inc(result,3);
-      exit;
-    end else begin
-      inc(result,2);
-      exit;
-    end else begin
-      inc(result);
-      exit;
-    end else
-      exit;
+  result := PtrUInt(S);
+  if S<>nil then begin
+    while true do
+      if PAnsiChar(result)[0]=#0 then
+        goto _0
+      else if PAnsiChar(result)[1]=#0 then
+        goto _1
+      else if PAnsiChar(result)[2]=#0 then
+        goto _2
+      else if PAnsiChar(result)[3]=#0 then
+        goto _3
+      else
+        inc(result, 4);
+_3: inc(result);
+_2: inc(result);
+_1: inc(result);
+_0: dec(result,PtrUInt(S)); // return length
+  end;
 end;
 
 function StrCompFast(Str1, Str2: pointer): PtrInt;
@@ -25838,6 +25853,16 @@ begin
   end;
 end;
 
+function StringReplaceAll(const S: RawUTF8; const OldNewPatternPairs: array of RawUTF8): RawUTF8;
+var n,i: integer;
+begin
+  result := S;
+  n := high(OldNewPatternPairs);
+  if (n>0) and (n and 1=1) then
+    for i := 0 to n shr 1 do
+      result := StringReplaceAll(result,OldNewPatternPairs[i*2],OldNewPatternPairs[i*2+1]);
+end;
+
 function StringReplaceTabs(const Source,TabText: RawUTF8): RawUTF8;
 
   procedure Process(S,D,T: PAnsiChar; TLen: integer);
@@ -26698,7 +26723,7 @@ begin
 end;
 
 type
-{$ifdef FPC} // FPC TFileStream doesn't have per-handle constructor like Delphi
+{$ifdef DELPHI5ORFPC} // TFileStream doesn't have per-handle constructor like Delphi
   TFileStreamFromHandle = class(THandleStream)
   public
     destructor Destroy; override;
@@ -26710,7 +26735,7 @@ begin
 end;
 {$else}
   TFileStreamFromHandle = TFileStream;
-{$endif FPC}
+{$endif DELPHI5ORFPC}
 
 function FileStreamSequentialRead(const FileName: string): THandleStream;
 begin
@@ -30371,7 +30396,7 @@ var da: TDynArray;
     n: PtrInt;
 begin // caller ensured that Values<>nil, Values^<>nil and RefCnt>1
   da.Init(TypeInfo,Values^);
-  n := PPtrInt(PPtrUInt(Values)^-_DALEN)^{$ifdef FPC}+1{$endif};
+  n := PDALen(PPtrUInt(Values)^-_DALEN)^{$ifdef FPC}+1{$endif};
   da.InternalSetLength(n,n); // make copy
 end;
 
@@ -32565,10 +32590,10 @@ begin
     exit;
   if up<>nil then
     while up^<>#0 do begin
-      while p<=' ' do // trim white space
+      while p^<=' ' do // trim white space
         if p^=#0 then
           exit else
-        inc(p);
+          inc(p);
       if up^<>NormToUpperAnsi7[p^] then
         exit;
       inc(up);
@@ -32915,36 +32940,40 @@ begin
   end;
 end;
 
-{$ifdef FPC}{$push}{$endif}
-{$WARNINGS OFF} // some Delphi compilers do not analyze well code below
 function GotoNextLine(source: PUTF8Char): PUTF8Char;
+label
+  _0, _1, _2, _3; // ugly but faster
 begin
+  result := source;
   if source<>nil then
     repeat
-      if source[0]>#13 then
-        if source[1]>#13 then
-          if source[2]>#13 then
-            if source[3]>#13 then begin
-              inc(source,4);
-              continue;
-            end else
-            inc(source,3) else
-          inc(source,2) else
-        inc(source);
-      case source^ of
-        #0: result := nil;
-        #10: result := source+1;
-        #13: if source[1]=#10 then result := source+2 else result := source+1;
-        else begin
-          inc(source);
-          continue;
-        end;
+      if result[0]<#13 then
+        goto _0
+      else if result[1]<#13 then
+        goto _1
+      else if result[2]<#13 then
+        goto _2
+      else if result[3]<#13 then
+        goto _3
+      else begin
+        inc(result, 4);
+        continue;
+      end;
+_3:   inc(result);
+_2:   inc(result);
+_1:   inc(result);
+_0:   case result^ of
+      #0: result := nil;
+      #10: inc(result);
+      #13: if result[1]=#10 then inc(result,2) else inc(result);
+      else begin
+        inc(result);
+        continue;
+      end;
       end;
       exit;
-    until false else
-    result := source;
+    until false
 end;
-{$ifdef FPC}{$pop}{$else}{$WARNINGS ON}{$endif}
 
 function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
 {$ifdef CPUX64}
@@ -33014,51 +33043,50 @@ function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
         pop     rsi
 {$endif}
 end;
-{$else} {$ifdef FPC}inline;{$endif}
-var c: cardinal;
+{$else}
 begin
-  result := 0;
-  dec(PtrInt(TextEnd),PtrInt(Text)); // compute TextLen
-  if TextEnd<>nil then
-    repeat
-      c := ord(Text[result]);
-      if c>13 then begin
-        inc(result);
-        if result>=PtrInt(PtrUInt(TextEnd)) then
-          break;
+  result := PtrUInt(Text)-1;
+  repeat
+    inc(result);
+    if PtrUInt(result)<PtrUInt(TextEnd) then
+      if (PByte(result)^>13) or ((PByte(result)^<>10) and (PByte(result)^<>13)) then
         continue;
-      end;
-      if (c=10) or (c=13) then
-        break;
-      inc(result);
-      if result>=PtrInt(PtrUInt(TextEnd)) then
-        break;
-    until false;
+    break;
+  until false;
+  dec(result,PtrInt(Text)); // returns length
 end;
 {$endif CPUX64}
 
-function GetLineSize(P,PEnd: PUTF8Char): PtrUInt;
-var c: cardinal;
+function GetLineSize(P, PEnd: PUTF8Char): PtrUInt;
+var c: byte;
 begin
-  if PEnd=nil then
-    dec(PtrUInt(PEnd));
-  result := PtrUInt(P);
-  if P<>nil then
-    repeat
-      c := ord(P^);
-      if c>13 then begin
-        inc(P);
-        if P>=PEnd then
-          break;
-        continue;
+  {$ifdef CPUX64}
+  if PEnd <> nil then begin
+    result := BufferLineLength(P,PEnd); // use branchless SSE2 on x86_64
+    exit;
+  end;
+  result := PtrUInt(P)-1;
+  {$else}
+  result := PtrUInt(P)-1;
+  if PEnd<>nil then
+    repeat // inlined BufferLineLength()
+      inc(result);
+      if PtrUInt(result)<PtrUInt(PEnd) then begin
+        c := PByte(result)^;
+        if (c>13) or ((c<>10) and (c<>13)) then
+          continue;
       end;
-      if (c=0) or (c=10) or (c=13) then
-        break;
-      inc(P);
-      if P>=PEnd then
-        break;
+      break;
+    until false else
+  {$endif CPUX64}
+    repeat // inlined BufferLineLength() ending at #0 for PEnd=nil
+      inc(result);
+      c := PByte(result)^;
+      if (c>13) or ((c<>0) and (c<>10) and (c<>13)) then
+        continue;
+      break;
     until false;
-  result := PtrUInt(P)-result;
+  dec(result,PtrUInt(P)); // returns length
 end;
 
 function GetNextItem(var P: PUTF8Char; Sep: AnsiChar): RawUTF8;
@@ -33858,7 +33886,7 @@ var A, n: PtrInt;
 begin
   result := '';
   n := high(NameValuePairs);
-  if n>0 then begin
+  if (n>0) and (n and 1=1) then begin
     for A := 0 to n shr 1 do begin
       VarRecToUTF8(NameValuePairs[A*2],name);
       if not IsUrlValid(pointer(name)) then
@@ -44307,36 +44335,37 @@ begin
   VarClear(Value);
 end;
 
+procedure ClearVariantForString(var Value: variant); {$ifdef HASINLINE} inline; {$endif}
+var
+  v: cardinal;
+begin
+  v := TVarData(Value).VType;
+  if v = varString then
+    Finalize(RawByteString(TVarData(Value).VAny))
+  else
+    begin
+      if v and VTYPE_STATIC <> 0 then
+        {$ifdef NOVARCOPYPROC}VarClear(Value){$else}VarClearProc(TVarData(Value)){$endif};
+      TVarData(Value).VType := varString;
+      TVarData(Value).VAny := nil; // to avoid GPF when assigned to a RawByteString
+    end;
+end;
+
 procedure RawUTF8ToVariant(Txt: PUTF8Char; TxtLen: integer; var Value: variant);
 begin
-  with TVarData(Value) do begin
-    if cardinal(VType)<>varString then begin // in-place replacement of a RawUTF8 value
-      {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
-        VarClear(Value);
-      VType := varString;
-      VAny := nil; // avoid GPF below when assigning a string variable to VAny
-    end;
-    FastSetString(RawUTF8(VString),Txt,TxtLen);
-  end;
+  ClearVariantForString(Value);
+  FastSetString(RawUTF8(TVarData(Value).VString), Txt, TxtLen);
 end;
 
 procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: variant);
 begin
-  with TVarData(Value) do begin
-    if cardinal(VType)<>varString then begin // in-place replacement of a RawUTF8 value
-      {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
-        VarClear(Value);
-      VType := varString;
-      VAny := nil; // avoid GPF below when assigning a string variable to VAny
-      if Txt='' then
-        exit;
-    end;
-    RawByteString(VAny) := Txt;
-    {$ifdef HASCODEPAGE}
-    if (Txt<>'') and (StringCodePage(Txt)=CP_RAWBYTESTRING) then
-      SetCodePage(RawByteString(VAny),CP_UTF8,false); // force explicit UTF-8
-    {$endif}
-  end;
+  ClearVariantForString(Value);
+  if Txt='' then
+    exit;
+  RawByteString(TVarData(Value).VAny) := Txt;
+  {$ifdef HASCODEPAGE} // force explicit UTF-8
+  SetCodePage(RawByteString(TVarData(Value).VAny),CP_UTF8,false);
+  {$endif HASCODEPAGE}
 end;
 
 procedure FormatUTF8ToVariant(const Fmt: RawUTF8; const Args: array of const;
@@ -44353,19 +44382,16 @@ end;
 procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: TVarData;
   ExpectedValueType: cardinal);
 begin
+  if ExpectedValueType=varString then begin
+    RawUTF8ToVariant(Txt,variant(Value));
+    exit;
+  end;
   {$ifndef FPC}if Value.VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(variant(Value));
   Value.VType := ExpectedValueType;
   Value.VAny := nil; // avoid GPF below
   if Txt<>'' then
   case ExpectedValueType of
-    varString: begin
-      RawByteString(Value.VAny) := Txt;
-      {$ifdef HASCODEPAGE}
-      if (Txt<>'') and  (StringCodePage(Txt)=CP_RAWBYTESTRING) then
-        SetCodePage(RawByteString(Value.VAny),CP_UTF8,false); // force explicit UTF-8
-      {$endif}
-    end;
     varOleStr:
       UTF8ToWideString(Txt,WideString(Value.VAny));
     {$ifdef HASVARUSTRING}
@@ -45003,7 +45029,7 @@ begin
       ToBeParsed := JSON;
   t := pointer(SynVariantTypes);
   if (t<>nil) and not(dvoJSONParseDoNotTryCustomVariants in Options^) then
-    for i := {$ifdef FPC}0{$else}1{$endif} to PPtrInt(PtrUInt(t)-_DALEN)^ do
+    for i := {$ifdef FPC}0{$else}1{$endif} to PDALen(PtrUInt(t)-_DALEN)^ do
       if t^.TryJSONToVariant(ToBeParsed,Value,EndOfObject) then begin
         if not wasParsedWithinString then
           JSON := ToBeParsed;
@@ -45617,13 +45643,14 @@ begin
 end;
 
 procedure TDocVariantData.AddNameValuesToObject(const NameValuePairs: array of const);
-var n,arg: integer;
+var n,arg: PtrInt;
     tmp: variant;
 begin
-  n := length(NameValuePairs) shr 1;
-  if (n=0) or (dvoIsArray in VOptions) then
+  n := length(NameValuePairs);
+  if (n=0) or (n and 1=1) or (dvoIsArray in VOptions) then
     exit; // nothing to add
   include(VOptions,dvoIsObject);
+  n := n shr 1;
   if length(VValue)<VCount+n then begin
     SetLength(VValue,VCount+n);
     SetLength(VName,VCount+n);
@@ -48430,7 +48457,7 @@ begin
     if result<>0 then begin
       result := PPtrInt(result)^;
       if result<>0 then
-        result := PPtrInt(result-_DALEN)^{$ifdef FPC}+1{$endif};
+        result := PDALen(result-_DALEN)^{$ifdef FPC}+1{$endif};
     end;
   end;
 end;
@@ -48581,7 +48608,11 @@ begin // very efficient code on FPC and modern Delphi
 ok:   inc(PByte(result),PtrUInt(index)*ElemSize) else
       result := nil
   end else
-    if PtrUInt(index){$ifdef FPC}<={$else}<{$endif}PPtrUInt(PtrUInt(result)-_DALEN)^ then
+    {$ifdef FPC}
+    if PtrUInt(index)<=PPtrUInt(PtrUInt(result)-_DALEN)^ then
+    {$else}
+    if PtrUInt(index)<PPtrUInt(PtrUInt(result)-_DALEN)^ then
+    {$endif FPC}
       goto ok else
       result := nil;
 end;
@@ -50175,7 +50206,7 @@ begin
       if (delta>0) and (aCount<MINIMUM_SIZE) then
         aCount := MINIMUM_SIZE; // reserve some minimal (64) items for Add()
     end else begin
-      capa := PPtrInt(arrayptr-_DALEN)^{$ifdef FPC}+1{$endif};
+      capa := PDALen(arrayptr-_DALEN)^{$ifdef FPC}+1{$endif};
       if delta>0 then begin  // size-up
         if capa>=aCount then
           exit; // no need to grow
@@ -50189,7 +50220,7 @@ begin
   end else // no external capacity: use length()
   if arrayptr=0 then
     oldlen := arrayptr else begin
-    oldlen := PPtrInt(arrayptr-_DALEN)^{$ifdef FPC}+1{$endif};
+    oldlen := PDALen(arrayptr-_DALEN)^{$ifdef FPC}+1{$endif};
     if oldlen=aCount then
       exit;  // InternalSetLength(samecount) would make a private copy
   end;
@@ -50203,7 +50234,7 @@ begin // capacity = length(DynArray)
   if result<>0 then begin
     result := PPtrInt(result)^;
     if result<>0 then
-      result := PPtrInt(result-_DALEN)^{$ifdef FPC}+1{$endif};
+      result := PDALen(result-_DALEN)^{$ifdef FPC}+1{$endif};
   end;
 end;
 
@@ -58521,7 +58552,7 @@ begin
     fSafe.Lock;
     try
       for i := aFirstIndex to fCount-1 do
-        if PosEx(aText,fValue[result])>0 then begin
+        if PosEx(aText,fValue[i])>0 then begin
           result := i;
           exit;
         end;
@@ -60875,58 +60906,66 @@ begin
     UTF8DecodeToString(fLines[aIndex],GetLineSize(fLines[aIndex],fMapEnd),result);
 end;
 
-function GetLineContains(p,pEnd, up: PUTF8Char): boolean;
-var i: PtrInt;
-    table: {$ifdef CPUX86NOTPIC}TNormTableByte absolute NormToUpperAnsi7Byte{$else}PNormTableByte{$endif};
-label Fnd;
+function GetLineContains(p, pEnd, up: PUTF8Char): boolean;
+var
+  i: PtrInt;
+  {$ifdef CPUX86NOTPIC} table: TNormTable absolute NormToUpperAnsi7Byte;
+  {$else} table: PNormTable; {$endif}
+label
+  Fnd1, LF1, Fnd2, LF2, Ok; // ugly but fast
 begin
-  {$ifndef CPUX86NOTPIC}table := @NormToUpperAnsi7Byte;{$endif}
-  if (p<>nil) and (up<>nil) then
-  if pEnd=nil then
-    repeat
-      i := ord(p^);
-      if not (AnsiChar(i) in ANSICHARNOT01310) then break;
-      inc(p);
-      if (table[i]=ord(up^)) and IdemPChar2(
-         {$ifdef CPUX86NOTPIC}@{$else}pointer{$endif}(table),p,@up[1]) then begin
-        result := true;
-        exit;
-      end;
-    until false
-  else
-  repeat // fast unrolled search
-    if p>=pEnd then break;
-    i := ord(p^);
-    if i in [10,13] then break;
-    if table[i]=ord(up^) then goto Fnd;
-    inc(p);
-    if p>=pEnd then break;
-    i := ord(p^);
-    if i in [10,13] then break;
-    if table[i]=ord(up^) then goto Fnd;
-    inc(p);
-    if p>=pEnd then break;
-    i := ord(p^);
-    if i in [10,13] then break;
-    if table[i]=ord(up^) then goto Fnd;
-    inc(p);
-    if p>=pEnd then break;
-    i := ord(p^);
-    if i in [10,13] then break;
-    if table[i]<>ord(up^) then begin
-      inc(p);
-      continue;
-    end;
-Fnd:i := 0;
-    repeat
-      inc(i);
-      if up[i]=#0 then begin
-        result := true; // found
-        exit;
-      end;
-    until table[ord(p[i])]<>ord(up[i]);
-    inc(p);
-  until false;
+  if (p<>nil) and (up<>nil) then begin
+    {$ifndef CPUX86NOTPIC} table := @NormToUpperAnsi7; {$endif}
+    if pEnd=nil then
+      repeat
+        if p^<=#13 then
+          goto LF1
+        else if table[p^]=up^ then
+          goto Fnd1;
+        inc(p);
+        continue;
+LF1:    if (p^=#0) or (p^=#13) or (p^=#10) then
+          break;
+        inc(p);
+        continue;
+Fnd1:   i := 0;
+        repeat
+          inc(i);
+          if up[i]<>#0 then
+            if up[i]=table[p[i]] then
+              continue else
+              break else begin
+Ok:         result := true; // found
+            exit;
+          end;
+        until false;
+        inc(p);
+      until false
+    else
+      repeat
+        if p>=pEnd then
+          break;
+        if p^<=#13 then
+          goto LF2
+        else if table[p^]=up^ then
+          goto Fnd2;
+        inc(p);
+        continue;
+LF2:    if (p^=#13) or (p^=#10) then
+          break;
+        inc(p);
+        continue;
+Fnd2:   i := 0;
+        repeat
+          inc(i);
+          if up[i]=#0 then
+            goto Ok;
+          if p+i>=pEnd then
+            break;
+        until up[i]<>table[p[i]];
+        inc(p);
+      until false;
+  end;
   result := false;
 end;
 
@@ -61459,8 +61498,9 @@ procedure SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
 var name: RawUTF8;
 begin
   FormatUTF8(Format,Args,name);
-  name := StringReplaceAll(StringReplaceAll(StringReplaceAll(StringReplaceAll(StringReplaceAll(
-    name,'TSQLRest',''),'TSQL',''),'TWebSocket','WS'),'TSyn',''),'Thread','');
+  name := StringReplaceAll(name,['TSQLRest','', 'TSQL','', 'TWebSocket','WS',
+    'TSyn','', 'Thread','', 'Process','', 'Background','Bgd', 'Server','Svr',
+    'Client','Clt', 'WebSocket','WS', 'Timer','Tmr', 'Thread','Thd']);
   SetThreadNameInternal(ThreadID,name);
 end;
 

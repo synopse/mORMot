@@ -13369,7 +13369,7 @@ begin
   try
     // retrieve some initial entropy from OS
     SetLength(fromos,Len);
-    FillSystemRandom(pointer(fromos),len,{allowblocking=}true);
+    FillSystemRandom(pointer(fromos),len,{allowblocking=}SystemOnly);
     if SystemOnly then begin
       result := fromos;
       fromos := '';

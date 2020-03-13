@@ -3324,19 +3324,43 @@ var i,j: integer;
   end;
 
 begin
+  V := '123456789ABC'#10'DEF0zxy';
+  Check(GetLineContains(@V[1],nil,'1'));
+  Check(GetLineContains(@V[1],nil,'C'));
+  Check(GetLineContains(@V[1],nil,'89'));
+  Check(not GetLineContains(@V[1],nil,'ZX'));
+  Check(GetLineContains(@V[14],nil,'ZXY'));
+  Check(not GetLineContains(@V[1],nil,'890'));
+  Check(GetLineContains(@V[1],@V[21],'89'));
+  Check(GetLineContains(@V[14],@V[21],'ZX'));
+  Check(not GetLineContains(@V[1],@V[21],'ZX'));
+  Check(GetLineContains(@V[14],@V[21],'ZXY'));
+  Check(not GetLineContains(@V[1],@V[5],'89'));
+  Check(not GetLineContains(@V[1],@V[15],'ZXY'));
+  Check(not GetLineContains(@V[14],@V[17],'ZXY'));
   V := '1234567890123456'#13'1234567890123456789';
   for j := 1 to 16 do begin
-    for i := j to 16 do
-      Check(BufferLineLength(@V[j],@V[i])=i-j);
-    for i := 17 to 34 do
-      Check(BufferLineLength(@V[j],@V[i])=17-j);
+    for i := j to 16 do begin
+      CheckEqual(BufferLineLength(@V[j],@V[i]),i-j);
+      CheckEqual(GetLineSize(@V[j],@V[i]),i-j);
+    end;
+    for i := 17 to 34 do begin
+      CheckEqual(BufferLineLength(@V[j],@V[i]),17-j);
+      CheckEqual(GetLineSize(@V[j],@V[i]),17-j);
+    end;
+    CheckEqual(GetLineSize(@V[j],nil),17-j);
   end;
-  V := '12345678901234561234567890123456'#13'1234567890123456789';
+  V := '12345678901234561234567890123456'#10'1234567890123456789';
   for j := 1 to 32 do begin
-    for i := j to 32 do
-      Check(BufferLineLength(@V[j],@V[i])=i-j);
-    for i := 33 to 50 do
-      Check(BufferLineLength(@V[j],@V[i])=33-j);
+    for i := j to 32 do begin
+      CheckEqual(BufferLineLength(@V[j],@V[i]),i-j);
+      CheckEqual(GetLineSize(@V[j],@V[i]),i-j);
+    end;
+    for i := 33 to 50 do begin
+      CheckEqual(BufferLineLength(@V[j],@V[i]),33-j);
+      CheckEqual(GetLineSize(@V[j],@V[i]),33-j);
+    end;
+    CheckEqual(GetLineSize(@V[j],nil),33-j);
   end;
   Check(IsMatch('','',true));
   Check(not IsMatch('','toto',true));
@@ -4713,7 +4737,7 @@ procedure TTestLowLevelCommon._UTF8;
     Check(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W))=W);
     {$endif}
   end;
-  procedure tc(const S: RawUTF8; start,count: PtrInt);
+  procedure CheckTrimCopy(const S: RawUTF8; start,count: PtrInt);
   var t: RawUTF8;
   begin
     trimcopy(s,start,count,t);
@@ -5066,27 +5090,32 @@ begin
   Check(StringReplaceAll('abcabcabc','bc','B')='aBaBaB');
   Check(StringReplaceAll('abcabcabc','bc','bcd')='abcdabcdabcd');
   Check(StringReplaceAll('abcabcabc','c','C')='abCabCabC');
+  Check(StringReplaceAll('abcabcabc',[])='abcabcabc');
+  Check(StringReplaceAll('abcabcabc',['c'])='abcabcabc');
+  Check(StringReplaceAll('abcabcabc',['c','C'])='abCabCabC');
+  Check(StringReplaceAll('abcabcabc',['c','C','a'])='abcabcabc');
+  Check(StringReplaceAll('abcabcabc',['c','C','toto','titi','ab','AB'])='ABCABCABC');
   for i := -10 to 50 do
     for j := -10 to 50 do begin
-      tc('',i,j);
-      tc('1',i,j);
-      tc('1 ',i,j);
-      tc(' 1',i,j);
-      tc('   1',i,j);
-      tc('1   ',i,j);
-      tc('1',i,j);
-      tc('12',i,j);
-      tc('123',i,j);
-      tc(' 234',i,j);
-      tc(' 234 ',i,j);
-      tc(' 2 4',i,j);
-      tc(' 2 4 ',i,j);
-      tc('  3    ',i,j);
-      tc('  3   7  ',i,j);
-      tc(' 234 6',i,j);
-      tc('234 67 ',i,j);
-      tc(' 234 67 ',i,j);
-      tc(' 234 67 ',i,maxInt);
+      CheckTrimCopy('',i,j);
+      CheckTrimCopy('1',i,j);
+      CheckTrimCopy('1 ',i,j);
+      CheckTrimCopy(' 1',i,j);
+      CheckTrimCopy('   1',i,j);
+      CheckTrimCopy('1   ',i,j);
+      CheckTrimCopy('1',i,j);
+      CheckTrimCopy('12',i,j);
+      CheckTrimCopy('123',i,j);
+      CheckTrimCopy(' 234',i,j);
+      CheckTrimCopy(' 234 ',i,j);
+      CheckTrimCopy(' 2 4',i,j);
+      CheckTrimCopy(' 2 4 ',i,j);
+      CheckTrimCopy('  3    ',i,j);
+      CheckTrimCopy('  3   7  ',i,j);
+      CheckTrimCopy(' 234 6',i,j);
+      CheckTrimCopy('234 67 ',i,j);
+      CheckTrimCopy(' 234 67 ',i,j);
+      CheckTrimCopy(' 234 67 ',i,maxInt);
     end;
 end;
 

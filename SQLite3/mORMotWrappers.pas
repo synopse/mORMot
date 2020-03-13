@@ -1427,7 +1427,7 @@ begin
       inc(i, 3);
     end;
     pas := TSynMustache.Parse(Template).Render(context, nil, TSynMustache.HelpersGetStandardList);
-    result := StringReplaceAll(StringReplaceAll(pas, '();', ';'), '():', ':');
+    result := StringReplaceAll(pas, ['();', ';', '():', ':']);
 //FileFromString(_Safe(context)^.ToJSON('','',jsonUnquotedPropName),FileName+'.json');
   finally
     server.Free;
@@ -1512,8 +1512,7 @@ begin
         TextColor(ccBrown);
     end
     else begin
-      line := StringReplaceAll(StringReplaceAll(StringReplaceAll(
-        line, '`', ''),'<<', ''), '>>', '');
+      line := StringReplaceAll(line, ['`','', '<<','', '>>','']);
       i := 1;
       repeat
         j := PosEx('[', line, i);
