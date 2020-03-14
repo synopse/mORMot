@@ -1099,7 +1099,7 @@ procedure SetMainAESPRNG;
 /// low-level function returning some random binary using standard API
 // - will call /dev/urandom or /dev/random under POSIX, and CryptGenRandom API
 // on Windows, and fallback to SynCommons.FillRandom if the system API failed
-// or for padding if more than 32 bytes is retrieved from /dev/urandom
+// or for padding if more than 256 bytes is retrieved from /dev/urandom
 // - you should not have to call this procedure, but faster and safer TAESPRNG
 procedure FillSystemRandom(Buffer: PByteArray; Len: integer; AllowBlocking: boolean);
 
@@ -13318,9 +13318,9 @@ begin
   if dev>0 then
     try
       i := Len;
-      if i>32 then
-        i := 32; // up to 256 bits - see "man urandom" Usage paragraph
-      fromos := (FileRead(dev,Buffer[0],i)=i) and (Len<=32); // will XOR up to Len
+      if i>256 then
+        i := 256; // up to 256 bytes - see "man urandom" Usage paragraph
+      fromos := (FileRead(dev,Buffer[0],i)=i) and (Len<=256); // will XOR up to Len
     finally
       FileClose(dev);
     end;
