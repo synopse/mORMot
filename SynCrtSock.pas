@@ -4885,9 +4885,12 @@ end;
 
 procedure TCrtSocket.OpenBind(const aServer, aPort: SockString;
   doBind: boolean; aSock: integer; aLayer: TCrtSocketLayer; aTLS: boolean);
-const BINDTXT: array[boolean] of string[4] = ('open','bind');
-      BINDMSG: array[boolean] of string = ('Is a server running on this address:port?',
-        'Another process may be currently listening to this port!');
+const
+  RETRYSLEEPTIME = 10;
+  RETRYCOUNT     = 5;
+  BINDTXT: array[boolean] of string[4] = ('open','bind');
+  BINDMSG: array[boolean] of string = ('Is a server running on this address:port?',
+                                       'Another process may be currently listening to this port!');
 var
   aRetryCount:integer;
 begin
@@ -4899,16 +4902,16 @@ begin
       fPort := DEFAULT_PORT[aTLS] else // default port is 80/443 (HTTP/S)
       fPort := aPort;
     fServer := aServer;
-    while aRetryCount<5 do
+    while (aRetryCount<RETRYCOUNT) do
     begin
-    fSock := CallServer(aServer,Port,doBind,aLayer,Timeout); // OPEN or BIND
+      fSock := CallServer(aServer,Port,doBind,aLayer,Timeout); // OPEN or BIND
       if fSock>0 then break;
       if (NOT WSAIsFatalError) then
       begin
-        sleep(10);
+        sleep(RETRYSLEEPTIME);
         Inc(aRetryCount);
       end;
-     end;
+    end;
     if fSock<=0 then
       raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s) failed: %s',
         [aServer,fPort,BINDTXT[doBind],BINDMSG[doBind]],-1);
