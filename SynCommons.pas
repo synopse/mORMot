@@ -39869,7 +39869,8 @@ begin
   end;
   {$endif KYLIX3}
   {$else}
-  ProtectedResult:=(fpmprotect(Pointer(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC) = 0);
+  ProtectedResult:=(Do_SysCall(syscall_nr_mprotect,PtrUInt(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC)=0);
+  //ProtectedResult:=(fpmprotect(Pointer(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC) = 0);
   {$endif USEMPROTECT}
   if ProtectedResult then
     try
@@ -39880,7 +39881,8 @@ begin
     {$ifdef USEMPROTECT}
       mprotect(Pointer(AlignedAddr),PageSize,PROT_READ or PROT_EXEC);
     {$else}
-      fpmprotect(Pointer(AlignedAddr),PageSize,PROT_READ or PROT_EXEC);
+      ProtectedResult:=(Do_SysCall(syscall_nr_mprotect,PtrUInt(AlignedAddr),PageSize,PROT_READ or PROT_EXEC)=0);
+      //fpmprotect(Pointer(AlignedAddr),PageSize,PROT_READ or PROT_EXEC);
     {$endif USEMPROTECT}
 
     except
