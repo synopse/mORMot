@@ -2278,13 +2278,13 @@ procedure MoveFast(const src; var dst; cnt: PtrInt);
 // - on non-Intel CPUs, it will fallback to the default RTL FillChar()
 // - note: Delphi x86_64 is far from efficient: even ERMS was wrongly
 // introduced in latest updates
-var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) {$ifdef FPC} = FillChar {$endif};
+var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte);
 
 /// our fast version of move()
 // - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available),
 // or optimized X87 assembly implementation for older CPUs
 // - on non-Intel CPUs, it will fallback to the default RTL Move()
-var MoveFast: procedure(const Source; var Dest; Count: PtrInt) {$ifdef FPC} = Move {$endif};
+var MoveFast: procedure(const Source; var Dest; Count: PtrInt);
 
 {$endif CPUX64}
 {$endif ABSOLUTEPASCAL}
@@ -16685,6 +16685,13 @@ function SynLZDecompressBody(P,Body: PAnsiChar; PLen,BodyLen: integer;
 function SynLZDecompressPartial(P,Partial: PAnsiChar; PLen,PartialLen: integer): integer;
 
 
+{$ifdef BSDNOTDARWIN}
+{$ifdef USEMPROTECT}
+function mprotect(Addr: Pointer; Len: size_t; Prot: Integer): Integer; cdecl external 'libc.so' name 'mprotect';
+{$endif USEMPROTECT}
+{$endif BSDNOTDARWIN}
+
+
 resourcestring
   sInvalidIPAddress = '"%s" is an invalid IP v4 address';
   sInvalidEmailAddress = '"%s" is an invalid email address';
@@ -16861,7 +16868,10 @@ end;
 procedure TSynTempBuffer.Done;
 begin
   if (buf<>@tmp) and (buf<>nil) then
+  begin
     FreeMem(buf);
+    buf:=nil;
+  end;
 end;
 
 procedure TSynTempBuffer.Done(EndBuf: pointer; var Dest: RawUTF8);
@@ -16869,8 +16879,7 @@ begin
   if EndBuf=nil then
     Dest := '' else
     FastSetString(Dest,buf,PAnsiChar(EndBuf)-PAnsiChar(buf));
-  if (buf<>@tmp) and (buf<>nil) then
-    FreeMem(buf);
+  Done;
 end;
 
 
@@ -35100,10 +35109,10 @@ end;
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm .noframe // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
+asm .noframe // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,edx)
 {$endif FPC}
         mov     eax, crc
-        not     eax
+        xor     eax, $FFFFFFFF
         test    len, len
         jz      @0
         test    buf, buf
@@ -35129,7 +35138,7 @@ asm .noframe // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
 @1:     test    cl, 1
         jz      @0
         crc32   eax, byte ptr[buf]
-@0:     not     eax
+@0:     xor     eax, $FFFFFFFF
         ret
 {$ifdef FPC} align 16
 @s:     crc32   rax, qword [buf] // hash 8 bytes per loop
@@ -39808,16 +39817,6 @@ begin
 end;
 {$endif MSWINDOWS}
 
-{$ifdef BSD}
-function mprotect(Addr: Pointer; Len: size_t; Prot: Integer): Integer;
-  {$ifdef Darwin} cdecl external 'libc.dylib' name 'mprotect';
-  {$else} cdecl external 'libc.so' name 'mprotect'; {$endif}
-  {$define USEMPROTECT}
-{$endif BSD}
-{$ifdef KYLIX3}
-  {$define USEMPROTECT}
-{$endif KYLIX3}
-
 procedure PatchCode(Old,New: pointer; Size: integer; Backup: pointer;
   LeaveUnprotected: boolean);
 {$ifdef MSWINDOWS}
@@ -39839,24 +39838,51 @@ begin
   end;
 end;
 {$else}
-var PageSize, AlignedAddr: PtrUInt;
+var
+  PageSize: PtrUInt;
+  AlignedAddr: pointer;
     i: integer;
+  ProtectedResult:boolean;
+  {$ifdef USEMPROTECT}
+  ProtectedMemory:boolean;
+  {$endif USEMPROTECT}
 begin
   if Backup<>nil then
     for i := 0 to Size-1 do // do not use Move() here
       PByteArray(Backup)^[i] := PByteArray(Old)^[i];
   PageSize := SystemInfo.dwPageSize;
-  AlignedAddr := PtrUInt(Old) and not (PageSize-1);
-  while PtrUInt(Old)+PtrUInt(Size)>=AlignedAddr+PageSize do
+  AlignedAddr := Pointer((PtrUInt(Old) DIV SystemInfo.dwPageSize) * SystemInfo.dwPageSize);
+  while PtrUInt(Old)+PtrUInt(Size)>=PtrUInt(AlignedAddr)+PageSize do
     Inc(PageSize,SystemInfo.dwPageSize);
+
+  ProtectedResult:=False;
   {$ifdef USEMPROTECT}
-  if mprotect(Pointer(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC)=0 then
+  ProtectedMemory:=False;
+  {$ifdef KYLIX3}
+  ProtectedResult:=(mprotect(AlignedAddr,PageSize,PROT_READ or PROT_WRITE or PROT_EXEC) = 0);
   {$else}
-  Do_SysCall(syscall_nr_mprotect,PtrUInt(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC);
+  ProtectedResult:=(mprotect(AlignedAddr,PageSize,PROT_READ or PROT_WRITE or PROT_EXEC) = 0);
+  if (NOT ProtectedResult) then
+  begin
+    ProtectedMemory:=True;
+    ProtectedResult:=(mprotect(AlignedAddr,PageSize,PROT_READ or PROT_WRITE) = 0);
+  end;
+  {$endif KYLIX3}
+  {$else}
+  ProtectedResult:=(fpmprotect(Pointer(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC) = 0);
   {$endif USEMPROTECT}
+  if ProtectedResult then
     try
       for i := 0 to Size-1 do // do not use Move() here
         PByteArray(Old)^[i] := PByteArray(New)^[i];
+
+    if (NOT LeaveUnprotected) then
+    {$ifdef USEMPROTECT}
+      mprotect(Pointer(AlignedAddr),PageSize,PROT_READ or PROT_EXEC);
+    {$else}
+      fpmprotect(Pointer(AlignedAddr),PageSize,PROT_READ or PROT_EXEC);
+    {$endif USEMPROTECT}
+
     except
     end;
 end;
@@ -55099,7 +55125,10 @@ begin
   if twoStreamIsOwned in fCustomOptions then
     fStream.Free;
   if not (twoBufferIsExternal in fCustomOptions) then
+  begin
     FreeMem(fTempBuf);
+    fTempBuf:=nil;
+  end;
   fInternalJSONWriter.Free;
   inherited;
 end;
@@ -59687,12 +59716,12 @@ begin
     fMap := 0;
   end;
   {$else}
-  if (fBuf<>nil) and (fBufSize>0) then
+  if (fBuf<>nil) and (fBufSize>0) and (fFile<>0) then
     {$ifdef KYLIX3}munmap{$else}fpmunmap{$endif}(fBuf,fBufSize);
   {$endif}
-  fBuf := nil;
   fBufSize := 0;
-  if fFile<>0 then begin
+  if (fFile<>0) then begin
+  fBuf := nil;
     if fFileLocal then
       FileClose(fFile);
     fFile := 0;
@@ -60851,6 +60880,7 @@ end; // invalid file or unable to memory map its content -> Count := 0
 destructor TMemoryMapText.Destroy;
 begin
   Freemem(fLines);
+  fLines:=nil;
   fMap.UnMap;
   inherited;
 end;
@@ -61865,6 +61895,19 @@ begin
     GetBitsCountPtrInt := @GetBitsCountSSE42;
   {$endif CPUINTEL}
   {$endif ABSOLUTEPASCAL}
+
+  {$ifdef FPC}
+    {$ifdef ABSOLUTEPASCAL}
+      if Addr(MoveFast)=nil then MoveFast := @System.Move;
+      if Addr(FillCharFast)=nil then FillCharFast := @System.FillChar; // fallback to FPC cross-platform RTL
+    {$else}
+      {$ifndef CPUX64}
+        if Addr(MoveFast)=nil then MoveFast := @System.Move;
+        if Addr(FillCharFast)=nil then FillCharFast := @System.FillChar; // fallback to FPC cross-platform RTL
+      {$endif}
+    {$endif}
+  {$endif FPC}
+
   InterningHasher := DefaultHasher;
 end;
 

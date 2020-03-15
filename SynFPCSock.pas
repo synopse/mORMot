@@ -59,18 +59,22 @@ unit SynFPCSock;
 {$MODE DELPHI}
 {$H+}
 
+{.$define USELIBC}
+
 {$ifdef ANDROID}
   {$define LINUX} // a Linux-based system
 {$endif}
 
 // BSD definition of socketaddr
-{$ifdef FREEBSD}
-  {$DEFINE SOCK_HAS_SINLEN}
+{$if
+     defined(OpenBSD) or
+     defined(FreeBSD) or
+     defined(Darwin) or
+     defined(Haiku)
+}
+  {$DEFINE SOCK_HAS_SINLEN}               // BSD definition of socketaddr
 {$endif}
 {$ifdef SUNOS}
-  {$DEFINE SOCK_HAS_SINLEN}
-{$endif}
-{$ifdef BSD}
   {$DEFINE SOCK_HAS_SINLEN}
 {$endif}
 
@@ -175,6 +179,9 @@ const
 
   SO_DEBUG      = sockets.SO_DEBUG;
   SO_REUSEADDR  = sockets.SO_REUSEADDR;
+  {$ifdef BSD}
+  SO_REUSEPORT  = sockets.SO_REUSEPORT;
+  {$endif}
   SO_TYPE       = sockets.SO_TYPE;
   SO_ERROR      = sockets.SO_ERROR;
   SO_DONTROUTE  = sockets.SO_DONTROUTE;
@@ -189,7 +196,13 @@ const
   SO_RCVTIMEO   = sockets.SO_RCVTIMEO;
   SO_SNDTIMEO   = sockets.SO_SNDTIMEO;
 {$IFDEF BSD}
+  {$IFNDEF OPENBSD}
+  {$IFDEF DARWIN}
   SO_NOSIGPIPE  = $1022;
+  {$ELSE}
+  SO_NOSIGPIPE	= $800;
+  {$ENDIF}
+  {$ENDIF}
 {$ENDIF}
   // we use Linux default here
   SOMAXCONN     = 128;
@@ -205,8 +218,12 @@ const
   MSG_PEEK      = sockets.MSG_PEEK;     // Peek at incoming messages.
 
   {$ifdef BSD}
+  {$ifndef OpenBSD}
+  // Works under MAC OS X and FreeBSD, but is undocumented, so FPC doesn't include it
   MSG_NOSIGNAL  = $20000;  // Do not generate SIGPIPE.
-  // Works under MAC OS X, but is undocumented, so FPC doesn't include it
+  {$else}
+  MSG_NOSIGNAL  = $400;
+  {$endif}
   {$else}
   {$ifdef SUNOS}
   MSG_NOSIGNAL  = $20000;  // Do not generate SIGPIPE.
@@ -590,6 +607,9 @@ var
 
 implementation
 
+{$ifdef USELIBC}
+{$i SynFPCSockLIBC.inc}
+{$endif}
 
 function IN6_IS_ADDR_UNSPECIFIED(const a: PInAddr6): boolean;
 begin
@@ -682,6 +702,7 @@ begin
   fpFD_ZERO(fdset);
 end;
 
+{$ifndef USELIBC}
 function fpbind(s:cint; addrx: psockaddr; addrlen: tsocklen): cint;
 begin
   result := sockets.fpbind(s, addrx, addrlen);
@@ -701,6 +722,7 @@ function fpsend(s:cint; msg:pointer; len:size_t; flags:cint): ssize_t;
 begin
   result := sockets.fpsend(s, msg, len, flags);
 end;
+{$endif USELIBC}
 
 {$endif FPC}
 
@@ -878,13 +900,14 @@ begin
 end;
 
 function Socket(af,Struc,Protocol: Integer): TSocket;
-{$IFDEF BSD}
-var on_off: integer;
+{$IF defined(BSD) AND NOT defined(OpenBSD)}
+var
+  on_off: integer;
 {$ENDIF}
 begin
   result := {$ifdef KYLIX3}LibC.socket{$else}fpSocket{$endif}(af,struc,protocol);
 // ##### Patch for BSD to avoid "Project XXX raised exception class 'External: SIGPIPE'" error.
-{$IFDEF BSD}
+{$IF defined(BSD) AND NOT defined(OpenBSD)}
   if result <> INVALID_SOCKET then begin
     on_off := 1;
     fpSetSockOpt(result,integer(SOL_SOCKET),integer(SO_NOSIGPIPE),@on_off,SizeOf(integer));
@@ -1104,12 +1127,14 @@ var TwoPass: boolean;
   end;
 begin
   result := 0;
-  FillChar(Sin,Sizeof(Sin),0);
   if (Family=AF_UNIX) then begin
     Sin.AddressFamily := AF_UNIX;
     Move(IP[1],Sin.sun_path,length(IP));
+    Sin.sun_path[length(IP)]:=#0;
+    result:=length(IP)+SizeOf(Sin.AddressFamily)+2;
     exit;
   end;
+  FillChar(Sin,SizeOfVarSin(Sin),0);
   Sin.sin_port := Resolveport(port,family,SockProtocol,SockType);
   TwoPass := false;
   if Family=AF_UNSPEC then begin

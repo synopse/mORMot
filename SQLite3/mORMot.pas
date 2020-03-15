@@ -54552,6 +54552,10 @@ type
 
 var
   CurrentFakeStubBuffer: TFakeStubBuffer;
+  {$ifdef USEMPROTECT}
+  MemoryProtection:boolean=false;
+  {$endif USEMPROTECT}
+
 
 constructor TFakeStubBuffer.Create;
 begin
@@ -54561,11 +54565,25 @@ begin
   {$ifdef KYLIX3}
   fStub := mmap(nil,STUB_SIZE,PROT_READ OR PROT_WRITE OR PROT_EXEC,MAP_PRIVATE OR MAP_ANONYMOUS,-1,0);
   {$else}
+  {$ifdef USEMPROTECT}
+  if (NOT MemoryProtection) then fStub := StubCallAllocMem(STUB_SIZE,PROT_READ OR PROT_WRITE OR PROT_EXEC);
+  if ((fStub=MAP_FAILED) OR MemoryProtection) then
+  begin
+    // i.e. on OpenBSD, we can have w^x protection
+    fStub := StubCallAllocMem(STUB_SIZE,PROT_READ OR PROT_WRITE);
+    if (fStub<>MAP_FAILED) then MemoryProtection:=True;
+  end;
+  {$else}
   fStub := StubCallAllocMem(STUB_SIZE,PROT_READ OR PROT_WRITE OR PROT_EXEC);
+  {$endif USEMPROTECT}
   {$endif KYLIX3}
   {$endif MSWINDOWS}
-  if fStub=nil then
-    raise EServiceException.CreateUTF8('%.Create: OS allocation failed',[self]);
+  {$ifdef MSWINDOWS}
+  if (fStub=nil) then
+  {$else}
+  if (fStub=MAP_FAILED) then
+  {$endif}
+    raise EServiceException.CreateUTF8('%.Create: OS memory allocation failed',[Self]);
 end;
 
 destructor TFakeStubBuffer.Destroy;
@@ -54601,6 +54619,9 @@ end;
 function TInterfaceFactory.GetMethodsVirtualTable: pointer;
 var i, tmp: cardinal;
     P: PCardinal;
+    {$ifdef USEMPROTECT}
+    PageAlignedFakeStub:pointer;
+    {$endif USEMPROTECT}
     {$ifdef CPUAARCH64}stub: PtrUInt;{$endif}
 begin
   if fFakeVTable=nil then begin
@@ -54620,8 +54641,20 @@ begin
                {$ifdef CPUARM}fMethodsCount*12{$endif}
                {$ifdef CPUAARCH64}($120 shr 2)+fMethodsCount*28{$endif};
         fFakeStub := TFakeStubBuffer.Reserve(tmp);
-        PtrUInt(fFakeStub) := PtrUInt(fFakeStub){$ifdef CPUAARCH64} + $120{$endif};
         P := pointer(fFakeStub);
+        {$ifdef CPUAARCH64}
+        PtrUInt(P) := PtrUInt(P)+$120;
+        {$endif};
+
+        {$ifdef USEMPROTECT}
+        if MemoryProtection then
+        begin
+          PageAlignedFakeStub := Pointer((PtrUInt(P) DIV SystemInfo.dwPageSize) * SystemInfo.dwPageSize);
+          if mprotect(PageAlignedFakeStub , (SystemInfo.dwPageSize shl 1), PROT_READ OR PROT_WRITE)<0 then
+             raise EServiceException.CreateUTF8('%.Create: mprotect write failure.',[self]);
+        end;
+        {$endif USEMPROTECT}
+
         for i := 0 to fMethodsCount-1 do begin
           fFakeVTable[i+RESERVED_VTABLE_SLOTS] := P;
           {$ifdef CPUX64}
@@ -54672,6 +54705,13 @@ begin
           inc(PByte(P),3);
           {$endif CPUX86}
         end;
+        {$ifdef USEMPROTECT}
+        if MemoryProtection then
+        begin
+          if mprotect(PageAlignedFakeStub , (SystemInfo.dwPageSize shl 1), PROT_READ OR PROT_EXEC)<0 then
+             raise EServiceException.CreateUTF8('%.Create: mprotect exec failure.',[self]);
+        end;
+        {$endif USEMPROTECT}
       end;
     finally
       InterfaceFactoryCache.Safe.UnLock;

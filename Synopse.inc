@@ -229,7 +229,7 @@
     {$define FPC_PROVIDE_ATTR_TABLE} // introducing TTypeData.AttributeTable
   {$endif}
   {$if not defined(VER3_0) and not defined(VER3_2) and not defined(VER2)}
-    {.$define FPC_PROVIDE_ATTR_TABLE} // to be defined since SVN 42356-42411
+    {$define FPC_PROVIDE_ATTR_TABLE} // to be defined since SVN 42356-42411
     // on compilation error in SynFPCTypInfo, undefine the above conditional
     // see https://lists.freepascal.org/pipermail/fpc-announce/2019-July/000612.html
   {$ifend}
@@ -259,13 +259,13 @@
       {$define FPCSQLITE3STATIC} // use static/arm-linux\sqlite3.o
     {$endif}
     {$ifdef CPUAARCH64}
-      {$ifdef ANDROID}
         {$define FPCSQLITE3STATIC} // note: problems with current static/aarch64-linux\sqlite3.o
       {$endif}
     {$endif}
-  {$endif}
 
   {$ifdef BSD}
+    {$define ABSOLUTEPASCAL} // NO asm nor redirection (until stabilized)
+    {$undef FORCE_STRSSE42}  // fails otherwise for sure
     // LINUX conditional includes Darwin and BSD family like FreeBSD
     {$define LINUX} // not true, but a POSIX/BSD system - see LINUXNOTBSD
     {$ifdef DARWIN}
@@ -273,10 +273,18 @@
       {$ifdef CPUINTEL}
         {$define FPC_PIC} // may have not be defined by the compiler options
       {$endif}
-      {$undef FORCE_STRSSE42}  // fails otherwise for sure
-      {$define ABSOLUTEPASCAL} // NO asm nor redirection (until stabilized)
     {$else}
       {$define BSDNOTDARWIN}   // OSX has some non-standard API calls
+    {$endif}
+    {$ifdef FREEBSD}
+      {$ifdef CPUX64}
+        {$define FPCSQLITE3STATIC} // we supply x64 static libs
+      {$endif CPUX64}
+    {$endif}
+    {$ifdef OPENBSD}
+      {$ifdef CPUX64}
+        {$define FPCSQLITE3STATIC} // we supply x64 static libs
+      {$endif CPUX64}
     {$endif}
   {$else}
     {$ifdef LINUX}
@@ -383,7 +391,9 @@
     {$define HASALIGNTYPEDATA} // to ensure proper RTTI alignment
   {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
-
+  {$ifdef ABSOLUTEPASCAL}
+    {$undef CPUX64ASM}
+  {$endif}
 {$else FPC}
 
 (********************** Delphi Conditionals **********************)
@@ -678,4 +688,12 @@
   {.$define LIBCURLMULTI}
   // enable https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
 {$endif USELIBCURL}
+
+{$ifdef BSDNOTDARWIN}
+  {$define USEMPROTECT}
+{$endif BSDNOTDARWIN}
+{$ifdef KYLIX3}
+  {$define USEMPROTECT}
+{$endif KYLIX3}
+
 

@@ -151,11 +151,17 @@ function fpsysctlhwstr(hwid: cint; var temp: shortstring): pointer;
 {$ifndef DARWIN} // OSX has no clock_gettime() API
 
 {$ifdef BSD}
+{$ifdef OpenBSD}
+const // see https://github.com/freebsd/freebsd/blob/master/sys/sys/time.h
+  CLOCK_REALTIME = 0;
+  CLOCK_MONOTONIC = 3;
+{$else}
 const // see https://github.com/freebsd/freebsd/blob/master/sys/sys/time.h
   CLOCK_REALTIME = 0;
   CLOCK_MONOTONIC = 4;
   CLOCK_REALTIME_COARSE = 10; // named CLOCK_REALTIME_FAST in FreeBSD 8.1+
   CLOCK_MONOTONIC_COARSE = 12;
+{$endif}
 {$else}
 const
   CLOCK_REALTIME = 0;
@@ -226,6 +232,14 @@ procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
 begin
   {$ifdef LINUXNOTBSD}
   if cs.__m_kind<>0 then
+  {$else}
+  {$ifdef BSD}
+  {$ifdef Darwin}
+  if cs.sig<>0 then
+  {$else}
+  if Assigned(cs) then
+  {$endif Darwin}
+  {$endif BSD}
   {$endif LINUXNOTBSD}
     DoneCriticalSection(cs);
 end;
@@ -578,10 +592,12 @@ begin
   {$else}
   {$ifdef LINUX}
   // try Linux kernel 2.6.32+ or FreeBSD 8.1+ fastest clocks
+  {$ifndef OpenBSD}
   if clock_gettime(CLOCK_REALTIME_COARSE, @tp) = 0 then
     CLOCK_REALTIME_FAST := CLOCK_REALTIME_COARSE;
   if clock_gettime(CLOCK_MONOTONIC_COARSE, @tp) = 0 then
     CLOCK_MONOTONIC_FAST := CLOCK_MONOTONIC_COARSE;
+  {$endif}
   if (clock_gettime(CLOCK_REALTIME_FAST,@tp)<>0) or // paranoid check
      (clock_gettime(CLOCK_MONOTONIC_FAST,@tp)<>0) then
     raise Exception.CreateFmt('clock_gettime() not supported by %s kernel - errno=%d',
@@ -597,9 +613,7 @@ type
     Loaded: boolean;
     {$ifdef LINUX}
     pthread: pointer;
-    {$ifdef LINUXNOTBSD} // see https://stackoverflow.com/a/7989973
     pthread_setname_np: function(thread: pointer; name: PAnsiChar): LongInt; cdecl;
-    {$endif LINUXNOTBSD}
     {$endif LINUX}
     procedure EnsureLoaded;
     procedure Done;
@@ -612,11 +626,16 @@ begin
   EnterCriticalSection(Lock);
   if not Loaded then begin
     {$ifdef LINUX}
+    @pthread_setname_np:=nil;
     pthread := dlopen({$ifdef ANDROID}'libc.so'{$else}'libpthread.so.0'{$endif}, RTLD_LAZY);
     if pthread <> nil then begin
-      {$ifdef LINUXNOTBSD}
+      {$ifdef BSDNOTDARWIN}
+      @pthread_setname_np := dlsym(pthread, 'pthread_set_name_np');
+      {$else}
+      {$ifndef Darwin}
       @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
-      {$endif LINUXNOTBSD}
+      {$endif}
+      {$endif BSDNOTDARWIN}
     end;
     {$endif LINUX}
     Loaded := true;
@@ -629,9 +648,7 @@ begin
   EnterCriticalSection(Lock);
   if Loaded then begin
     {$ifdef LINUX}
-    {$ifdef LINUXNOTBSD}
     @pthread_setname_np := nil;
-    {$endif LINUXNOTBSD}
     if pthread <> nil then
       dlclose(pthread);
     {$endif LINUX}
@@ -665,11 +682,18 @@ begin
   if L = 0 then
     exit;
   trunc[L] := #0;
-  {$ifdef LINUXNOTBSD}
+
+  {$ifdef LINUX}
   ExternalLibraries.EnsureLoaded;
   if Assigned(ExternalLibraries.pthread_setname_np) then
+  begin
+    {$ifdef NetBSD}
+    ExternalLibraries.pthread_setname_np(pointer(ThreadID), @trunc[0], L);
+    {$else}
     ExternalLibraries.pthread_setname_np(pointer(ThreadID), @trunc[0]);
-  {$endif LINUXNOTBSD}
+    {$endif}
+  end;
+  {$endif LINUX}
 end;
 
 initialization

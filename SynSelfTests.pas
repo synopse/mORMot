@@ -121,7 +121,7 @@ uses
     dddInfraEmailer,
     dddInfraAuthRest,
     dddInfraRepoUser,
-    ECCProcess,
+    ECCProcess{$ifdef FPC} in '.\SQLite3\Samples\33 - ECC\ECCProcess.pas'{$endif},
   {$endif DELPHI5OROLDER}
   mORMotService,
   SynProtoRTSPHTTP,
@@ -1162,7 +1162,7 @@ type
     procedure Collections(Item: TCollTest; var List: TCollTestsI; out Copy: TCollTestsI);
     {$endif}
     /// returns the thread ID running the method on server side
-    function GetCurrentThreadID: TThreadID;
+    function GetCurrentThreadID: PtrUInt;
     /// validate record transmission
     function GetCustomer(CustomerId: Integer; out CustomerData: TCustomerData): Boolean;
     //// validate TSQLRecord transmission
@@ -3997,8 +3997,10 @@ begin
   Test(crc32creference,'pas');
   Test(crc32cfast,'fast');
   {$ifdef CPUINTEL}
+  {$ifndef BSD}
   if cfSSE42 in CpuFeatures then
     Test(crc32csse42,'sse42');
+  {$endif BSD}
   {$ifdef CPUX64}
   if (cfSSE42 in CpuFeatures) and (cfAesNi in CpuFeatures) then
     Test(crc32c,'sse42+aesni'); // use SSE4.2+pclmulqdq instructions on x64
@@ -17338,7 +17340,7 @@ type
     procedure Collections(Item: TCollTest; var List: TCollTestsI; out Copy: TCollTestsI);
     destructor Destroy; override;
     {$endif LVCL}
-    function GetCurrentThreadID: TThreadID;
+    function GetCurrentThreadID: PtrUInt;
     function EchoRecord(const Nav: TConsultaNav): TConsultaNav;
     function GetCustomer(CustomerId: Integer; out CustomerData: TCustomerData): Boolean;
     procedure FillPeople(var People: TSQLRecordPeople);
@@ -17518,19 +17520,19 @@ begin
   result := Nav;
 end;
 
-function GetThreadID: TThreadID;
+function GetThreadID: PtrUInt;
 begin // avoid name conflict with TServiceComplexCalculator.GetCurrentThreadID
-  result := GetCurrentThreadId;
+  result := PtrUInt(GetCurrentThreadId);
 end;
 
 procedure TServiceComplexCalculator.EnsureInExpectedThread;
 begin
   case GlobalInterfaceTestMode of
   itmDirect, itmClient, itmMainThread:
-    if GetThreadID<>MainThreadID then
+    if GetThreadID<>PtrUInt(MainThreadID) then
       raise Exception.Create('Shall be in main thread');
   itmPerInterfaceThread, itmHttp, itmLocked:
-    if GetThreadID=MainThreadID then
+    if GetThreadID=PtrUInt(MainThreadID) then
       raise Exception.Create('Shall NOT be in main thread') else
     if ServiceContext.RunningThread=nil then
       raise Exception.Create('Shall have a known RunningThread');
@@ -17554,7 +17556,7 @@ begin
 end;
 {$endif}
 
-function TServiceComplexCalculator.GetCurrentThreadID: TThreadID;
+function TServiceComplexCalculator.GetCurrentThreadID: PtrUInt;
 begin
   result := GetThreadID;
 end;
@@ -17834,9 +17836,9 @@ begin
   end;
   case GlobalInterfaceTestMode of
   itmMainThread:
-    Check(Inst.CC.GetCurrentThreadID=MainThreadID);
+    Check(Inst.CC.GetCurrentThreadID=PtrUInt(MainThreadID));
   itmPerInterfaceThread,itmLocked:
-    Check(Inst.CC.GetCurrentThreadID<>MainThreadID);
+    Check(Inst.CC.GetCurrentThreadID<>PtrUInt(MainThreadID));
   end;
   TestCalculator(Inst.I);
   TestCalculator(Inst.CC); // test the fact that CC inherits from ICalculator
@@ -18404,10 +18406,13 @@ procedure TTestServiceOrientedArchitecture.ClientSideRESTServiceLogToDB;
 var Log: TSQLRestServerDB;
 begin
   {$ifdef Darwin}
+  {$ifdef NOSQLITE3STATIC}
   // due to a very strange error during prepare_v2, this does not (yet) work on Darwin.
-  // at least on my Darwin with sqlite 3.7.13 (Alfred note)
+  // at least on Darwin with system sqlite 3.7.13
+  // however, mORMots own static works perfect
   Check(1=0,'Not (yet) supported on Darwin !!');
   exit;
+  {$endif}
   {$endif}
   DeleteFile('servicelog.db');
   Log := TSQLRestServerDB.CreateWithOwnModel([TSQLRecordServiceLog],'servicelog.db');
@@ -18916,6 +18921,7 @@ begin
   U := fUserRepository.GetUserByName(UserName);
   Assert(U.Name=UserName,'internal verification');
   U.Password := Int32ToUtf8(Random(MaxInt));
+  U.MobilePhoneNumber := Int32ToUtf8(Random(MaxInt));
   if fSmsSender.Send('Your new password is '+U.Password,U.MobilePhoneNumber) then
     fUserRepository.Save(U);
 end;
@@ -19272,15 +19278,15 @@ begin
       if fTestClass=TSQLRestClientURINamedPipe then
         break else
       {$endif}
+      {$ifdef CPUARM3264}
+      if fTestClass=TSQLHttpClientWebsockets then
+        break else
+      {$endif CPUARM3264}
         fRunningThreadCount := 10 else
       {$ifdef MSWINDOWS}
       if fTestClass=TSQLRestClientURIMessage then
         break else
       {$endif}
-      {$ifdef CPUARM3264}
-      if fTestClass=TSQLHttpClientWebsockets then
-        break else
-      {$endif CPUARM3264}
         fRunningThreadCount := fRunningThreadCount+20;
   until fRunningThreadCount>fMaxThreads;
   // 3. Cleanup for this protocol (but reuse the same threadpool)

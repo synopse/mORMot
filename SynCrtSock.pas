@@ -4610,12 +4610,16 @@ begin
     end;
     SetSockOpt(Sock,SOL_SOCKET, SO_LINGER, @li, SizeOf(li));
     if OptVal>0 then begin
-      {$ifdef LINUX}
-      SetSockOpt(Sock,SOL_SOCKET, SO_REUSEADDR,@SO_TRUE,SizeOf(SO_TRUE));
-      {$endif}
+      {$ifdef UNIX}
       {$ifdef BSD}
+      SetSockOpt(Sock,SOL_SOCKET,SO_REUSEPORT,@SO_TRUE,SizeOf(SO_TRUE));
+      {$ifndef OpenBSD}
       SetSockOpt(Sock,SOL_SOCKET,SO_NOSIGPIPE,@SO_TRUE,SizeOf(SO_TRUE));
-      {$endif}
+      {$endif OpenBSD}
+      {$else}
+      SetSockOpt(Sock,SOL_SOCKET, SO_REUSEADDR,@SO_TRUE,SizeOf(SO_TRUE));
+      {$endif BSD}
+      {$endif UNIX}
     end;
     exit;
   end;
@@ -4884,15 +4888,27 @@ procedure TCrtSocket.OpenBind(const aServer, aPort: SockString;
 const BINDTXT: array[boolean] of string[4] = ('open','bind');
       BINDMSG: array[boolean] of string = ('Is a server running on this address:port?',
         'Another process may be currently listening to this port!');
+var
+  aRetryCount:integer;
 begin
   fSocketLayer := aLayer;
   fWasBind := doBind;
+  aRetryCount:=0;
   if aSock<=0 then begin
     if (aPort='') and (aLayer<>cslUNIX) then
       fPort := DEFAULT_PORT[aTLS] else // default port is 80/443 (HTTP/S)
       fPort := aPort;
     fServer := aServer;
+    while aRetryCount<5 do
+    begin
     fSock := CallServer(aServer,Port,doBind,aLayer,Timeout); // OPEN or BIND
+      if fSock>0 then break;
+      if (NOT WSAIsFatalError) then
+      begin
+        sleep(10);
+        Inc(aRetryCount);
+      end;
+     end;
     if fSock<=0 then
       raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s) failed: %s',
         [aServer,fPort,BINDTXT[doBind],BINDMSG[doBind]],-1);
@@ -9920,6 +9936,7 @@ begin
         conn.DoOnDisconnect();
         conn.Disconnect();
         Dispose(conn);
+        conn:=nil;
       end;
     end;
     fPendingForClose.Free;
@@ -9932,6 +9949,7 @@ begin
   DeleteCriticalSection(fSafe);
   {$ENDIF}
   FreeMem(fConnections, fConnectionsCapacity * SizeOf(PHttpApiWebSocketConnection));
+  fConnections:=nil;
   inherited;
 end;
 
@@ -10319,6 +10337,7 @@ begin
     fRegisteredProtocols^[i].Free;
   fRegisteredProtocols^ := nil;
   Dispose(fRegisteredProtocols);
+  fRegisteredProtocols:=nil;
   inherited;
 end;
 
@@ -10516,6 +10535,7 @@ begin
       LeaveCriticalSection(conn.Protocol.fSafe);
     end;
     Dispose(conn);
+    conn:=nil;
   end;
 end;
 
