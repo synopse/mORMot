@@ -2560,8 +2560,7 @@ procedure SynLogException(const Ctxt: TSynLogExceptionContext);
       ndx, n: cardinal;
   begin
     result := nil;
-    if SynLogFileList=nil then begin
-      // we are here if no log content was generated yet (i.e. no log file yet)
+    if SynLogFileList.Count=0 then begin // no log content yet
       for i := 0 to SynLogFamily.Count-1 do
         with TSynLogFamily(SynLogFamily.List[i]) do
         if fHandleExceptions then begin
@@ -3171,8 +3170,6 @@ end;
 function TSynLogFamily.CreateSynLog: TSynLog;
 var i: integer;
 begin
-  if SynLogFileList=nil then
-    GarbageCollectorFreeAndNil(SynLogFileList,TSynObjectListLocked.Create);
   SynLogFileList.Safe.Lock;
   try
     result := fSynLogClass.Create(self);
@@ -3252,7 +3249,7 @@ begin
       if Terminated then
         exit;
       {$endif}
-      if SynLogFileList=nil then
+      if SynLogFileList.Count=0 then
         continue; // nothing to flush
       inc(AutoFlushSecondElapsed);
       SynLogFileList.Safe.Lock;
@@ -3376,10 +3373,11 @@ begin
     result := nil;
 end;
 
-procedure TSynLogFamily.SynLogFileListEcho(const aEvent: TOnTextWriterEcho; aEventAdd: boolean);
+procedure TSynLogFamily.SynLogFileListEcho(const aEvent: TOnTextWriterEcho;
+  aEventAdd: boolean);
 var i: integer;
 begin
-  if (self=nil) or (SynLogFileList=nil) or not Assigned(aEvent) then
+  if (self=nil) or (SynLogFileList.Count=0) or not Assigned(aEvent) then
     exit;
   SynLogFileList.Safe.Lock;
   try
@@ -3443,7 +3441,7 @@ var log: TSynLog;
     P: PAnsiChar;
 begin
   result := '';
-  if SynLogFileList<>nil then begin
+  if SynLogFileList.Count<>0 then begin
     SynLogFileList.Safe.Lock;
     try
       for i := 0 to SynLogFileList.Count-1 do
@@ -5952,6 +5950,7 @@ initialization
   assert(ord(sfLocal7)=23);
   assert(ord(ssDebug)=7);
   InitializeCriticalSection(GlobalThreadLock); // will be deleted with the process
+  GarbageCollectorFreeAndNil(SynLogFileList,TSynObjectListLocked.Create);
   {$ifndef NOEXCEPTIONINTERCEPT}
   DefaultSynLogExceptionToStr := InternalDefaultSynLogExceptionToStr;
   {$endif}
