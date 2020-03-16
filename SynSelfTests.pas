@@ -3323,21 +3323,26 @@ var i,j: integer;
     check(not match.Match('1a2'));
   end;
 
+  function GL(a,b: PAnsiChar; const c: RawUTF8): boolean;
+  begin // avoid Delphi compiler complains about PUTF8Char/PAnsiChar types
+    result := GetLineContains(pointer(a), pointer(b), pointer(c));
+  end;
+
 begin
   V := '123456789ABC'#10'DEF0zxy';
-  Check(GetLineContains(@V[1],nil,'1'));
-  Check(GetLineContains(@V[1],nil,'C'));
-  Check(GetLineContains(@V[1],nil,'89'));
-  Check(not GetLineContains(@V[1],nil,'ZX'));
-  Check(GetLineContains(@V[14],nil,'ZXY'));
-  Check(not GetLineContains(@V[1],nil,'890'));
-  Check(GetLineContains(@V[1],@V[21],'89'));
-  Check(GetLineContains(@V[14],@V[21],'ZX'));
-  Check(not GetLineContains(@V[1],@V[21],'ZX'));
-  Check(GetLineContains(@V[14],@V[21],'ZXY'));
-  Check(not GetLineContains(@V[1],@V[5],'89'));
-  Check(not GetLineContains(@V[1],@V[15],'ZXY'));
-  Check(not GetLineContains(@V[14],@V[17],'ZXY'));
+  Check(GL(@V[1],nil,'1'));
+  Check(GL(@V[1],nil,'C'));
+  Check(GL(@V[1],nil,'89'));
+  Check(not GL(@V[1],nil,'ZX'));
+  Check(GL(@V[14],nil,'ZXY'));
+  Check(not GL(@V[1],nil,'890'));
+  Check(GL(@V[1],@V[21],'89'));
+  Check(GL(@V[14],@V[21],'ZX'));
+  Check(not GL(@V[1],@V[21],'ZX'));
+  Check(GL(@V[14],@V[21],'ZXY'));
+  Check(not GL(@V[1],@V[5],'89'));
+  Check(not GL(@V[1],@V[15],'ZXY'));
+  Check(not GL(@V[14],@V[17],'ZXY'));
   V := '1234567890123456'#13'1234567890123456789';
   for j := 1 to 16 do begin
     for i := j to 16 do begin

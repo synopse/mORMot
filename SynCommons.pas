@@ -3941,7 +3941,8 @@ type
 /// retrieve published methods information about any class instance
 // - will optionaly accept a Class, in this case Instance is ignored
 // - will work with FPC and Delphi RTTI
-function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray; aClass: TClass = nil): integer;
+function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray;
+  aClass: TClass = nil): integer;
 
 {$ifdef LINUX}
 const
@@ -6615,10 +6616,10 @@ type
   TSynNameValueItemDynArray = array of TSynNameValueItem;
 
   /// event handler used to convert on the fly some UTF-8 text content
-  TConvertRawUTF8 = function(const text: RawUTF8): RawUTF8 of object;
+  TOnSynNameValueConvertRawUTF8 = function(const text: RawUTF8): RawUTF8 of object;
 
   /// callback event used by TSynNameValue
-  TSynNameValueNotify = procedure(const Item: TSynNameValueItem; Index: PtrInt) of object;
+  TOnSynNameValueNotify = procedure(const Item: TSynNameValueItem; Index: PtrInt) of object;
 
   /// pseudo-class used to store Name/Value RawUTF8 pairs
   // - use internaly a TDynArrayHashed instance for fast retrieval
@@ -6628,7 +6629,7 @@ type
   // - Delphi "object" is buggy on stack -> also defined as record with methods
   {$ifdef USERECORDWITHMETHODS}TSynNameValue = record private
   {$else}TSynNameValue = object protected{$endif}
-    fOnAdd: TSynNameValueNotify;
+    fOnAdd: TOnSynNameValueNotify;
     function GetBlobData: RawByteString;
     procedure SetBlobData(const aValue: RawByteString);
     function GetStr(const aName: RawUTF8): RawUTF8; {$ifdef HASINLINE}inline;{$endif}
@@ -6651,8 +6652,8 @@ type
     // section content
     // - will first call Init(false) to initialize the internal array
     // - Section can be retrieved e.g. via FindSectionFirstLine()
-    procedure InitFromIniSection(Section: PUTF8Char; OnTheFlyConvert: TConvertRawUTF8=nil;
-      OnAdd: TSynNameValueNotify=nil);
+    procedure InitFromIniSection(Section: PUTF8Char; OnTheFlyConvert: TOnSynNameValueConvertRawUTF8=nil;
+      OnAdd: TOnSynNameValueNotify=nil);
     /// reset content, then add all name=value; CSV pairs
     // - will first call Init(false) to initialize the internal array
     // - if ItemSep=#10, then any kind of line feed (CRLF or LF) will be handled
@@ -6737,7 +6738,7 @@ type
     /// can be used to set or retrieve all stored data as one BLOB content
     property BlobData: RawByteString read GetBlobData write SetBlobData;
     /// event triggerred after an item has just been added to the list
-    property OnAfterAdd: TSynNameValueNotify read fOnAdd write fOnAdd;
+    property OnAfterAdd: TOnSynNameValueNotify read fOnAdd write fOnAdd;
     /// search for a Name, return the associated Value as a UTF-8 string
     // - returns '' if aName is not found in the stored keys
     property Str[const aName: RawUTF8]: RawUTF8 read GetStr; default;
@@ -13711,7 +13712,7 @@ function VarIs(const V: Variant; const VTypes: TVarDataTypes): Boolean;
 
 type
   /// custom variant handler with easier/faster access of variant properties,
-  // and JSON support
+  // and JSON serialization support
   // - default GetProperty/SetProperty methods are called via some protected
   // virtual IntGet/IntSet methods, with less overhead (to be overriden)
   // - these kind of custom variants will be faster than the default
@@ -14127,6 +14128,7 @@ type
   // ! assert(_Json('["one",2,3]')='["one",2,3]');
   TDocVariant = class(TSynInvokeableVariantType)
   protected
+    /// name and values interning are shared among all TDocVariantData instances
     fInternNames, fInternValues: TRawUTF8Interning;
     /// fast getter/setter implementation
     function IntGet(var Dest: TVarData; const Instance: TVarData;
@@ -20379,7 +20381,7 @@ type
     );
     tkDynArray: (
       {$ifdef FPC}
-      elSize: SizeUInt;
+      elSize: SizeUInt; // and $7FFFFFFF = item/record size
       elType2: PTypeInfoStored;
       varType: LongInt;
       elType: PTypeInfoStored;
@@ -38508,7 +38510,8 @@ begin
   FastSetString(result,@DelphiName^[TrimLeft+1],ord(DelphiName^[0])-TrimLeft);
 end;
 
-function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray; aClass: TClass): integer;
+function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray;
+  aClass: TClass): integer;
   procedure AddParentsFirst(C: TClass);
   type
     TMethodInfo = packed record
@@ -41218,13 +41221,9 @@ var
   recInitData: PFPCRecInitData; // low-level type redirected from SynFPCTypInfo
   aPointer:pointer;
 begin
-  if Assigned(info^.RecInitInfo) then begin
-    recInitData := PFPCRecInitData(AlignTypeDataClean(PTypeInfo(info^.RecInitInfo+2+PByte(info^.RecInitInfo+1)^)));
-    firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
-    inc(PByte(firstfield),SizeOf(recInitData^.ManagedFieldCount));
-    firstfield := AlignPTypeInfo(firstfield);
-    result := recInitData^.ManagedFieldCount;
-  end else begin
+  if Assigned(info^.RecInitInfo) then
+    recInitData := PFPCRecInitData(AlignTypeDataClean(PTypeInfo(info^.RecInitInfo+2+PByte(info^.RecInitInfo+1)^)))
+  else begin
     aPointer:=@info^.RecInitInfo;
     {$ifdef FPC_PROVIDE_ATTR_TABLE}
     dec(PByte(aPointer),SizeOf(Pointer));
@@ -41235,11 +41234,11 @@ begin
     {$endif}
     {$endif}
     recInitData := PFPCRecInitData(aPointer);
-    firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
-    inc(PByte(firstfield),SizeOf(recInitData^.ManagedFieldCount));
-    firstfield := AlignPTypeInfo(firstfield);
-    result := recInitData^.ManagedFieldCount;
   end;
+  firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
+  inc(PByte(firstfield),SizeOf(recInitData^.ManagedFieldCount));
+  firstfield := AlignPTypeInfo(firstfield);
+  result := recInitData^.ManagedFieldCount;
 {$else}
 begin
   firstfield := @info^.ManagedFields[0];
@@ -51474,10 +51473,10 @@ begin
   info := GetTypeInfo(aTypeInfo,tkDynArray);
   if info=nil then
     exit; // invalid type information
-  if (info^.ElType<>nil) or (Source=nil) or
-     (Source[0]<>AnsiChar(info^.elSize)) or (Source[1]<>#0) then
-    exit; // invalid type information or Source content
   ElemSize := info^.elSize {$ifdef FPC}and $7FFFFFFF{$endif};
+  if (info^.ElType<>nil) or (Source=nil) or
+     (Source[0]<>AnsiChar(ElemSize)) or (Source[1]<>#0) then
+    exit; // invalid type information or Source content
   inc(Source,2);
   Count := FromVarUInt32(PByte(Source)); // dynamic array count
   if (Count<>0) and (NoHash32Check or (Hash32(@Hash[1],Count*ElemSize)=Hash[0])) then
@@ -61148,7 +61147,7 @@ begin
 end;
 
 procedure TSynNameValue.InitFromIniSection(Section: PUTF8Char;
-  OnTheFlyConvert: TConvertRawUTF8; OnAdd: TSynNameValueNotify);
+  OnTheFlyConvert: TOnSynNameValueConvertRawUTF8; OnAdd: TOnSynNameValueNotify);
 var s: RawUTF8;
     i: integer;
 begin

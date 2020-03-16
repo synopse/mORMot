@@ -19941,7 +19941,7 @@ end;
 
 function TPropInfo.SetterIsField: boolean;
 begin
- result := {$ifdef FPC}(PropProcs shr 2)and 3{$else}PropWrap(SetProc).Kind{$endif}=ptField;
+  result := {$ifdef FPC}(PropProcs shr 2)and 3{$else}PropWrap(SetProc).Kind{$endif}=ptField;
 end;
 
 function TPropInfo.GetFieldAddr(Instance: TObject): pointer;

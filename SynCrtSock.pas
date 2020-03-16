@@ -3569,43 +3569,6 @@ begin
   end;
 end;
 
-function GetHeaderValue(var headers: SockString; const upname: SockString;
-  deleteInHeaders: boolean): SockString;
-var i,j,k: PtrInt;
-begin
-  result := '';
-  if (headers='') or (upname='') then
-    exit;
-  i := 1;
-  repeat
-    k := length(headers)+1;
-    for j := i to k-1 do
-      if headers[j]<' ' then begin
-        k := j;
-        break;
-      end;
-    if IdemPChar(@headers[i],pointer(upname)) then begin
-      j := i;
-      inc(i,length(upname));
-      while headers[i]=' ' do inc(i);
-      result := copy(headers,i,k-i);
-      if deleteInHeaders then begin
-        while true do // delete also ending #13#10
-          if (headers[k]=#0) or (headers[k]>=' ') then
-            break else
-            inc(k);
-        delete(headers,j,k-j);
-      end;
-      exit;
-    end;
-    i := k;
-    while headers[i]<' ' do
-      if headers[i]=#0 then
-        exit else
-        inc(i);
-  until false;
-end;
-
 // rewrite some functions to avoid unattempted ansi<->unicode conversion
 
 function PosCh(ch: AnsiChar; const s: SockString): PtrInt;
@@ -3640,8 +3603,8 @@ begin
     SetString(result,PAnsiChar(@PByteArray(S)[start]),L);
 end;
 
-function Trim(const S: SockString): SockString;
 {$ifdef FPC_OR_PUREPASCAL}
+function Trim(const S: SockString): SockString;
 var i, L: PtrInt;
 begin
   L := Length(S);
@@ -3658,6 +3621,7 @@ begin
   end;
 end;
 {$else}
+function Trim(const S: SockString): SockString;
 asm  // fast implementation by John O'Harrow
   test eax,eax                   {S = nil?}
   xchg eax,edx
@@ -3689,6 +3653,42 @@ asm  // fast implementation by John O'Harrow
   jmp  @@CheckDone
 end;
 {$endif}
+
+function GetHeaderValue(var headers: SockString; const upname: SockString;
+  deleteInHeaders: boolean): SockString;
+var i,j,k: PtrInt;
+begin
+  {$ifdef FPC} Finalize(result); {$else} result := ''; {$endif}
+  if (headers='') or (upname='') then
+    exit;
+  i := 1;
+  repeat
+    k := length(headers)+1;
+    for j := i to k-1 do
+      if headers[j]<' ' then begin
+        k := j;
+        break;
+      end;
+    if IdemPCharUp(@headers[i],pointer(upname),@NormToUpper) then begin
+      j := i;
+      inc(i,length(upname));
+      TrimCopy(headers,i,k-i,result);
+      if deleteInHeaders then begin
+        while true do // delete also ending #13#10
+          if (headers[k]=#0) or (headers[k]>=' ') then
+            break else
+            inc(k);
+        delete(headers,j,k-j);
+      end;
+      exit;
+    end;
+    i := k;
+    while headers[i]<' ' do
+      if headers[i]=#0 then
+        exit else
+        inc(i);
+  until false;
+end;
 
 procedure UpperMove(Source, Dest: PByte; ToUp: PByteArray; L: cardinal);
 begin
@@ -6756,7 +6756,7 @@ begin
        else P := nil;
        end;
     1: include(HeaderFlags,transferChuked);
-    2: case IdemPCharArray(P+12,['CLOSE', 'UPGRADE', 'KEEP-ALIVE']) of
+    2: case IdemPCharArray(P+12,['CLOSE','UPGRADE','KEEP-ALIVE']) of
        0: include(HeaderFlags,connectionClose);
        1: include(HeaderFlags,connectionUpgrade);
        2: begin
@@ -9065,7 +9065,8 @@ begin
           P := Req^.Headers.pUnknownHeaders;
           if P<>nil then
           for i := 1 to Req^.Headers.UnknownHeaderCount do
-            if (P^.NameLength=L) and IdemPChar(P^.pName,Pointer(fRemoteConnIDHeaderUpper)) then begin
+            if (P^.NameLength=L) and
+               IdemPChar(P^.pName,Pointer(fRemoteConnIDHeaderUpper)) then begin
               SetString(RemoteConn,p^.pRawValue,p^.RawValueLength); // need #0 end
               R := pointer(RemoteConn);
               Context.fConnectionID := GetNextItemUInt64(R);
