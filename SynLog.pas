@@ -2438,18 +2438,20 @@ end;
 function IsActiveLogFile(const aFileName: TFileName): boolean;
 var i: PtrInt;
     one: ^TSynLog;
+    files: TSynObjectListLocked;
 begin
   result := true;
-  SynLogFileList.Safe.Lock;
+  files := SynLogFileList;
+  files.Safe.Lock;
   try
-    one := pointer(SynLogFileList.List);
-    for i := 1 to SynLogFileList.Count do
+    one := pointer(files.List);
+    for i := 1 to files.Count do
       if {$ifdef MSWINDOWS}CompareText(one^.FileName,aFileName)=0{$else}
          one^.FileName=aFileName{$endif} then
         exit else
         inc(one);
   finally
-    SynLogFileList.Safe.UnLock;
+    files.Safe.UnLock;
   end;
   result := false;
 end;
@@ -2555,12 +2557,14 @@ end;
 // this is the main entry point for all intercepted exceptions
 procedure SynLogException(const Ctxt: TSynLogExceptionContext);
   function GetHandleExceptionSynLog: TSynLog;
-  var Index: ^TSynLogFileIndex;
+  var files: TSynObjectListLocked;
+      Index: ^TSynLogFileIndex;
       i: PtrInt;
       ndx, n: cardinal;
   begin
     result := nil;
-    if SynLogFileList.Count=0 then begin // no log content yet
+    files := SynLogFileList;
+    if files.Count=0 then begin // no log content yet
       for i := 0 to SynLogFamily.Count-1 do
         with TSynLogFamily(SynLogFamily.List[i]) do
         if fHandleExceptions then begin
@@ -2568,26 +2572,26 @@ procedure SynLogException(const Ctxt: TSynLogExceptionContext);
           exit;
         end;
     end else begin
-      SynLogFileList.Safe.Lock;
+      files.Safe.Lock;
       try
         Index := @SynLogFileIndexThreadVar;
-        n := SynLogFileList.Count;
+        n := files.Count;
         for i := 0 to high(Index^) do begin
           ndx := Index^[i]-1;
           if ndx<=n then begin
-            result := TSynLog(SynLogFileList.List[ndx]);
+            result := files.List[ndx];
             if result.fFamily.fHandleExceptions then
               exit;
           end;
         end;
         for i := 0 to n-1 do begin
-          result := TSynLog(SynLogFileList.List[i]);
+          result := files.List[i];
           if result.fFamily.fHandleExceptions then
             exit;
         end;
         result := nil;
       finally
-        SynLogFileList.Safe.UnLock;
+        files.Safe.UnLock;
       end;
     end;
   end;
@@ -3234,6 +3238,7 @@ end;
 procedure TAutoFlushThread.Execute;
 {$endif}
 var i: integer;
+    files: TSynObjectListLocked;
 begin
   SetThreadNameDefault(GetCurrentThreadID,'SynLog AutoFlushProc');
   try
@@ -3249,13 +3254,14 @@ begin
       if Terminated then
         exit;
       {$endif}
-      if SynLogFileList.Count=0 then
+      files := SynLogFileList;
+      if files.Count=0 then
         continue; // nothing to flush
       inc(AutoFlushSecondElapsed);
-      SynLogFileList.Safe.Lock;
+      files.Safe.Lock;
       try
-        for i := 0 to SynLogFileList.Count-1 do
-        with TSynLog(SynLogFileList.List[i]) do
+        for i := 0 to files.Count-1 do
+        with TSynLog(files.List[i]) do
           if Terminated then
             break else // avoid GPF
           if (fFamily.fAutoFlush<>0) and (fWriter<>nil) and (fWriter.PendingBytes>1) and
@@ -3268,7 +3274,7 @@ begin
               Flush(false); // write pending data
             end;
        finally
-         SynLogFileList.Safe.UnLock;
+         files.Safe.UnLock;
        end;
     until Terminated;
   finally
@@ -3376,19 +3382,21 @@ end;
 procedure TSynLogFamily.SynLogFileListEcho(const aEvent: TOnTextWriterEcho;
   aEventAdd: boolean);
 var i: integer;
+    files: TSynObjectListLocked;
 begin
   if (self=nil) or (SynLogFileList.Count=0) or not Assigned(aEvent) then
     exit;
-  SynLogFileList.Safe.Lock;
+  files := SynLogFileList;
+  files.Safe.Lock;
   try
-    for i := 0 to SynLogFileList.Count-1 do
-      if TSynLog(SynLogFileList.List[i]).fFamily=self then
-        with TSynLog(SynLogFileList.List[i]).fWriter do
+    for i := 0 to files.Count-1 do
+      if TSynLog(files.List[i]).fFamily=self then
+        with TSynLog(files.List[i]).fWriter do
           if aEventAdd then
             EchoAdd(aEvent) else
             EchoRemove(aEvent);
   finally
-    SynLogFileList.Safe.UnLock;
+    files.Safe.UnLock;
   end;
 end;
 
@@ -3444,9 +3452,8 @@ begin
   if SynLogFileList.Count<>0 then begin
     SynLogFileList.Safe.Lock;
     try
-      for i := 0 to SynLogFileList.Count-1 do
-      if SynLogFileList.Count=1 then begin
-        log := SynLogFileList.List[0];
+      for i := 0 to SynLogFileList.Count-1 do begin
+        log := SynLogFileList.List[i];
         if log.fFamily<>self then
           continue;
         EnterCriticalSection(GlobalThreadLock);
