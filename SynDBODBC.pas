@@ -1178,13 +1178,15 @@ begin
       raise EODBCException.CreateUTF8(
         '%.Connect: unrecognized provider DBMSName=% DriverName=% DBMSVersion=%',
         [self,DBMSName,DriverName,DBMSVersion]);
-    Log.Log(sllDebug,'Connected to % using % % recognized as %',
-      [DBMSName,DriverName,DBMSVersion,fProperties.DBMSEngineName]);
+    if Log<>nil then
+      Log.Log(sllDebug,'Connected to % using % % recognized as %',
+        [DBMSName,DriverName,DBMSVersion,fProperties.DBMSEngineName]);
     // notify any re-connection
     inherited Connect;
   except
     on E: Exception do begin
-      Log.Log(sllError,E);
+      if Log<>nil then
+        Log.Log(sllError,E);
       self.Disconnect; // clean up on fail
       raise;
     end;
@@ -1863,7 +1865,8 @@ begin
       SQL_HANDLE_STMT,fStatement);
   except
     on E: Exception do begin
-      Log.Log(sllError,E);
+      if Log<>nil then
+        Log.Log(sllError,E);
       ODBC.FreeHandle(SQL_HANDLE_STMT,fStatement);
       fStatement := nil;
       raise;

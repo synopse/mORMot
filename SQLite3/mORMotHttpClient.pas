@@ -493,9 +493,10 @@ begin
   end else
     Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501 indicates not socket closed
 {$ifdef WITHLOG}
-  with Call do
-    log.Log(sllClient,'% % status=% len=% state=%',
-      [method,url,OutStatus,length(OutBody),OutInternalState],self);
+  if log<>nil then
+    with Call do
+      log.Log(sllClient,'% % status=% len=% state=%',
+        [method,url,OutStatus,length(OutBody),OutInternalState],self);
 {$endif}
 end;
 
@@ -861,9 +862,10 @@ begin
       end;
   end;
 {$ifdef WITHLOG}
-  if result<>'' then
-    log.Log(sllWarning,'[%] error upgrading %',[result,sockets],self) else
-    log.Log(sllHTTP,'HTTP link upgraded to WebSockets using %',[sockets],self);
+  if log<>nil then
+    if result<>'' then
+      log.Log(sllWarning,'[%] error upgrading %',[result,sockets],self) else
+      log.Log(sllHTTP,'HTTP link upgraded to WebSockets using %',[sockets],self);
 {$endif}
 end;
 

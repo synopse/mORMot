@@ -254,7 +254,8 @@ var
 
   procedure PendingDelete(i: integer; const reason: RawUTF8);
   begin
-    log.Log(sllDebug, 'ConnectionCreate rejected %', [reason], self);
+    if log<>nil then
+      log.Log(sllDebug, 'ConnectionCreate rejected %', [reason], self);
     fPendingGet.Delete(i);
   end;
 

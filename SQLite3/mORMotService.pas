@@ -1053,7 +1053,8 @@ procedure TService.DoCtrlHandle(Code: DWORD);
 var log: ISynLog;
 begin
   log := ServiceLog.Enter(self, 'DoCtrlHandle');
-  ServiceLog.Add.Log(sllInfo,'%: command % received from OS',[ServiceName,Code],self);
+  if log<>nil then
+    log.Log(sllInfo,'%: command % received from OS',[ServiceName,Code],self);
   try
     case Code of
     SERVICE_CONTROL_STOP: begin

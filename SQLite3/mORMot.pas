@@ -37289,7 +37289,7 @@ begin
     if aResponseHead<>nil then
       aResponseHead^ := header;
     {$ifdef WITHLOG}
-    if (aResponse<>'') and (sllServiceReturn in fLogFamily.Level) then
+    if (log<>nil) and (aResponse<>'') and (sllServiceReturn in fLogFamily.Level) then
       if IsHTMLContentTypeTextual(pointer(header)) then
         log.Log(sllServiceReturn,aResponse,self,MAX_SIZE_RESPONSE_LOG) else
         log.Log(sllServiceReturn,'% bytes [%]',[length(aResponse),header],self);
@@ -41305,7 +41305,8 @@ begin
   Ctxt := ServicesRouting.Create(self,Call);
   try
     {$ifdef WITHLOG}
-    Ctxt.Log := Log.Instance;
+    if log<>nil then
+      Ctxt.Log := log.Instance;
     {$endif}
     Ctxt.SafeProtocolID := safeID;
     if fShutdownRequested then
@@ -61008,7 +61009,8 @@ begin
   if (status=HTTP_UNAUTHORIZED) and (clientDrivenID<>'') and
      (fInstanceCreation=sicClientDriven) and (aClientDrivenID<>nil) then begin
     {$ifdef WITHLOG}
-    log.Log(sllClient,'% -> try to recreate ClientDrivenID',[resp],self);
+    if log<>nil then
+      log.Log(sllClient,'% -> try to recreate ClientDrivenID',[resp],self);
     {$endif}
     clientDrivenID := '';
     aClientDrivenID^ := 0;
@@ -61035,11 +61037,11 @@ begin
     end;
     // decode JSON object
     {$ifdef WITHLOG}
-    if ((service=nil) or ([smdConst,smdVar]*service^.HasSPIParams=[])) and
-       not(optNoLogOutput in fExecution[m].Options) then
+    if (log<>nil) and (resp<>'') and not(optNoLogOutput in fExecution[m].Options) and
+       ((service=nil) or ([smdConst,smdVar]*service^.HasSPIParams=[])) then
       with fRest.fLogFamily do
-        if (sllServiceReturn in Level) and (resp<>'') then
-          SynLog.Log(sllServiceReturn,resp,self,MAX_SIZE_RESPONSE_LOG);
+        if sllServiceReturn in Level then
+          log.Log(sllServiceReturn,resp,self,MAX_SIZE_RESPONSE_LOG);
     {$endif WITHLOG}
     if fResultAsJSONObject then begin
       if aResult<>nil then
@@ -61068,14 +61070,15 @@ begin
   end else begin
     // custom answer returned in TServiceCustomAnswer
     {$ifdef WITHLOG}
-    with fRest.fLogFamily do
-      if (sllServiceReturn in Level) and (resp<>'') then begin
-        ct := FindIniNameValue(pointer(head), HEADER_CONTENT_TYPE_UPPER);
-        if (resp[1] in ['[','{','"']) and IdemPChar(pointer(ct), JSON_CONTENT_TYPE_UPPER) then
-          SynLog.Log(sllServiceReturn,resp,self,MAX_SIZE_RESPONSE_LOG) else
-          SynLog.Log(sllServiceReturn,'TServiceCustomAnswer=% % len=% %',
-            [status,ct,length(resp),EscapeToShort(resp)],self);
-      end;
+    if (log<>nil) and (resp<>'') then
+      with fRest.fLogFamily do
+        if sllServiceReturn in Level then begin
+          ct := FindIniNameValue(pointer(head),HEADER_CONTENT_TYPE_UPPER);
+          if (resp[1] in ['[','{','"']) and IdemPChar(pointer(ct), JSON_CONTENT_TYPE_UPPER) then
+            log.Log(sllServiceReturn,resp,self,MAX_SIZE_RESPONSE_LOG) else
+            log.Log(sllServiceReturn,'TServiceCustomAnswer=% % len=% %',
+              [status,ct,length(resp),EscapeToShort(resp)],self);
+        end;
     {$endif WITHLOG}
     aServiceCustomAnswer^.Status := status;
     aServiceCustomAnswer^.Header := head;

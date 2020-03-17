@@ -2287,7 +2287,8 @@ begin
     inherited Connect; // notify any re-connection
   except
     on E: Exception do begin
-      Log.Log(sllError,E);
+      if Log<>nil then
+        Log.Log(sllError,E);
       fSession := nil; // mark not connected
       fDBInitialize := nil;
       DataInitialize := nil;
@@ -2318,7 +2319,8 @@ begin
     CoUninit;
   except
     on E: Exception do
-      Log.Log(sllError,E);
+      if Log<>nil then
+        Log.Log(sllError,E);
   end;
 end;
 
@@ -2484,11 +2486,13 @@ begin
         fConnectionString := tmp;
         if tmp<>nil then
           CoTaskMemFree(tmp);
-        Log.Log(sllDB,'New connection settings set',self);
+        if Log<>nil then
+          Log.Log(sllDB,'New connection settings set',self);
         result := true;
       end;
       DB_E_CANCELED:
-        Log.Log(sllDB,'Canceled',self);
+        if Log<>nil then
+          Log.Log(sllDB,'Canceled',self);
       else OleCheck(res);
       end;
     finally
@@ -2496,7 +2500,8 @@ begin
     end;
   except
     on E: Exception do
-      Log.Log(sllError,E);
+      if Log<>nil then
+        Log.Log(sllError,E);
   end;
 end;
 

@@ -512,9 +512,10 @@ begin
     result := true;
   finally
     fSafe.UnLock;
-    log.Log(sllHttp,'AddServer(%,Root=%,Port=%,Public=%:%)=%',
-      [aServer,aServer.Model.Root,fPort,fPublicAddress,fPublicPort,
-       BOOL_STR[result]],self);
+    if log<>nil then
+      log.Log(sllHttp,'AddServer(%,Root=%,Port=%,Public=%:%)=%',
+        [aServer,aServer.Model.Root,fPort,fPublicAddress,fPublicPort,
+         BOOL_STR[result]],self);
   end;
 end;
 
@@ -560,8 +561,9 @@ begin
     end;
   finally
     fSafe.UnLock;
-    log.Log(sllHttp,'%.RemoveServer(Root=%)=%',
-      [self,aServer.Model.Root,BOOL_STR[result]],self);
+    if log<>nil then
+      log.Log(sllHttp,'%.RemoveServer(Root=%)=%',
+        [self,aServer.Model.Root,BOOL_STR[result]],self);
   end;
 end;
 
@@ -697,9 +699,9 @@ end;
 destructor TSQLHttpServer.Destroy;
 var log: ISynLog;
 begin
-  log := fLog.Enter(self, 'Destroy');
-  fLog.Add.Log(sllHttp,'% finalized for %',[fHttpServer,
-    Plural('server',length(fDBServers))],self);
+  log := fLog.Enter(self,'Destroy');
+  if log<>nil then
+    log.Log(sllHttp,'% finalized for %',[fHttpServer,Plural('server',length(fDBServers))],self);
   Shutdown(true); // but don't call fDBServers[i].Server.Shutdown
   FreeAndNil(fHttpServer);
   inherited Destroy;

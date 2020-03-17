@@ -3967,7 +3967,8 @@ begin
   {$ifdef WITHLOG}
   if SQLShouldBeLogged(aSQL) then begin
     log := fLog.Enter(self{$ifndef DELPHI5OROLDER},'ExecuteAll'{$endif});
-    log.Log(sllSQL,aSQL,self,4096);
+    if log<>nil then
+      log.Log(sllSQL,aSQL,self,4096);
   end;
   {$endif WITHLOG}
   LockAndFlushCache; // don't trust aSQL -> assume modify -> inc(InternalState^)
@@ -4007,7 +4008,8 @@ begin
   {$ifdef WITHLOG}
   if SQLShouldBeLogged(aSQL) then begin
     log := fLog.Enter(self{$ifndef DELPHI5OROLDER},'Execute'{$endif});
-    log.Log(sllSQL,aSQL,self,2048);
+    if log<>nil then
+      log.Log(sllSQL,aSQL,self,2048);
   end;
   {$endif}
   Lock(aSQL);
@@ -4461,15 +4463,16 @@ end;
 
 function TSQLDataBase.DBClose: integer;
 {$ifdef WITHLOG}
-var FPCLog: ISynLog;
+var log: ISynLog;
 {$endif}
 begin
   result := SQLITE_OK;
   if (self=nil) or (fDB=0) then
     exit;
   {$ifdef WITHLOG}
-  FPCLog := fLog.Enter(self{$ifndef DELPHI5OROLDER},'DBClose'{$endif});
-  FPCLog.Log(sllDB,'closing [%] %',[FileName, KB(GetFileSize)],self);
+  log := fLog.Enter(self{$ifndef DELPHI5OROLDER},'DBClose'{$endif});
+  if log<>nil then
+    log.Log(sllDB,'closing [%] %',[FileName, KB(GetFileSize)],self);
   {$endif}
   if (sqlite3=nil) or not Assigned(sqlite3.close) then
     raise ESQLite3Exception.CreateUTF8('%.DBClose called with no sqlite3 global',[self]);
@@ -4483,15 +4486,16 @@ end;
 {$ifndef DELPHI5OROLDER}
 function TSQLDataBase.EnableCustomTokenizer: integer;
 {$ifdef WITHLOG}
-var FPCLog: ISynLog;
+var log: ISynLog;
 {$endif}
 begin
   result := SQLITE_OK;
   if (self=nil) or (fDB=0) then
     exit;
   {$ifdef WITHLOG}
-  FPCLog := fLog.Enter;
-  FPCLog.Log(sllDB,'Enable custom tokenizer for [%]',[FileName],self);
+  log := fLog.Enter;
+  if log<>nil then
+    log.Log(sllDB,'Enable custom tokenizer for [%]',[FileName],self);
   {$endif}
   if (sqlite3=nil) or not Assigned(sqlite3.db_config) then
     raise ESQLite3Exception.CreateUTF8('%.EnableCustomTokenizer called with no sqlite3 engine',[self]);
@@ -4503,9 +4507,9 @@ function TSQLDataBase.DBOpen: integer;
 var utf8: RawUTF8;
     i: integer;
 {$ifdef WITHLOG}
-    FPCLog: ISynLog;
+    log: ISynLog;
 begin
-  FPCLog := fLog.Enter('DBOpen %',[fFileNameWithoutPath],self);
+  log := fLog.Enter('DBOpen %',[fFileNameWithoutPath],self);
 {$else}
 begin
 {$endif WITHLOG}
@@ -4529,8 +4533,8 @@ begin
     result := sqlite3.open(pointer(utf8),fDB);
   if result<>SQLITE_OK then begin
     {$ifdef WITHLOG}
-    if FPCLog<>nil then
-      FPCLog.Log(sllError,'sqlite3_open ("%") failed with error % (%): %',
+    if log<>nil then
+      log.Log(sllError,'sqlite3_open ("%") failed with error % (%): %',
         [utf8,sqlite3_resultToErrorText(result),result,sqlite3.errmsg(fDB)]);
     {$endif WITHLOG}
     sqlite3.close(fDB); // should always be closed, even on failure
@@ -4612,8 +4616,9 @@ begin
   if i<0 then
     i := (-i) shr 10 else
     i := PageSize*CacheSize;
-  FPCLog.Log(sllDB,'"%" database file (%) opened with PageSize=% CacheSize=% (%)',
-    [FileName,KB(GetFileSize),PageSize,CacheSize,KB(i)],self);
+  if log<>nil then
+    log.Log(sllDB,'"%" database file (%) opened with PageSize=% CacheSize=% (%)',
+      [FileName,KB(GetFileSize),PageSize,CacheSize,KB(i)],self);
   {$endif}
 end;
 
