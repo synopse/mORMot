@@ -2492,7 +2492,7 @@ end;
 class procedure TSMVariant.New(const aObject: TSMObject;
   out aValue: variant);
 begin
-  if TVarData(aValue).VType and VTYPE_STATIC<>0 then
+  {$ifndef FPC}if TVarData(aValue).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(aValue);
   TSMVariantData(aValue).Init(aObject);
 end;
@@ -2500,14 +2500,14 @@ end;
 class procedure TSMVariant.New(cx: PJSContext; obj: PJSObject;
   out aValue: variant);
 begin
-  if TVarData(aValue).VType and VTYPE_STATIC<>0 then
+  {$ifndef FPC}if TVarData(aValue).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(aValue);
   TSMVariantData(aValue).Init(cx,obj);
 end;
 
 class procedure TSMVariant.New(engine: TSMEngine; out aValue: variant);
 begin
-  if TVarData(aValue).VType and VTYPE_STATIC<>0 then
+  {$ifndef FPC}if TVarData(aValue).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(aValue);
   TSMVariantData(aValue).InitNew(engine);
 end;

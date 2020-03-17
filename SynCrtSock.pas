@@ -4610,12 +4610,16 @@ begin
     end;
     SetSockOpt(Sock,SOL_SOCKET, SO_LINGER, @li, SizeOf(li));
     if OptVal>0 then begin
-      {$ifdef LINUX}
-      SetSockOpt(Sock,SOL_SOCKET, SO_REUSEADDR,@SO_TRUE,SizeOf(SO_TRUE));
-      {$endif}
+      {$ifdef UNIX}
       {$ifdef BSD}
+      SetSockOpt(Sock,SOL_SOCKET,SO_REUSEPORT,@SO_TRUE,SizeOf(SO_TRUE));
+      {$ifndef OpenBSD}
       SetSockOpt(Sock,SOL_SOCKET,SO_NOSIGPIPE,@SO_TRUE,SizeOf(SO_TRUE));
-      {$endif}
+      {$endif OpenBSD}
+      {$else}
+      SetSockOpt(Sock,SOL_SOCKET, SO_REUSEADDR,@SO_TRUE,SizeOf(SO_TRUE));
+      {$endif BSD}
+      {$endif UNIX}
     end;
     exit;
   end;
@@ -4711,7 +4715,7 @@ function WSAIsFatalError: boolean;
 var err: integer;
 begin
   err := WSAGetLastError;
-  result := (err<>NO_ERROR) and (err<>WSATRY_AGAIN) and (err<>WSAEINTR)
+  result := (err<>NO_ERROR) and (err<>WSATRY_AGAIN) and (err<>WSAEINTR) and (err<>WSAEADDRNOTAVAIL)
     {$ifdef MSWINDOWS}and (err<>WSAETIMEDOUT) and (err<>WSAEWOULDBLOCK){$endif};
 end;
 
@@ -4881,18 +4885,33 @@ end;
 
 procedure TCrtSocket.OpenBind(const aServer, aPort: SockString;
   doBind: boolean; aSock: integer; aLayer: TCrtSocketLayer; aTLS: boolean);
-const BINDTXT: array[boolean] of string[4] = ('open','bind');
+const
+  RETRYSLEEPTIME = 20;
+  RETRYCOUNT     = 5;
+  BINDTXT: array[boolean] of string[4] = ('open','bind');
       BINDMSG: array[boolean] of string = ('Is a server running on this address:port?',
         'Another process may be currently listening to this port!');
+var
+  aRetryCount:integer;
 begin
   fSocketLayer := aLayer;
   fWasBind := doBind;
+  aRetryCount:=0;
   if aSock<=0 then begin
     if (aPort='') and (aLayer<>cslUNIX) then
       fPort := DEFAULT_PORT[aTLS] else // default port is 80/443 (HTTP/S)
       fPort := aPort;
     fServer := aServer;
+    // To prevent a simple, non fatal timeout that can be recovered from.
+    // Just try again a few times.
+    // Timeout has been observed on native ARM(64) systems and on BSD systems running in a VM.
+    while (aRetryCount<RETRYCOUNT) do
+    begin
     fSock := CallServer(aServer,Port,doBind,aLayer,Timeout); // OPEN or BIND
+      if (fSock>0) OR (WSAIsFatalError) then break;
+      sleep(RETRYSLEEPTIME);
+      Inc(aRetryCount);
+    end;
     if fSock<=0 then
       raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s) failed: %s',
         [aServer,fPort,BINDTXT[doBind],BINDMSG[doBind]],-1);
@@ -4927,7 +4946,7 @@ end;
 
 procedure TCrtSocket.AcceptRequest(aClientSock: TSocket; aClientSin: PVarSin);
 begin
-  {$ifdef LINUX}
+  {$ifdef LINUXNOTBSD}
   // on Linux fd returned from accept() inherits all parent fd options
   // except O_NONBLOCK and O_ASYNC;
   fSock := aClientSock;
@@ -7007,10 +7026,11 @@ const SHUT_: array[boolean] of integer = (SHUT_RD, SHUT_RDWR);
 begin
   if sock<=0 then
     exit;
-  {$ifndef MSWINDOWS}
+  // Alf : to investigate under Linux and BSD
+  {$ifdef LINUXNOTBSD}
   // at last under UNIX close() is enough. For example nginx don't call shutdown
   if rdwr then
-  {$endif MSWINDOWS}
+  {$endif LINUXNOTBSD}
     Shutdown(sock,SHUT_[rdwr]); // SHUT_RD doesn't unlock accept() on Linux
   CloseSocket(sock); // SO_LINGER usually set to 5 or 10 seconds
 end;
@@ -9921,6 +9941,7 @@ begin
         conn.DoOnDisconnect();
         conn.Disconnect();
         Dispose(conn);
+        conn:=nil;
       end;
     end;
     fPendingForClose.Free;
@@ -9933,6 +9954,7 @@ begin
   DeleteCriticalSection(fSafe);
   {$ENDIF}
   FreeMem(fConnections, fConnectionsCapacity * SizeOf(PHttpApiWebSocketConnection));
+  fConnections:=nil;
   inherited;
 end;
 
@@ -10320,6 +10342,7 @@ begin
     fRegisteredProtocols^[i].Free;
   fRegisteredProtocols^ := nil;
   Dispose(fRegisteredProtocols);
+  fRegisteredProtocols:=nil;
   inherited;
 end;
 
@@ -10517,6 +10540,7 @@ begin
       LeaveCriticalSection(conn.Protocol.fSafe);
     end;
     Dispose(conn);
+    conn:=nil;
   end;
 end;
 
