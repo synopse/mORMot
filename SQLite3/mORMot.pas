@@ -54810,7 +54810,7 @@ begin
     {$endif FPC}
     na := n;
     if Kind=mkFunction then
-      inc(na); // function result is an addition output parameter
+      inc(na); // function result is an additional output parameter
     if na>MAX_METHOD_ARGS then
        RaiseError('method has too many parameters: %>%',[na,MAX_METHOD_ARGS]);
     SetLength(sm^.Args,na);
