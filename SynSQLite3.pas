@@ -3609,7 +3609,6 @@ end;
 procedure sqlite3InternalFree(p: pointer); cdecl;
 begin
   Freemem(p);
-  p:=nil;
 end;
 
 procedure sqlite3InternalFreeObject(p: pointer); cdecl;
@@ -5767,7 +5766,6 @@ end;
 procedure xFree(ptr: pointer); cdecl;
 begin
   FreeMem(ptr);
-  ptr:=nil;
 end;
 
 function xRealloc(ptr: pointer; size: integer): pointer; cdecl;

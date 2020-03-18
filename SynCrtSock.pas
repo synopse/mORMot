@@ -4610,16 +4610,16 @@ begin
     end;
     SetSockOpt(Sock,SOL_SOCKET, SO_LINGER, @li, SizeOf(li));
     if OptVal>0 then begin
-      {$ifdef UNIX}
-      {$ifdef BSD}
-      SetSockOpt(Sock,SOL_SOCKET,SO_REUSEPORT,@SO_TRUE,SizeOf(SO_TRUE));
-      {$ifndef OpenBSD}
-      SetSockOpt(Sock,SOL_SOCKET,SO_NOSIGPIPE,@SO_TRUE,SizeOf(SO_TRUE));
-      {$endif OpenBSD}
-      {$else}
-      SetSockOpt(Sock,SOL_SOCKET, SO_REUSEADDR,@SO_TRUE,SizeOf(SO_TRUE));
-      {$endif BSD}
-      {$endif UNIX}
+      {$ifdef LINUX}
+        {$ifdef BSD}
+          SetSockOpt(Sock,SOL_SOCKET,SO_REUSEPORT,@SO_TRUE,SizeOf(SO_TRUE));
+        {$ifndef OpenBSD}
+          SetSockOpt(Sock,SOL_SOCKET,SO_NOSIGPIPE,@SO_TRUE,SizeOf(SO_TRUE));
+        {$endif OpenBSD}
+        {$else}
+          SetSockOpt(Sock,SOL_SOCKET, SO_REUSEADDR,@SO_TRUE,SizeOf(SO_TRUE));
+        {$endif BSD}
+      {$endif LINUX}
     end;
     exit;
   end;
@@ -4885,36 +4885,31 @@ end;
 
 procedure TCrtSocket.OpenBind(const aServer, aPort: SockString;
   doBind: boolean; aSock: integer; aLayer: TCrtSocketLayer; aTLS: boolean);
-const
-  RETRYSLEEPTIME = 20;
-  RETRYCOUNT     = 5;
-  BINDTXT: array[boolean] of string[4] = ('open','bind');
+const BINDTXT: array[boolean] of string[4] = ('open','bind');
       BINDMSG: array[boolean] of string = ('Is a server running on this address:port?',
         'Another process may be currently listening to this port!');
-var
-  aRetryCount:integer;
+var retry: integer;
 begin
   fSocketLayer := aLayer;
   fWasBind := doBind;
-  aRetryCount:=0;
   if aSock<=0 then begin
     if (aPort='') and (aLayer<>cslUNIX) then
       fPort := DEFAULT_PORT[aTLS] else // default port is 80/443 (HTTP/S)
       fPort := aPort;
     fServer := aServer;
-    // To prevent a simple, non fatal timeout that can be recovered from.
-    // Just try again a few times.
-    // Timeout has been observed on native ARM(64) systems and on BSD systems running in a VM.
-    while (aRetryCount<RETRYCOUNT) do
-    begin
-    fSock := CallServer(aServer,Port,doBind,aLayer,Timeout); // OPEN or BIND
-      if (fSock>0) OR (WSAIsFatalError) then break;
-      sleep(RETRYSLEEPTIME);
-      Inc(aRetryCount);
-    end;
-    if fSock<=0 then
-      raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s) failed: %s',
-        [aServer,fPort,BINDTXT[doBind],BINDMSG[doBind]],-1);
+    if doBind then // allow small number of retries (e.g. XP or BSD during aggressive tests)
+      retry := 10 else 
+      retry := {$ifdef BSD}10{$else}2{$endif}; 
+    repeat
+      fSock := CallServer(aServer,Port,doBind,aLayer,Timeout); // OPEN or BIND
+      if (fSock>0) or WSAIsFatalError then
+        break;
+      dec(retry);
+      if retry=0 then
+        raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s) failed: %s',
+          [aServer,fPort,BINDTXT[doBind],BINDMSG[doBind]],-1);
+      sleep(10);
+    until false;
   end else
     fSock := aSock; // ACCEPT mode -> socket is already created by caller
   if TimeOut>0 then begin // set timout values for both directions
@@ -4954,7 +4949,7 @@ begin
   // on other OS inheritance is undefined, so call OpenBind to set all fd options
   OpenBind('','',false,aClientSock, fSocketLayer); // set the ACCEPTed aClientSock
   Linger := 5; // should remain open for 5 seconds after a closesocket() call
-  {$endif}
+  {$endif LINUXNOTBSD}
   if aClientSin<>nil then
     IPText(aClientSin^,fRemoteIP);
 end;
@@ -7026,9 +7021,8 @@ const SHUT_: array[boolean] of integer = (SHUT_RD, SHUT_RDWR);
 begin
   if sock<=0 then
     exit;
-  // Alf : to investigate under Linux and BSD
   {$ifdef LINUXNOTBSD}
-  // at last under UNIX close() is enough. For example nginx don't call shutdown
+  // at last under Linux close() is enough. For example nginx don't call shutdown
   if rdwr then
   {$endif LINUXNOTBSD}
     Shutdown(sock,SHUT_[rdwr]); // SHUT_RD doesn't unlock accept() on Linux
@@ -9941,7 +9935,6 @@ begin
         conn.DoOnDisconnect();
         conn.Disconnect();
         Dispose(conn);
-        conn:=nil;
       end;
     end;
     fPendingForClose.Free;
@@ -9954,7 +9947,7 @@ begin
   DeleteCriticalSection(fSafe);
   {$ENDIF}
   FreeMem(fConnections, fConnectionsCapacity * SizeOf(PHttpApiWebSocketConnection));
-  fConnections:=nil;
+  fConnections := nil;
   inherited;
 end;
 
@@ -10342,7 +10335,7 @@ begin
     fRegisteredProtocols^[i].Free;
   fRegisteredProtocols^ := nil;
   Dispose(fRegisteredProtocols);
-  fRegisteredProtocols:=nil;
+  fRegisteredProtocols := nil;
   inherited;
 end;
 
@@ -10540,7 +10533,6 @@ begin
       LeaveCriticalSection(conn.Protocol.fSafe);
     end;
     Dispose(conn);
-    conn:=nil;
   end;
 end;
 

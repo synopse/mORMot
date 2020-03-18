@@ -13630,7 +13630,8 @@ const
   // - depending on the compiler version
   varNativeString = {$ifdef UNICODE}varUString{$else}varString{$endif};
 
-  /// those TVarData.VType values are un-managed and do not need to be cleared
+  {$ifdef USE_VTYPE_STATIC}
+  /// bitmap for TVarData.VType unmanaged values which do not need to be cleared
   // - used mainly in low-level code similar to the folllowing:
   // !  if TVarData(aVariant).VType and VTYPE_STATIC<>0 then
   // !    VarClear(aVariant);
@@ -13639,12 +13640,11 @@ const
   // - make some false positive to varBoolean and varError
   // - our overloaded VarClear() inlined function uses this constant
   VTYPE_STATIC = $BFE8;
+  {$endif USE_VTYPE_STATIC}
 
 {$ifdef FPC}
-{$if not defined (CPUARM3264) and not defined(BSD)}
 /// overloaded function which can be properly inlined
 procedure VarClear(var v: variant); inline;
-{$endif}
 {$endif FPC}
 
 /// same as Dest := TVarData(Source) for simple values
@@ -13711,10 +13711,6 @@ function VarIs(const V: Variant; const VTypes: TVarDataTypes): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 {$ifndef NOVARIANTS}
-
-{$ifdef FPC}
-function SynMProtect(addr:pointer;size:size_t;prot:integer):longint;
-{$endif}
 
 type
   /// custom variant handler with easier/faster access of variant properties,
@@ -16719,7 +16715,6 @@ uses
   sysctl,
   {$else}
   Linux,
-  SysCall,
   {$endif BSD}
   {$ifdef FPCUSEVERSIONINFO} // to be enabled in Synopse.inc
     fileinfo, // FPC 3.0 and up
@@ -16769,48 +16764,15 @@ const
   UTF8_FIRSTBYTE: array[2..6] of byte = ($c0,$e0,$f0,$f8,$fc);
 
 {$ifdef FPC}
-
-{$if not defined (CPUARM3264) and not defined(BSD)}
 procedure VarClear(var v: variant); // defined here for proper inlining
-  (*
-  Alf.
-  This has been a very long standing issue on all arm/arm64 and BSD systems.
-  The sockets got corrupted by the variants test, leading to TestSQL3 failures.
-  Been hunting this for more than 2 years ...
-  It should/ could be investigated in more detail.
-  Also due to the fact that, for FPC this VTYPE_STATIC is often disabled in the source by defines !
-  *)
 var p: pointer; // more efficient generated asm with an explicit temp variable
 begin
   p := @v;
+  {$ifdef USE_VTYPE_STATIC} // circumvent weird bug on BSD + ARM (Alfred)
   if integer(PVarData(p)^.VType) and VTYPE_STATIC=0 then
-    PPtrInt(p)^ := 0
-  else
+    PPtrInt(p)^ := 0 else
+  {$endif USE_VTYPE_STATIC}
     VarClearProc(PVarData(p)^);
-end;
-{$endif}
-
-{$ifdef BSD}
-function mprotect(Addr: Pointer; Len: size_t; Prot: Integer): Integer;
-  {$ifdef Darwin} cdecl external 'libc.dylib' name 'mprotect';
-  {$else} cdecl external 'libc.so' name 'mprotect'; {$endif}
-{$endif BSD}
-
-function SynMProtect(addr:pointer;size:size_t;prot:integer):longint;
-begin
-  result:=-1;
-  {$ifdef UNIX}
-  {$ifdef BSD}
-  result:=mprotect(addr,size,prot);
-  {$else}
-  if (Do_SysCall(syscall_nr_mprotect,PtrUInt(addr),size,prot)>=0) then result:=0;
-  //More modern FPC:
-  //result:=Fpmprotect(addr,size,prot);
-  {$endif}
-  {$endif UNIX}
-  {$ifdef KYLIX3}
-  result:=mprotect(addr,size,prot);
-  {$endif UNIX}
 end;
 {$endif FPC}
 
@@ -16904,10 +16866,7 @@ end;
 procedure TSynTempBuffer.Done;
 begin
   if (buf<>@tmp) and (buf<>nil) then
-  begin
     FreeMem(buf);
-    buf:=nil;
-  end;
 end;
 
 procedure TSynTempBuffer.Done(EndBuf: pointer; var Dest: RawUTF8);
@@ -16915,7 +16874,8 @@ begin
   if EndBuf=nil then
     Dest := '' else
     FastSetString(Dest,buf,PAnsiChar(EndBuf)-PAnsiChar(buf));
-  Done;
+  if (buf<>@tmp) and (buf<>nil) then
+    FreeMem(buf);
 end;
 
 
@@ -39875,12 +39835,11 @@ begin
   end;
 end;
 {$else}
-var
-  PageSize: PtrUInt;
-  AlignedAddr: pointer;
+var PageSize: PtrUInt;
+    AlignedAddr: pointer;
     i: integer;
-  ProtectedResult:boolean;
-  ProtectedMemory:boolean;
+    ProtectedResult: boolean;
+    ProtectedMemory: boolean;
 begin
   if Backup<>nil then
     for i := 0 to Size-1 do // do not use Move() here
@@ -39889,21 +39848,16 @@ begin
   AlignedAddr := Pointer((PtrUInt(Old) DIV SystemInfo.dwPageSize) * SystemInfo.dwPageSize);
   while PtrUInt(Old)+PtrUInt(Size)>=PtrUInt(AlignedAddr)+PageSize do
     Inc(PageSize,SystemInfo.dwPageSize);
-
-  ProtectedResult:=(SynMProtect(AlignedAddr,PageSize,PROT_READ or PROT_WRITE or PROT_EXEC) = 0);
-  ProtectedMemory:=False;
-  if (NOT ProtectedResult) then begin
-    ProtectedMemory:=True;
-    ProtectedResult:=(SynMProtect(AlignedAddr,PageSize,PROT_READ or PROT_WRITE) = 0);
-  end;
-
+  ProtectedResult := SynMProtect(AlignedAddr,PageSize,PROT_READ or PROT_WRITE or PROT_EXEC) = 0;
+  ProtectedMemory := not ProtectedResult; 
+  if ProtectedMemory then
+    ProtectedResult := SynMProtect(AlignedAddr,PageSize,PROT_READ or PROT_WRITE) = 0;
   if ProtectedResult then
     try
       for i := 0 to Size-1 do // do not use Move() here
         PByteArray(Old)^[i] := PByteArray(New)^[i];
-    if (NOT LeaveUnprotected) then
-      if (ProtectedMemory) then
-        SynMProtect(AlignedAddr,PageSize,PROT_READ or PROT_EXEC);
+    if not LeaveUnprotected and ProtectedMemory then
+      SynMProtect(AlignedAddr,PageSize,PROT_READ or PROT_EXEC);
     except
     end;
 end;
@@ -44387,7 +44341,7 @@ begin
     Finalize(RawByteString(TVarData(Value).VAny))
   else
     begin
-      {$ifndef FPC}if v and VTYPE_STATIC <> 0 then{$endif}
+      {$ifndef FPC}if v and VTYPE_STATIC<>0 then{$endif}
         {$ifdef NOVARCOPYPROC}VarClear(Value){$else}VarClearProc(TVarData(Value)){$endif};
       TVarData(Value).VType := varString;
       TVarData(Value).VAny := nil; // to avoid GPF when assigned to a RawByteString
@@ -45000,10 +44954,8 @@ begin
     v := PVarData(v.VPointer)^;
   until false;
   repeat
-    {$ifndef FPC}
-    if vt and VTYPE_STATIC=0 then
+    if vt<=varString then
       exit; // we need a complex type to lookup
-    {$endif}
     GetNextItemShortString(FullName,itemName,'.');
     if itemName[0] in [#0,#255] then
       exit;
@@ -48467,17 +48419,13 @@ begin
         result := AnsiICompW(A.VAny,B.VAny) else
         result := StrCompW(A.VAny,B.VAny);
     else
-      (*
-      Alf:
-      Is this correct for FPC
-      *)
-      if AT and VTYPE_STATIC=0 then
+      if AT<varString then
         result := ICMP[VarCompareValue(variant(A),variant(B))] else
         result := CMP[caseInsensitive](variant(A),variant(B));
     end else
   if (AT<=varNull) or (BT<=varNull) then
     result := ord(AT>varNull)-ord(BT>varNull) else
-  if (AT and VTYPE_STATIC=0) and (BT and VTYPE_STATIC=0) then
+  if (AT<varString) and (BT<varString) then
     result := ICMP[VarCompareValue(variant(A),variant(B))] else
     result := CMP[caseInsensitive](variant(A),variant(B));
 end;
@@ -55148,10 +55096,7 @@ begin
   if twoStreamIsOwned in fCustomOptions then
     fStream.Free;
   if not (twoBufferIsExternal in fCustomOptions) then
-  begin
     FreeMem(fTempBuf);
-    fTempBuf:=nil;
-  end;
   fInternalJSONWriter.Free;
   inherited;
 end;
@@ -59739,17 +59684,12 @@ begin
     fMap := 0;
   end;
   {$else}
-  (*
-  Alf:
-  A map is only created when a file is mapped.
-  On BSD systems, you cannot unmap a memory area that has not been mapped before.
-  *)
   if (fBuf<>nil) and (fBufSize>0) and (fFile<>0) then
     {$ifdef KYLIX3}munmap{$else}fpmunmap{$endif}(fBuf,fBufSize);
   {$endif}
   fBuf := nil;
   fBufSize := 0;
-  if (fFile<>0) then begin
+  if fFile<>0 then begin
     if fFileLocal then
       FileClose(fFile);
     fFile := 0;
@@ -60908,7 +60848,6 @@ end; // invalid file or unable to memory map its content -> Count := 0
 destructor TMemoryMapText.Destroy;
 begin
   Freemem(fLines);
-  fLines:=nil;
   fMap.UnMap;
   inherited;
 end;
@@ -61923,19 +61862,6 @@ begin
     GetBitsCountPtrInt := @GetBitsCountSSE42;
   {$endif CPUINTEL}
   {$endif ABSOLUTEPASCAL}
-
-  {$ifdef FPC}
-    {$ifdef ABSOLUTEPASCAL}
-      if Addr(MoveFast)=nil then MoveFast := @System.Move;
-      if Addr(FillCharFast)=nil then FillCharFast := @System.FillChar; // fallback to FPC cross-platform RTL
-    {$else}
-      {$ifndef CPUX64}
-        if Addr(MoveFast)=nil then MoveFast := @System.Move;
-        if Addr(FillCharFast)=nil then FillCharFast := @System.FillChar; // fallback to FPC cross-platform RTL
-      {$endif}
-    {$endif}
-  {$endif FPC}
-
   InterningHasher := DefaultHasher;
 end;
 

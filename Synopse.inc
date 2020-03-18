@@ -189,6 +189,7 @@
   {$define FPC_OR_DELPHIXE}
   {$define FPC_OR_DELPHIXE4}
   {$define FPC_ENUMHASINNER}
+  {$define USE_VTYPE_STATIC} // in our inlined VarClear()
 
   // $if FPC_FULLVERSION>20700 breaks Delphi 6-7 and SynProject :(
   {$ifdef VER2_7}
@@ -338,6 +339,12 @@
     {$endif CPUX86}
   {$endif CPU64}
 
+  {$ifdef CPUARM3264}
+    {$ifdef BSD}
+      {$undef USE_VTYPE_STATIC} // circumvent bug in VarClear() on BSD + ARM
+    {$endif BSD}
+  {$endif CPUARM3264}
+
   {$ifdef ISFPC30}
     {$ifndef MSWINDOWS}
       // define FPCUSEVERSIONINFO to link low-level executable file information
@@ -354,10 +361,7 @@
     {$ifdef CPUINTEL}
       {$define HASINTERFACERTTI}
     {$endif}
-    {$ifdef CPUARM}
-      {$define HASINTERFACERTTI}
-    {$endif}
-    {$ifdef CPUAARCH64}
+    {$ifdef CPUARM3264}
       {$define HASINTERFACERTTI}
     {$endif}
   {$endif}
@@ -391,11 +395,13 @@
     {$define HASALIGNTYPEDATA} // to ensure proper RTTI alignment
   {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
+
 {$else FPC}
 
 (********************** Delphi Conditionals **********************)
 
   {$define DELPHI_OR_FPC_OLDRTTI}
+  {$define USE_VTYPE_STATIC} // "and VTYPE_STATIC" test before VarClear()
 
   {$ifdef LVCL}
     {$define OWNNORMTOUPPER} // NormToUpper[] exists only in our enhanced RTL
