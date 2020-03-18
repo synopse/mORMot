@@ -20832,7 +20832,8 @@ end;
 
 procedure TSQLPropInfo.SetVariant(Instance: TObject; const Source: Variant);
 begin
-  SetValueVar(Instance,VariantToUTF8(Source),TVarData(Source).VType and VTYPE_STATIC<>0);
+  SetValueVar(Instance,VariantToUTF8(Source),
+    (TVarData(Source).VType=varOleStr) or (TVarData(Source).VType>=varString));
 end;
 
 {$endif NOVARIANTS}
