@@ -13054,9 +13054,9 @@ begin
   inherited; // CV := IV + set fIn,fOut
   for i := 1 to Count shr 4 do begin
     TAESContext(AES.Context).DoBlock(AES.Context,fCV,tmp);
-    inc(fCV[7]); // counter is in the lower 64 bits, nonce in the upper 64 bits
-    if fCV[7]=0 then begin // manual big-endian increment
-      j := 6;
+    inc(fCV[15]); // counter is in the lower 64 bits, nonce in the upper 64 bits
+    if fCV[15]=0 then begin // manual big-endian increment
+      j := 14;
       repeat
         inc(fCV[j]);
         if (fCV[j]<>0) or (j=0) then
