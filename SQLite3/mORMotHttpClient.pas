@@ -956,8 +956,7 @@ begin
     result.Lo := fRequest.Request(SockString(url),SockString(method),
       KeepAliveMS,SockString(Header),SockString(Data),SockString(DataType),
       SockString(OutHeader),SockString(OutData));
-    result.Hi := GetCardinal(pointer(
-      FindIniNameValue(pointer(OutHeader),'SERVER-INTERNALSTATE: ')));
+    result.Hi := GetCardinal(FindNameValue(pointer(OutHeader),'SERVER-INTERNALSTATE:'));
     Header := OutHeader;
     Data := OutData;
   end;

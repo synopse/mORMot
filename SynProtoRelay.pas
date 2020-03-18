@@ -655,7 +655,7 @@ begin
     result := STATUS_SUCCESS;
     exit;
   end;
-  bearer := FindIniNameValue(pointer(aInHeaders), HEADER_BEARER_UPPER);
+  FindNameValue(aInHeaders, HEADER_BEARER_UPPER, bearer);
   res := fServerJWT.Verify(bearer);
   if res = jwtValid then
     if fServerConnected <> nil then begin

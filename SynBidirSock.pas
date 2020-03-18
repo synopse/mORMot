@@ -1348,7 +1348,7 @@ begin
   STATUS_SUCCESS:
     if fCache <> nil then begin
       if fHttp <> nil then
-        cache.Tag := Trim(FindIniNameValue(pointer(headout),'ETAG:')) else
+        FindNameValue(headout,'ETAG:',cache.Tag) else
         cache.Tag := fSocket.HeaderGetValue('ETAG');
       if cache.Tag <> '' then begin
         cache.Content := result;
@@ -3478,7 +3478,7 @@ begin
         nil,fProcess.fOwnerConnection,fProcess.fOwnerThread);
       try
         Ctxt.Prepare(url,method,header,data,dataType,'',fTLS);
-        resthead := FindIniNameValue(Pointer(header),'SEC-WEBSOCKET-REST: ');
+        FindNameValue(header,'SEC-WEBSOCKET-REST:',resthead);
         if resthead='NonBlocking' then
           block := wscNonBlockWithoutAnswer else
           block := wscBlockWithAnswer;

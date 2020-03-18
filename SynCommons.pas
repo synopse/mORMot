@@ -3453,6 +3453,24 @@ procedure StringDynArrayToRawUTF8DynArray(const Source: TStringDynArray;
 /// convert the string list into a dynamic array of UTF-8 strings
 procedure StringListToRawUTF8DynArray(Source: TStringList; var Result: TRawUTF8DynArray);
 
+/// search for a value from its uppercased named entry
+// - i.e. iterate IdemPChar(source,UpperName) over every line of the source
+// - returns the text just after UpperName if it has been found at line beginning
+// - returns nil if UpperName was not found was not found at any line beginning
+// - could be used as alternative to FindIniNameValue() and FindIniNameValueInteger()
+// if there is no section, i.e. if search should not stop at '[' but at source end
+function FindNameValue(P: PUTF8Char; UpperName: PAnsiChar): PUTF8Char; overload;
+
+/// search and returns a value from its uppercased named entry
+// - i.e. iterate IdemPChar(source,UpperName) over every line of the source
+// - returns true and the trimmed text just after UpperName if it has been found
+// at line beginning
+// - returns false if UpperName was not found was not found at any line beginning
+// - could be used e.g. to efficently extract a value from HTTP headers, whereas
+// FindIniNameValue() is tuned for [section]-oriented INI files
+function FindNameValue(const NameValuePairs: RawUTF8; UpperName: PAnsiChar;
+  var Value: RawUTF8): boolean; overload;
+
 /// find a Name= Value in a [Section] of a INI RawUTF8 Content
 // - this function scans the Content memory buffer, and is
 // therefore very fast (no temporary TMemIniFile is created)
@@ -26608,15 +26626,14 @@ begin
   modname := PosChar(modname,':');
   if modname<>nil then
     modname := GotoNextNotSpace(modname+1);
-  release := trim(FindIniNameValue(pointer(StringFromFile('/etc/os-release')),'PRETTY_NAME='));
+  FindNameValue(StringFromFile('/etc/os-release'),'PRETTY_NAME=',release);
   if (release<>'') and (release[1]='"') then
     release := copy(release,2,length(release)-2);
   release := trim(release);
-  if release='' then begin
-    release := trim(FindIniNameValue(pointer(StringFromFile('/etc/lsb-release')),'DISTRIB_DESCRIPTION='));
-    if (release<>'') and (release[1]='"') then
+  if release=''  then
+    if FindNameValue(StringFromFile('/etc/lsb-release'),'DISTRIB_DESCRIPTION=',release) and
+       (release<>'') and (release[1]='"') then
       release := copy(release,2,length(release)-2);
-  end;
   if (release='') and (FindFirst('/etc/*-release',faAnyFile,SR)=0) then begin
     release := StringToUTF8(SR.Name); // 'redhat-release' 'SuSE-release'
     if IdemPChar(pointer(release),'LSB-') and (FindNext(SR)=0) then
@@ -29072,6 +29089,98 @@ begin
   result := true;
 end;
 {$endif USENORMTOUPPER}
+
+function FindNameValue(P: PUTF8Char; UpperName: PAnsiChar): PUTF8Char;
+var
+  {$ifdef CPUX86NOTPIC}
+  table: TNormTable absolute NormToUpperAnsi7;
+  {$else}
+  table: PNormTable;
+  {$endif}
+  c: AnsiChar;
+  u: PAnsiChar;
+label
+  _0;
+begin
+  if (P = nil) or (UpperName = nil) then
+    goto _0;
+  {$ifndef CPUX86NOTPIC} table := @NormToUpperAnsi7; {$endif}
+  repeat
+    c := UpperName^;
+    if table[P^] = c then
+    begin
+      inc(P);
+      u := UpperName + 1;
+      repeat
+        c := u^;
+        inc(u);
+        if c <> #0 then
+        begin
+          if table[P^] <> c then
+            break;
+          inc(P);
+          continue;
+        end;
+        result := P; // if found, points just after UpperName
+        exit;
+      until false;
+    end;
+    repeat
+      repeat
+        c := P^;
+        inc(P);
+      until c <= #13;
+      if c <> #13 then
+        if c <> #10 then
+          if c <> #0 then
+            continue // e.g. #9
+          else
+            goto _0
+        else
+          repeat
+            c := P^;
+            if c <> #10 then
+              break;
+            inc(P);
+          until false
+      else
+        repeat
+          c := P^;
+          if (c <> #10) and (c <> #13) then
+            break;
+          inc(P);
+        until false;
+      if c <> #0 then
+        break;
+_0:   result := nil;
+      exit;
+    until false;
+  until false;
+end;
+
+function FindNameValue(const NameValuePairs: RawUTF8; UpperName: PAnsiChar;
+  var Value: RawUTF8): boolean;
+var
+  P: PUTF8Char;
+  L: PtrInt;
+begin
+  P := FindNameValue(pointer(NameValuePairs), UpperName);
+  if P <> nil then
+  begin
+    while P^ in [#9, ' '] do // trim left
+      inc(P);
+    L := 0;
+    while P[L] > #13 do // trim right
+      inc(L);
+    FastSetString(Value, P, L);
+    result := true;
+  end
+  else
+  begin
+    {$ifdef FPC} Finalize(Value); {$else} Value := ''; {$endif}
+    result := false;
+  end;
+end;
 
 function FindSectionFirstLineW(var source: PWideChar; search: PUTF8Char): boolean;
 {$ifdef PUREPASCAL}

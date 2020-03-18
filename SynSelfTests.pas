@@ -1764,6 +1764,25 @@ begin
   Check(GetNextLine(P,P)='ghijkl');
   Check(GetNextLine(P,P)='1234567890');
   Check(P=nil);
+  Check(FindNameValue(pointer(Content),'A')^ = 'b');
+  Check(FindNameValue(pointer(Content),'AB')^ = 'c');
+  Check(FindNameValue(pointer(Content),'D')^ = 'e');
+  Check(FindNameValue(pointer(Content),'1')^ = '2');
+  Check(FindNameValue(pointer(Content),'GHIJK')^ = 'l');
+  Check(FindNameValue(pointer(Content),'B') = nil);
+  Check(FindNameValue(pointer(Content),'L') = nil);
+  Check(FindNameValue(pointer(Content),'2') = nil);
+  Check(FindNameValue(pointer(Content),'TOTO') = nil);
+  Check(FindNameValue(Content,'AB',S));
+  Check(S='c');
+  Check(FindNameValue(Content,'DEF',S));
+  Check(S='');
+  Check(FindNameValue(Content,'G',S));
+  Check(S='hijkl');
+  Check(FindNameValue(Content,'1234',S));
+  Check(S='567890');
+  Check(not FindNameValue(Content,'H',S));
+  Check(S='');
 end;
 
 procedure TTestLowLevelCommon.Soundex;
