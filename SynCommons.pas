@@ -39723,7 +39723,7 @@ begin
       ProgramFileName := GetModuleName(HInstance);
       if ProgramFileName='' then
         ProgramFileName := ExpandFileName(paramstr(0));
-      {$endif}
+      {$endif MSWINDOWS}
       ProgramFilePath := ExtractFilePath(ProgramFileName);
       if IsLibrary then
         InstanceFileName := GetModuleName(HInstance) else
@@ -39748,7 +39748,7 @@ begin
         User := LibC.getpwuid(LibC.getuid)^.pw_name else
       {$endif}
         StringToUTF8(tmp,User);
-      {$endif}
+      {$endif MSWINDOWS}
       if Host='' then
         Host := 'unknown';
       if User='' then
