@@ -259,24 +259,32 @@
       {$define FPCSQLITE3STATIC} // use static/arm-linux\sqlite3.o
     {$endif}
     {$ifdef CPUAARCH64}
-      {$ifdef ANDROID}
-        {$define FPCSQLITE3STATIC} // note: problems with current static/aarch64-linux\sqlite3.o
-      {$endif}
+      {$define FPCSQLITE3STATIC} // use:static/aarch64-linux\sqlite3.o
     {$endif}
   {$endif}
 
   {$ifdef BSD}
     // LINUX conditional includes Darwin and BSD family like FreeBSD
     {$define LINUX} // not true, but a POSIX/BSD system - see LINUXNOTBSD
+    {$undef FORCE_STRSSE42}  // fails otherwise for sure
+    {$define ABSOLUTEPASCAL} // NO asm nor redirection (until stabilized)
     {$ifdef DARWIN}
       {$define FPCSQLITE3STATIC} // we supply Darwin static libs
       {$ifdef CPUINTEL}
         {$define FPC_PIC} // may have not be defined by the compiler options
       {$endif}
-      {$undef FORCE_STRSSE42}  // fails otherwise for sure
-      {$define ABSOLUTEPASCAL} // NO asm nor redirection (until stabilized)
     {$else}
       {$define BSDNOTDARWIN}   // OSX has some non-standard API calls
+    {$endif}
+    {$ifdef FREEBSD}
+      {$ifdef CPUX64}
+        {$define FPCSQLITE3STATIC} // we supply x64 static libs
+      {$endif CPUX64}
+    {$endif}
+    {$ifdef OPENBSD}
+      {$ifdef CPUX64}
+        {$define FPCSQLITE3STATIC} // we supply x64 static libs
+      {$endif CPUX64}
     {$endif}
   {$else}
     {$ifdef LINUX}
@@ -302,10 +310,10 @@
     {$ifdef CPUX64}
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
-      {$ifndef DARWIN}
+      {$ifndef BSD}
         {$define CPUX64ASM} // Delphi XE4 or Darwin asm are buggy :(
         {$define HASAESNI}  // SynCrypto rejected by Darwin asm
-      {$endif DARWIN}
+      {$endif BSD}
       {$define FPC_X64}   // supports AVX/AVX2/AVX512 - which Delphi doesn't
       {$ASMMODE INTEL}    // to share asm code with Delphi
     {$endif CPUX64}
@@ -382,7 +390,6 @@
     {$define FPC_ENUMHASINNER}
     {$define HASALIGNTYPEDATA} // to ensure proper RTTI alignment
   {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-
 
 {$else FPC}
 
