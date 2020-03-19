@@ -531,12 +531,12 @@ begin
   if n = 0 then
     exit;
   L := 2; // '{}'
-  inc(L, n); // ',' after each element
+  inc(L, n-1); // ',' after each element except last
   v := pointer(Values);
   for i := 1 to n do
   begin
     vl := length(v^);
-    if vl = 0 then
+    if vl <> 0 then
     begin
       inc(L, vl);
       s := pointer(v^);
@@ -592,8 +592,7 @@ begin
     inc(d);
     inc(v);
   end;
-  d^ := '}'; // replace last ',' by '}'
-  inc(d);
+  (d-1)^ := '}'; // replace last ',' by '}'
   assert(d - pointer(result) = length(result)); // until stabilized
 end;
 
@@ -747,8 +746,8 @@ begin
             raise ESQLDBPostgres.CreateUTF8('%.ExecutePrepared: cannot bind ' +
               'parameter #% of type %', [self, i, ToText(p^.VType)^]);
         end;
-        fPGParams[i] := pointer(p^.VData);
       end;
+      fPGParams[i] := pointer(p^.VData);
     end;
     c := TSQLDBPostgresConnection(Connection);
     if fPreparedStmtName <> '' then
