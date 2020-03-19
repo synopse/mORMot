@@ -22586,8 +22586,13 @@ begin
     P := StrUInt32(@tmp[23],Value);
     L := @tmp[23]-P;
   end;
-  MoveSmall(P,Buffer,L);
-  result := Buffer+L;
+  result := Buffer;
+  repeat
+    result^ := P^;
+    inc(result);
+    inc(P);
+    dec(L);
+  until L=0;
 end;
 
 function QuotedStr(const S: RawUTF8; Quote: AnsiChar): RawUTF8;
