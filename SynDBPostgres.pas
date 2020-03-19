@@ -669,7 +669,7 @@ begin
       if log<>nil then
         log.Log(sllDB,'Prepare % name=% cache=% %',
           [timer.Stop, fPreparedStmtName, fromcache, fParsedSQL],self);
-    end;
+    end
     else if log<>nil then
       log.Log(sllDB,'Prepare % %', [timer.Stop, fParsedSQL],self);
   except
