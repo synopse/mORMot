@@ -577,8 +577,8 @@ begin
             raise ESQLDBPostgres.CreateUTF8('%.ExecutePrepared: cannot bind ' +
               'parameter #% of type %', [self, i, ToText(p^.VType)^]);
         end;
-        fPGParams[i] := pointer(p^.VData);
       end;
+      fPGParams[i] := pointer(p^.VData);
     end;
     c := TSQLDBPostgresConnection(Connection);
     if fPreparedStmtName <> '' then
