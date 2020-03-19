@@ -200,19 +200,6 @@ var
   PQlibVersion: function: longint; cdecl;
 
 
-/// process simple SQL (no ; inside) as expected by libpq
-// - replace all '?' in the SQL statement with position parameters $1, $2..
-// - returns the number of ? parameters found within aSQL
-//  For SQL with ; ( several statements should not be parametized)  or w/o ? return as is
-// Compliant with Postgres expectations
-function ReplaceQParamsByIndex(const aSQL: RawUTF8; var aNewSQL: RawUTF8): integer;
-
-/// convert an array of quoted RawUTF8 into PostgreSQL ARRAY
-// - 'one', 't"wo' -> '{"one","t\"wo"}'
-// - 1,2,3 -> '{1,2,3}'
-function UTF8Array2PostgreArray(const Values: TRawUTF8DynArray): RawUTF8;
-
-
 implementation
 
 uses
@@ -440,163 +427,6 @@ begin
   FOids2FieldType.AddOrUpdate(cOid, fieldType);
 end;
 
-/// In case aSQL is simple (no ; inside)
-// - replace all '?' in the SQL statement with position parameters $1, $2..
-// - returns the number of ? parameters found within aSQL
-// - for SQL with ; ( several statements should not be parametized) or w/o ? return as is
-function ReplaceQParamsByIndex(const aSQL: RawUTF8; var aNewSQL: RawUTF8): integer;
-var
-  ndx, L: PtrInt;
-  s, d: PAnsiChar;
-begin
-  aNewSQL := aSQL;
-  result := 0;
-  ndx := 0;
-  L := Length(aSQL);
-  s := pointer(aSQL);
-  // calculate ? parameters count, check for ;
-  while s^ <> #0 do
-  begin
-    if s^ = '?' then
-    begin
-      inc(ndx);
-      if ndx > 9 then  // ? will be replaced by $n $nn $nnn
-        if ndx > 99 then
-          inc(L, 3)
-        else
-          inc(L, 2)
-        else
-          inc(L);
-    end
-    else if s^ = '''' then
-    begin
-      repeat // ignore double quotes between single quotes
-        inc(s);
-        if s^ = #0 then
-          exit; // quote without proper ending -> reject
-      until (s^ = '''') and (s[1] <> '''');
-    end else if s^ = ';' then
-      exit; // complex expression can not be prepared
-    inc(s);
-  end;
-  if ndx = 0 then // no ? parameter
-    exit;
-  result := ndx;
-  // parse SQL and replace ? into $n
-  FastSetString(aNewSQL, nil, L);
-  s := pointer(aSQL);
-  d := pointer(aNewSQL);
-  ndx := 0;
-  repeat
-    if s^ = '?' then
-    begin
-      d^ := '$';
-      inc(d);
-      inc(ndx);
-      d := AppendUInt32ToBuffer(d, ndx);
-    end
-    else if s^ = '''' then
-    begin
-      repeat // ignore double quotes between single quotes
-        d^ := s^;
-        inc(d);
-        inc(s);
-      until (s^ = '''') and (s[1] <> '''');
-      d^ := s^; // store last '''
-      inc(d);
-    end
-    else
-    begin
-      d^ := s^;
-      inc(d);
-    end;
-    inc(s);
-  until s^ = #0;
-  assert(d - pointer(aNewSQL) = length(aNewSQL)); // until stabilized
-end;
-
-/// Convert array of RawUTF8 to PostgreSQL ARRAY
-// - 'one', 't"wo' -> '{"one","t\"wo"}'
-// - 1,2,3 -> '{1,2,3}'
-function UTF8Array2PostgreArray(const Values: TRawUTF8DynArray): RawUTF8;
-var
-  V: ^RawUTF8;
-  s, d: PUTF8Char;
-  L, vl, j: PtrInt;
-  n, i: integer;
-  c: AnsiChar;
-begin
-  result := '';
-  n := length(Values);
-  if n = 0 then
-    exit;
-  L := 2; // '{}'
-  inc(L, n); // ',' after each element
-  v := pointer(Values);
-  for i := 1 to n do
-  begin
-    vl := length(v^);
-    if vl = 0 then
-    begin
-      inc(L, vl);
-      s := pointer(v^);
-      if s^ = '''' then // quoted ftUTF8
-        for j := 1 to vl - 2 do
-          if s[j] = '''' then
-            dec(L) // double ' into single '
-          else if s[j] = '"' then
-            inc(L); // \ before "
-    end;
-    inc(v);
-  end;
-  FastSetString(result, nil, L);
-  d := pointer(result);
-  d^ := '{';
-  inc(d);
-  v := pointer(Values);
-  for i := 1 to n do
-  begin
-    vl := length(v^);
-    if vl <> 0 then
-    begin
-      s := pointer(v^);
-      if s^ = '''' then // quoted ftUTF8
-      begin
-        d^ := '"';
-        inc(d);
-        for j := 1 to vl - 2 do
-        begin
-          c := s[j];
-          if c = '''' then
-            continue // double ' into single '
-          else if c = '"' then
-          begin
-            d^ := '\'; // \ before "
-            inc(d);
-          end;
-          d^ := c;
-          inc(d);
-        end;
-        d^ := '"';
-        inc(d);
-      end
-      else
-      repeat // regular content
-        d^ := s^;
-        inc(d);
-        inc(s);
-        dec(vl);
-      until vl = 0;
-    end;
-    d^ := ',';
-    inc(d);
-    inc(v);
-  end;
-  d^ := '}'; // replace last ',' by '}'
-  inc(d);
-  assert(d - pointer(result) = length(result)); // until stabilized
-end;
-
 procedure TSQLDBPostgresStatement.BindColumnus;
 var
   nCols, c: longint;
@@ -653,7 +483,7 @@ begin
     if aSQL = '' then
       raise ESQLDBPostgres.CreateUTF8('%.Prepare: empty statement', [self]);
     inherited Prepare(aSQL, ExpectResults); // will strip last ;
-    fPreparedParamsCount := ReplaceQParamsByIndex(fSQL, fParsedSQL);
+    fPreparedParamsCount := ReplaceParamsByNumbers(fSQL, fParsedSQL, '$');
     if (fPreparedParamsCount > 0) and (IdemPCharArray(PUTF8Char(fParsedSQL),
         ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'VALUES']) >= 0) then
     begin // preparable
@@ -719,7 +549,7 @@ begin
         if not (p^.VType in [ftInt64, ftDouble, ftCurrency, ftUTF8]) then
           raise ESQLDBPostgres.CreateUTF8('%.ExecutePrepared: Invalid array type % ' +
             'on bound parameter #%', [Self, ToText(p^.VType)^, i]);
-        p^.VData := UTF8Array2PostgreArray(p^.VArray);
+        p^.VData := BoundArrayToJSONArray(p^.VArray);
       end
       else
       begin

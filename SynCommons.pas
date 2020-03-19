@@ -2153,11 +2153,16 @@ procedure AppendBuffersToRawUTF8(var Text: RawUTF8; const Buffers: array of PUTF
 // you may encounter buffer overflows and random memory errors
 function AppendRawUTF8ToBuffer(Buffer: PUTF8Char; const Text: RawUTF8): PUTF8Char;
 
-/// fast add text conversion of a 32-bit signed integer value into a given buffer
+/// fast add text conversion of a 32-bit unsigned integer value into a given buffer
 // - warning: the Buffer should contain enough space to store the text, otherwise
 // you may encounter buffer overflows and random memory errors
 function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: PtrUInt): PUTF8Char;
 
+/// fast add text conversion of 0-999 integer value into a given buffer
+// - warning: it won't check that Value is in 0-999 range
+// - up to 4 bytes may be written to the buffer (including trailing #0)
+function Append999ToBuffer(Buffer: PUTF8Char; Value: PtrUInt): PUTF8Char;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// buffer-safe version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - pure pascal StrComp() won't access the memory beyond the string, but this
@@ -22593,6 +22598,16 @@ begin
     inc(P);
     dec(L);
   until L=0;
+end;
+
+function Append999ToBuffer(Buffer: PUTF8Char; Value: PtrUInt): PUTF8Char;
+begin
+  PCardinal(Buffer)^ := PCardinal(SmallUInt32UTF8[Value])^;
+  if Value<10 then
+    result := Buffer+1 else
+  if Value<100 then
+    result := Buffer+2 else
+    result := Buffer+3;
 end;
 
 function QuotedStr(const S: RawUTF8; Quote: AnsiChar): RawUTF8;

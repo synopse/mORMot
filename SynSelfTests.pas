@@ -121,7 +121,7 @@ uses
     dddInfraEmailer,
     dddInfraAuthRest,
     dddInfraRepoUser,
-    ECCProcess{$ifdef FPC} in '.\SQLite3\Samples\33 - ECC\ECCProcess.pas'{$endif},
+    ECCProcess {$ifdef FPC} in '.\SQLite3\Samples\33 - ECC\ECCProcess.pas' {$endif},
   {$endif DELPHI5OROLDER}
   mORMotService,
   SynProtoRTSPHTTP,
@@ -15139,7 +15139,7 @@ begin
 end;
 
 procedure TTestExternalDatabase.AutoAdaptSQL;
-var SQLOrigin: RawUTF8;
+var SQLOrigin, s: RawUTF8;
     Props: TSQLDBConnectionProperties;
     Server: TSQLRestServer;
     Ext: TSQLRestStorageExternalHook;
@@ -15161,6 +15161,31 @@ var SQLOrigin: RawUTF8;
       Test(DBMS,true,Expected);
   end;
 begin
+  check(ReplaceParamsByNumbers('',s)=0);
+  check(s='');
+  check(ReplaceParamsByNumbers('toto titi',s)=0);
+  check(s='toto titi');
+  check(ReplaceParamsByNumbers('toto=? titi',s)=1);
+  check(s='toto=$1 titi');
+  check(ReplaceParamsByNumbers('toto=? titi=?',s)=2);
+  check(s='toto=$1 titi=$2');
+  check(ReplaceParamsByNumbers('toto=? titi=? and a=''''',s)=2);
+  check(s='toto=$1 titi=$2 and a=''''');
+  check(ReplaceParamsByNumbers('toto=? titi=? and a=''dd''',s)=2);
+  check(s='toto=$1 titi=$2 and a=''dd''');
+  check(ReplaceParamsByNumbers('toto=? titi=? and a=''d''''d''',s)=2);
+  check(s='toto=$1 titi=$2 and a=''d''''d''');
+  check(ReplaceParamsByNumbers('toto=? titi=? and a=''d?d''',s)=2);
+  check(s='toto=$1 titi=$2 and a=''d?d''');
+  check(ReplaceParamsByNumbers('1?2?3?4?5?6?7?8?9?10?11?12? x',s)=12);
+  check(s='1$12$23$34$45$56$67$78$89$910$1011$1112$12 x');
+  checkequal(BoundArrayToJSONArray(TRawUTF8DynArrayFrom([])),'');
+  checkequal(BoundArrayToJSONArray(TRawUTF8DynArrayFrom(['1'])),'{1}');
+  checkequal(BoundArrayToJSONArray(TRawUTF8DynArrayFrom(['''1'''])),'{"1"}');
+  checkequal(BoundArrayToJSONArray(TRawUTF8DynArrayFrom(['1','2','3'])),'{1,2,3}');
+  checkequal(BoundArrayToJSONArray(TRawUTF8DynArrayFrom(['''1''','2','''3'''])),'{"1",2,"3"}');
+  checkequal(BoundArrayToJSONArray(TRawUTF8DynArrayFrom(['''1"1''','2','''"3\'''])),'{"1\"1",2,"\"3\\"}');
+
   check(TSQLDBConnectionProperties.IsSQLKeyword(dUnknown,'SELEct'));
   check(not TSQLDBConnectionProperties.IsSQLKeyword(dUnknown,'toto'));
   check(TSQLDBConnectionProperties.IsSQLKeyword(dOracle,'SELEct'));
@@ -15170,6 +15195,7 @@ begin
   check(TSQLDBConnectionProperties.IsSQLKeyword(dSQLite,'SELEct'));
   check(TSQLDBConnectionProperties.IsSQLKeyword(dSQLite,'clustER'));
   check(not TSQLDBConnectionProperties.IsSQLKeyword(dSQLite,'value'));
+  
   Server := TSQLRestServer.Create(fExternalModel);
   try
     Props := TSQLDBSQLite3ConnectionProperties.Create(SQLITE_MEMORY_DATABASE_NAME,'','','');
