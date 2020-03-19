@@ -29130,29 +29130,28 @@ begin
         c := P^;
         inc(P);
       until c <= #13;
-      if c <> #13 then
-        if c <> #10 then
-          if c <> #0 then
-            continue // e.g. #9
-          else
-            goto _0
-        else
-          repeat
-            c := P^;
-            if c <> #10 then
-              break;
-            inc(P);
-          until false
-      else
+      if c = #13 then // most common case is text ending with #13#10
         repeat
           c := P^;
           if (c <> #10) and (c <> #13) then
             break;
           inc(P);
+        until false
+      else if c <> #10 then
+        if c <> #0 then
+          continue // e.g. #9
+        else
+          goto _0
+      else
+        repeat
+          c := P^;
+          if c <> #10 then
+            break;
+          inc(P);
         until false;
       if c <> #0 then
-        break;
-_0:   result := nil;
+        break; // check if UpperName is at the begining of the new line
+_0:   result := nil; // reached P^=#0 -> not found
       exit;
     until false;
   until false;
@@ -29170,8 +29169,10 @@ begin
     while P^ in [#9, ' '] do // trim left
       inc(P);
     L := 0;
-    while P[L] > #13 do // trim right
+    while P[L] > #13 do // end of line/value
       inc(L);
+    while P[L - 1] = ' ' do // trim right
+      dec(L);
     FastSetString(Value, P, L);
     result := true;
   end
@@ -33056,37 +33057,44 @@ end;
 
 function GotoNextLine(source: PUTF8Char): PUTF8Char;
 label
-  _0, _1, _2, _3; // ugly but faster
+  _z, _0, _1, _2, _3; // ugly but faster
+var
+  c: AnsiChar;
 begin
-  result := source;
   if source<>nil then
     repeat
-      if result[0]<#13 then
+      if source[0]<#13 then
         goto _0
-      else if result[1]<#13 then
+      else if source[1]<#13 then
         goto _1
-      else if result[2]<#13 then
+      else if source[2]<#13 then
         goto _2
-      else if result[3]<#13 then
+      else if source[3]<#13 then
         goto _3
       else begin
-        inc(result, 4);
+        inc(source, 4);
         continue;
       end;
-_3:   inc(result);
-_2:   inc(result);
-_1:   inc(result);
-_0:   case result^ of
-      #0: result := nil;
-      #10: inc(result);
-      #13: if result[1]=#10 then inc(result,2) else inc(result);
-      else begin
-        inc(result);
-        continue;
+_3:   inc(source);
+_2:   inc(source);
+_1:   inc(source);
+_0:   c := source^;
+      if c=#13 then begin
+        if source[1]=#10 then begin
+          result := source+2; // most common case is text ending with #13#10
+          exit;
+        end;
+      end else
+      if c=#0 then
+        goto _z else
+      if c<>#10 then begin
+        inc(source);
+        continue; // e.g. #9
       end;
-      end;
+      result := source+1;
       exit;
-    until false
+    until false;
+_z: result := nil;
 end;
 
 function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
