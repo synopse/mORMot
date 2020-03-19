@@ -19345,7 +19345,9 @@ end;
 {$ifndef ONLYUSEHTTPSOCKET}
 procedure TTestMultiThreadProcess.WindowsAPI;
 begin
+  {$ifdef USEWININET}
   Test(TSQLHttpClientWinHTTP,useHttpApi);
+  {$endif}
 end;
 {$endif}
 

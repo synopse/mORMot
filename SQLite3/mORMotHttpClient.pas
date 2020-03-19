@@ -431,6 +431,7 @@ type
   {$endif USEWININET}
   {$endif USELIBCURL}
   {$else ONLYUSEHTTPSOCKET}
+  {$ifdef USEWININET}
   /// HTTP/1.1 RESTful JSON default mORMot Client class
   // - under Windows, maps the TSQLHttpClientWinHTTP class
   TSQLHttpClient = TSQLHttpClientWinHTTP;
@@ -438,6 +439,10 @@ type
   // - under Windows, maps the TSQLHttpClientWinHTTP class, or TSQLHttpClientCurl
   // under Linux
   TSQLHttpsClient = TSQLHttpClientWinHTTP;
+  {$else}
+  TSQLHttpClient = TSQLHttpClientWinSock;
+  TSQLHttpsClient = TSQLHttpClientWinSock; // wouls use SChannel if available
+  {$endif USEWININET}
   {$endif ONLYUSEHTTPSOCKET}
 
 var
