@@ -4905,7 +4905,7 @@ begin
       if (fSock>0) or WSAIsFatalError then
         break;
       dec(retry);
-      if retry=0 then
+      if retry<=0 then
         raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s) failed: %s',
           [aServer,fPort,BINDTXT[doBind],BINDMSG[doBind]],-1);
       sleep(10);
@@ -5570,7 +5570,6 @@ begin
 end;
 
 procedure THttpClientSocket.RequestSendHeader(const url, method: SockString);
-var aURL: SockString;
 begin
   if fSock<=0 then
     exit;
@@ -5579,9 +5578,8 @@ begin
   if TCPPrefix<>'' then
     SockSend(TCPPrefix);
   if (url='') or (url[1]<>'/') then
-    aURL := '/'+url else // need valid url according to the HTTP/1.1 RFC
-    aURL := url;
-  SockSend([method,' ',aURL,' HTTP/1.1']);
+    SockSend([method,' /',url,' HTTP/1.1']) else
+    SockSend([method,' ',url,' HTTP/1.1']);
   if Port=DEFAULT_PORT[fTLS] then
     SockSend(['Host: ',Server]) else
     SockSend(['Host: ',Server,':',Port]);
@@ -12809,11 +12807,13 @@ begin
     (ord(reqUserAgent)=40) and
     (ord(respLocation)=23) and (sizeof(THttpHeader)=4) and
     (integer(HTTP_LOG_FIELD_TEST_SUB_STATUS)=HTTP_LOG_FIELD_SUB_STATUS));
-  FillChar(WinHttpAPI, SizeOf(WinHttpAPI), 0);
-  WinHttpAPIInitialize;
   GetTick64 := GetProcAddress(GetModuleHandle(kernel32),'GetTickCount64');
   if not Assigned(GetTick64) then // fallback before Vista
     GetTick64 := @GetTick64ForXP;
+  {$ifdef USEWININET}
+  FillChar(WinHttpAPI, SizeOf(WinHttpAPI), 0);
+  WinHttpAPIInitialize;
+  {$endif}
   {$endif MSWINDOWS}
   FillChar(WsaDataOnce,sizeof(WsaDataOnce),0);
   if InitSocketInterface then

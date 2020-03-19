@@ -2751,6 +2751,18 @@ function TrimLeftSchema(const TableName: RawUTF8): RawUTF8;
 // compliant with Oracle OCI expectations
 function ReplaceParamsByNames(const aSQL: RawUTF8; var aNewSQL: RawUTF8): integer;
 
+/// replace all '?' in the SQL statement with indexed parameters like $1 $2 ...
+// - returns the number of ? parameters found within aSQL
+// - as used e.g. by PostgreSQL library
+function ReplaceParamsByNumbers(const aSQL: RawUTF8; var aNewSQL: RawUTF8;
+  IndexChar: AnsiChar = '$'): integer;
+
+/// create a JSON array from an array of UTF-8 bound values
+// - as generated during array binding, i.e. with quoted strings
+// 'one','t"wo' -> '{"one","t\"wo"}'   and  1,2,3 -> '{1,2,3}'
+// - as used e.g. by PostgreSQL library
+function BoundArrayToJSONArray(const Values: TRawUTF8DynArray): RawUTF8;
+
 
 { -------------- native connection interfaces, without OleDB }
 
@@ -7860,6 +7872,185 @@ begin
     until i=L;
   end else
     aNewSQL := copy(aSQL,1,L); // trim right ';' if any
+end;
+
+function ReplaceParamsByNumbers(const aSQL: RawUTF8; var aNewSQL: RawUTF8;
+  IndexChar: AnsiChar): integer;
+var
+  ndx, L: PtrInt;
+  s, d, n: PUTF8Char;
+  c: AnsiChar;
+begin
+  aNewSQL := aSQL;
+  result := 0;
+  ndx := 0;
+  L := Length(aSQL);
+  s := pointer(aSQL);
+  if s = nil then
+    exit;
+  // calculate ? parameters count, check for ;
+  while s^ <> #0 do
+  begin
+    c := s^;
+    if c = '?' then
+    begin
+      inc(ndx);
+      if ndx > 9 then  // ? will be replaced by $n $nn $nnn
+        if ndx > 99 then
+          if ndx > 999 then
+            exit
+          else
+            inc(L, 3)
+        else
+          inc(L, 2)
+        else
+          inc(L);
+    end
+    else if c = '''' then
+    begin
+      repeat
+        inc(s);
+        c := s^;
+        if c = #0 then
+          exit; // quote without proper ending -> reject
+        if c = '''' then
+          if s[1] = c then
+            inc(s) // ignore double quotes between single quotes
+          else
+            break;
+      until false;
+    end else if c = ';' then
+      exit; // complex expression can not be prepared
+    inc(s);
+  end;
+  if ndx = 0 then // no ? parameter
+    exit;
+  result := ndx;
+  // parse SQL and replace ? into $n
+  FastSetString(aNewSQL, nil, L);
+  s := pointer(aSQL);
+  d := pointer(aNewSQL);
+  ndx := 0;
+  repeat
+    c := s^;
+    if c = '?' then
+    begin
+      d^ := IndexChar; // e.g. '$'
+      inc(d);
+      inc(ndx);
+      d := Append999ToBuffer(d, ndx);
+    end
+    else if c = '''' then
+    begin
+      repeat // ignore double quotes between single quotes
+        d^ := c;
+        inc(d);
+        inc(s);
+        c := s^;
+        if c = '''' then
+          if s[1] = c then
+          begin
+            d^ := c;
+            inc(d);
+            inc(s) // ignore double quotes between single quotes
+          end
+          else
+            break;
+      until false;
+      d^ := c; // store last '''
+      inc(d);
+    end
+    else
+    begin
+      d^ := c;
+      inc(d);
+    end;
+    inc(s);
+  until s^ = #0;
+  //assert(d - pointer(aNewSQL) = length(aNewSQL)); // until stabilized
+end;
+
+function BoundArrayToJSONArray(const Values: TRawUTF8DynArray): RawUTF8;
+//  'one', 't"wo' -> '{"one","t\"wo"}'  and  1,2,3 -> '{1,2,3}'
+var
+  V: ^RawUTF8;
+  s, d: PUTF8Char;
+  L, vl, j, n: PtrInt;
+  c: AnsiChar;
+begin
+  result := '';
+  n := length(Values);
+  if n = 0 then
+    exit;
+  L := 1; // trailing '{'
+  inc(L, n); // ',' after each element - and ending '}'
+  v := pointer(Values);
+  repeat
+    vl := length(v^);
+    if vl <> 0 then
+    begin
+      inc(L, vl);
+      s := pointer(v^);
+      if s^ = '''' then // quoted ftUTF8
+        for j := 1 to vl - 2 do
+        begin
+          c := s[j];
+          if c = '''' then
+            dec(L) // double ' into single '
+          else if (c = '"') or (c = '\') then
+            inc(L); // \ before "
+        end;
+    end;
+    inc(v);
+    dec(n);
+  until n = 0;
+  FastSetString(result, nil, L);
+  d := pointer(result);
+  d^ := '{';
+  inc(d);
+  v := pointer(Values);
+  n := length(Values);
+  repeat
+    vl := length(v^);
+    if vl <> 0 then
+    begin
+      s := pointer(v^);
+      if s^ = '''' then // quoted ftUTF8
+      begin
+        d^ := '"';
+        inc(d);
+        for j := 1 to vl - 2 do
+        begin
+          c := s[j];
+          if c = '''' then
+            continue // double ' into single '
+          else if (c = '"') or (c = '\') then
+          begin
+            d^ := '\'; // \ before "
+            inc(d);
+          end;
+          d^ := c;
+          inc(d);
+        end;
+        d^ := '"';
+        inc(d);
+      end
+      else
+      repeat // regular content
+        d^ := s^;
+        inc(d);
+        inc(s);
+        dec(vl);
+      until vl = 0;
+    end;
+    d^ := ',';
+    inc(d);
+    inc(v);
+    dec(n);
+  until n = 0;
+  dec(d);
+  d^ := '}'; // replace last ',' by '}'
+  // inc(d); assert(d - pointer(result) = length(result)); // until stabilized
 end;
 
 

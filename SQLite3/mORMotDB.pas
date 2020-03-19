@@ -831,27 +831,26 @@ begin
   result := false;
   if SQL='' then
     exit;
-  Stmt := TSynTableStatement.Create(SQL,
-    fStoredClassRecordProps.Fields.IndexByName,
+  Stmt := TSynTableStatement.Create(SQL,fStoredClassRecordProps.Fields.IndexByName,
     fStoredClassRecordProps.SimpleFieldsBits[soSelect]);
   try
     if (Stmt.SQLStatement='') or // parsing failed
       not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then begin
-      InternalLog('%.AdaptSQLForEngineList: statement too complex -> '+
-        'would use SQLite3 virtual engine [%]',[ClassType,SQL],sllWarning);
+      InternalLog('AdaptSQLForEngineList: complex statement -> switch to '+
+        'SQLite3 virtual engine - check efficiency',[],sllDebug);
       exit;
     end;
     if Stmt.Offset<>0 then begin
-      InternalLog('%.AdaptSQLForEngineList: unsupported OFFSET for [%]',
-        [ClassType,SQL],sllWarning);
+      InternalLog('AdaptSQLForEngineList: unsupported OFFSET for [%]',
+        [SQL],sllWarning);
       exit;
     end;
     if Stmt.Limit=0 then
       limit.Position := posNone else begin
       limit := fProperties.SQLLimitClause(Stmt);
       if limit.Position=posNone then begin
-        InternalLog('%.AdaptSQLForEngineList: unknown % LIMIT syntax for [%]',
-          [ClassType,ToText(fProperties.DBMS)^,SQL],sllWarning);
+        InternalLog('AdaptSQLForEngineList: unknown % LIMIT syntax for [%]',
+          [ToText(fProperties.DBMS)^,SQL],sllWarning);
         exit;
       end;
       if  limit.Position = posOuter then
@@ -920,8 +919,8 @@ begin
         for f := 0 to n do
         with Stmt.Where[f] do begin
           if (FunctionName<>'') or (Operator>high(DB_SQLOPERATOR)) then begin
-            InternalLog('%.AdaptSQLForEngineList: unsupported function %() for [%]',
-              [ClassType,FunctionName,SQL],sllWarning);
+            InternalLog('AdaptSQLForEngineList: unsupported function %() for [%]',
+              [FunctionName,SQL],sllWarning);
             exit;
           end;
           if f>0 then
