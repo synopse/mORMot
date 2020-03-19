@@ -7878,7 +7878,7 @@ function ReplaceParamsByNumbers(const aSQL: RawUTF8; var aNewSQL: RawUTF8;
   IndexChar: AnsiChar): integer;
 var
   ndx, L: PtrInt;
-  s, d, n: PUTF8Char;
+  s, d: PUTF8Char;
   c: AnsiChar;
 begin
   aNewSQL := aSQL;
@@ -7926,7 +7926,7 @@ begin
   if ndx = 0 then // no ? parameter
     exit;
   result := ndx;
-  // parse SQL and replace ? into $n
+  // parse SQL and replace ? into $n $nn $nnn
   FastSetString(aNewSQL, nil, L);
   s := pointer(aSQL);
   d := pointer(aNewSQL);
@@ -8048,8 +8048,7 @@ begin
     inc(v);
     dec(n);
   until n = 0;
-  dec(d);
-  d^ := '}'; // replace last ',' by '}'
+  d[-1] := '}'; // replace last ',' by '}'
   // inc(d); assert(d - pointer(result) = length(result)); // until stabilized
 end;
 

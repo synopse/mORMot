@@ -537,9 +537,9 @@ begin
       raise ESQLDBPostgres.CreateUTF8('%.ExecutePrepared: Query expects % parameters ' +
         'but % bound', [self, fPreparedParamsCount, fParamCount]);
     inherited ExecutePrepared;
-    for i := 0 to fParamCount - 1 do // repack parameters as expected by Postgre
+    for i := 0 to fParamCount - 1 do // set parameters as expected by PostgreSQL
     begin
-      // mark parameter as textual by default
+      // mark parameter as textual by default, with no blob len
       fPGParamFormats[i] := 0;
       fPGparamLengths[i] := 0;
       // convert parameter value as text stored in p^.VData
@@ -564,7 +564,7 @@ begin
           ftDouble:
             ExtendedToStr(PDouble(@p^.VInt64)^, DOUBLE_PRECISION, RawUTF8(p^.VData));
           ftDate:
-            // Posgres expects space instead of T in ISO8601 expanded format
+            // Postgres expects space instead of T in ISO8601 expanded format
             p^.VData := DateTimeToIso8601(PDateTime(@p^.VInt64)^, true, ' ');
           ftUTF8:
             ; // text already in p^.VData

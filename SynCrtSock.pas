@@ -389,7 +389,7 @@ type
     // this case, Close method won't be called
     function TrySockRecv(Buffer: pointer; var Length: integer; StopBeforeLength: boolean=false): boolean;
     /// call readln(SockIn^,Line) or simulate it with direct use of Recv(Sock, ..)
-    // - char are read one by one
+    // - char are read one by one if needed
     // - use TimeOut milliseconds wait for incoming data
     // - raise ECrtSocket exception on socket error
     // - by default, will handle #10 or #13#10 as line delimiter (as normal text
