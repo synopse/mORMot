@@ -7204,7 +7204,7 @@ begin
           maxAllowed := maxInt;
         AddParamValueAsText(num,W,maxAllowed);
         inc(num);
-      until (P^=#0) or ((maxSize>0)and(W.TextLength>=maxSize));
+      until (P^=#0) or ((maxSize>0) and (W.TextLength>=maxSize));
       result := W.Text;
       fSQLWithInlinedParams := result;
     finally

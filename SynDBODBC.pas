@@ -1196,7 +1196,7 @@ end;
 constructor TODBCConnection.Create(aProperties: TSQLDBConnectionProperties);
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Create'{$endif});
+  Log := SynDBLog.Enter(self,'Create');
   if not aProperties.InheritsFrom(TODBCConnectionProperties) then
     raise EODBCException.CreateUTF8('Invalid %.Create(%)',[self,aProperties]);
   fODBCProperties := TODBCConnectionProperties(aProperties);
@@ -1218,7 +1218,7 @@ begin
   finally
     if (ODBC<>nil) and (fDbc<>nil) then
     with ODBC do begin
-      log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Disconnect'{$endif});
+      log := SynDBLog.Enter(self,'Disconnect');
       Disconnect(fDbc);
       FreeHandle(SQL_HANDLE_DBC,fDbc);
       fDbc := nil;
@@ -1655,6 +1655,7 @@ var p, k: integer;
       StrLen_or_Ind: array of PtrInt;
       WData: RawUnicode;
     end;
+    log: ISynLog;
 label retry;
 begin
   if fStatement=nil then
@@ -1662,9 +1663,12 @@ begin
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   DriverDoesNotHandleUnicode := TODBCConnection(fConnection).fODBCProperties.fDriverDoesNotHandleUnicode;
   if fSQL<>'' then
-    with SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'ExecutePrepared'{$endif}).Instance do
-      if sllSQL in Family.Level then
-        Log(sllSQL,SQLWithInlinedParams,self,2048);
+  begin
+    log := SynDBLog.Enter(self,'ExecutePrepared');
+    if log <> nil then
+      if sllSQL in log.Instance.Family.Level then
+        log.Log(sllSQL,SQLWithInlinedParams,self,2048);
+  end;
   try
     // 1. bind parameters
     if (fParamsArrayCount>0) and (fDBMS<>dMSSQL) then
@@ -1852,7 +1856,7 @@ end;
 procedure TODBCStatement.Prepare(const aSQL: RawUTF8; ExpectResults: Boolean);
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Prepare'{$endif});
+  Log := SynDBLog.Enter(self,'Prepare');
   if (fStatement<>nil) or (fColumnCount>0) then
     raise EODBCException.CreateUTF8('%.Prepare should be called only once',[self]);
   // 1. process SQL

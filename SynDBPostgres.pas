@@ -285,15 +285,16 @@ begin
     if log <> nil then
     begin
       PQsetNoticeProcessor(fPGConn, SynLogNoticeProcessor, pointer(self));
-      log.Log(sllDB, 'Connected to % using % v%',
-        [fProperties.ServerName, Postgres3LoadedLibrary, PQlibVersion()]);
+      log.Log(sllDB, 'Connected to % % using % v%',
+        [fProperties.ServerName, fProperties.DatabaseNameSafe,
+         Postgres3LoadedLibrary, PQlibVersion]);
     end;
     inherited Connect; // notify any re-connection
   except
     on E: Exception do
     begin
       if log <> nil then
-        log.Log(sllError, E);
+        log.Log(sllError, 'Connect: % on %', [E, Properties.DatabaseNameSafe], self);
       Disconnect; // clean up on fail
       raise;
     end;
@@ -325,9 +326,9 @@ end;
 
 procedure TSQLDBPostgresConnection.StartTransaction;
 var
-  {%H-}Log: ISynLog;
+  log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self, 'StartTransaction');
+  log := SynDBLog.Enter(self, 'StartTransaction');
   if TransactionCount > 0 then
     raise ESQLDBPostgres.CreateUTF8('Invalid %.StartTransaction: nested ' +
       'transactions are not supported by the Postgres - use SAVEPOINT instead', [self]);
@@ -337,6 +338,8 @@ begin
   except
     on E: Exception do
     begin
+      if log <> nil then
+        log.Log(sllError, 'StartTransaction: % on %', [E, Properties.DatabaseNameSafe], self);
       if fTransactionCount > 0 then
         Dec(fTransactionCount);
       raise;
@@ -556,7 +559,6 @@ begin
     vl := length(v^);
     if vl <> 0 then
     begin
-      inc(L, vl);
       s := pointer(v^);
       if s^ = '''' then // quoted ftUTF8
       begin
@@ -622,7 +624,7 @@ procedure TSQLDBPostgresStatement.CheckColAndRowset(const Col: integer);
 begin
   CheckCol(Col);
   if (fRes = nil) or (fResStatus <> PGRES_TUPLES_OK) then
-    raise ESQLDBPostgres.CreateUTF8('%.Execute should be called before', [self]);
+    raise ESQLDBPostgres.CreateUTF8('%.Execute not called before Column*()', [self]);
 end;
 
 destructor TSQLDBPostgresStatement.Destroy;
@@ -637,25 +639,47 @@ end;
 procedure TSQLDBPostgresStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
 var
   c: TSQLDBPostgresConnection;
+  log: TSynLog;
+  timer: TPrecisionTimer;
+  fromcache: integer;
 begin
-  if aSQL = '' then
-    raise ESQLDBPostgres.Create('Empty statement passed to prepare');
-  inherited Prepare(aSQL, ExpectResults); // will strip last ;
-  fPreparedParamsCount := ReplaceQParamsByIndex(fSQL, fParsedSQL);
-  if (fPreparedParamsCount > 0) and (IdemPCharArray(PUTF8Char(fParsedSQL),
-      ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'VALUES']) >= 0) then
-  begin // preparable
-    fPreparedStmtName := SHA256(fParsedSQL);
-    c := pointer(Connection);
-    if c.FPQprepared.IndexOf(fPreparedStmtName) < 0 then
-    begin // not prepared in this connection yet
-      c.Check(PQPrepare(c.fPGConn, pointer(fPreparedStmtName), pointer(fParsedSQL),
-        fPreparedParamsCount, nil));
-      c.FPQprepared.Add(fPreparedStmtName);
-      SynDBLog.Add.Log(sllDebug, 'Prepare: Statement cache MISS', self);
-    end
-    else
-      SynDBLog.Add.Log(sllDebug, 'Prepare: Statement cache HIT', self);
+  try
+    log := SynDBLog.Add;
+    if log <> nil then
+      if sllDB in log.Family.Level then
+        timer.Start
+      else
+        log := nil;
+    if aSQL = '' then
+      raise ESQLDBPostgres.CreateUTF8('%.Prepare: empty statement', [self]);
+    inherited Prepare(aSQL, ExpectResults); // will strip last ;
+    fPreparedParamsCount := ReplaceQParamsByIndex(fSQL, fParsedSQL);
+    if (fPreparedParamsCount > 0) and (IdemPCharArray(PUTF8Char(fParsedSQL),
+        ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'VALUES']) >= 0) then
+    begin // preparable
+      fPreparedStmtName := SHA256(fParsedSQL);
+      c := pointer(Connection);
+      fromcache := c.FPQprepared.IndexOf(fPreparedStmtName);
+      if fromcache < 0 then
+      begin // not prepared in this connection yet
+        c.Check(PQPrepare(c.fPGConn, pointer(fPreparedStmtName),
+          pointer(fParsedSQL), fPreparedParamsCount, nil));
+        c.FPQprepared.Add(fPreparedStmtName);
+      end;
+      if log<>nil then
+        log.Log(sllDB,'Prepare % name=% cache=% %',
+          [timer.Stop, fPreparedStmtName, fromcache, fParsedSQL],self);
+    end;
+    else if log<>nil then
+      log.Log(sllDB,'Prepare % %', [timer.Stop, fParsedSQL],self);
+  except
+    on E: Exception do
+    begin
+      if SynDBLog <> nil then
+        SynDBLog.Add.Log(sllError, 'Prepare: % on % [%]',
+          [E, Connection.Properties.DatabaseNameSafe, aSQL], self);
+      raise;
+    end;
   end;
   SetLength(fPGParams, fPreparedParamsCount);
   SetLength(fPGParamFormats, fPreparedParamsCount);
@@ -667,84 +691,99 @@ var
   i: PtrInt;
   p: PSQLDBParam;
   c: TSQLDBPostgresConnection;
+  log: TSynLog;
+  timer: TPrecisionTimer;
 begin
-  if fParsedSQL = '' then
-    raise ESQLDBPostgres.Create('Statement not prepared');
-  if fParamCount <> fPreparedParamsCount then
-    raise ESQLDBPostgres.CreateUTF8('Query expect % parameters but % is binded',
-      [fPreparedParamsCount, fParamCount]);
-  inherited ExecutePrepared;
-  with SynDBLog.Add do
-    if sllSQL in Family.Level then
-      Log(sllSQL, fParsedSQL, self, 2048);
-  for i := 0 to fParamCount - 1 do // repack parameters as expected by Postgre
-  begin
-    // mark parameter as textual by default
-    fPGParamFormats[i] := 0;
-    fPGparamLengths[i] := 0;
-    // convert parameter value as text stored in p^.VData
-    p := @fParams[i];
-    if p^.VArray <> nil then
+  try
+    log := SynDBLog.Add;
+    if log<>nil then
+      if sllSQL in log.Family.Level then
+        timer.Start
+      else
+        log := nil;
+    if fParsedSQL = '' then
+      raise ESQLDBPostgres.CreateUTF8('%.ExecutePrepared: Statement not prepared', [self]);
+    if fParamCount <> fPreparedParamsCount then
+      raise ESQLDBPostgres.CreateUTF8('%.ExecutePrepared: Query expects % parameters ' +
+        'but % bound', [self, fPreparedParamsCount, fParamCount]);
+    inherited ExecutePrepared;
+    for i := 0 to fParamCount - 1 do // repack parameters as expected by Postgre
     begin
-      if not (p^.VType in [ftInt64, ftDouble, ftCurrency, ftUTF8]) then
-        raise ESQLDBPostgres.CreateUTF8('%.ExecutePrepared: Invalid array type % ' +
-          'on bound parameter #%', [Self, ToText(p^.VType)^, i]);
-      p^.VData := UTF8Array2PostgreArray(p^.VArray);
-    end
-    else
-    begin
-      case p^.VType of
-        ftNull:
-          p^.VData := '';
-        ftInt64:
-          // use SwapEndian + binary ?
-          Int64ToUtf8(p^.VInt64, RawUTF8(p^.VData));
-        ftCurrency:
-          Curr64ToStr(p^.VInt64, RawUTF8(p^.VData));
-        ftDouble:
-          ExtendedToStr(PDouble(@p^.VInt64)^, DOUBLE_PRECISION, RawUTF8(p^.VData));
-        ftDate:
-          // Posgres expects space instead of T in ISO8601 expanded format
-          p^.VData := DateTimeToIso8601(PDateTime(@p^.VInt64)^, true, ' ');
-        ftUTF8:
-          ; // text already in p^.VData
-        ftBlob:
-        begin
-          fPGParamFormats[i] := 1; // binary
-          fPGparamLengths[i] := length(p^.VData);
+      // mark parameter as textual by default
+      fPGParamFormats[i] := 0;
+      fPGparamLengths[i] := 0;
+      // convert parameter value as text stored in p^.VData
+      p := @fParams[i];
+      if p^.VArray <> nil then
+      begin
+        if not (p^.VType in [ftInt64, ftDouble, ftCurrency, ftUTF8]) then
+          raise ESQLDBPostgres.CreateUTF8('%.ExecutePrepared: Invalid array type % ' +
+            'on bound parameter #%', [Self, ToText(p^.VType)^, i]);
+        p^.VData := UTF8Array2PostgreArray(p^.VArray);
+      end
+      else
+      begin
+        case p^.VType of
+          ftNull:
+            p^.VData := '';
+          ftInt64:
+            // use SwapEndian + binary ?
+            Int64ToUtf8(p^.VInt64, RawUTF8(p^.VData));
+          ftCurrency:
+            Curr64ToStr(p^.VInt64, RawUTF8(p^.VData));
+          ftDouble:
+            ExtendedToStr(PDouble(@p^.VInt64)^, DOUBLE_PRECISION, RawUTF8(p^.VData));
+          ftDate:
+            // Posgres expects space instead of T in ISO8601 expanded format
+            p^.VData := DateTimeToIso8601(PDateTime(@p^.VInt64)^, true, ' ');
+          ftUTF8:
+            ; // text already in p^.VData
+          ftBlob:
+          begin
+            fPGParamFormats[i] := 1; // binary
+            fPGparamLengths[i] := length(p^.VData);
+          end;
+          else
+            raise ESQLDBPostgres.CreateUTF8('%.ExecutePrepared: cannot bind ' +
+              'parameter #% of type %', [self, i, ToText(p^.VType)^]);
         end;
-        else
-          raise ESQLDBPostgres.CreateUTF8(
-            '%.ExecutePrepared: cannot bind parameter #% of type %',
-              [self, i, ToText(p^.VType)^]);
+        fPGParams[i] := pointer(p^.VData);
       end;
-      fPGParams[i] := pointer(p^.VData);
     end;
-  end;
-  c := TSQLDBPostgresConnection(Connection);
-  if fPreparedStmtName <> '' then
-    fRes := PQexecPrepared(c.fPGConn, pointer(fPreparedStmtName), fPreparedParamsCount,
-      pointer(fPGParams), pointer(fPGparamLengths), pointer(fPGParamFormats), 0)
-  else if fPreparedParamsCount = 0 then // PQexec can include multiple SQL commands
-    fRes := PQexec(c.fPGConn, pointer(fParsedSQL))
-  else
-    fRes := PQexecParams(c.fPGConn, pointer(fParsedSQL), fPreparedParamsCount, nil,
-      pointer(fPGParams), pointer(fPGparamLengths), pointer(fPGParamFormats), 0);
-  c.Check(fRes, @fRes, false{forceClean});
-
-  fResStatus := PQresultStatus(fRes);
-  if fExpectResults then
-  begin
-    if (fResStatus <> PGRES_TUPLES_OK) then
-    begin // may be we do not need check?
-      PQclear(fRes);
-      fRes := nil;
-      raise ESQLDBPostgres.Create('result expected but statement not return tuples');
+    c := TSQLDBPostgresConnection(Connection);
+    if fPreparedStmtName <> '' then
+      fRes := PQexecPrepared(c.fPGConn, pointer(fPreparedStmtName), fPreparedParamsCount,
+        pointer(fPGParams), pointer(fPGparamLengths), pointer(fPGParamFormats), 0)
+    else if fPreparedParamsCount = 0 then // PQexec can include multiple SQL commands
+      fRes := PQexec(c.fPGConn, pointer(fParsedSQL))
+    else
+      fRes := PQexecParams(c.fPGConn, pointer(fParsedSQL), fPreparedParamsCount, nil,
+        pointer(fPGParams), pointer(fPGparamLengths), pointer(fPGParamFormats), 0);
+    c.Check(fRes, @fRes, false{forceClean});
+    fResStatus := PQresultStatus(fRes);
+    if fExpectResults then
+    begin
+      if fResStatus <> PGRES_TUPLES_OK then
+      begin // paranoid check
+        PQclear(fRes);
+        fRes := nil;
+        raise ESQLDBPostgres.CreateUTF8('%.ExecutePrepared: result expected but ' +
+          'statement did not return tuples', [self]);
+      end;
+      fTotalRowsRetrieved := PQntuples(fRes);
+      fCurrentRow := -1;
+      if fColumn.Count = 0 then // if columnus exists then statement is already cached
+        BindColumnus;
     end;
-    fTotalRowsRetrieved := PQntuples(fRes);
-    fCurrentRow := -1;
-    if fColumn.Count = 0 then // if columnus exists then statement is already cached
-      BindColumnus;
+    if log <> nil then
+      log.Log(sllSQL, 'ExecutePrepared: % %', [timer.Stop, SQLWithInlinedParams], self);
+  except
+    on E: Exception do
+    begin
+      if SynDBLog <> nil then
+        SynDBLog.Add.Log(sllError, '% %', [E, SQLWithInlinedParams], self);
+      raise;
+    end;
   end;
 end;
 
