@@ -7204,7 +7204,7 @@ begin
           maxAllowed := maxInt;
         AddParamValueAsText(num,W,maxAllowed);
         inc(num);
-      until (P^=#0) or ((maxSize>0)and(W.TextLength>=maxSize));
+      until (P^=#0) or ((maxSize>0) and (W.TextLength>=maxSize));
       result := W.Text;
       fSQLWithInlinedParams := result;
     finally
@@ -7354,7 +7354,8 @@ begin
       if (L>5) and (aSQL[L]=';') and // avoid syntax error for some drivers
          not IdemPChar(@aSQL[L-4],' END') then
         fSQL := copy(aSQL,1,L-1) else
-        fSQL := aSQL;
+        fSQL := aSQL else
+      fSQL := aSQL;
     fExpectResults := ExpectResults;
     if (fConnection<>nil) and not fConnection.IsConnected then
       fConnection.Connect;

@@ -3569,43 +3569,6 @@ begin
   end;
 end;
 
-function GetHeaderValue(var headers: SockString; const upname: SockString;
-  deleteInHeaders: boolean): SockString;
-var i,j,k: PtrInt;
-begin
-  result := '';
-  if (headers='') or (upname='') then
-    exit;
-  i := 1;
-  repeat
-    k := length(headers)+1;
-    for j := i to k-1 do
-      if headers[j]<' ' then begin
-        k := j;
-        break;
-      end;
-    if IdemPChar(@headers[i],pointer(upname)) then begin
-      j := i;
-      inc(i,length(upname));
-      while headers[i]=' ' do inc(i);
-      result := copy(headers,i,k-i);
-      if deleteInHeaders then begin
-        while true do // delete also ending #13#10
-          if (headers[k]=#0) or (headers[k]>=' ') then
-            break else
-            inc(k);
-        delete(headers,j,k-j);
-      end;
-      exit;
-    end;
-    i := k;
-    while headers[i]<' ' do
-      if headers[i]=#0 then
-        exit else
-        inc(i);
-  until false;
-end;
-
 // rewrite some functions to avoid unattempted ansi<->unicode conversion
 
 function PosCh(ch: AnsiChar; const s: SockString): PtrInt;
@@ -3640,8 +3603,8 @@ begin
     SetString(result,PAnsiChar(@PByteArray(S)[start]),L);
 end;
 
-function Trim(const S: SockString): SockString;
 {$ifdef FPC_OR_PUREPASCAL}
+function Trim(const S: SockString): SockString;
 var i, L: PtrInt;
 begin
   L := Length(S);
@@ -3658,6 +3621,7 @@ begin
   end;
 end;
 {$else}
+function Trim(const S: SockString): SockString;
 asm  // fast implementation by John O'Harrow
   test eax,eax                   {S = nil?}
   xchg eax,edx
@@ -3689,6 +3653,42 @@ asm  // fast implementation by John O'Harrow
   jmp  @@CheckDone
 end;
 {$endif}
+
+function GetHeaderValue(var headers: SockString; const upname: SockString;
+  deleteInHeaders: boolean): SockString;
+var i,j,k: PtrInt;
+begin
+  {$ifdef FPC} Finalize(result); {$else} result := ''; {$endif}
+  if (headers='') or (upname='') then
+    exit;
+  i := 1;
+  repeat
+    k := length(headers)+1;
+    for j := i to k-1 do
+      if headers[j]<' ' then begin
+        k := j;
+        break;
+      end;
+    if IdemPCharUp(@headers[i],pointer(upname),@NormToUpper) then begin
+      j := i;
+      inc(i,length(upname));
+      TrimCopy(headers,i,k-i,result);
+      if deleteInHeaders then begin
+        while true do // delete also ending #13#10
+          if (headers[k]=#0) or (headers[k]>=' ') then
+            break else
+            inc(k);
+        delete(headers,j,k-j);
+      end;
+      exit;
+    end;
+    i := k;
+    while headers[i]<' ' do
+      if headers[i]=#0 then
+        exit else
+        inc(i);
+  until false;
+end;
 
 procedure UpperMove(Source, Dest: PByte; ToUp: PByteArray; L: cardinal);
 begin
@@ -4611,11 +4611,15 @@ begin
     SetSockOpt(Sock,SOL_SOCKET, SO_LINGER, @li, SizeOf(li));
     if OptVal>0 then begin
       {$ifdef LINUX}
-      SetSockOpt(Sock,SOL_SOCKET, SO_REUSEADDR,@SO_TRUE,SizeOf(SO_TRUE));
-      {$endif}
-      {$ifdef BSD}
-      SetSockOpt(Sock,SOL_SOCKET,SO_NOSIGPIPE,@SO_TRUE,SizeOf(SO_TRUE));
-      {$endif}
+        {$ifdef BSD}
+          SetSockOpt(Sock,SOL_SOCKET,SO_REUSEPORT,@SO_TRUE,SizeOf(SO_TRUE));
+        {$ifndef OpenBSD}
+          SetSockOpt(Sock,SOL_SOCKET,SO_NOSIGPIPE,@SO_TRUE,SizeOf(SO_TRUE));
+        {$endif OpenBSD}
+        {$else}
+          SetSockOpt(Sock,SOL_SOCKET, SO_REUSEADDR,@SO_TRUE,SizeOf(SO_TRUE));
+        {$endif BSD}
+      {$endif LINUX}
     end;
     exit;
   end;
@@ -4711,7 +4715,7 @@ function WSAIsFatalError: boolean;
 var err: integer;
 begin
   err := WSAGetLastError;
-  result := (err<>NO_ERROR) and (err<>WSATRY_AGAIN) and (err<>WSAEINTR)
+  result := (err<>NO_ERROR) and (err<>WSATRY_AGAIN) and (err<>WSAEINTR) and (err<>WSAEADDRNOTAVAIL)
     {$ifdef MSWINDOWS}and (err<>WSAETIMEDOUT) and (err<>WSAEWOULDBLOCK){$endif};
 end;
 
@@ -4884,6 +4888,7 @@ procedure TCrtSocket.OpenBind(const aServer, aPort: SockString;
 const BINDTXT: array[boolean] of string[4] = ('open','bind');
       BINDMSG: array[boolean] of string = ('Is a server running on this address:port?',
         'Another process may be currently listening to this port!');
+var retry: integer;
 begin
   fSocketLayer := aLayer;
   fWasBind := doBind;
@@ -4892,10 +4897,19 @@ begin
       fPort := DEFAULT_PORT[aTLS] else // default port is 80/443 (HTTP/S)
       fPort := aPort;
     fServer := aServer;
-    fSock := CallServer(aServer,Port,doBind,aLayer,Timeout); // OPEN or BIND
-    if fSock<=0 then
-      raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s) failed: %s',
-        [aServer,fPort,BINDTXT[doBind],BINDMSG[doBind]],-1);
+    if doBind then // allow small number of retries (e.g. XP or BSD during aggressive tests)
+      retry := 10 else 
+      retry := {$ifdef BSD}10{$else}2{$endif}; 
+    repeat
+      fSock := CallServer(aServer,Port,doBind,aLayer,Timeout); // OPEN or BIND
+      if (fSock>0) or WSAIsFatalError then
+        break;
+      dec(retry);
+      if retry=0 then
+        raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s) failed: %s',
+          [aServer,fPort,BINDTXT[doBind],BINDMSG[doBind]],-1);
+      sleep(10);
+    until false;
   end else
     fSock := aSock; // ACCEPT mode -> socket is already created by caller
   if TimeOut>0 then begin // set timout values for both directions
@@ -4927,7 +4941,7 @@ end;
 
 procedure TCrtSocket.AcceptRequest(aClientSock: TSocket; aClientSin: PVarSin);
 begin
-  {$ifdef LINUX}
+  {$ifdef LINUXNOTBSD}
   // on Linux fd returned from accept() inherits all parent fd options
   // except O_NONBLOCK and O_ASYNC;
   fSock := aClientSock;
@@ -4935,7 +4949,7 @@ begin
   // on other OS inheritance is undefined, so call OpenBind to set all fd options
   OpenBind('','',false,aClientSock, fSocketLayer); // set the ACCEPTed aClientSock
   Linger := 5; // should remain open for 5 seconds after a closesocket() call
-  {$endif}
+  {$endif LINUXNOTBSD}
   if aClientSin<>nil then
     IPText(aClientSin^,fRemoteIP);
 end;
@@ -6756,7 +6770,7 @@ begin
        else P := nil;
        end;
     1: include(HeaderFlags,transferChuked);
-    2: case IdemPCharArray(P+12,['CLOSE', 'UPGRADE', 'KEEP-ALIVE']) of
+    2: case IdemPCharArray(P+12,['CLOSE','UPGRADE','KEEP-ALIVE']) of
        0: include(HeaderFlags,connectionClose);
        1: include(HeaderFlags,connectionUpgrade);
        2: begin
@@ -7007,10 +7021,10 @@ const SHUT_: array[boolean] of integer = (SHUT_RD, SHUT_RDWR);
 begin
   if sock<=0 then
     exit;
-  {$ifndef MSWINDOWS}
-  // at last under UNIX close() is enough. For example nginx don't call shutdown
+  {$ifdef LINUXNOTBSD}
+  // at last under Linux close() is enough. For example nginx don't call shutdown
   if rdwr then
-  {$endif MSWINDOWS}
+  {$endif LINUXNOTBSD}
     Shutdown(sock,SHUT_[rdwr]); // SHUT_RD doesn't unlock accept() on Linux
   CloseSocket(sock); // SO_LINGER usually set to 5 or 10 seconds
 end;
@@ -9065,7 +9079,8 @@ begin
           P := Req^.Headers.pUnknownHeaders;
           if P<>nil then
           for i := 1 to Req^.Headers.UnknownHeaderCount do
-            if (P^.NameLength=L) and IdemPChar(P^.pName,Pointer(fRemoteConnIDHeaderUpper)) then begin
+            if (P^.NameLength=L) and
+               IdemPChar(P^.pName,Pointer(fRemoteConnIDHeaderUpper)) then begin
               SetString(RemoteConn,p^.pRawValue,p^.RawValueLength); // need #0 end
               R := pointer(RemoteConn);
               Context.fConnectionID := GetNextItemUInt64(R);
@@ -9932,6 +9947,7 @@ begin
   DeleteCriticalSection(fSafe);
   {$ENDIF}
   FreeMem(fConnections, fConnectionsCapacity * SizeOf(PHttpApiWebSocketConnection));
+  fConnections := nil;
   inherited;
 end;
 
@@ -10319,6 +10335,7 @@ begin
     fRegisteredProtocols^[i].Free;
   fRegisteredProtocols^ := nil;
   Dispose(fRegisteredProtocols);
+  fRegisteredProtocols := nil;
   inherited;
 end;
 

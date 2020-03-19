@@ -2273,7 +2273,8 @@ begin
   Stop(dummy); // ignore any error when stopping
   fProcessTimer.Resume;
   {$ifdef WITHLOG}
-  Log.Log(sllTrace,'Start %',[self],self);
+  if Log<>nil then
+    Log.Log(sllTrace,'Start %',[self],self);
   {$endif}
   CqrsBeginMethod(qaNone,result,cqrsSuccess);
   SetLength(fProcess,fProcessThreadCount);
@@ -2407,7 +2408,8 @@ begin
     CqrsSetResult(cqrsAlreadyExists,result) else
     try
       {$ifdef WITHLOG}
-      log.Log(sllDDDInfo,'Starting',self);
+      if log<>nil then
+        log.Log(sllDDDInfo,'Starting',self);
       {$endif}
       InternalStart;
       fStatus := dsStarted;
@@ -2451,12 +2453,14 @@ begin
     if InternalRetrieveState(Information) then
     try
       {$ifdef WITHLOG}
-      log.Log(sllDDDInfo,'Stopping %',[Information],self);
+      if log<>nil then
+        log.Log(sllDDDInfo,'Stopping %',[Information],self);
       {$endif}
       InternalStop; // always stop
       fStatus := dsStopped;
       {$ifdef WITHLOG}
-      log.Log(sllDDDInfo,'Stopped: %',[Information],self);
+      if log<>nil then
+        log.Log(sllDDDInfo,'Stopped: %',[Information],self);
       {$endif}
       CqrsSetResult(cqrsSuccess,result);
     except
@@ -2479,7 +2483,8 @@ begin
   if InternalIsRunning then
   try
     {$ifdef WITHLOG}
-    log.Log(sllDDDInfo,'Halting',self);
+    if log<>nil then
+      log.Log(sllDDDInfo,'Halting',self);
     {$endif}
     CqrsSetResult(Stop(Information),result);
   except

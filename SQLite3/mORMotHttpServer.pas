@@ -512,9 +512,10 @@ begin
     result := true;
   finally
     fSafe.UnLock;
-    log.Log(sllHttp,'AddServer(%,Root=%,Port=%,Public=%:%)=%',
-      [aServer,aServer.Model.Root,fPort,fPublicAddress,fPublicPort,
-       BOOL_STR[result]],self);
+    if log<>nil then
+      log.Log(sllHttp,'AddServer(%,Root=%,Port=%,Public=%:%)=%',
+        [aServer,aServer.Model.Root,fPort,fPublicAddress,fPublicPort,
+         BOOL_STR[result]],self);
   end;
 end;
 
@@ -560,8 +561,9 @@ begin
     end;
   finally
     fSafe.UnLock;
-    log.Log(sllHttp,'%.RemoveServer(Root=%)=%',
-      [self,aServer.Model.Root,BOOL_STR[result]],self);
+    if log<>nil then
+      log.Log(sllHttp,'%.RemoveServer(Root=%)=%',
+        [self,aServer.Model.Root,BOOL_STR[result]],self);
   end;
 end;
 
@@ -697,9 +699,9 @@ end;
 destructor TSQLHttpServer.Destroy;
 var log: ISynLog;
 begin
-  log := fLog.Enter(self, 'Destroy');
-  fLog.Add.Log(sllHttp,'% finalized for %',[fHttpServer,
-    Plural('server',length(fDBServers))],self);
+  log := fLog.Enter(self,'Destroy');
+  if log<>nil then
+    log.Log(sllHttp,'% finalized for %',[fHttpServer,Plural('server',length(fDBServers))],self);
   Shutdown(true); // but don't call fDBServers[i].Server.Shutdown
   FreeAndNil(fHttpServer);
   inherited Destroy;
@@ -844,7 +846,7 @@ function TSQLHttpServer.Request(Ctxt: THttpServerRequest): cardinal;
 var call: TSQLRestURIParams;
     i,hostlen: integer;
     P: PUTF8Char;
-    hostroot,redirect: RawUTF8;
+    headers,hostroot,redirect: RawUTF8;
     match: TSQLRestModelMatch;
     serv: TSQLRestServer;
 begin
@@ -863,8 +865,8 @@ begin
   if Ctxt.Method='OPTIONS' then begin // handle CORS
     if fAccessControlAllowOrigin='' then
       Ctxt.OutCustomHeaders := 'Access-Control-Allow-Origin:' else begin
-      Ctxt.OutCustomHeaders := 'Access-Control-Allow-Headers: '+
-        FindIniNameValue(pointer(Ctxt.InHeaders),'ACCESS-CONTROL-REQUEST-HEADERS: ');
+      FindNameValue(Ctxt.InHeaders,'ACCESS-CONTROL-REQUEST-HEADERS:',headers);
+      Ctxt.OutCustomHeaders := 'Access-Control-Allow-Headers: '+headers;
       ComputeAccessControlHeader(Ctxt);
     end;
     result := HTTP_NOCONTENT;
@@ -881,7 +883,7 @@ begin
           include(call.LowLevelFlags,llfSecured);
     end;
     if fHosts.Count>0 then begin
-      hostroot := FindIniNameValue(pointer(Ctxt.InHeaders),'HOST: ');
+      FindNameValue(Ctxt.InHeaders,'HOST: ',hostroot);
       i := PosExChar(':',hostroot);
       if i>0 then
         SetLength(hostroot,i-1); // trim any port
@@ -1012,7 +1014,7 @@ end;
 procedure TSQLHttpServer.ComputeAccessControlHeader(Ctxt: THttpServerRequest);
 var origin: RawUTF8;
 begin // caller did ensure that fAccessControlAllowOrigin<>''
-  origin := trim(FindIniNameValue(pointer(Ctxt.InHeaders),'ORIGIN: '));
+  FindNameValue(Ctxt.InHeaders,'ORIGIN: ',origin);
   if origin='' then
     exit;
   if fAccessControlAllowOrigin='*' then

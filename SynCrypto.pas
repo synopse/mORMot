@@ -131,7 +131,10 @@ uses
   SynCommons,
   SynTable; // for TSynUniqueIdentifierGenerator
 
-
+{$ifdef ABSOLUTEPASCAL}
+  {$define AES_PASCAL}
+  {$define SHA3_PASCAL}
+{$else}
 {$ifdef DELPHI5OROLDER}
   {$define AES_PASCAL} // Delphi 5 internal asm is buggy :(
   {$define SHA3_PASCAL}
@@ -178,6 +181,7 @@ uses
     {$define AES_PASCAL}
     {$define SHA3_PASCAL}
   {$endif CPUINTEL}
+{$endif}
 {$endif}
 
 {$ifdef AES_PASCAL}

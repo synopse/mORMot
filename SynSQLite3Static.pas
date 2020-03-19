@@ -207,72 +207,84 @@ implementation
 
   {$ifdef MSWINDOWS}
     {$ifdef CPU64}
-      {$L static\x86_64-win64\sqlite3.o}
-      {$linklib static\x86_64-win64\libkernel32.a}
-      {$linklib static\x86_64-win64\libgcc.a}
-      {$linklib static\x86_64-win64\libmsvcrt.a}
       const _PREFIX = '';
+      {$L .\static\x86_64-win64\sqlite3.o}
+      {$linklib .\static\x86_64-win64\libkernel32.a}
+      {$linklib .\static\x86_64-win64\libgcc.a}
+      {$linklib .\static\x86_64-win64\libmsvcrt.a}
     {$else}
-      {$L static\i386-win32\sqlite3.o}
-      {$linklib static\i386-win32\libkernel32.a}
-      {$linklib static\i386-win32\libgcc.a}
-      {$linklib static\i386-win32\libmsvcrt.a}
       const _PREFIX = '_';
+      {$L .\static\i386-win32\sqlite3.o}
+      {$linklib .\static\i386-win32\libkernel32.a}
+      {$linklib .\static\i386-win32\libgcc.a}
+      {$linklib .\static\i386-win32\libmsvcrt.a}
     {$endif CPU64}
-  {$else}
-    {$ifdef Darwin}
-      {$ifdef CPU64}
-        {$linklib .\..\static\x86_64-darwin\libsqlite3.a}
-      {$else}
-        {$linklib .\..\static\i386-darwin\libsqlite3.a}
-      {$endif}
-      const _PREFIX = '_';
-    {$else Darwin}
-      {$ifndef FPC_CROSSCOMPILING}
-        {$linklib gcc.a}
-      {$endif}
-      {$ifdef CPUAARCH64}
-        {$ifdef ANDROID}
-          {$L .\static\aarch64-android\libsqlite3.a}
-          {$L .\static\aarch64-android\libgcc.a}
-        {$else}
-          {$L .\static\aarch64-linux\libsqlite3.a}
-          {$L .\static\aarch64-linux\libgcc.a}
-        {$endif}
-        const _PREFIX = '';
-      {$endif}
-      {$ifdef CPUARM}
-        {$ifdef ANDROID}
-          {$L .\static\arm-android\libsqlite3.a}
-          {$L .\static\arm-android\libgcc.a}
-        {$else}
-          {$L static\arm-linux\sqlite3.o}
-          {$ifdef FPC_CROSSCOMPILING}
-            {$linklib static\arm-linux\gcc.a}
-            {$L libgcc_s.so.1}
-          {$else}
-            {$linklib gcc_s.so.1}
-          {$endif FPC_CROSSCOMPILING}
-        {$endif ANDROID}
-        const _PREFIX = '';
-      {$endif}
-      {$ifdef CPUINTEL}
-        {$ifdef CPU64}
-          {$L static/x86_64-linux\sqlite3.o}
-          {$ifdef FPC_CROSSCOMPILING}
-            {$linklib static/x86_64-linux\gcc.a}
-          {$endif}
-          const _PREFIX = '';
-        {$else}
-          {$L static/i386-linux\sqlite3.o}
-          {$ifdef FPC_CROSSCOMPILING}
-            {$linklib static/i386-linux\gcc.a}
-          {$endif}
-          const _PREFIX = '';
-        {$endif CPU64}
-      {$endif CPUINTEL}
-    {$endif Darwin}
   {$endif MSWINDOWS}
+
+  {$ifdef Darwin}
+    const _PREFIX = '_';
+    {$ifdef CPU64}
+      {$linklib .\static\x86_64-darwin\libsqlite3.a}
+    {$else}
+      {$linklib .\static\i386-darwin\libsqlite3.a}
+    {$endif}
+  {$endif Darwin}
+
+  {$ifdef ANDROID}
+    const _PREFIX = '';
+    {$ifdef CPUAARCH64}
+      {$L .\static\aarch64-android\libsqlite3.a}
+      {$L .\static\aarch64-android\libgcc.a}
+    {$endif CPUAARCH64}
+    {$ifdef CPUARM}
+      {$L .\static\arm-android\libsqlite3.a}
+      {$L .\static\arm-android\libgcc.a}
+    {$endif CPUARM}
+  {$endif ANDROID}
+
+  {$ifdef FREEBSD}
+    {$ifdef CPUX64}
+    const _PREFIX = '';
+    {$L .\static\x86_64-freebsd\sqlite3.o}
+    {$ifdef FPC_CROSSCOMPILING}
+      {$linklib .\static\x86_64-freebsd\libgcc.a}
+    {$endif}
+    {$endif CPUX64}
+  {$endif FREEBSD}
+
+  {$ifdef OPENBSD}
+    {$ifdef CPUX64}
+      const _PREFIX = '';
+      {$L .\static\x86_64-openbsd\sqlite3.o}
+      {$ifdef FPC_CROSSCOMPILING}
+        {$linklib .\static\x86_64-openbsd\libgcc.a}
+      {$endif}
+    {$endif CPUX64}
+  {$endif OPENBSD}
+
+  {$if defined(Linux) and not defined(BSD) and not defined(Android)}
+    const _PREFIX = '';
+    {$ifdef CPUAARCH64}
+      {$L .\static\aarch64-linux\sqlite3.o}
+      {$L .\static\aarch64-linux\libgcc.a}
+    {$endif CPUAARCH64}
+    {$ifdef CPUARM}
+      {$L .\static\arm-linux\sqlite3.o}
+      {$L .\static\arm-linux\libgcc.a}
+    {$endif CPUARM}
+    {$ifdef CPUX86}
+      {$L .\static\i386-linux\sqlite3.o}
+      {$ifdef FPC_CROSSCOMPILING}
+        {$linklib .\static\i386-linux\libgcc.a}
+      {$endif}
+    {$endif CPUX86}
+    {$ifdef CPUX64}
+      {$L .\static\x86_64-linux\sqlite3.o}
+      {$ifdef FPC_CROSSCOMPILING}
+        {$linklib .\static\x86_64-linux\libgcc.a}
+      {$endif}
+    {$endif CPUX64}
+  {$ifend}
 
 function log(x: double): double; cdecl; public name _PREFIX+'log'; export;
 begin
@@ -291,21 +303,21 @@ end;
 
 {$ifdef DARWIN}
 
-function moddi3(num,den:int64):int64; cdecl; public alias: '___moddi3';
+function moddi3(num, den: int64): int64; cdecl; public alias: '___moddi3';
 begin
- result := num mod den;
+  result := num mod den;
 end;
-function umoddi3(num,den:uint64):uint64; cdecl; public alias: '___umoddi3';
+function umoddi3(num, den: uint64): uint64; cdecl; public alias: '___umoddi3';
 begin
- result := num mod den;
+  result := num mod den;
 end;
-function divdi3(num,den:int64):int64; cdecl; public alias: '___divdi3';
+function divdi3(num, den: int64): int64; cdecl; public alias: '___divdi3';
 begin
- result := num div den;
+  result := num div den;
 end;
-function udivdi3(num,den:uint64):uint64; cdecl; public alias: '___udivdi3';
+function udivdi3(num, den: uint64): uint64; cdecl; public alias: '___udivdi3';
 begin
- result := num div den;
+  result := num div den;
 end;
 
 {$endif DARWIN}

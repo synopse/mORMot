@@ -1952,9 +1952,10 @@ begin
         // 3.2 ExpectResults=false (e.g. SQL UPDATE) -> leave fRowSet=nil
         OleDBConnection.OleDBCheck(self,
           fCommand.Execute(nil,DB_NULLGUID,fDBParams,@fUpdateCount,nil));
-      with SynDBLog.Add do
-        if sllSQL in Family.Level then
-          Log(sllSQL,'% %',[Timer.Stop,SQLWithInlinedParams],self);
+      if SynDBLog<>nil then
+        with SynDBLog.Add do
+          if sllSQL in Family.Level then
+            Log(sllSQL,'% %',[Timer.Stop,SQLWithInlinedParams],self);
     finally
       for i := 0 to fParamCount - 1 do
         if Assigned(IDLists[i]) then begin
@@ -2287,7 +2288,8 @@ begin
     inherited Connect; // notify any re-connection
   except
     on E: Exception do begin
-      Log.Log(sllError,E);
+      if Log<>nil then
+        Log.Log(sllError,E);
       fSession := nil; // mark not connected
       fDBInitialize := nil;
       DataInitialize := nil;
@@ -2299,7 +2301,7 @@ end;
 constructor TOleDBConnection.Create(aProperties: TSQLDBConnectionProperties);
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Create'{$endif});
+  Log := SynDBLog.Enter(self,'Create');
   if not aProperties.InheritsFrom(TOleDBConnectionProperties) then
     raise EOleDBException.CreateUTF8('Invalid %.Create(%)',[self,aProperties]);
   fOleDBProperties := TOleDBConnectionProperties(aProperties);
@@ -2311,21 +2313,22 @@ end;
 destructor TOleDBConnection.Destroy;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Destroy'{$endif});
+  Log := SynDBLog.Enter(self,'Destroy');
   try
     inherited Destroy; // call Disconnect;
     fMalloc := nil;
     CoUninit;
   except
     on E: Exception do
-      Log.Log(sllError,E);
+      if Log<>nil then
+        Log.Log(sllError,E);
   end;
 end;
 
 procedure TOleDBConnection.Disconnect;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Disconnect'{$endif});
+  Log := SynDBLog.Enter(self,'Disconnect');
   try
     inherited Disconnect; // flush any cached statement
   finally
@@ -2419,7 +2422,7 @@ end;
 procedure TOleDBConnection.Commit;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Commit'{$endif});
+  Log := SynDBLog.Enter(self,'Commit');
   if assigned(fTransaction) then begin
     inherited Commit;
     try
@@ -2434,7 +2437,7 @@ end;
 procedure TOleDBConnection.Rollback;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Rollback'{$endif});
+  Log := SynDBLog.Enter(self,'Rollback');
   if assigned(fTransaction) then begin
     inherited Rollback;
     OleDbCheck(nil,fTransaction.Abort(nil,False,False));
@@ -2444,7 +2447,7 @@ end;
 procedure TOleDBConnection.StartTransaction;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'StartTransaction'{$endif});
+  Log := SynDBLog.Enter(self,'StartTransaction');
   if assigned(fTransaction) then begin
     inherited StartTransaction;
     OleDbCheck(nil,fTransaction.StartTransaction(ISOLATIONLEVEL_READCOMMITTED,0,nil,nil));
@@ -2462,7 +2465,7 @@ var DataInitialize: IDataInitialize;
     tmp: PWideChar;
     Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'ConnectionStringDialog'{$endif});
+  Log := SynDBLog.Enter(self,'ConnectionStringDialog');
   result := false;
   if self<>nil then
   try
@@ -2484,11 +2487,13 @@ begin
         fConnectionString := tmp;
         if tmp<>nil then
           CoTaskMemFree(tmp);
-        Log.Log(sllDB,'New connection settings set',self);
+        if Log<>nil then
+          Log.Log(sllDB,'New connection settings set',self);
         result := true;
       end;
       DB_E_CANCELED:
-        Log.Log(sllDB,'Canceled',self);
+        if Log<>nil then
+          Log.Log(sllDB,'Canceled',self);
       else OleCheck(res);
       end;
     finally
@@ -2496,7 +2501,8 @@ begin
     end;
   except
     on E: Exception do
-      Log.Log(sllError,E);
+      if Log<>nil then
+        Log.Log(sllError,E);
   end;
 end;
 

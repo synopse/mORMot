@@ -4506,7 +4506,7 @@ type
     /// input parameter containing the caller message headers
     // - you can use e.g. to retrieve the remote IP:
     // ! Call.Header(HEADER_REMOTEIP_UPPER)
-    // ! or FindIniNameValue(pointer(Call.InHead),HEADER_REMOTEIP_UPPER)
+    // ! or FindNameValue(Call.InHead,HEADER_REMOTEIP_UPPER)
     // but consider rather using TSQLRestServerURIContext.RemoteIP
     InHead: RawUTF8;
     /// input parameter containing the caller message body
@@ -4559,14 +4559,14 @@ type
     /// check if the "Content-Type" value from OutHead is JSON
     // - if GuessJSONIfNoneSet is TRUE, assume JSON is used
     function OutBodyTypeIsJson(GuessJSONIfNoneSet: boolean=True): boolean;
-    /// just a wrapper around FindIniNameValue(pointer(InHead),UpperName)
+    /// just a wrapper around FindNameValue(InHead,UpperName)
     // - use e.g. as
     // ! Call.Header(HEADER_REMOTEIP_UPPER) or Call.Header(HEADER_BEARER_UPPER)
     // - consider rather using TSQLRestServerURIContext.InHeader[] or even
     // dedicated TSQLRestServerURIContext.RemoteIP/AuthenticationBearerToken
     function Header(UpperName: PAnsiChar): RawUTF8;
       {$ifdef HASINLINE}inline;{$endif}
-    /// wrap FindIniNameValue(pointer(InHead),UpperName) with a cache store
+    /// wrap FindNameValue(InHead,UpperName) with a cache store
     function HeaderOnce(var Store: RawUTF8; UpperName: PAnsiChar): RawUTF8;
   end;
 
@@ -19941,7 +19941,7 @@ end;
 
 function TPropInfo.SetterIsField: boolean;
 begin
- result := {$ifdef FPC}(PropProcs shr 2)and 3{$else}PropWrap(SetProc).Kind{$endif}=ptField;
+  result := {$ifdef FPC}(PropProcs shr 2)and 3{$else}PropWrap(SetProc).Kind{$endif}=ptField;
 end;
 
 function TPropInfo.GetFieldAddr(Instance: TObject): pointer;
@@ -20832,7 +20832,8 @@ end;
 
 procedure TSQLPropInfo.SetVariant(Instance: TObject; const Source: Variant);
 begin
-  SetValueVar(Instance,VariantToUTF8(Source),TVarData(Source).VType and VTYPE_STATIC<>0);
+  SetValueVar(Instance,VariantToUTF8(Source),
+    (TVarData(Source).VType=varOleStr) or (TVarData(Source).VType>=varString));
 end;
 
 {$endif NOVARIANTS}
@@ -34195,7 +34196,7 @@ begin
   if (fCustomEncryptContentPrefix='') or (Body='') or (Sender<>self) or
      (Url='') or IdemPChar(pointer(Url),pointer(fCustomEncryptUrlIgnore)) then
     exit;
-  ct := FindIniNameValue(pointer(Head),HEADER_CONTENT_TYPE_UPPER);
+  FindNameValue(Head,HEADER_CONTENT_TYPE_UPPER,ct);
   if IdemPChar(pointer(ct),pointer(fCustomEncryptContentPrefixUpper)) then begin
     if fCustomEncryptAES<>nil then begin
       // decrypt using PKCS7 + initial random/unique IV at the beginning
@@ -34253,7 +34254,7 @@ begin
   if fCustomEncryptAES<>nil then
     // encrypt using PKCS7 + initial random/unique IV at the beginning
     Body := fCustomEncryptAES.EncryptPKCS7(Body,true);
-  ct := FindIniNameValue(pointer(Head),HEADER_CONTENT_TYPE_UPPER);
+  FindNameValue(Head,HEADER_CONTENT_TYPE_UPPER,ct);
   if ct='' then // not specified -> append 'application/json'
     ct := JSON_CONTENT_TYPE_VAR;
   UpdateIniNameValue(Head,HEADER_CONTENT_TYPE,HEADER_CONTENT_TYPE_UPPER,
@@ -36441,7 +36442,7 @@ end;
 
 function TSQLRestURIParams.InBodyType(GuessJSONIfNoneSet: boolean): RawUTF8;
 begin
-  result := FindIniNameValue(pointer(InHead),HEADER_CONTENT_TYPE_UPPER);
+  FindNameValue(InHead,HEADER_CONTENT_TYPE_UPPER,result);
   if GuessJSONIfNoneSet and (result='') then
     result := JSON_CONTENT_TYPE_VAR;
 end;
@@ -36453,7 +36454,7 @@ end;
 
 function TSQLRestURIParams.OutBodyType(GuessJSONIfNoneSet: boolean): RawUTF8;
 begin
-  result := FindIniNameValue(pointer(OutHead),HEADER_CONTENT_TYPE_UPPER);
+  FindNameValue(OutHead,HEADER_CONTENT_TYPE_UPPER,result);
   if GuessJSONIfNoneSet and (result='') then
     result := JSON_CONTENT_TYPE_VAR;
 end;
@@ -36465,13 +36466,13 @@ end;
 
 function TSQLRestURIParams.Header(UpperName: PAnsiChar): RawUTF8;
 begin
-  result := FindIniNameValue(pointer(InHead),UpperName);
+  FindNameValue(InHead,UpperName,result);
 end;
 
 function TSQLRestURIParams.HeaderOnce(var Store: RawUTF8; UpperName: PAnsiChar): RawUTF8;
 begin
   if (Store='') and (@self<>nil) then begin
-    result := FindIniNameValue(pointer(InHead),UpperName);
+    FindNameValue(InHead,UpperName,result);
     if result='' then
       Store := NULL_STR_VAR else // ensure header is parsed only once
       Store := result;
@@ -36787,7 +36788,7 @@ begin
     exit;
   if (Ctxt.InHead<>'') and
      (callback.Factory.MethodIndexCurrentFrameCallback>=0) then begin
-    frames := FindIniNameValue(pointer(Ctxt.InHead),'SEC-WEBSOCKET-FRAME: ');
+    FindNameValue(Ctxt.InHead,'SEC-WEBSOCKET-FRAME: ',frames);
   end;
   Split(interfmethod,'.',interf,method);
   methodIndex := callback.Factory.FindMethodIndex(method);
@@ -37289,7 +37290,7 @@ begin
     if aResponseHead<>nil then
       aResponseHead^ := header;
     {$ifdef WITHLOG}
-    if (aResponse<>'') and (sllServiceReturn in fLogFamily.Level) then
+    if (log<>nil) and (aResponse<>'') and (sllServiceReturn in fLogFamily.Level) then
       if IsHTMLContentTypeTextual(pointer(header)) then
         log.Log(sllServiceReturn,aResponse,self,MAX_SIZE_RESPONSE_LOG) else
         log.Log(sllServiceReturn,'% bytes [%]',[length(aResponse),header],self);
@@ -39892,7 +39893,7 @@ begin // expects Service, ServiceParameters, ServiceMethod(Index) to be set
         exit; // execution aborted by OnMethodExecute() callback event
   end;
   if Service.ResultAsXMLObjectIfAcceptOnlyXML then begin
-    xml := FindIniNameValue(pointer(Call^.InHead),'ACCEPT: ');
+    FindNameValue(Call^.InHead,'ACCEPT:',xml);
     if (xml='application/xml') or (xml='text/xml') then
       ForceServiceResultAsXMLObject := true;
   end;
@@ -40611,7 +40612,7 @@ begin
   if fInHeaderLastName=HeaderName then
     result := fInHeaderLastValue else begin
     PWord(UpperCopy255(up,HeaderName))^ := ord(':');
-    result := Trim(FindIniNameValue(pointer(Call.InHead),up));
+    FindNameValue(Call.InHead,up,result);
     if result<>'' then begin
       fInHeaderLastName := HeaderName;
       fInHeaderLastValue := result;
@@ -40628,7 +40629,7 @@ var n: integer;
     cookie,cn,cv: RawUTF8;
 begin
   fInputCookiesRetrieved := true;
-  cookie := FindIniNameValue(pointer(Call.InHead),'COOKIE:');
+  FindNameValue(Call.InHead,'COOKIE:',cookie);
   P := pointer(cookie);
   n := 0;
   while P<>nil do begin
@@ -40801,7 +40802,7 @@ begin
       Call.OutHead := Call.OutHead+#13#10'Cache-Control: max-age='+UInt32ToUtf8(CacheControlMaxAge);
     if Handle304NotModified and (Status=HTTP_SUCCESS) and
        (Length(Result)>64) then begin
-      clientHash := FindIniNameValue(pointer(Call.InHead),'IF-NONE-MATCH: ');
+      FindNameValue(Call.InHead,'IF-NONE-MATCH: ',clientHash);
       if ServerHash='' then
         ServerHash := '"'+crc32cUTF8ToHex(Result)+'"';
       ServerHash := '"'+ServerHash+'"';
@@ -40877,7 +40878,7 @@ begin
       Call.OutHead := Call.OutHead+#13#10'Cache-Control: max-age='+UInt32ToUtf8(CacheControlMaxAge);
     Call.OutStatus := HTTP_SUCCESS;
     if Handle304NotModified then begin
-      clientHash := FindIniNameValue(pointer(Call.InHead),'IF-NONE-MATCH: ');
+      FindNameValue(Call.InHead,'IF-NONE-MATCH:',clientHash);
       serverHash := '"'+DateTimeToIso8601(FileTime,false,'T',true)+'"';
       Call.OutHead := Call.OutHead+#13#10'ETag: '+serverHash;
       if clientHash=serverHash then begin
@@ -41305,7 +41306,8 @@ begin
   Ctxt := ServicesRouting.Create(self,Call);
   try
     {$ifdef WITHLOG}
-    Ctxt.Log := Log.Instance;
+    if log<>nil then
+      Ctxt.Log := log.Instance;
     {$endif}
     Ctxt.SafeProtocolID := safeID;
     if fShutdownRequested then
@@ -51672,7 +51674,7 @@ begin
   if PB=nil then
     RaiseError;
   ComputeProtectedValues;
-  fRemoteIP := FindIniNameValue(pointer(fSentHeaders),HEADER_REMOTEIP_UPPER);
+  FindNameValue(fSentHeaders,HEADER_REMOTEIP_UPPER,fRemoteIP);
 end;
 
 
@@ -52563,7 +52565,7 @@ begin
   InDataEnc := Ctxt.InputUTF8['Data'];
   if InDataEnc='' then begin
     // client is browser and used HTTP headers to send auth data
-    InDataEnc := FindIniNameValue(pointer(Ctxt.Call.InHead),SECPKGNAMEHTTPAUTHORIZATION);
+    FindNameValue(Ctxt.Call.InHead,SECPKGNAMEHTTPAUTHORIZATION,InDataEnc);
     if InDataEnc = '' then begin
       // no auth data sent, reply with supported auth methods
       Ctxt.Call.OutHead := SECPKGNAMEHTTPWWWAUTHENTICATE;
@@ -54527,7 +54529,7 @@ begin
         fpmunmap(result,STUB_SIZE);
     end;
   end;
-  result := nil; // error
+  result := MAP_FAILED; // error
 end;
 {$else} // other platforms (Intel+Arm64) use absolute call
 begin
@@ -54552,20 +54554,31 @@ type
 
 var
   CurrentFakeStubBuffer: TFakeStubBuffer;
+  {$ifdef UNIX}
+  MemoryProtection: boolean = false;
+  {$endif UNIX}
 
 constructor TFakeStubBuffer.Create;
 begin
   {$ifdef MSWINDOWS}
   fStub := VirtualAlloc(nil,STUB_SIZE,MEM_COMMIT,PAGE_EXECUTE_READWRITE);
+  if fStub=nil then
   {$else MSWINDOWS}
   {$ifdef KYLIX3}
-  fStub := mmap(nil,STUB_SIZE,PROT_READ OR PROT_WRITE OR PROT_EXEC,MAP_PRIVATE OR MAP_ANONYMOUS,-1,0);
+  fStub := mmap(nil,STUB_SIZE,PROT_READ or PROT_WRITE or PROT_EXEC,MAP_PRIVATE or MAP_ANONYMOUS,-1,0);
   {$else}
-  fStub := StubCallAllocMem(STUB_SIZE,PROT_READ OR PROT_WRITE OR PROT_EXEC);
+  if not MemoryProtection then
+    fStub := StubCallAllocMem(STUB_SIZE,PROT_READ or PROT_WRITE or PROT_EXEC);
+  if (fStub=MAP_FAILED) or MemoryProtection then begin
+    // i.e. on OpenBSD, we can have w^x protection
+    fStub := StubCallAllocMem(STUB_SIZE,PROT_READ OR PROT_WRITE);
+    if fStub<>MAP_FAILED then 
+      MemoryProtection := True;
+  end;
   {$endif KYLIX3}
+  if fStub=MAP_FAILED then
   {$endif MSWINDOWS}
-  if fStub=nil then
-    raise EServiceException.CreateUTF8('%.Create: OS allocation failed',[self]);
+    raise EServiceException.CreateUTF8('%.Create: OS memory allocation failed',[Self]);
 end;
 
 destructor TFakeStubBuffer.Destroy;
@@ -54601,6 +54614,9 @@ end;
 function TInterfaceFactory.GetMethodsVirtualTable: pointer;
 var i, tmp: cardinal;
     P: PCardinal;
+    {$ifdef UNIX}
+    PageAlignedFakeStub: pointer;
+    {$endif UNIX}
     {$ifdef CPUAARCH64}stub: PtrUInt;{$endif}
 begin
   if fFakeVTable=nil then begin
@@ -54620,8 +54636,18 @@ begin
                {$ifdef CPUARM}fMethodsCount*12{$endif}
                {$ifdef CPUAARCH64}($120 shr 2)+fMethodsCount*28{$endif};
         fFakeStub := TFakeStubBuffer.Reserve(tmp);
-        PtrUInt(fFakeStub) := PtrUInt(fFakeStub){$ifdef CPUAARCH64} + $120{$endif};
         P := pointer(fFakeStub);
+        {$ifdef CPUAARCH64}
+        PtrUInt(P) := PtrUInt(P)+$120;
+        {$endif};
+        {$ifdef UNIX}
+        if MemoryProtection then begin
+          // Disable execution permission of memory to be able to write into memory
+          PageAlignedFakeStub := Pointer((PtrUInt(P) DIV SystemInfo.dwPageSize) * SystemInfo.dwPageSize);
+          if SynMProtect(PageAlignedFakeStub , (SystemInfo.dwPageSize shl 1), PROT_READ or PROT_WRITE)<0 then
+             raise EServiceException.CreateUTF8('%.Create: SynMProtect write failure.',[self]);
+        end;
+        {$endif UNIX}
         for i := 0 to fMethodsCount-1 do begin
           fFakeVTable[i+RESERVED_VTABLE_SLOTS] := P;
           {$ifdef CPUX64}
@@ -54672,6 +54698,12 @@ begin
           inc(PByte(P),3);
           {$endif CPUX86}
         end;
+        {$ifdef UNIX}
+        if MemoryProtection then 
+          // Enable execution permission of memory
+          if SynMProtect(PageAlignedFakeStub , (SystemInfo.dwPageSize shl 1), PROT_READ OR PROT_EXEC)<0 then
+             raise EServiceException.CreateUTF8('%.Create: SynMProtect exec failure.',[self]);
+        {$endif UNIX}
       end;
     finally
       InterfaceFactoryCache.Safe.UnLock;
@@ -54809,7 +54841,7 @@ begin
     {$endif FPC}
     na := n;
     if Kind=mkFunction then
-      inc(na); // function result is an addition output parameter
+      inc(na); // function result is an additional output parameter
     if na>MAX_METHOD_ARGS then
        RaiseError('method has too many parameters: %>%',[na,MAX_METHOD_ARGS]);
     SetLength(sm^.Args,na);
@@ -61008,7 +61040,8 @@ begin
   if (status=HTTP_UNAUTHORIZED) and (clientDrivenID<>'') and
      (fInstanceCreation=sicClientDriven) and (aClientDrivenID<>nil) then begin
     {$ifdef WITHLOG}
-    log.Log(sllClient,'% -> try to recreate ClientDrivenID',[resp],self);
+    if log<>nil then
+      log.Log(sllClient,'% -> try to recreate ClientDrivenID',[resp],self);
     {$endif}
     clientDrivenID := '';
     aClientDrivenID^ := 0;
@@ -61035,11 +61068,11 @@ begin
     end;
     // decode JSON object
     {$ifdef WITHLOG}
-    if ((service=nil) or ([smdConst,smdVar]*service^.HasSPIParams=[])) and
-       not(optNoLogOutput in fExecution[m].Options) then
+    if (log<>nil) and (resp<>'') and not(optNoLogOutput in fExecution[m].Options) and
+       ((service=nil) or ([smdConst,smdVar]*service^.HasSPIParams=[])) then
       with fRest.fLogFamily do
-        if (sllServiceReturn in Level) and (resp<>'') then
-          SynLog.Log(sllServiceReturn,resp,self,MAX_SIZE_RESPONSE_LOG);
+        if sllServiceReturn in Level then
+          log.Log(sllServiceReturn,resp,self,MAX_SIZE_RESPONSE_LOG);
     {$endif WITHLOG}
     if fResultAsJSONObject then begin
       if aResult<>nil then
@@ -61068,14 +61101,15 @@ begin
   end else begin
     // custom answer returned in TServiceCustomAnswer
     {$ifdef WITHLOG}
-    with fRest.fLogFamily do
-      if (sllServiceReturn in Level) and (resp<>'') then begin
-        ct := FindIniNameValue(pointer(head), HEADER_CONTENT_TYPE_UPPER);
-        if (resp[1] in ['[','{','"']) and IdemPChar(pointer(ct), JSON_CONTENT_TYPE_UPPER) then
-          SynLog.Log(sllServiceReturn,resp,self,MAX_SIZE_RESPONSE_LOG) else
-          SynLog.Log(sllServiceReturn,'TServiceCustomAnswer=% % len=% %',
-            [status,ct,length(resp),EscapeToShort(resp)],self);
-      end;
+    if (log<>nil) and (resp<>'') then
+      with fRest.fLogFamily do
+        if sllServiceReturn in Level then begin
+          FindNameValue(head,HEADER_CONTENT_TYPE_UPPER,ct);
+          if (resp[1] in ['[','{','"']) and IdemPChar(pointer(ct), JSON_CONTENT_TYPE_UPPER) then
+            log.Log(sllServiceReturn,resp,self,MAX_SIZE_RESPONSE_LOG) else
+            log.Log(sllServiceReturn,'TServiceCustomAnswer=% % len=% %',
+              [status,ct,length(resp),EscapeToShort(resp)],self);
+        end;
     {$endif WITHLOG}
     aServiceCustomAnswer^.Status := status;
     aServiceCustomAnswer^.Header := head;

@@ -2278,13 +2278,13 @@ procedure MoveFast(const src; var dst; cnt: PtrInt);
 // - on non-Intel CPUs, it will fallback to the default RTL FillChar()
 // - note: Delphi x86_64 is far from efficient: even ERMS was wrongly
 // introduced in latest updates
-var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) {$ifdef FPC} = FillChar {$endif};
+var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte);
 
 /// our fast version of move()
 // - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available),
 // or optimized X87 assembly implementation for older CPUs
 // - on non-Intel CPUs, it will fallback to the default RTL Move()
-var MoveFast: procedure(const Source; var Dest; Count: PtrInt) {$ifdef FPC} = Move {$endif};
+var MoveFast: procedure(const Source; var Dest; Count: PtrInt);
 
 {$endif CPUX64}
 {$endif ABSOLUTEPASCAL}
@@ -3453,6 +3453,24 @@ procedure StringDynArrayToRawUTF8DynArray(const Source: TStringDynArray;
 /// convert the string list into a dynamic array of UTF-8 strings
 procedure StringListToRawUTF8DynArray(Source: TStringList; var Result: TRawUTF8DynArray);
 
+/// search for a value from its uppercased named entry
+// - i.e. iterate IdemPChar(source,UpperName) over every line of the source
+// - returns the text just after UpperName if it has been found at line beginning
+// - returns nil if UpperName was not found was not found at any line beginning
+// - could be used as alternative to FindIniNameValue() and FindIniNameValueInteger()
+// if there is no section, i.e. if search should not stop at '[' but at source end
+function FindNameValue(P: PUTF8Char; UpperName: PAnsiChar): PUTF8Char; overload;
+
+/// search and returns a value from its uppercased named entry
+// - i.e. iterate IdemPChar(source,UpperName) over every line of the source
+// - returns true and the trimmed text just after UpperName if it has been found
+// at line beginning
+// - returns false if UpperName was not found was not found at any line beginning
+// - could be used e.g. to efficently extract a value from HTTP headers, whereas
+// FindIniNameValue() is tuned for [section]-oriented INI files
+function FindNameValue(const NameValuePairs: RawUTF8; UpperName: PAnsiChar;
+  var Value: RawUTF8): boolean; overload;
+
 /// find a Name= Value in a [Section] of a INI RawUTF8 Content
 // - this function scans the Content memory buffer, and is
 // therefore very fast (no temporary TMemIniFile is created)
@@ -3941,7 +3959,8 @@ type
 /// retrieve published methods information about any class instance
 // - will optionaly accept a Class, in this case Instance is ignored
 // - will work with FPC and Delphi RTTI
-function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray; aClass: TClass = nil): integer;
+function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray;
+  aClass: TClass = nil): integer;
 
 {$ifdef LINUX}
 const
@@ -6615,10 +6634,10 @@ type
   TSynNameValueItemDynArray = array of TSynNameValueItem;
 
   /// event handler used to convert on the fly some UTF-8 text content
-  TConvertRawUTF8 = function(const text: RawUTF8): RawUTF8 of object;
+  TOnSynNameValueConvertRawUTF8 = function(const text: RawUTF8): RawUTF8 of object;
 
   /// callback event used by TSynNameValue
-  TSynNameValueNotify = procedure(const Item: TSynNameValueItem; Index: PtrInt) of object;
+  TOnSynNameValueNotify = procedure(const Item: TSynNameValueItem; Index: PtrInt) of object;
 
   /// pseudo-class used to store Name/Value RawUTF8 pairs
   // - use internaly a TDynArrayHashed instance for fast retrieval
@@ -6628,7 +6647,7 @@ type
   // - Delphi "object" is buggy on stack -> also defined as record with methods
   {$ifdef USERECORDWITHMETHODS}TSynNameValue = record private
   {$else}TSynNameValue = object protected{$endif}
-    fOnAdd: TSynNameValueNotify;
+    fOnAdd: TOnSynNameValueNotify;
     function GetBlobData: RawByteString;
     procedure SetBlobData(const aValue: RawByteString);
     function GetStr(const aName: RawUTF8): RawUTF8; {$ifdef HASINLINE}inline;{$endif}
@@ -6651,8 +6670,8 @@ type
     // section content
     // - will first call Init(false) to initialize the internal array
     // - Section can be retrieved e.g. via FindSectionFirstLine()
-    procedure InitFromIniSection(Section: PUTF8Char; OnTheFlyConvert: TConvertRawUTF8=nil;
-      OnAdd: TSynNameValueNotify=nil);
+    procedure InitFromIniSection(Section: PUTF8Char; OnTheFlyConvert: TOnSynNameValueConvertRawUTF8=nil;
+      OnAdd: TOnSynNameValueNotify=nil);
     /// reset content, then add all name=value; CSV pairs
     // - will first call Init(false) to initialize the internal array
     // - if ItemSep=#10, then any kind of line feed (CRLF or LF) will be handled
@@ -6737,7 +6756,7 @@ type
     /// can be used to set or retrieve all stored data as one BLOB content
     property BlobData: RawByteString read GetBlobData write SetBlobData;
     /// event triggerred after an item has just been added to the list
-    property OnAfterAdd: TSynNameValueNotify read fOnAdd write fOnAdd;
+    property OnAfterAdd: TOnSynNameValueNotify read fOnAdd write fOnAdd;
     /// search for a Name, return the associated Value as a UTF-8 string
     // - returns '' if aName is not found in the stored keys
     property Str[const aName: RawUTF8]: RawUTF8 read GetStr; default;
@@ -13629,7 +13648,8 @@ const
   // - depending on the compiler version
   varNativeString = {$ifdef UNICODE}varUString{$else}varString{$endif};
 
-  /// those TVarData.VType values are un-managed and do not need to be cleared
+  {$ifdef USE_VTYPE_STATIC}
+  /// bitmap for TVarData.VType unmanaged values which do not need to be cleared
   // - used mainly in low-level code similar to the folllowing:
   // !  if TVarData(aVariant).VType and VTYPE_STATIC<>0 then
   // !    VarClear(aVariant);
@@ -13638,6 +13658,7 @@ const
   // - make some false positive to varBoolean and varError
   // - our overloaded VarClear() inlined function uses this constant
   VTYPE_STATIC = $BFE8;
+  {$endif USE_VTYPE_STATIC}
 
 {$ifdef FPC}
 /// overloaded function which can be properly inlined
@@ -13711,7 +13732,7 @@ function VarIs(const V: Variant; const VTypes: TVarDataTypes): Boolean;
 
 type
   /// custom variant handler with easier/faster access of variant properties,
-  // and JSON support
+  // and JSON serialization support
   // - default GetProperty/SetProperty methods are called via some protected
   // virtual IntGet/IntSet methods, with less overhead (to be overriden)
   // - these kind of custom variants will be faster than the default
@@ -14127,6 +14148,7 @@ type
   // ! assert(_Json('["one",2,3]')='["one",2,3]');
   TDocVariant = class(TSynInvokeableVariantType)
   protected
+    /// name and values interning are shared among all TDocVariantData instances
     fInternNames, fInternValues: TRawUTF8Interning;
     /// fast getter/setter implementation
     function IntGet(var Dest: TVarData; const Instance: TVarData;
@@ -16711,7 +16733,6 @@ uses
   sysctl,
   {$else}
   Linux,
-  SysCall,
   {$endif BSD}
   {$ifdef FPCUSEVERSIONINFO} // to be enabled in Synopse.inc
     fileinfo, // FPC 3.0 and up
@@ -16765,8 +16786,10 @@ procedure VarClear(var v: variant); // defined here for proper inlining
 var p: pointer; // more efficient generated asm with an explicit temp variable
 begin
   p := @v;
+  {$ifdef USE_VTYPE_STATIC} // circumvent weird bug on BSD + ARM (Alfred)
   if integer(PVarData(p)^.VType) and VTYPE_STATIC=0 then
     PPtrInt(p)^ := 0 else
+  {$endif USE_VTYPE_STATIC}
     VarClearProc(PVarData(p)^);
 end;
 {$endif FPC}
@@ -20379,7 +20402,7 @@ type
     );
     tkDynArray: (
       {$ifdef FPC}
-      elSize: SizeUInt;
+      elSize: SizeUInt; // and $7FFFFFFF = item/record size
       elType2: PTypeInfoStored;
       varType: LongInt;
       elType: PTypeInfoStored;
@@ -22563,8 +22586,13 @@ begin
     P := StrUInt32(@tmp[23],Value);
     L := @tmp[23]-P;
   end;
-  MoveSmall(P,Buffer,L);
-  result := Buffer+L;
+  result := Buffer;
+  repeat
+    result^ := P^;
+    inc(result);
+    inc(P);
+    dec(L);
+  until L=0;
 end;
 
 function QuotedStr(const S: RawUTF8; Quote: AnsiChar): RawUTF8;
@@ -26603,15 +26631,14 @@ begin
   modname := PosChar(modname,':');
   if modname<>nil then
     modname := GotoNextNotSpace(modname+1);
-  release := trim(FindIniNameValue(pointer(StringFromFile('/etc/os-release')),'PRETTY_NAME='));
+  FindNameValue(StringFromFile('/etc/os-release'),'PRETTY_NAME=',release);
   if (release<>'') and (release[1]='"') then
     release := copy(release,2,length(release)-2);
   release := trim(release);
-  if release='' then begin
-    release := trim(FindIniNameValue(pointer(StringFromFile('/etc/lsb-release')),'DISTRIB_DESCRIPTION='));
-    if (release<>'') and (release[1]='"') then
+  if release=''  then
+    if FindNameValue(StringFromFile('/etc/lsb-release'),'DISTRIB_DESCRIPTION=',release) and
+       (release<>'') and (release[1]='"') then
       release := copy(release,2,length(release)-2);
-  end;
   if (release='') and (FindFirst('/etc/*-release',faAnyFile,SR)=0) then begin
     release := StringToUTF8(SR.Name); // 'redhat-release' 'SuSE-release'
     if IdemPChar(pointer(release),'LSB-') and (FindNext(SR)=0) then
@@ -29067,6 +29094,99 @@ begin
   result := true;
 end;
 {$endif USENORMTOUPPER}
+
+function FindNameValue(P: PUTF8Char; UpperName: PAnsiChar): PUTF8Char;
+var
+  {$ifdef CPUX86NOTPIC}
+  table: TNormTable absolute NormToUpperAnsi7;
+  {$else}
+  table: PNormTable;
+  {$endif}
+  c: AnsiChar;
+  u: PAnsiChar;
+label
+  _0;
+begin
+  if (P = nil) or (UpperName = nil) then
+    goto _0;
+  {$ifndef CPUX86NOTPIC} table := @NormToUpperAnsi7; {$endif}
+  repeat
+    c := UpperName^;
+    if table[P^] = c then
+    begin
+      inc(P);
+      u := UpperName + 1;
+      repeat
+        c := u^;
+        inc(u);
+        if c <> #0 then
+        begin
+          if table[P^] <> c then
+            break;
+          inc(P);
+          continue;
+        end;
+        result := P; // if found, points just after UpperName
+        exit;
+      until false;
+    end;
+    repeat
+      repeat
+        c := P^;
+        inc(P);
+      until c <= #13;
+      if c = #13 then // most common case is text ending with #13#10
+        repeat
+          c := P^;
+          if (c <> #10) and (c <> #13) then
+            break;
+          inc(P);
+        until false
+      else if c <> #10 then
+        if c <> #0 then
+          continue // e.g. #9
+        else
+          goto _0
+      else
+        repeat
+          c := P^;
+          if c <> #10 then
+            break;
+          inc(P);
+        until false;
+      if c <> #0 then
+        break; // check if UpperName is at the begining of the new line
+_0:   result := nil; // reached P^=#0 -> not found
+      exit;
+    until false;
+  until false;
+end;
+
+function FindNameValue(const NameValuePairs: RawUTF8; UpperName: PAnsiChar;
+  var Value: RawUTF8): boolean;
+var
+  P: PUTF8Char;
+  L: PtrInt;
+begin
+  P := FindNameValue(pointer(NameValuePairs), UpperName);
+  if P <> nil then
+  begin
+    while P^ in [#9, ' '] do // trim left
+      inc(P);
+    L := 0;
+    while P[L] > #13 do // end of line/value
+      inc(L);
+    while P[L - 1] = ' ' do // trim right
+      dec(L);
+    FastSetString(Value, P, L);
+    result := true;
+  end
+  else
+  begin
+    {$ifdef FPC} Finalize(Value); {$else} Value := ''; {$endif}
+    result := false;
+  end;
+end;
 
 function FindSectionFirstLineW(var source: PWideChar; search: PUTF8Char): boolean;
 {$ifdef PUREPASCAL}
@@ -32942,37 +33062,44 @@ end;
 
 function GotoNextLine(source: PUTF8Char): PUTF8Char;
 label
-  _0, _1, _2, _3; // ugly but faster
+  _z, _0, _1, _2, _3; // ugly but faster
+var
+  c: AnsiChar;
 begin
-  result := source;
   if source<>nil then
     repeat
-      if result[0]<#13 then
+      if source[0]<#13 then
         goto _0
-      else if result[1]<#13 then
+      else if source[1]<#13 then
         goto _1
-      else if result[2]<#13 then
+      else if source[2]<#13 then
         goto _2
-      else if result[3]<#13 then
+      else if source[3]<#13 then
         goto _3
       else begin
-        inc(result, 4);
+        inc(source, 4);
         continue;
       end;
-_3:   inc(result);
-_2:   inc(result);
-_1:   inc(result);
-_0:   case result^ of
-      #0: result := nil;
-      #10: inc(result);
-      #13: if result[1]=#10 then inc(result,2) else inc(result);
-      else begin
-        inc(result);
-        continue;
+_3:   inc(source);
+_2:   inc(source);
+_1:   inc(source);
+_0:   c := source^;
+      if c=#13 then begin
+        if source[1]=#10 then begin
+          result := source+2; // most common case is text ending with #13#10
+          exit;
+        end;
+      end else
+      if c=#0 then
+        goto _z else
+      if c<>#10 then begin
+        inc(source);
+        continue; // e.g. #9
       end;
-      end;
+      result := source+1;
       exit;
-    until false
+    until false;
+_z: result := nil;
 end;
 
 function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
@@ -35100,7 +35227,7 @@ end;
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm .noframe // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
+asm .noframe // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,edx)
 {$endif FPC}
         mov     eax, crc
         not     eax
@@ -38508,7 +38635,8 @@ begin
   FastSetString(result,@DelphiName^[TrimLeft+1],ord(DelphiName^[0])-TrimLeft);
 end;
 
-function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray; aClass: TClass): integer;
+function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray;
+  aClass: TClass): integer;
   procedure AddParentsFirst(C: TClass);
   type
     TMethodInfo = packed record
@@ -39677,7 +39805,7 @@ begin
       ProgramFileName := GetModuleName(HInstance);
       if ProgramFileName='' then
         ProgramFileName := ExpandFileName(paramstr(0));
-      {$endif}
+      {$endif MSWINDOWS}
       ProgramFilePath := ExtractFilePath(ProgramFileName);
       if IsLibrary then
         InstanceFileName := GetModuleName(HInstance) else
@@ -39702,7 +39830,7 @@ begin
         User := LibC.getpwuid(LibC.getuid)^.pw_name else
       {$endif}
         StringToUTF8(tmp,User);
-      {$endif}
+      {$endif MSWINDOWS}
       if Host='' then
         Host := 'unknown';
       if User='' then
@@ -39808,16 +39936,6 @@ begin
 end;
 {$endif MSWINDOWS}
 
-{$ifdef BSD}
-function mprotect(Addr: Pointer; Len: size_t; Prot: Integer): Integer;
-  {$ifdef Darwin} cdecl external 'libc.dylib' name 'mprotect';
-  {$else} cdecl external 'libc.so' name 'mprotect'; {$endif}
-  {$define USEMPROTECT}
-{$endif BSD}
-{$ifdef KYLIX3}
-  {$define USEMPROTECT}
-{$endif KYLIX3}
-
 procedure PatchCode(Old,New: pointer; Size: integer; Backup: pointer;
   LeaveUnprotected: boolean);
 {$ifdef MSWINDOWS}
@@ -39839,24 +39957,29 @@ begin
   end;
 end;
 {$else}
-var PageSize, AlignedAddr: PtrUInt;
+var PageSize: PtrUInt;
+    AlignedAddr: pointer;
     i: integer;
+    ProtectedResult: boolean;
+    ProtectedMemory: boolean;
 begin
   if Backup<>nil then
     for i := 0 to Size-1 do // do not use Move() here
       PByteArray(Backup)^[i] := PByteArray(Old)^[i];
   PageSize := SystemInfo.dwPageSize;
-  AlignedAddr := PtrUInt(Old) and not (PageSize-1);
-  while PtrUInt(Old)+PtrUInt(Size)>=AlignedAddr+PageSize do
+  AlignedAddr := Pointer((PtrUInt(Old) DIV SystemInfo.dwPageSize) * SystemInfo.dwPageSize);
+  while PtrUInt(Old)+PtrUInt(Size)>=PtrUInt(AlignedAddr)+PageSize do
     Inc(PageSize,SystemInfo.dwPageSize);
-  {$ifdef USEMPROTECT}
-  if mprotect(Pointer(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC)=0 then
-  {$else}
-  Do_SysCall(syscall_nr_mprotect,PtrUInt(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC);
-  {$endif USEMPROTECT}
+  ProtectedResult := SynMProtect(AlignedAddr,PageSize,PROT_READ or PROT_WRITE or PROT_EXEC) = 0;
+  ProtectedMemory := not ProtectedResult; 
+  if ProtectedMemory then
+    ProtectedResult := SynMProtect(AlignedAddr,PageSize,PROT_READ or PROT_WRITE) = 0;
+  if ProtectedResult then
     try
       for i := 0 to Size-1 do // do not use Move() here
         PByteArray(Old)^[i] := PByteArray(New)^[i];
+    if not LeaveUnprotected and ProtectedMemory then
+      SynMProtect(AlignedAddr,PageSize,PROT_READ or PROT_EXEC);
     except
     end;
 end;
@@ -41218,13 +41341,9 @@ var
   recInitData: PFPCRecInitData; // low-level type redirected from SynFPCTypInfo
   aPointer:pointer;
 begin
-  if Assigned(info^.RecInitInfo) then begin
-    recInitData := PFPCRecInitData(AlignTypeDataClean(PTypeInfo(info^.RecInitInfo+2+PByte(info^.RecInitInfo+1)^)));
-    firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
-    inc(PByte(firstfield),SizeOf(recInitData^.ManagedFieldCount));
-    firstfield := AlignPTypeInfo(firstfield);
-    result := recInitData^.ManagedFieldCount;
-  end else begin
+  if Assigned(info^.RecInitInfo) then
+    recInitData := PFPCRecInitData(AlignTypeDataClean(PTypeInfo(info^.RecInitInfo+2+PByte(info^.RecInitInfo+1)^)))
+  else begin
     aPointer:=@info^.RecInitInfo;
     {$ifdef FPC_PROVIDE_ATTR_TABLE}
     dec(PByte(aPointer),SizeOf(Pointer));
@@ -41235,11 +41354,11 @@ begin
     {$endif}
     {$endif}
     recInitData := PFPCRecInitData(aPointer);
-    firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
-    inc(PByte(firstfield),SizeOf(recInitData^.ManagedFieldCount));
-    firstfield := AlignPTypeInfo(firstfield);
-    result := recInitData^.ManagedFieldCount;
   end;
+  firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
+  inc(PByte(firstfield),SizeOf(recInitData^.ManagedFieldCount));
+  firstfield := AlignPTypeInfo(firstfield);
+  result := recInitData^.ManagedFieldCount;
 {$else}
 begin
   firstfield := @info^.ManagedFields[0];
@@ -44344,7 +44463,7 @@ begin
     Finalize(RawByteString(TVarData(Value).VAny))
   else
     begin
-      if v and VTYPE_STATIC <> 0 then
+      {$ifndef FPC}if v and VTYPE_STATIC<>0 then{$endif}
         {$ifdef NOVARCOPYPROC}VarClear(Value){$else}VarClearProc(TVarData(Value)){$endif};
       TVarData(Value).VType := varString;
       TVarData(Value).VAny := nil; // to avoid GPF when assigned to a RawByteString
@@ -44957,7 +45076,7 @@ begin
     v := PVarData(v.VPointer)^;
   until false;
   repeat
-    if vt and VTYPE_STATIC=0 then
+    if vt<=varString then
       exit; // we need a complex type to lookup
     GetNextItemShortString(FullName,itemName,'.');
     if itemName[0] in [#0,#255] then
@@ -48422,13 +48541,13 @@ begin
         result := AnsiICompW(A.VAny,B.VAny) else
         result := StrCompW(A.VAny,B.VAny);
     else
-      if AT and VTYPE_STATIC=0 then
+      if AT<varString then
         result := ICMP[VarCompareValue(variant(A),variant(B))] else
         result := CMP[caseInsensitive](variant(A),variant(B));
     end else
   if (AT<=varNull) or (BT<=varNull) then
     result := ord(AT>varNull)-ord(BT>varNull) else
-  if (AT and VTYPE_STATIC=0) and (BT and VTYPE_STATIC=0) then
+  if (AT<varString) and (BT<varString) then
     result := ICMP[VarCompareValue(variant(A),variant(B))] else
     result := CMP[caseInsensitive](variant(A),variant(B));
 end;
@@ -51474,10 +51593,10 @@ begin
   info := GetTypeInfo(aTypeInfo,tkDynArray);
   if info=nil then
     exit; // invalid type information
-  if (info^.ElType<>nil) or (Source=nil) or
-     (Source[0]<>AnsiChar(info^.elSize)) or (Source[1]<>#0) then
-    exit; // invalid type information or Source content
   ElemSize := info^.elSize {$ifdef FPC}and $7FFFFFFF{$endif};
+  if (info^.ElType<>nil) or (Source=nil) or
+     (Source[0]<>AnsiChar(ElemSize)) or (Source[1]<>#0) then
+    exit; // invalid type information or Source content
   inc(Source,2);
   Count := FromVarUInt32(PByte(Source)); // dynamic array count
   if (Count<>0) and (NoHash32Check or (Hash32(@Hash[1],Count*ElemSize)=Hash[0])) then
@@ -59687,7 +59806,7 @@ begin
     fMap := 0;
   end;
   {$else}
-  if (fBuf<>nil) and (fBufSize>0) then
+  if (fBuf<>nil) and (fBufSize>0) and (fFile<>0) then
     {$ifdef KYLIX3}munmap{$else}fpmunmap{$endif}(fBuf,fBufSize);
   {$endif}
   fBuf := nil;
@@ -61148,7 +61267,7 @@ begin
 end;
 
 procedure TSynNameValue.InitFromIniSection(Section: PUTF8Char;
-  OnTheFlyConvert: TConvertRawUTF8; OnAdd: TSynNameValueNotify);
+  OnTheFlyConvert: TOnSynNameValueConvertRawUTF8; OnAdd: TOnSynNameValueNotify);
 var s: RawUTF8;
     i: integer;
 begin
