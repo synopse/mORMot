@@ -1948,7 +1948,7 @@ type
 // ! end;
 
 procedure JSError(cx: PJSContext; aException: Exception);
-procedure JSErrorUC(cx: PJSContext; aMessage: WideString);
+procedure JSErrorUC(cx: PJSContext; aMessage: WideString; errorCode: integer = 0);
 procedure JSRangeErrorUC(cx: PJSContext; aMessage: WideString);
 procedure JSTypeErrorUC(cx: PJSContext; aMessage: WideString);
 
@@ -3357,7 +3357,7 @@ begin
       JSTypeErrorUC(cx, ws);
     end else begin
       ws := StringToSynUnicode(aException.Message);
-      JSErrorUC(cx, ws);
+      JSErrorUC(cx, ws, aException.HelpContext);
     end;
 end;
 
@@ -3400,10 +3400,10 @@ begin
   result := @TypeErrorUCFormatString;
 end;
 
-procedure JSErrorUC(cx: PJSContext; aMessage: WideString);
+procedure JSErrorUC(cx: PJSContext; aMessage: WideString; errorCode: integer);
 begin
   if not JS_IsExceptionPending(cx) then
-    JS_ReportErrorNumberUC(cx, ReportErrorUC, nil, SMExceptionNumber ,Pointer(aMessage));
+    JS_ReportErrorNumberUC(cx, ReportErrorUC, nil, SMExceptionNumber + errorCode, Pointer(aMessage));
 end;
 
 procedure JSRangeErrorUC(cx: PJSContext; aMessage: WideString);
