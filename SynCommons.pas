@@ -53041,29 +53041,35 @@ begin
 end;
 
 procedure TTextWriter.AddFloatStr(P: PUTF8Char);
-var L: PtrUInt;
+var c: AnsiChar;
+    D: PUTF8Char;
 begin
-  if (P<>nil) and (P^=' ') then
-    P := GotoNextNotSpace(P+1);
-  L := StrLen(P);
-  if (L=0) or (L>30) then
-    Add('0') else begin
-    if BEnd-B<=31 then
-      FlushToStream;
-    inc(B);
+  if BEnd-B<=31 then
+    FlushToStream;
+  D := B+1;
+  if P<>nil then begin
+    while P^=' ' do inc(P);
     if PWord(P)^=ord('-')+ord('.')shl 8 then begin
-      PWord(B)^ := ord('-')+ord('0')shl 8; // '-.3' -> '-0.3'
-      inc(B,2);
+      PCardinal(D)^ := ord('-')+ord('0')shl 8; // '-.3' -> '-0.3'
+      inc(D,2);
       inc(P);
-      dec(L);
-    end else
-    if P^='.' then begin
-      B^ := '0'; // '.5' -> '0.5'
-      inc(B);
     end;
-    MoveSmall(P,B,L);
-    inc(B,L-1);
-  end;
+    c := P^;
+    if c='.' then begin
+      D^ := '0'; // '.5' -> '0.5'
+      inc(D);
+    end;
+    repeat
+      inc(P);
+      if c=#0 then
+        break;
+      D^ := c;
+      inc(D);
+      c := P^;
+    until false;
+  end else
+    D^ := '0';
+  B := D;
 end;
 
 procedure TTextWriter.Add({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID);
