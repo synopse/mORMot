@@ -2714,7 +2714,7 @@ begin
   end;
   res := 0;
   for i := 0 to high(fSchemaRec) do
-    if IsEqualGuid(fSchemaRec[i].SchemaGuid,aUID) then begin
+    if IsEqualGuid(@fSchemaRec[i].SchemaGuid,@aUID) then begin
       res := fSchemaRec[i].SupportedRestrictions;
       break;
     end;
@@ -3010,7 +3010,7 @@ function TBaseAggregatingRowset.QueryInterface({$IFDEF FPC_HAS_CONSTREF}constref
 function TBaseAggregatingRowset.QueryInterface(const IID: TGUID; out Obj): HResult;
 {$endif FPC}
 begin
-  if IsEqualGUID(IID, IID_IUnknown)then begin
+  if IsEqualGUID(@IID, @IID_IUnknown) then begin
     IUnknown(Obj) := Self;
   end else begin
     if not Assigned(fUnkInnerSQLNCLIRowset) then begin
@@ -3018,7 +3018,7 @@ begin
       Result := E_NOINTERFACE;
       Exit;
     end;
-    if IsEqualGUID(IID, IID_IRowset)then begin
+    if IsEqualGUID(@IID, @IID_IRowset)then begin
       IUnknown(Obj) := self;
     end else begin
       Result := fUnkInnerSQLNCLIRowset.QueryInterface(IID, Obj);
