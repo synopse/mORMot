@@ -381,7 +381,11 @@ end;
 
 procedure SynLogNoticeProcessor({%H-}arg: Pointer; message: PUTF8Char); cdecl;
 begin
-  SynDBLog.Add.Log(sllInfo, 'PGINFO: %', [message]);
+  SynDBLog.Add.Log(sllTrace, 'PGINFO: %', [message], TObject(arg));
+end;
+
+procedure DummyNoticeProcessor({%H-}arg: Pointer; message: PUTF8Char); cdecl;
+begin
 end;
 
 procedure TSQLDBPostgresConnection.Connect;
@@ -402,7 +406,9 @@ begin
       PQ.SetNoticeProcessor(fPGConn, SynLogNoticeProcessor, pointer(self));
       log.Log(sllDB, 'Connected to % % using % v%', [fProperties.ServerName,
         fProperties.DatabaseNameSafe, PQ.fLibraryPath, PQ.LibVersion]);
-    end;
+    end
+    else // to ensure no performance drop due to notice to console
+      PQ.SetNoticeProcessor(fPGConn, DummyNoticeProcessor, nil);
     inherited Connect; // notify any re-connection
   except
     on E: Exception do
@@ -825,15 +831,14 @@ begin
       case ColumnType of
         ftNull:
           WR.AddShort('null');
-        ftInt64, ftDate:
+        ftInt64:
           WR.AddNoJSONEscape(PQ.GetValue(fRes, fCurrentRow, col));
         ftDouble, ftCurrency:
-          WR.AddFloatStr(PQ.GetValue(fRes, fCurrentRow, col));
-        ftUTF8:
+            WR.AddFloatStr(PQ.GetValue(fRes, fCurrentRow, col));
+        ftUTF8, ftDate:
           begin
             WR.Add('"');
-            WR.AddJSONEscape(PQ.GetValue(fRes, fCurrentRow, col),
-              PQ.GetLength(fRes, fCurrentRow, col));
+            WR.AddJSONEscape(PQ.GetValue(fRes, fCurrentRow, col));
             WR.Add('"');
           end;
         ftBlob:
