@@ -1550,7 +1550,6 @@ procedure TODBCStatement.ColumnsToJSON(WR: TJSONWriter);
 var res: TSQLDBStatementGetCol;
     col: integer;
     tmp: array[0..31] of AnsiChar;
-    blob: RawByteString;
 begin
   if not Assigned(fStatement) or (CurrentRow<=0) then
     raise EODBCException.CreateUTF8('%.ColumnsToJSON() with no prior Step',[self]);
@@ -1579,10 +1578,8 @@ begin
       end;
       ftBlob:
         if fForceBlobAsNull then
-          WR.AddShort('null') else begin
-          blob := ColumnBlob(Col);
-          WR.WrBase64(pointer(blob),length(blob),true);
-        end;
+          WR.AddShort('null') else
+          WR.WrBase64(pointer(fColData[Col]),ColumnDataSize,true);
       else assert(false);
     end;
     WR.Add(',');

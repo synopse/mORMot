@@ -13940,13 +13940,13 @@ function THash128History.Exists(const hash: THash128): boolean;
 begin
   if Count = 0 then
     result := false else
-    result := HashFound(pointer(Previous),Count,THash128Rec(hash));
+    result := Hash128Index(pointer(Previous),Count,@hash)>=0;
 end;
 
 function THash128History.Add(const hash: THash128): boolean;
 var n: integer;
 begin
-  result := not HashFound(pointer(Previous),Count,THash128Rec(hash));
+  result := Hash128Index(pointer(Previous),Count,@hash)<0;
   if not result then
     exit;
   Previous[Index].b := hash;

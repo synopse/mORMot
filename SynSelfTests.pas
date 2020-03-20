@@ -3196,6 +3196,7 @@ begin
   FillCharFast(GUID2,sizeof(GUID2),0);
   Check(Base64uriToBin(utf,@GUID2,SizeOf(GUID2)));
   Check(IsEqualGUID(GUID2,GUID));
+  Check(IsEqualGUID(@GUID2,@GUID));
   Check(U.From('toto.com'));
   Check(U.URI='http://toto.com/');
   Check(U.From('toto.com:123'));
@@ -3238,6 +3239,7 @@ begin
     Check(IsZero(@g2,sizeof(g2)));
     Check(TextToGUID(@s[2],@g2)^='}');
     Check(IsEqualGUID(g2,g));
+    Check(IsEqualGUID(@g2,@g));
     Check(IsEqualGUID(RawUTF8ToGUID(s),g));
     inc(g.D1);
     Check(not IsEqualGUID(g2,g));
@@ -3989,7 +3991,13 @@ begin
     crcblocksfast(@crc1,@crcs.h0,j);
     check(not IsZero(crc1));
     check(IsEqual(crc1,crc2),'crcblocksfast4');
+    CheckEqual(Hash128Index(@crcs,4,@crcs.r[j-1]),j-1);
+    check(Hash128Index(@crcs,j-1,@crcs.r[j-1])<0);
   end;
+  CheckEqual(Hash256Index(@crcs,2,@crcs.r[0]),0);
+  check(Hash256Index(@crcs,2,@crcs.r[1])<0);
+  CheckEqual(Hash256Index(@crcs,2,@crcs.r[2]),1);
+  check(Hash256Index(@crcs,2,@crcs.r[3])<0);
   for i := 0 to 50000 do begin
     FillZero(crc1);
     crcblock(@crc1,@digest);

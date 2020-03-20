@@ -890,6 +890,7 @@ type
     fEngineName: RawUTF8;
     fOnProcess: TOnSQLDBProcess;
     fOnStatementInfo: TOnSQLDBInfo;
+    fStatementCacheReplicates: integer;
     fConnectionTimeOutTicks: Int64;
     fSharedTransactions: array of record
       SessionID: cardinal;
@@ -1400,6 +1401,17 @@ type
     // - will cache only statements containing ? parameters or a SELECT with no
     // WHERE clause within
     property UseCache: boolean read fUseCache write fUseCache;
+    /// if UseCache is true, how many statement replicates can be generated
+    // if the cached ISQLDBStatement is already used
+    // - such replication is normally not needed in a per-thread connection,
+    // unless ISQLDBStatement are not released as soon as possible
+    // - above this limit, no cache will be made, and a dedicated single-time
+    // statement will be prepared
+    // - default is 0 to cache statements once - but you may try to increase
+    // this value if you run identical SQL with long-standing ISQLDBStatement;
+    // or you can set -1 if you don't want the warning log to appear
+    property StatementCacheReplicates: integer read fStatementCacheReplicates
+      write fStatementCacheReplicates;
     /// defines if TSQLDBConnection.Disconnect shall Rollback any pending
     // transaction
     // - some engines executes a COMMIT when the client is disconnected, others
@@ -2149,9 +2161,8 @@ type
   // connection pool
   TSQLDBConnectionPropertiesThreadSafe = class(TSQLDBConnectionProperties)
   protected
-    fConnectionPool: TSynObjectList;
+    fConnectionPool: TSynObjectListLocked;
     fLatestConnectionRetrievedInPool: integer;
-    fConnectionCS: TRTLCriticalSection;
     fThreadingMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode;
     /// returns -1 if none was defined yet
     function CurrentThreadConnectionIndex: Integer;
@@ -4046,33 +4057,36 @@ begin
   if length(aSQL)<5 then
     exit;
   // first check if could be retrieved from cache
+  cachedSQL := aSQL;
   ToCache := fProperties.IsCachable(Pointer(aSQL));
   if ToCache and (fCache<>nil) then begin
-    cachedSQL := aSQL;
     ndx := fCache.IndexOf(cachedSQL);
     if ndx>=0 then begin
       Stmt := fCache.Objects[ndx];
       if Stmt.RefCount=1 then begin // ensure statement is not currently in use
+        result := Stmt; // acquire the statement
         Stmt.Reset;
-        result := Stmt;
         exit;
-      end else begin // in use -> create up to 8 cached alternatives
+      end else begin // in use -> create cached alternatives
         ToCache := false; // if all slots are used, won't cache this statement
-        for altern := 1 to 8 do begin
-          cachedSQL := aSQL+RawUTF8(AnsiChar(altern)); // safe SQL duplicate
-          ndx := fCache.IndexOf(cachedSQL);
-          if ndx>=0 then begin
-            Stmt := fCache.Objects[ndx];
-            if Stmt.RefCount=1 then begin
-              Stmt.Reset;
-              result := Stmt;
-              exit;
+        if fProperties.StatementCacheReplicates = 0 then
+          SynDBLog.Add.Log(sllWarning, 'NewStatementPrepared: cached statement still in use ' +
+            '-> you should release ISQLDBStatement ASAP [%]',[cachedSQL],self) else
+          for altern := 1 to fProperties.StatementCacheReplicates do begin
+            cachedSQL := aSQL+RawUTF8(AnsiChar(altern)); // safe SQL duplicate
+            ndx := fCache.IndexOf(cachedSQL);
+            if ndx>=0 then begin
+              Stmt := fCache.Objects[ndx];
+              if Stmt.RefCount=1 then begin
+                result := Stmt;
+                Stmt.Reset;
+                exit;
+              end;
+            end else begin
+              ToCache := true; // cache the statement in this void slot
+              break;
             end;
-          end else begin
-            ToCache := true; // cache the statement in this void slot
-            break;
           end;
-        end;
       end;
     end;
   end;
@@ -6226,7 +6240,7 @@ end;
 procedure TSQLDBConnectionPropertiesThreadSafe.ClearConnectionPool;
 var i: PtrInt;
 begin
-  EnterCriticalSection(fConnectionCS);
+  fConnectionPool.Safe.Lock;
   try
     if fMainConnection<>nil then
       fMainConnection.fLastAccessTicks := -1; // force IsOutdated to return true
@@ -6234,16 +6248,15 @@ begin
       TSQLDBConnectionThreadSafe(fConnectionPool.List[i]).fLastAccessTicks := -1;
     fLatestConnectionRetrievedInPool := -1;
   finally
-    LeaveCriticalSection(fConnectionCS);
+    fConnectionPool.Safe.UnLock;
   end;
 end;
 
 constructor TSQLDBConnectionPropertiesThreadSafe.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUTF8);
 begin
-  fConnectionPool := TSynObjectList.Create;
+  fConnectionPool := TSynObjectListLocked.Create;
   fLatestConnectionRetrievedInPool := -1;
-  InitializeCriticalSection(fConnectionCS);
   inherited Create(aServerName,aDatabaseName,aUserID,aPassWord);
 end;
 
@@ -6263,7 +6276,7 @@ begin // caller made EnterCriticalSection(fConnectionCS)
     end;
     result := 0;
     while result<fConnectionPool.Count do begin
-      conn := TSQLDBConnectionThreadSafe(fConnectionPool.List[result]);
+      conn := fConnectionPool.List[result];
       if conn.IsOutdated(tix) then // to guarantee reconnection
         fConnectionPool.Delete(result) else begin
         if conn.fThreadID=id then begin
@@ -6281,13 +6294,12 @@ destructor TSQLDBConnectionPropertiesThreadSafe.Destroy;
 begin
   inherited Destroy; // do MainConnection.Free
   fConnectionPool.Free;
-  DeleteCriticalSection(fConnectionCS);
 end;
 
 procedure TSQLDBConnectionPropertiesThreadSafe.EndCurrentThread;
 var i: integer;
 begin
-  EnterCriticalSection(fConnectionCS);
+  fConnectionPool.Safe.Lock;
   try
     i := CurrentThreadConnectionIndex;
     if i>=0 then begin // do nothing if this thread has no active connection
@@ -6296,7 +6308,7 @@ begin
         fLatestConnectionRetrievedInPool := -1;
     end;
   finally
-    LeaveCriticalSection(fConnectionCS);
+    fConnectionPool.Safe.UnLock;
   end;
 end;
 
@@ -6310,7 +6322,7 @@ var i: integer;
 begin
   case fThreadingMode of
   tmThreadPool: begin
-    EnterCriticalSection(fConnectionCS);
+    fConnectionPool.Safe.Lock;
     try
       i := CurrentThreadConnectionIndex;
       if i>=0 then begin
@@ -6321,7 +6333,7 @@ begin
       (result as TSQLDBConnectionThreadSafe).fThreadID := GetCurrentThreadId;
       fLatestConnectionRetrievedInPool := fConnectionPool.Add(result)
     finally
-      LeaveCriticalSection(fConnectionCS);
+      fConnectionPool.Safe.UnLock;
      end;
   end;
   tmMainConnection:
@@ -6728,7 +6740,7 @@ begin
         if fForceBlobAsNull then
           WR.AddShort('null') else begin
           blob := ColumnBlob(col);
-          WR.WrBase64(pointer(blob),length(blob),true); // withMagic=true
+          WR.WrBase64(pointer(blob),length(blob),{withMagic=}true);
         end;
       else raise ESQLDBException.CreateUTF8(
         '%.ColumnsToJSON: invalid ColumnType(%)=%',[self,col,ord(ColumnType(col))]);
@@ -7878,7 +7890,7 @@ function ReplaceParamsByNumbers(const aSQL: RawUTF8; var aNewSQL: RawUTF8;
   IndexChar: AnsiChar): integer;
 var
   ndx, L: PtrInt;
-  s, d, n: PUTF8Char;
+  s, d: PUTF8Char;
   c: AnsiChar;
 begin
   aNewSQL := aSQL;
@@ -7926,7 +7938,7 @@ begin
   if ndx = 0 then // no ? parameter
     exit;
   result := ndx;
-  // parse SQL and replace ? into $n
+  // parse SQL and replace ? into $n $nn $nnn
   FastSetString(aNewSQL, nil, L);
   s := pointer(aSQL);
   d := pointer(aNewSQL);
@@ -8048,8 +8060,7 @@ begin
     inc(v);
     dec(n);
   until n = 0;
-  dec(d);
-  d^ := '}'; // replace last ',' by '}'
+  d[-1] := '}'; // replace last ',' by '}'
   // inc(d); assert(d - pointer(result) = length(result)); // until stabilized
 end;
 
@@ -8417,9 +8428,8 @@ begin
       ftBlob:
       if fForceBlobAsNull then
         WR.AddShort('null') else begin
-        // WrBase64(..,withMagic=true)
         DataLen := FromVarUInt32(Data);
-        WR.WrBase64(PAnsiChar(Data),DataLen,true);
+        WR.WrBase64(PAnsiChar(Data),DataLen,{withMagic=}true);
       end;
     end;
     WR.Add(',');

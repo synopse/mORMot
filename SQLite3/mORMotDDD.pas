@@ -1766,7 +1766,7 @@ function TDDDRepositoryRestManager.GetFactoryIndex(
   const aInterface: TGUID): integer;
 begin
   for result := 0 to length(fFactory)-1 do
-    if IsEqualGUID(fFactory[result].fInterface.InterfaceIID,aInterface) then
+    if IsEqualGUID(@fFactory[result].fInterface.InterfaceIID,@aInterface) then
       exit;
   result := -1;
 end;

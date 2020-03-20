@@ -2985,7 +2985,8 @@ const
     Count: 0);
 
 /// returns the interface name of a registered GUID, or its hexadecimal value
-function ToText(const aGUID: TGUID): TGUIDShortString; overload;
+function ToText({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
+  aGUID: TGUID): TGUIDShortString; overload;
 
 /// retrieve a Field property RTTI information from a Property Name
 function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PPropInfo;
@@ -52918,25 +52919,33 @@ end;
 
 function TServiceContainer.Info(aTypeInfo: PTypeInfo): TServiceFactory;
 var i: PtrInt;
+    p: PServiceContainerInterface;
 begin
-  if self<>nil then
-    for i := 0 to high(fInterface) do
-      if fInterface[i].Service.fInterface.fInterfaceTypeInfo=aTypeInfo then begin
-        result := fInterface[i].Service;
-        exit;
-      end;
+  if self<>nil then begin
+    p := pointer(fInterface);
+    for i := 1 to length(fInterface) do begin
+      result := p^.Service;
+      if result.fInterface.fInterfaceTypeInfo=aTypeInfo then
+        exit else
+        inc(p);
+    end;
+  end;
   result := nil;
 end;
 
 function TServiceContainer.Info(const aGUID: TGUID): TServiceFactory;
 var i: PtrInt;
+    p: PServiceContainerInterface;
 begin
-  if self<>nil then
-    for i := 0 to high(fInterface) do
-      if IsEqualGUID(fInterface[i].Service.fInterface.fInterfaceIID,aGUID) then begin
-        result := fInterface[i].Service;
-        exit;
-      end;
+  if self<>nil then begin
+    p := pointer(fInterface);
+    for i := 1 to length(fInterface) do begin
+      result := p^.Service;
+      if IsEqualGUID(@result.fInterface.fInterfaceIID,@aGUID) then
+        exit else
+        inc(p);
+    end;
+  end;
   result := nil;
 end;
 
@@ -53303,7 +53312,7 @@ function TInterfacedObjectFake.FakeQueryInterface(
 {$endif}
 begin
   self := SelfFromInterface;
-  if IsEqualGUID(IID,fFactory.fInterfaceIID) then begin
+  if IsEqualGUID(@IID,@fFactory.fInterfaceIID) then begin
     pointer(Obj) := @fVTable;
     _AddRef;
     result := NOERROR;
@@ -53809,7 +53818,8 @@ begin
   result := nil;
 end;
 
-function ToText(const aGUID: TGUID): TGUIDShortString;
+function ToText({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
+  aGUID: TGUID): TGUIDShortString;
 var fact: TInterfaceFactory;
 begin
   fact := TInterfaceFactory.Get(aGUID);
@@ -57159,8 +57169,8 @@ function TServiceContainerServer.AddImplementation(
   aSharedImplementation: TInterfacedObject; const aContractExpected: RawUTF8): TServiceFactoryServer;
 var C: TClass;
     T: PInterfaceTable;
-    i, j: integer;
-    UID: array of ^TGUID;
+    i, j: PtrInt;
+    UID: array of PGUID;
     F: TServiceFactoryServer;
 begin
   result := nil;
@@ -57179,7 +57189,7 @@ begin
   // check all interfaces available in aSharedImplementation/aImplementationClass
   if (aSharedImplementation<>nil) and
      aSharedImplementation.InheritsFrom(TInterfacedObjectFake) then begin
-    if IsEqualGUID(UID[0]^,TInterfacedObjectFake(aSharedImplementation).
+    if IsEqualGUID(UID[0],@TInterfacedObjectFake(aSharedImplementation).
         fFactory.fInterfaceIID) then
       UID[0] := nil; // mark TGUID implemented by this fake interface
   end else begin
@@ -57190,7 +57200,8 @@ begin
         for i := 0 to T^.EntryCount-1 do
           with T^.Entries[i] do
           for j := 0 to high(aInterfaces) do
-            if (UID[j]<>nil) and IsEqualGUID(UID[j]^,IID{$ifdef FPC}^{$endif}) then begin
+            if (UID[j]<>nil) and
+               IsEqualGUID(UID[j],{$ifdef FPC}IID{$else}@IID{$endif}) then begin
               UID[j] := nil; // mark TGUID found
               break;
             end;
