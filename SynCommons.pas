@@ -39890,19 +39890,17 @@ const
   ENV: array[TSystemPath] of TFileName = (
     'ALLUSERSAPPDATA', 'LOCALAPPDATA', '', '', 'TEMP', 'LOCALAPPDATA');
 var tmp: array[0..MAX_PATH] of char;
-    k: TSystemPath;
 begin
-  if _SystemPath[spCommonData]='' then
-    for k := low(k) to high(k) do
-      if (k=spLog) and IsDirectoryWritable(ExeVersion.ProgramFilePath) then
-        _SystemPath[k] := EnsureDirectoryExists(ExeVersion.ProgramFilePath+'log') else
-      if (CSIDL[k]<>0) and (SHGetFolderPath(0,CSIDL[k],0,0,@tmp)=S_OK) then
-        _SystemPath[k] := IncludeTrailingPathDelimiter(tmp) else begin
-        _SystemPath[k] := GetEnvironmentVariable(ENV[k]);
-        if _SystemPath[k]='' then
-          _SystemPath[k] := GetEnvironmentVariable('APPDATA');
-        _SystemPath[k] := IncludeTrailingPathDelimiter(_SystemPath[k]);
-      end;
+  if _SystemPath[kind]='' then
+    if (kind=spLog) and IsDirectoryWritable(ExeVersion.ProgramFilePath) then
+      _SystemPath[kind] := EnsureDirectoryExists(ExeVersion.ProgramFilePath+'log') else
+    if (CSIDL[kind]<>0) and (SHGetFolderPath(0,CSIDL[kind],0,0,@tmp)=S_OK) then
+      _SystemPath[kind] := IncludeTrailingPathDelimiter(tmp) else begin
+      _SystemPath[kind] := GetEnvironmentVariable(ENV[kind]);
+      if _SystemPath[kind]='' then
+        _SystemPath[kind] := GetEnvironmentVariable('APPDATA');
+      _SystemPath[kind] := IncludeTrailingPathDelimiter(_SystemPath[kind]);
+    end;
   result := _SystemPath[kind];
 end;
 {$else MSWINDOWS}
