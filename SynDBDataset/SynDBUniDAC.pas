@@ -55,11 +55,13 @@ unit SynDBUniDAC;
 interface
 
 uses
-  Windows, SysUtils,
+  Windows,
+  SysUtils,
   {$IFNDEF DELPHI5OROLDER}
   Variants,
   {$ENDIF}
-  Classes, Contnrs,
+  Classes,
+  Contnrs,
   SynCommons,
   SynLog,
   SynDB,
@@ -127,6 +129,9 @@ type
     /// retrieve the advanced indexed information of a specified Table
     // - this overridden method will use UniDAC metadata to retrieve the information
     procedure GetIndexes(const aTableName: RawUTF8; out Indexes: TSQLDBIndexDefineDynArray); override;
+    /// determine if the SQL statement can be cached
+    // - overriden to circumvent an UniDAC bug reported with BLOB updates
+    function IsCachable(P: PUTF8Char): boolean; override;
 
     /// allow to set the options specific to a UniDAC driver
     // - for instance, you can set for both SQLite3 and Firebird/Interbase:
@@ -358,6 +363,13 @@ begin
     List.Free;
   end;
   inherited;
+end;
+
+function TSQLDBUniDACConnectionProperties.IsCachable(P: PUTF8Char): boolean;
+begin
+  result := not IdemPChar(P,'UPDATE '); // reported with blobs
+  if result then
+    result := inherited IsCachable(P);
 end;
 
 function TSQLDBUniDACConnectionProperties.NewConnection: TSQLDBConnection;
