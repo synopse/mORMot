@@ -6243,7 +6243,8 @@ type
 
   /// simple and efficient TList, without any notification
   // - regular TList has an internal notification mechanism which slows down
-  // basic process, and can't be easily inherited
+  // basic process, and most used methods were not defined as virtual, so can't
+  // be easily inherited
   // - stateless methods (like Add/Clear/Exists/Remove) are defined as virtual
   // since can be overriden e.g. by TSynObjectListLocked to add a TSynLocker
   TSynList = class(TSynPersistent)
@@ -7082,13 +7083,15 @@ procedure DynArraySortIndexed(Values: pointer; ElemSize, Count: Integer;
 
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
-function IsEqualGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
-  guid1, guid2: TGUID): Boolean; {$ifdef HASINLINE}inline;{$endif}
+function IsEqualGUID(const guid1, guid2: TGUID): Boolean; overload; {$ifdef HASINLINE}inline;{$endif}
+
+/// compare two TGUID values
+// - this version is faster than the one supplied by SysUtils
+function IsEqualGUID(guid1, guid2: PGUID): Boolean; overload; {$ifdef HASINLINE}inline;{$endif}
 
 /// returns the index of a matching TGUID in an array
 // - returns -1 if no item matched
-function IsEqualGUIDArray({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
-  guid: TGUID; const guids: array of TGUID): integer;
+function IsEqualGUIDArray(const guid: TGUID; const guids: array of TGUID): integer;
 
 /// check if a TGUID value contains only 0 bytes
 // - this version is faster than the one supplied by SysUtils
@@ -11724,7 +11727,9 @@ type
   7: (b384: THash384);
   8: (w: array[0..31] of word);
   9: (c: array[0..15] of cardinal);
-  10: (l,h: THash256Rec);
+  10: (i: array[0..7] of Int64);
+  11: (r: array[0..3] of THash128Rec);
+  12: (l,h: THash256Rec);
   end;
   /// pointer to 512-bit hash map variable record
   PHash512Rec = ^THash512Rec;
@@ -11777,7 +11782,8 @@ function IsEqual(const A,B: THash128): boolean; overload;
 procedure FillZero(out dig: THash128); overload;
 
 /// fast O(n) search of a 128-bit item in an array of such values
-function HashFound(P: PHash128Rec; Count: integer; const h: THash128Rec): boolean;
+function Hash128Index(P: PHash128Rec; Count: integer; h: PHash128Rec): integer;
+  {$ifdef CPU64} inline; {$endif}
 
 /// convert a 32-bit integer (storing a IP4 address) into its full notation
 // - returns e.g. '1.2.3.4' for any valid address, or '' if ip4=0
@@ -11830,6 +11836,9 @@ function IsEqual(const A,B: THash256): boolean; overload;
 // - may be used to cleanup stack-allocated content
 // ! ... finally FillZero(digest); end;
 procedure FillZero(out dig: THash256); overload;
+
+/// fast O(n) search of a 256-bit item in an array of such values
+function Hash256Index(P: PHash256Rec; Count: integer; h: PHash256Rec): integer; overload;
 
 /// returns TRUE if all 48 bytes of this 384-bit buffer equal zero
 // - e.g. a SHA-384 digest
@@ -13585,13 +13594,13 @@ procedure GarbageCollectorFree;
 // ! end;
 // - you should better not use such a giant-lock, but an instance-dedicated
 // critical section - these functions are just here to be convenient, for
-// non time critical process
+// non time-critical process
 procedure GlobalLock;
 
 /// release the giant lock for thread-safe shared process
 // - you should better not use such a giant-lock, but an instance-dedicated
 // critical section - these functions are just here to be convenient, for
-// non time critical process
+// non time-critical process
 procedure GlobalUnLock;
 
 
@@ -26809,8 +26818,12 @@ asm {$ifdef CPU64DELPHI} .noframe {$endif}
         setbe   al
 end; // we don't check for ismultithread global since lock is cheap on new CPUs
 {$else}
-begin // fallback to pure pascal version for ARM
-  result := {$ifdef FPC_64}InterLockedDecrement64{$else}InterLockedDecrement{$endif}(refcnt)<=0;
+begin // fallback to RTL asm e.g. for ARM
+  {$ifdef FPC_64}
+  result := InterLockedDecrement64(refcnt)<=0;
+  {$else}
+  result := InterLockedDecrement(refcnt)<=0;
+  {$endif FPC_64}
 end;
 {$endif CPUINTEL}
 
@@ -35687,26 +35700,30 @@ begin
   d[1] := 0;
 end;
 
-function HashFound(P: PHash128Rec; Count: integer; const h: THash128Rec): boolean;
-var first{$ifdef CPU64}, second{$endif}: PtrInt;
-    i: integer;
-begin // fast O(n) brute force search
+function Hash128Index(P: PHash128Rec; Count: integer; h: PHash128Rec): integer;
+{$ifdef CPU64}
+var _0, _1: PtrInt;
+begin
   if P<>nil then begin
-    result := true;
-    first := h.Lo;
-    {$ifdef CPU64}
-    second := h.hi;
-    for i := 1 to Count do
-      if (P^.Lo=first) and (P^.Hi=second) then
-    {$else}
-    for i := 1 to Count do
-      if (P^.i0=first) and (P^.i1=h.i1) and (P^.i2=h.i2) and (P^.i3=h.i3) then
-    {$endif}
+    _0 := h^.Lo;
+    _1 := h^.Hi;
+    for result := 0 to Count-1 do
+      if (P^.Lo=_0) and (P^.Hi=_1) then
         exit else
         inc(P);
   end;
-  result := false;
+  result := -1; // not found
 end;
+{$else}
+begin // fast O(n) brute force search
+  if P<>nil then
+    for result := 0 to Count-1 do
+      if (P^.i0=h^.i0) and (P^.i1=h^.i1) and (P^.i2=h^.i2) and (P^.i3=h^.i3) then
+        exit else
+        inc(P);
+  result := -1; // not found
+end;
+{$endif CPU64}
 
 function IP4Text(ip4: cardinal): shortstring;
 var b: array[0..3] of byte absolute ip4;
@@ -35793,6 +35810,32 @@ begin // uses anti-forensic time constant "xor/or" pattern
     {$ifndef CPU64} or (a_[4] xor b_[4]) or (a_[5] xor b_[5])
                     or (a_[6] xor b_[6]) or (a_[7] xor b_[7]) {$endif})=0;
 end;
+
+function Hash256Index(P: PHash256Rec; Count: integer; h: PHash256Rec): integer;
+{$ifdef CPU64} 
+var _0, _1: PtrInt;
+begin // fast O(n) brute force search
+  if P<>nil then begin
+    _0 := h^.d0;
+    _1 := h^.d1;
+    for result := 0 to Count-1 do
+      if (P^.d0=_0) and (P^.d1=_1) and (P^.d2=h^.d2) and (P^.d3=h^.d3) then
+        exit else
+        inc(P);
+  end;
+  result := -1; // not found
+end;
+{$else}
+begin
+  if P<>nil then
+    for result := 0 to Count-1 do
+      if (P^.i0=h^.i0) and (P^.i1=h^.i1) and (P^.i2=h^.i2) and (P^.i3=h^.i3) and
+         (P^.i4=h^.i4) and (P^.i5=h^.i5) and (P^.i6=h^.i6) and (P^.i7=h^.i7) then
+        exit else
+        inc(P);
+  result := -1; // not found
+end;
+{$endif CPU64}
 
 procedure FillZero(out dig: THash256);
 var d: TInt64Array absolute dig;
@@ -37909,35 +37952,37 @@ begin
     (ChangeFileExt(ExeVersion.ProgramFileName,'.log')));
 end;
 
-function IsEqualGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid1, guid2: TGUID): Boolean;
+function IsEqualGUID(const guid1, guid2: TGUID): Boolean;
 begin
   result := (PHash128Rec(@guid1).L=PHash128Rec(@guid2).L) and
             (PHash128Rec(@guid1).H=PHash128Rec(@guid2).H);
 end;
 
-function IsEqualGUIDArray({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
-  guid: TGUID; const guids: array of TGUID): integer;
+function IsEqualGUID(guid1, guid2: PGUID): Boolean;
 begin
-  for result := 0 to high(guids) do
-    if IsEqualGUID(guid,guids[result]) then
-      exit;
-  result := -1;
+  result := (PHash128Rec(guid1).L=PHash128Rec(guid2).L) and
+            (PHash128Rec(guid1).H=PHash128Rec(guid2).H);
+end;
+
+function IsEqualGUIDArray(const guid: TGUID; const guids: array of TGUID): integer;
+begin
+  result := Hash128Index(@guids[0],length(guids),@guid);
 end;
 
 function IsNullGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): Boolean;
 var a: TPtrIntArray absolute guid;
 begin
-  result := (a[0]=0) and (a[1]=0)
-    {$ifndef CPU64} and (a[2]=0) and (a[3]=0){$endif};
+  result := (a[0]=0) and (a[1]=0) {$ifndef CPU64} and (a[2]=0) and (a[3]=0){$endif};
 end;
 
 function AddGUID(var guids: TGUIDDynArray; const guid: TGUID;
   NoDuplicates: boolean): integer;
 begin
-  if NoDuplicates then
-    for result := 0 to length(guids)-1 do
-      if IsEqualGUID(guid,guids[result]) then
-        exit;
+  if NoDuplicates then begin
+    result := Hash128Index(pointer(guids),length(guids),@guid);
+    if result>=0 then
+      exit;
+  end;
   result := length(guids);
   SetLength(guids,result+1);
   guids[result] := guid;
@@ -52708,8 +52753,8 @@ procedure TTextWriter.Add(c: AnsiChar);
 begin
   if B>=BEnd then
     FlushToStream;
-  B[1] := c;
   inc(B);
+  B^ := c;
 end;
 
 procedure TTextWriter.AddOnce(c: AnsiChar);
@@ -52718,8 +52763,8 @@ begin
     exit; // no duplicate
   if B>=BEnd then
     FlushToStream;
-  B[1] := c;
   inc(B);
+  B^ := c;
 end;
 
 procedure TTextWriter.Add(c1, c2: AnsiChar);
@@ -52766,7 +52811,7 @@ var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
     Len: PtrInt;
 begin
-  if BEnd-B<=16 then
+  if BEnd-B<=24 then
     FlushToStream;
   if PtrUInt(Value)<=high(SmallUInt32UTF8) then begin
     P := pointer(SmallUInt32UTF8[Value]);
@@ -52998,6 +53043,8 @@ end;
 procedure TTextWriter.AddFloatStr(P: PUTF8Char);
 var L: PtrUInt;
 begin
+  if (P<>nil) and (P^=' ') then
+    P := GotoNextNotSpace(P+1);
   L := StrLen(P);
   if (L=0) or (L>30) then
     Add('0') else begin
