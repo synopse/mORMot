@@ -2161,9 +2161,8 @@ type
   // connection pool
   TSQLDBConnectionPropertiesThreadSafe = class(TSQLDBConnectionProperties)
   protected
-    fConnectionPool: TSynObjectList;
+    fConnectionPool: TSynObjectListLocked;
     fLatestConnectionRetrievedInPool: integer;
-    fConnectionCS: TRTLCriticalSection;
     fThreadingMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode;
     /// returns -1 if none was defined yet
     function CurrentThreadConnectionIndex: Integer;
@@ -6241,7 +6240,7 @@ end;
 procedure TSQLDBConnectionPropertiesThreadSafe.ClearConnectionPool;
 var i: PtrInt;
 begin
-  EnterCriticalSection(fConnectionCS);
+  fConnectionPool.Safe.Lock;
   try
     if fMainConnection<>nil then
       fMainConnection.fLastAccessTicks := -1; // force IsOutdated to return true
@@ -6249,16 +6248,15 @@ begin
       TSQLDBConnectionThreadSafe(fConnectionPool.List[i]).fLastAccessTicks := -1;
     fLatestConnectionRetrievedInPool := -1;
   finally
-    LeaveCriticalSection(fConnectionCS);
+    fConnectionPool.Safe.UnLock;
   end;
 end;
 
 constructor TSQLDBConnectionPropertiesThreadSafe.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUTF8);
 begin
-  fConnectionPool := TSynObjectList.Create;
+  fConnectionPool := TSynObjectListLocked.Create;
   fLatestConnectionRetrievedInPool := -1;
-  InitializeCriticalSection(fConnectionCS);
   inherited Create(aServerName,aDatabaseName,aUserID,aPassWord);
 end;
 
@@ -6278,7 +6276,7 @@ begin // caller made EnterCriticalSection(fConnectionCS)
     end;
     result := 0;
     while result<fConnectionPool.Count do begin
-      conn := TSQLDBConnectionThreadSafe(fConnectionPool.List[result]);
+      conn := fConnectionPool.List[result];
       if conn.IsOutdated(tix) then // to guarantee reconnection
         fConnectionPool.Delete(result) else begin
         if conn.fThreadID=id then begin
@@ -6296,13 +6294,12 @@ destructor TSQLDBConnectionPropertiesThreadSafe.Destroy;
 begin
   inherited Destroy; // do MainConnection.Free
   fConnectionPool.Free;
-  DeleteCriticalSection(fConnectionCS);
 end;
 
 procedure TSQLDBConnectionPropertiesThreadSafe.EndCurrentThread;
 var i: integer;
 begin
-  EnterCriticalSection(fConnectionCS);
+  fConnectionPool.Safe.Lock;
   try
     i := CurrentThreadConnectionIndex;
     if i>=0 then begin // do nothing if this thread has no active connection
@@ -6311,7 +6308,7 @@ begin
         fLatestConnectionRetrievedInPool := -1;
     end;
   finally
-    LeaveCriticalSection(fConnectionCS);
+    fConnectionPool.Safe.UnLock;
   end;
 end;
 
@@ -6325,7 +6322,7 @@ var i: integer;
 begin
   case fThreadingMode of
   tmThreadPool: begin
-    EnterCriticalSection(fConnectionCS);
+    fConnectionPool.Safe.Lock;
     try
       i := CurrentThreadConnectionIndex;
       if i>=0 then begin
@@ -6336,7 +6333,7 @@ begin
       (result as TSQLDBConnectionThreadSafe).fThreadID := GetCurrentThreadId;
       fLatestConnectionRetrievedInPool := fConnectionPool.Add(result)
     finally
-      LeaveCriticalSection(fConnectionCS);
+      fConnectionPool.Safe.UnLock;
      end;
   end;
   tmMainConnection:
@@ -6743,7 +6740,7 @@ begin
         if fForceBlobAsNull then
           WR.AddShort('null') else begin
           blob := ColumnBlob(col);
-          WR.WrBase64(pointer(blob),length(blob),true); // withMagic=true
+          WR.WrBase64(pointer(blob),length(blob),{withMagic=}true);
         end;
       else raise ESQLDBException.CreateUTF8(
         '%.ColumnsToJSON: invalid ColumnType(%)=%',[self,col,ord(ColumnType(col))]);
@@ -8431,9 +8428,8 @@ begin
       ftBlob:
       if fForceBlobAsNull then
         WR.AddShort('null') else begin
-        // WrBase64(..,withMagic=true)
         DataLen := FromVarUInt32(Data);
-        WR.WrBase64(PAnsiChar(Data),DataLen,true);
+        WR.WrBase64(PAnsiChar(Data),DataLen,{withMagic=}true);
       end;
     end;
     WR.Add(',');
