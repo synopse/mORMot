@@ -890,6 +890,7 @@ type
     fEngineName: RawUTF8;
     fOnProcess: TOnSQLDBProcess;
     fOnStatementInfo: TOnSQLDBInfo;
+    fStatementCacheReplicates: integer;
     fConnectionTimeOutTicks: Int64;
     fSharedTransactions: array of record
       SessionID: cardinal;
@@ -1400,6 +1401,17 @@ type
     // - will cache only statements containing ? parameters or a SELECT with no
     // WHERE clause within
     property UseCache: boolean read fUseCache write fUseCache;
+    /// if UseCache is true, how many statement replicates can be generated
+    // if the cached ISQLDBStatement is already used
+    // - such replication is normally not needed in a per-thread connection,
+    // unless ISQLDBStatement are not released as soon as possible
+    // - above this limit, no cache will be made, and a dedicated single-time
+    // statement will be prepared
+    // - default is 0 to cache statements once - but you may try to increase
+    // this value if you run identical SQL with long-standing ISQLDBStatement;
+    // or you can set -1 if you don't want the warning log to appear
+    property StatementCacheReplicates: integer read fStatementCacheReplicates
+      write fStatementCacheReplicates;
     /// defines if TSQLDBConnection.Disconnect shall Rollback any pending
     // transaction
     // - some engines executes a COMMIT when the client is disconnected, others
@@ -4046,33 +4058,36 @@ begin
   if length(aSQL)<5 then
     exit;
   // first check if could be retrieved from cache
+  cachedSQL := aSQL;
   ToCache := fProperties.IsCachable(Pointer(aSQL));
   if ToCache and (fCache<>nil) then begin
-    cachedSQL := aSQL;
     ndx := fCache.IndexOf(cachedSQL);
     if ndx>=0 then begin
       Stmt := fCache.Objects[ndx];
       if Stmt.RefCount=1 then begin // ensure statement is not currently in use
+        result := Stmt; // acquire the statement
         Stmt.Reset;
-        result := Stmt;
         exit;
-      end else begin // in use -> create up to 8 cached alternatives
+      end else begin // in use -> create cached alternatives
         ToCache := false; // if all slots are used, won't cache this statement
-        for altern := 1 to 8 do begin
-          cachedSQL := aSQL+RawUTF8(AnsiChar(altern)); // safe SQL duplicate
-          ndx := fCache.IndexOf(cachedSQL);
-          if ndx>=0 then begin
-            Stmt := fCache.Objects[ndx];
-            if Stmt.RefCount=1 then begin
-              Stmt.Reset;
-              result := Stmt;
-              exit;
+        if fProperties.StatementCacheReplicates = 0 then
+          SynDBLog.Add.Log(sllWarning, 'NewStatementPrepared: cached statement still in use ' +
+            '-> you should release ISQLDBStatement ASAP [%]',[cachedSQL],self) else
+          for altern := 1 to fProperties.StatementCacheReplicates do begin
+            cachedSQL := aSQL+RawUTF8(AnsiChar(altern)); // safe SQL duplicate
+            ndx := fCache.IndexOf(cachedSQL);
+            if ndx>=0 then begin
+              Stmt := fCache.Objects[ndx];
+              if Stmt.RefCount=1 then begin
+                result := Stmt;
+                Stmt.Reset;
+                exit;
+              end;
+            end else begin
+              ToCache := true; // cache the statement in this void slot
+              break;
             end;
-          end else begin
-            ToCache := true; // cache the statement in this void slot
-            break;
           end;
-        end;
       end;
     end;
   end;
