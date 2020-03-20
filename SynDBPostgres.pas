@@ -499,24 +499,26 @@ begin
 end;
 
 procedure TSQLDBPostgresConnectionProperties.FillOidMapping;
-begin
+begin // see pg_type.h (most used first)
+  mapOid(23, ftInt64);     // int4
+  mapOid(20, ftInt64);     // int8
+  mapOid(25, ftUTF8);      // text
+  mapOid(701, ftDouble);   // float8
+  mapOid(1114, ftDate);    // timestamp
+  mapOid(17, ftBlob);      // bytea
+  mapOid(1700, ftCurrency);// numeric - our ORM uses NUMERIC(19,4) for currency
+  mapOid(16, ftInt64);     // bool
+  mapOid(21, ftInt64);     // int2
+  mapOid(790, ftCurrency); // money
+  mapOid(1184, ftDate);    // timestampz
   mapOid(702, ftDate);     // abstime
   mapOid(1082, ftDate);    // date
   mapOid(1083, ftDate);    // time
-  mapOid(1114, ftDate);    // timestamp
-  mapOid(1184, ftDate);    // timestampz
   mapOid(1266, ftDate);    // timez
-  mapOid(20, ftInt64);     // int8
-  mapOid(21, ftInt64);     // int2
-  mapOid(23, ftInt64);     // int4
   mapOid(24, ftInt64);     // regproc
   mapOid(26, ftInt64);     // oid
   mapOid(700, ftDouble);   // float4
-  mapOid(701, ftDouble);   // float8
-  mapOid(1700, ftDouble);  // numeric
-  mapOid(790, ftCurrency); // money
-  mapOid(17, ftBlob);      // bytea
-end;
+end; // any unregistered OID will be handled as ftUTF8
 
 constructor TSQLDBPostgresConnectionProperties.Create(
   const aServerName, aDatabaseName, aUserID, aPassword: RawUTF8);
@@ -834,7 +836,7 @@ begin
         ftInt64:
           WR.AddNoJSONEscape(PQ.GetValue(fRes, fCurrentRow, col));
         ftDouble, ftCurrency:
-            WR.AddFloatStr(PQ.GetValue(fRes, fCurrentRow, col));
+          WR.AddFloatStr(PQ.GetValue(fRes, fCurrentRow, col));
         ftUTF8, ftDate:
           begin
             WR.Add('"');
