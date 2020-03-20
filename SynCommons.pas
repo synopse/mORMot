@@ -943,12 +943,12 @@ function NextGrow(capacity: integer): integer;
 /// equivalence to SetString(s,nil,len) function
 // - faster especially under FPC
 procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
-  {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
+  {$ifndef HASCODEPAGE}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// equivalence to SetString(s,nil,len) function with a specific code page
 // - faster especially under FPC
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
-  {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
+  {$ifndef HASCODEPAGE}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// initialize a RawByteString, ensuring returned "aligned" pointer is 16-bytes aligned
 // - to be used e.g. for proper SSE process
