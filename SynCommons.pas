@@ -2263,8 +2263,8 @@ function StrLenPas(S: pointer): PtrInt;
 var StrLen: function(S: pointer): PtrInt = StrLenPas;
 
 {$ifdef ABSOLUTEPASCAL}
-var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte);
-var MoveFast: procedure(const Source; var Dest; Count: PtrInt);
+var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) = system.FillChar;
+var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = system.Move;
 {$else}
 {$ifdef CPUX64} // will define its own self-dispatched SSE2/AVX functions
 type
