@@ -238,13 +238,15 @@ begin
       fSpecificOptions.Values['HOMENAME'] := '';
     end;
     dMySQL: begin
-      fSpecificOptions.Values['MySQL.ConnectionTimeout'] := '0';    // s.d. 30.11.19 Damit der Connect schneller geht ! CRVioTCP.pas WaitForConnect
+      // s.d. 30.11.19 Damit der Connect schneller geht ! CRVioTCP.pas WaitForConnect
+      fSpecificOptions.Values['MySQL.ConnectionTimeout'] := '0';
     end;
   dMSSQL: begin
     if aUserID='' then
       fSpecificOptions.Values['Authentication'] := 'auWindows';
       fSpecificOptions.Values['SQL Server.Provider'] := cMSSQLProvider;
-      fSpecificOptions.Values['SQL Server.ConnectionTimeout'] := '0';    // s.d. 30.11.19 Damit der Connect im Direct Mode so Schnell ist wie mit prAuto/OleDB
+      // s.d. 30.11.19 Damit der Connect im Direct Mode so Schnell ist wie mit prAuto/OleDB
+      fSpecificOptions.Values['SQL Server.ConnectionTimeout'] := '0';
   end; // http://www.devart.com/unidac/docs/index.html?sqlprov_article.htm
   dPostgreSQL: begin  // thanks delphinium for the trick!
     fSpecificOptions.Values['CharSet'] := 'UTF8';
@@ -364,8 +366,7 @@ begin
   { TODO : get FOREIGN KEYS from UniDAC metadata ? }
 end;
 
-procedure TSQLDBUniDACConnectionProperties.GetTableNames(
-  out Tables: TRawUTF8DynArray);
+procedure TSQLDBUniDACConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
 var List: TStringList;
 begin
   List := TStringList.Create;
@@ -444,10 +445,12 @@ begin
   fDatabase.Username := UTF8ToString(fProperties.UserID);
   fDatabase.Password := UTF8ToString(fProperties.PassWord);
   if aProperties.DBMS = dMySQL then
-    fDatabase.SpecificOptions.Add('MySQL.ConnectionTimeout=0');    // s.d. 30.11.19 Damit der Connect schneller geht
+    // s.d. 30.11.19 Damit der Connect schneller geht
+    fDatabase.SpecificOptions.Add('MySQL.ConnectionTimeout=0');
   if aProperties.DBMS = dMSSQL then begin
     fDatabase.SpecificOptions.Add('SQL Server.Provider='+cMSSQLProvider);
-    fDatabase.SpecificOptions.Add('SQL Server.ConnectionTimeout=0');    // s.d. 30.11.19 Damit der Connect im Direct Mode so Schnell ist wie mit prAuto/OleDB
+    // s.d. 30.11.19 Damit der Connect im Direct Mode so Schnell ist wie mit prAuto/OleDB
+    fDatabase.SpecificOptions.Add('SQL Server.ConnectionTimeout=0');
   end;
   // handle the options set by TSQLDBUniDACConnectionProperties.URI() 
   options := (fProperties as TSQLDBUniDACConnectionProperties).fSpecificOptions;
@@ -546,89 +549,24 @@ end;
 
 { TSQLDBUniDACStatement }
 
-procedure TSQLDBUniDACStatement.DataSetBindSQLParam(const aArrayIndex, aParamIndex: integer; const aParam: TSQLDBParam);
+procedure TSQLDBUniDACStatement.DataSetBindSQLParam(const aArrayIndex,
+  aParamIndex: integer; const aParam: TSQLDBParam);
 var P: TDAParam;
-    I64: Int64;
-    tmp: RawUTF8;
 begin
-// SynDBLog.Enter('DataSetBindSQLParam(%, %, %)', [aArrayIndex, AParamIndex, Length(aParam.VData)], Self);
-  if fQueryParams[aParamIndex] is TDAParam then begin
-    with aParam do begin
-      P := TDAParam(fQueryParams[aParamIndex]);
-      P.ParamType := SQLParamTypeToDBParamType(VInOut);
-      if VinOut <> paramInOut then
-        case VType of
-          SynTable.ftNull: begin
-            P.Clear;
-            {$ifdef UNICODE}
-            P.AsBlob := nil; // avoid type errors when a blob field is adressed
-            {$else}
-            P.AsString := '';
-            {$endif}
-          end;
-          SynTable.ftInt64: begin
-            if aArrayIndex>=0 then
-              I64 := GetInt64(pointer(VArray[aArrayIndex])) else
-              I64 := VInt64;
-            {$ifdef UNICODE}
-            P.AsLargeInt := I64;
-            {$else}
-            if (PInt64Rec(@I64)^.Hi=0) or (PInt64Rec(@I64)^.Hi=Cardinal(-1)) then
-              P.AsInteger := I64 else
-              if TSQLDBDatasetConnectionProperties(Connection.Properties).
-                 fForceInt64AsFloat then
-                P.AsFloat := I64 else
-                P.Value := I64;
-            {$endif}
-          end;
-          SynTable.ftDouble:
-            if aArrayIndex>=0 then
-              P.AsFloat := GetExtended(pointer(VArray[aArrayIndex])) else
-              P.AsFloat := unaligned(PDouble(@VInt64)^);
-          SynTable.ftCurrency:
-            if aArrayIndex>=0 then
-              P.AsCurrency := StrToCurrency(pointer(VArray[aArrayIndex])) else
-              P.AsCurrency := PCurrency(@VInt64)^;
-          SynTable.ftDate:
-            if aArrayIndex>=0 then begin
-              UnQuoteSQLStringVar(pointer(VArray[aArrayIndex]),tmp);
-              P.AsDateTime := Iso8601ToDateTime(tmp);
-            end else
-              P.AsDateTime := PDateTime(@VInt64)^;
-          SynTable.ftUTF8:
-            if aArrayIndex>=0 then
-              if (VArray[aArrayIndex]='') and
-                 fConnection.Properties.StoreVoidStringAsNull then
-                P.Clear else begin
-              UnQuoteSQLStringVar(pointer(VArray[aArrayIndex]),tmp);
-              if fForceUseWideString then
-                P.Value := UTF8ToWideString(tmp) else
-                P.AsString := UTF8ToString(tmp);
-            end else
-              if (VData='') and fConnection.Properties.StoreVoidStringAsNull then
-                P.Clear else
-              if fForceUseWideString then
-                P.Value := UTF8ToWideString(VData) else
-                P.AsString := UTF8ToString(VData);
-          SynTable.ftBlob:
+  P := TDAParam(fQueryParams[aParamIndex]);
+  if P.InheritsFrom(TDAParam) then
+    with aParam do
+      if (VinOut<>paramInOut) and (VType=SynTable.ftBlob) then begin
+        P.ParamType := SQLParamTypeToDBParamType(VInOut);
+        if aArrayIndex>=0 then
 {$ifdef UNICODE}
-            if aArrayIndex>=0 then
-              P.SetBlobData(Pointer(VArray[aArrayIndex]),Length(VArray[aArrayIndex]))
-            else
-              P.SetBlobData(Pointer(VData),Length(VData));
-{$else}
-            if aArrayIndex>=0 then
-              P.AsString := VArray[aArrayIndex] else
-              P.AsString := VData;
-{$endif}
-          else
-            raise ESQLDBDataset.CreateFmt(
-              '%.DataSetBindSQLParam: Invalid type % on bound parameter #%d',
-              [self,ord(VType),aParamIndex+1]);
-          end;
-    end;
-  end else
-    inherited DataSetBindSQLParam(aArrayIndex, aParamIndex, aParam);
+          P.SetBlobData(Pointer(VArray[aArrayIndex]),Length(VArray[aArrayIndex])) else
+          P.SetBlobData(Pointer(VData),Length(VData));
+{$else}   P.AsString := VArray[aArrayIndex] else
+          P.AsString := VData;
+{$endif}exit;
+      end;
+  inherited DataSetBindSQLParam(aArrayIndex, aParamIndex, aParam);
 end;
 
 procedure TSQLDBUniDACStatement.DatasetCreate;
