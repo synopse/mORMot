@@ -1378,10 +1378,10 @@ type
     // ignored, and the maximum number of parameters is guessed per DBMS type
     property BatchMaxSentAtOnce: integer read fBatchMaxSentAtOnce write fBatchMaxSentAtOnce;
     /// the maximum size, in bytes, of logged SQL statements
-    // - default 0 will log statement and parameters with no size limit
+    // - setting 0 will log statement and parameters with no size limit
     // - setting -1 will log statement without any parameter value (just ?)
     // - setting any value >0 will log statement and parameters up to the
-    // number of bytes (could be set e.g. to 2048 to log up to 2KB per statement)
+    // number of bytes (default set to 2048 to log up to 2KB per statement)
     property LoggedSQLMaxSize: integer read fLoggedSQLMaxSize write fLoggedSQLMaxSize;
     /// allow to log the SQL statement when any low-level ESQLDBException is raised
     property LogSQLStatementOnException: boolean read fLogSQLStatementOnException
@@ -1681,6 +1681,8 @@ type
     {$endif}
     /// return the associated statement instance for a ISQLDBRows interface
     function Instance: TSQLDBStatement;
+    /// a wrapper to compute sllSQL context and start a local timer
+    function GetSQLLog(var timer: TPrecisionTimer; SQL: PRawUTF8 = nil): TSynLog;
   public
     /// create a statement instance
     constructor Create(aConnection: TSQLDBConnection); virtual;
@@ -4469,6 +4471,7 @@ begin
   fEngineName := EngineName;
   fRollbackOnDisconnect := true; // enabled by default
   fUseCache := true;
+  fLoggedSQLMaxSize := 2048; // log up to 2KB of inlined SQL by default
   SetInternalProperties; // virtual method used to override default parameters
   aDBMS := DBMS;
   if fForcedSchemaName='' then
@@ -5231,7 +5234,7 @@ end;
 
 function TSQLDBConnectionProperties.SQLFullTableName(const aTableName: RawUTF8): RawUTF8;
 begin
-  if (aTableName<>'') and (fForcedSchemaName<>'') and (PosEx('.',aTableName)=0) then
+  if (aTableName<>'') and (fForcedSchemaName<>'') and (PosExChar('.',aTableName)=0) then
     result := fForcedSchemaName+'.'+aTableName else
     result := aTableName;
 end;
@@ -5718,10 +5721,10 @@ var BeginQuoteChar, EndQuoteChar: RawUTF8;
 begin
   BeginQuoteChar := '"';
   EndQuoteChar := '"';
-  UseQuote := PosEx(' ',aTableName)>0;
+  UseQuote := PosExChar(' ',aTableName)>0;
   case fDBMS of
     dPostgresql:
-      if PosEx('.',aTablename)=0 then
+      if PosExChar('.',aTablename)=0 then
         UseQuote := true; // quote if not schema.identifier format
     dMySQL: begin
       BeginQuoteChar := '`';  // backtick/grave accent
@@ -5732,7 +5735,7 @@ begin
       EndQuoteChar := ']';
     end;
     dSQLite: begin
-      if PosEx('.',aTableName)>0 then
+      if PosExChar('.',aTableName)>0 then
         UseQuote := true;
       BeginQuoteChar := '`';  // backtick/grave accent
       EndQuoteChar := '`';
@@ -7175,6 +7178,24 @@ begin
   Result := Self;
 end;
 
+function TSQLDBStatement.GetSQLLog(var timer: TPrecisionTimer; SQL: PRawUTF8): TSynLog;
+var level: TSynLogInfo;
+begin
+  result := SynDBLog.Add;
+  if result = nil then
+    exit;
+  if SQL = nil then
+    level := sllDB else
+    level := sllSQL;
+  if level in result.Family.Level then
+  begin
+    timer.Start;
+    if SQL <> nil then
+      SQL^ := GetSQLWithInlinedParams;
+  end else
+    result := nil;
+end;
+
 function TSQLDBStatement.GetSQLWithInlinedParams: RawUTF8;
 var P,B: PUTF8Char;
     num: integer;
@@ -7229,7 +7250,7 @@ begin
         AddParamValueAsText(num,W,maxAllowed);
         inc(num);
       until (P^=#0) or ((maxSize>0) and (W.TextLength>=maxSize));
-      result := W.Text;
+      W.SetText(result);
       fSQLWithInlinedParams := result;
     finally
       W.Free;
@@ -7635,7 +7656,7 @@ begin
       ftDate:     Dest.AddDateTime(PDateTime(@VInt64),' ','''');
       ftUTF8:     Dest.AddQuotedStr(pointer(VData),'''',MaxCharCount);
       ftBlob:     Dest.AddShort('*BLOB*');
-      else        Dest.AddShort('???');
+      else        Dest.AddShort(ToText(VType)^);
     end;
 end;
 
@@ -7846,7 +7867,7 @@ begin
     if (aSQL[L]=';') and (L>5) and IdemPChar(@aSQL[L-3],'END') then
       break else // allows 'END;' at the end of a statement
       dec(L);    // trim ' ' or ';' right (last ';' could be found incorrect)
-  if PosEx('?',aSQL)>0 then begin
+  if PosExChar('?',aSQL)>0 then begin
     // change ? into :AA :BA ..
     c := ':AA';
     i := 0;
@@ -7898,7 +7919,7 @@ begin
   ndx := 0;
   L := Length(aSQL);
   s := pointer(aSQL);
-  if s = nil then
+  if (s = nil) or (PosExChar('?', aSQL) = 0) then
     exit;
   // calculate ? parameters count, check for ;
   while s^ <> #0 do
@@ -7987,8 +8008,10 @@ function BoundArrayToJSONArray(const Values: TRawUTF8DynArray): RawUTF8;
 var
   V: ^RawUTF8;
   s, d: PUTF8Char;
-  L, vl, j, n: PtrInt;
+  L, vl, n: PtrInt;
   c: AnsiChar;
+label
+  _dq;
 begin
   result := '';
   n := length(Values);
@@ -8003,15 +8026,23 @@ begin
     begin
       inc(L, vl);
       s := pointer(v^);
-      if s^ = '''' then // quoted ftUTF8
-        for j := 1 to vl - 2 do
-        begin
-          c := s[j];
-          if c = '''' then
-            dec(L) // double ' into single '
-          else if (c = '"') or (c = '\') then
-            inc(L); // \ before "
-        end;
+      if s^ = '''' then
+      begin // quoted ftUTF8
+        dec(vl, 2);
+        if vl > 0 then
+          repeat
+            inc(s);
+            c := s^;
+            if c = '''' then
+            begin
+              if s[1] = '''' then
+                dec(L); // double ' into single '
+            end
+            else if (c = '"') or (c = '\') then
+              inc(L); // escape \ before "
+            dec(vl);
+          until vl = 0;
+      end;
     end;
     inc(v);
     dec(n);
@@ -8031,19 +8062,25 @@ begin
       begin
         d^ := '"';
         inc(d);
-        for j := 1 to vl - 2 do
-        begin
-          c := s[j];
-          if c = '''' then
-            continue // double ' into single '
-          else if (c = '"') or (c = '\') then
-          begin
-            d^ := '\'; // \ before "
+        dec(vl, 2);
+        if vl > 0 then
+          repeat
+            inc(s);
+            c := s^;
+            if c = '''' then
+            begin
+              if s[1] = '''' then
+                goto _dq; // double ' into single '
+            end
+            else if (c = '"') or (c = '\') then
+            begin
+              d^ := '\'; // escape \ before "
+              inc(d);
+            end;
+            d^ := c;
             inc(d);
-          end;
-          d^ := c;
-          inc(d);
-        end;
+_dq:        dec(vl);
+          until vl = 0;
         d^ := '"';
         inc(d);
       end
@@ -8061,7 +8098,7 @@ begin
     dec(n);
   until n = 0;
   d[-1] := '}'; // replace last ',' by '}'
-  // inc(d); assert(d - pointer(result) = length(result)); // until stabilized
+  //assert(d - pointer(result) = length(result)); // until stabilized
 end;
 
 
@@ -8728,7 +8765,7 @@ constructor ESQLDBException.CreateUTF8(const Format: RawUTF8; const Args: array 
 var msg, sql: RawUTF8;
 begin
   msg := FormatUTF8(Format,Args);
-  if (length(Args)>0) and (Args[0].VType=vtObject) and (Args[0].VObject<>nil) then begin
+  if (length(Args)>0) and (Args[0].VType=vtObject) and (Args[0].VObject<>nil) then
     if Args[0].VObject.InheritsFrom(TSQLDBStatement) then begin
       fStatement := TSQLDBStatement(Args[0].VObject);
       if fStatement.Connection.Properties.LogSQLStatementOnException then begin
@@ -8740,7 +8777,6 @@ begin
         msg := msg+' - '+sql;
       end;
     end;
-  end;
   inherited Create(UTF8ToString(msg));
 end;
 
@@ -8752,11 +8788,9 @@ const
 
 initialization
   assert(SizeOf(TSQLDBColumnProperty)=sizeof(PTrUInt)*2+20);
-  {$ifndef ISDELPHI2010}
   TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TSQLDBFieldType));
   TTextWriter.RegisterCustomJSONSerializerFromText(
     TypeInfo(TSQLDBColumnDefine),__TSQLDBColumnDefine);
-  {$endif}
 end.
 
 

@@ -250,6 +250,7 @@ begin
   fBatchSendingAbilities := [cCreate,cUpdate,cDelete]; // always emulated
 end;
 
+
 { TSQLDBDatasetStatementAbstract }
 
 function TSQLDBDatasetStatementAbstract.ColumnBlob(Col: Integer): RawByteString;
@@ -375,16 +376,15 @@ begin
 end;
 
 procedure TSQLDBDatasetStatementAbstract.ExecutePrepared;
-var Log: ISynLog;
-    i,p: Integer;
+var i,p: Integer;
     lArrayIndex: integer;
     Field: TField;
+    log: TSynLog;
+    logsql: RawUTF8;
+    timer: TPrecisionTimer;
 begin
-  Log := SynDBLog.Enter(Self, 'ExecutePrepared');
+  log := GetSQLLog(timer,@logsql);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
-  with Log.Instance do
-    if sllSQL in Family.Level then
-      Log(sllSQL,SQLWithInlinedParams,self,2048);
   // 1. bind parameters in fParams[] to fQuery.Params
   if fPreparedParamsCount<>fParamCount then
     raise ESQLDBDataset.CreateUTF8(
@@ -419,7 +419,6 @@ begin
     end else
       DatasetExecSQL;
   until fDatasetSupportBatchBinding or (lArrayIndex=fParamsArrayCount-1);
-
   // 3. handle out parameters
   if fParamCount>0 then
     if fParamsArrayCount>0 then
@@ -429,6 +428,8 @@ begin
       for p := 0 to fParamCount-1 do
         if fParams[p].VInOut<>paramIn then
           DataSetOutSQLParam(p,fParams[p]);
+  if log <> nil then
+    log.Log(sllSQL, 'ExecutePrepared: % %', [timer.Stop, logsql], self);
 end;
 
 function TSQLDBDatasetStatementAbstract.Step(SeekFirst: boolean): boolean;
@@ -678,8 +679,7 @@ procedure TSQLDBDatasetStatement.Prepare(const aSQL: RawUTF8;
 begin
   inherited;
   if fPreparedParamsCount<>fQueryParams.Count then
-    raise ESQLDBDataset.CreateUTF8(
-      '%.Prepare expected % parameters in request, found % - [%]',
+    raise ESQLDBDataset.CreateUTF8('%.Prepare expected % parameters in request, found % - [%]',
       [self,fPreparedParamsCount,fQueryParams.Count,aSQL]);
 end;
 

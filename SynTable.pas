@@ -9365,7 +9365,7 @@ const TopLevelTLD: array[0..19] of PUTF8Char = (
 begin
   if IsValidEmail(pointer(value)) then
   repeat
-    DOM := lowercase(copy(value,PosEx('@',value)+1,100));
+    DOM := lowercase(copy(value,PosExChar('@',value)+1,100));
     if length(DOM)>63 then
       break; // exceeded 63-character limit of a DNS name
     if (ForbiddenDomains<>'') and (FindCSVIndex(pointer(ForbiddenDomains),DOM)>=0) then
@@ -17667,7 +17667,7 @@ var W: TTextWriter;
     tmp: TTextWriterStackBuffer;
 begin
   if PosExChar(#$f0,text)=0 then begin
-    result := text; // no smiley UTF-8 for sure
+    result := text; // no UTF-8 smiley for sure
     exit;
   end;
   W := TTextWriter.CreateOwnedStream(tmp);
