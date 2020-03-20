@@ -658,38 +658,38 @@ begin
 end;
 
 procedure TSQLDBSQLite3Statement.ExecutePrepared;
-var SQLToBeLogged: RawUTF8;
-    Timer: TPrecisionTimer;
-    DB: TSQLDataBase;
+var DB: TSQLDataBase;
+    timer: TPrecisionTimer;
     log: TSynLog;
+    logsql: RawUTF8;
 begin
   fCurrentRow := 0; // mark cursor on the first row
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   if fShouldLogSQL then begin
     log := SynDBLog.Add;
-    SQLToBeLogged := SQLWithInlinedParams;
+    logsql := SQLWithInlinedParams;
   end else
     log := nil;
   DB := TSQLDBSQLite3Connection(Connection).DB;
   if fExpectResults then begin
     // not executed here, but in TSQLDBSQLite3Statement.Step method
     if log<>nil then
-      log.Log(sllSQL,'% %',[DB.FileNameWithoutPath,SQLToBeLogged],self);
+      log.Log(sllSQL,'% %',[DB.FileNameWithoutPath,logsql],self);
     exit;
   end;
   try  // INSERT/UPDATE/DELETE (i.e. not SELECT) -> try to execute directly now
     if log<>nil then
-      Timer.Start;
+      timer.Start;
     repeat // Execute all steps of the first statement
     until fStatement.Step<>SQLITE_ROW;
-    if log<>nil then
-      log.Log(sllSQL,'% % %',[Timer.Stop,DB.FileNameWithoutPath,SQLToBeLogged],self);
     fUpdateCount := DB.LastChangeCount;
+    if log<>nil then
+      log.Log(sllSQL,'% % %',[timer.Stop,DB.FileNameWithoutPath,logsql],self);
   except
     on E: Exception do begin
       if log<>nil then
         log.Log(sllSQL,'Error % on % for [%] as [%]',
-          [E,DB.FileNameWithoutPath,SQL,SQLToBeLogged],self);
+          [E,DB.FileNameWithoutPath,SQL,logsql],self);
       raise;
     end;
   end;
@@ -727,7 +727,7 @@ begin
     SetLength(fBindValues,fParamCount);
     SetLength(fBindIsString,(fParamCount shr 3)+1);
   end;
-  if fShouldLogSQL and (PosEx('?',SQL)>0) then
+  if fShouldLogSQL and (PosExChar('?',SQL)>0) then
     SynDBLog.Add.Log(sllDB,'Prepare % % %',[Timer.Stop,
       TSQLDBSQLite3Connection(Connection).DB.FileNameWithoutPath,SQL],self);
 end;
@@ -755,7 +755,7 @@ begin
       if fShouldLogSQL then
         SynDBLog.Add.Log(sllError,'Error % on % for [%] as [%]',
           [E,TSQLDBSQLite3Connection(Connection).DB.FileNameWithoutPath,SQL,
-          SQLWithInlinedParams],self);
+           SQLWithInlinedParams],self);
       raise;
     end;
   end;

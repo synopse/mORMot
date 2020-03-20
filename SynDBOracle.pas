@@ -2564,7 +2564,7 @@ var i,j: PtrInt;
     ociArrays: array of POCIArray;
     ociArraysCount: byte;
     num_val: OCINumber;
-    tmp: RawUTF8;
+    tmp, logsql: RawUTF8;
     str_val: POCIString;
     {$ifdef FPC_64}
     wasStringHacked: TByteDynArray;
@@ -2574,13 +2574,12 @@ begin
   if (fStatement=nil) then
     raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared without previous Prepare',[self]);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
-  with SynDBLog.Add do
-    if sllSQL in Family.Level then begin
-      tmp := SQLWithInlinedParams;
-      Log(sllSQL,tmp,self,2048);
-    end;
   fTimeElapsed.Resume;
   try
+    if SynDBLog<>nil then
+      with SynDBLog.Add do
+        if sllSQL in Family.Level then
+          logsql := SQLWithInlinedParams;
     ociArraysCount := 0;
     Env := (Connection as TSQLDBOracleConnection).fEnv;
     Context := TSQLDBOracleConnection(Connection).fContext;
@@ -2896,6 +2895,8 @@ begin
     end;
   finally
     fTimeElapsed.Pause;
+    if logsql<>'' then
+      SynDBLog.Add.Log(sllSQL,'ExecutePrepared: % % ',[fTimeElapsed.LastTime,logsql],self);
   end;
 end;
 
@@ -3268,7 +3269,9 @@ procedure TSQLDBOracleStatement.Prepare(const aSQL: RawUTF8;
   ExpectResults: Boolean);
 var oSQL: RawUTF8;
     env: POCIEnv;
+    cached: boolean;
 begin
+  cached := false;
   fTimeElapsed.Resume;
   try
     try
@@ -3283,13 +3286,11 @@ begin
         HandleAlloc(env,fError,OCI_HTYPE_ERROR);
         if fUseServerSideStatementCache then begin
           if StmtPrepare2(TSQLDBOracleConnection(Connection).fContext,fStatement,
-            fError,pointer(oSQL),length(oSQL),nil,0,OCI_NTV_SYNTAX,OCI_PREP2_CACHE_SEARCHONLY) = OCI_SUCCESS then
-            SynDBLog.Add.Log(sllDebug,'Prepare: Statement cache HIT',self)
-          else begin
-            Check(nil,self,StmtPrepare2(TSQLDBOracleConnection(Connection).fContext,fStatement,
-              fError,pointer(oSQL),length(oSQL),nil,0,OCI_NTV_SYNTAX,OCI_DEFAULT),fError);
-            SynDBLog.Add.Log(sllDebug,'Prepare: Statement cache miss',self);
-          end;
+             fError,pointer(oSQL),length(oSQL),nil,0,OCI_NTV_SYNTAX,
+             OCI_PREP2_CACHE_SEARCHONLY) = OCI_SUCCESS then
+            cached := true else
+          Check(nil,self,StmtPrepare2(TSQLDBOracleConnection(Connection).fContext,fStatement,
+            fError,pointer(oSQL),length(oSQL),nil,0,OCI_NTV_SYNTAX,OCI_DEFAULT),fError);
         end else begin
           HandleAlloc(env,fStatement,OCI_HTYPE_STMT);
           Check(nil,self,StmtPrepare(fStatement,fError,pointer(oSQL),length(oSQL),
@@ -3307,6 +3308,7 @@ begin
     end;
   finally
     fTimeElapsed.Pause;
+    SynDBLog.Add.Log(sllDB,'Prepare % cache=% %',[fTimeElapsed.LastTime,cached,SQL],self);
   end;
 end;
 

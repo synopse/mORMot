@@ -1138,7 +1138,7 @@ const
 var Log: ISynLog;
     Len: SqlSmallint;
 begin
-  Log := SynDBLog.Enter;
+  Log := SynDBLog.Enter(self,'Connect');
   Disconnect; // force fDbc=nil
   if fEnv=nil then
     if (ODBC=nil) or (ODBC.AllocHandle(SQL_HANDLE_ENV,SQL_NULL_HANDLE,fEnv)=SQL_ERROR) then
@@ -1185,8 +1185,6 @@ begin
     inherited Connect;
   except
     on E: Exception do begin
-      if Log<>nil then
-        Log.Log(sllError,E);
       self.Disconnect; // clean up on fail
       raise;
     end;
@@ -1615,28 +1613,28 @@ const
   IDList_type: WideString = 'IDList';
   StrList_type: WideString = 'StrList';
 
-function CType2SQL(CDataType: integer): integer;
-begin
-  case CDataType of
-   SQL_C_CHAR:
-    case fDBMS of
-      dInformix:         result := SQL_INTEGER;
-      else               result := SQL_VARCHAR;
+  function CType2SQL(CDataType: integer): integer;
+  begin
+    case CDataType of
+     SQL_C_CHAR:
+      case fDBMS of
+        dInformix:         result := SQL_INTEGER;
+        else               result := SQL_VARCHAR;
+      end;
+     SQL_C_TYPE_DATE:      result := SQL_TYPE_DATE;
+     SQL_C_TYPE_TIMESTAMP: result := SQL_TYPE_TIMESTAMP;
+     SQL_C_WCHAR:
+      case fDBMS of
+        dInformix:         result := SQL_VARCHAR;
+        else               result := SQL_WVARCHAR;
+      end;
+     SQL_C_BINARY:         result := SQL_VARBINARY;
+     SQL_C_SBIGINT:        result := SQL_BIGINT;
+     SQL_C_DOUBLE:         result := SQL_DOUBLE;
+     else raise EODBCException.CreateUTF8(
+       '%.ExecutePrepared: Unexpected ODBC C type %',[self,CDataType]);
     end;
-   SQL_C_TYPE_DATE:      result := SQL_TYPE_DATE;
-   SQL_C_TYPE_TIMESTAMP: result := SQL_TYPE_TIMESTAMP;
-   SQL_C_WCHAR:
-    case fDBMS of
-      dInformix:         result := SQL_VARCHAR;
-      else               result := SQL_WVARCHAR;
-    end;
-   SQL_C_BINARY:         result := SQL_VARBINARY;
-   SQL_C_SBIGINT:        result := SQL_BIGINT;
-   SQL_C_DOUBLE:         result := SQL_DOUBLE;
-   else raise EODBCException.CreateUTF8(
-     '%.ExecutePrepared: Unexpected ODBC C type %',[self,CDataType]);
   end;
-end;
 
 var p, k: integer;
     status: SqlReturn;
@@ -1646,26 +1644,22 @@ var p, k: integer;
     ItemSize, BufferSize: SqlLen;
     ItemPW: PWideChar;
     timestamp: SQL_TIMESTAMP_STRUCT;
-    DriverDoesNotHandleUnicode: boolean;
+    ansitext: boolean;
     StrLen_or_Ind: array of PtrInt;
     ArrayData: array of record
       StrLen_or_Ind: array of PtrInt;
       WData: RawUnicode;
     end;
-    log: ISynLog;
+    log: TSynLog;
+    logsql: RawUTF8;
+    timer: TPrecisionTimer;
 label retry;
 begin
   if fStatement=nil then
     raise EODBCException.CreateUTF8('%.ExecutePrepared called without previous Prepare',[self]);
+  log := GetSQLLog(timer,@logsql);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
-  DriverDoesNotHandleUnicode := TODBCConnection(fConnection).fODBCProperties.fDriverDoesNotHandleUnicode;
-  if fSQL<>'' then
-  begin
-    log := SynDBLog.Enter(self,'ExecutePrepared');
-    if log <> nil then
-      if sllSQL in log.Instance.Family.Level then
-        log.Log(sllSQL,SQLWithInlinedParams,self,2048);
-  end;
+  ansitext := TODBCConnection(fConnection).fODBCProperties.fDriverDoesNotHandleUnicode;
   try
     // 1. bind parameters
     if (fParamsArrayCount>0) and (fDBMS<>dMSSQL) then
@@ -1731,7 +1725,7 @@ begin
               DecimalDigits := 3; // Possibly can be set to either 3 (datetime) or 7 (datetime2)
           end;
           ftUTF8:
-            if DriverDoesNotHandleUnicode then begin
+            if ansitext then begin
   retry:      VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
               CValueType := SQL_C_CHAR;
             end else
@@ -1756,10 +1750,9 @@ begin
         end;
         status := ODBC.BindParameter(fStatement, p+1, InputOutputType, CValueType,
          ParameterType, ColumnSize, DecimalDigits, ParameterValue, BufferSize, StrLen_or_Ind[p]);
-        if (status=SQL_ERROR) and not DriverDoesNotHandleUnicode and
-           (ODBC.GetDiagField(fStatement)='HY004') then begin
+        if (status=SQL_ERROR) and not ansitext and (ODBC.GetDiagField(fStatement)='HY004') then begin
           TODBCConnection(fConnection).fODBCProperties.fDriverDoesNotHandleUnicode := true;
-          DriverDoesNotHandleUnicode := true;
+          ansitext := true;
           VData := RawUnicodeToUtf8(pointer(VData),StrLenW(pointer(VData)));
           goto retry; // circumvent restriction of non-Unicode ODBC drivers
         end;
@@ -1822,11 +1815,13 @@ begin
         if VInOut<>paramIn then
           PDateTime(@VInt64)^ := PSQL_TIMESTAMP_STRUCT(VData)^.ToDateTime;
       ftUTF8:
-        if DriverDoesNotHandleUnicode then
+        if ansitext then
           VData := CurrentAnsiConvert.AnsiBufferToRawUTF8(pointer(VData),StrLen(pointer(VData))) else
           VData := RawUnicodeToUtf8(pointer(VData),StrLenW(pointer(VData)));
     end;
   end;
+  if log <> nil then
+    log.Log(sllSQL, 'ExecutePrepared: % %', [timer.Stop, logsql], self);
 end;
 
 procedure TODBCStatement.Reset;
@@ -1851,9 +1846,10 @@ begin
 end;
 
 procedure TODBCStatement.Prepare(const aSQL: RawUTF8; ExpectResults: Boolean);
-var Log: ISynLog;
+var log: TSynLog;
+    timer: TPrecisionTimer;
 begin
-  Log := SynDBLog.Enter(self,'Prepare');
+  log := GetSQLLog(timer);
   if (fStatement<>nil) or (fColumnCount>0) then
     raise EODBCException.CreateUTF8('%.Prepare should be called only once',[self]);
   // 1. process SQL
@@ -1864,10 +1860,10 @@ begin
   try
     ODBC.Check(nil,self,ODBC.PrepareW(fStatement,pointer(fSQLW),length(fSQLW) shr 1),
       SQL_HANDLE_STMT,fStatement);
+    if log<>nil then
+      log.Log(sllDB,'Prepare % %', [timer.Stop, aSQL], self);
   except
     on E: Exception do begin
-      if Log<>nil then
-        Log.Log(sllError,E);
       ODBC.FreeHandle(SQL_HANDLE_STMT,fStatement);
       fStatement := nil;
       raise;

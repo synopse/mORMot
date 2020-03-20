@@ -154,10 +154,12 @@ uses
       {$else}
         SynPdf in '..\SynPdf.pas',
         SynGdiPlus in '..\SynGdiPlus.pas',
+        // SynDBDataSet in '..\SynDBDataSet.pas',
       {$endif FPC}
       SynDB in '..\SynDB.pas',
       SynDBSQLite3 in '..\SynDBSQLite3.pas',
       SynDBOracle in '..\SynDBOracle.pas',
+      SynDBPostgres in '..\SynDBPostgres.pas',
       SynOleDB in '..\SynOleDB.pas',
       SynDBODBC in '..\SynDBODBC.pas',
       {$ifdef USEZEOS}

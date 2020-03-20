@@ -5676,7 +5676,10 @@ begin
         fConnections[result].Open;
       except
         on E: Exception do
+        begin
+          SleepHiRes(2);
           continue;
+        end;
       end;
       if fConnections[result].Opened then
         if fConnections[result].Locked then

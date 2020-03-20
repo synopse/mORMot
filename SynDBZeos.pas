@@ -407,7 +407,8 @@ const
 
 { TSQLDBZEOSConnectionProperties }
 
-constructor TSQLDBZEOSConnectionProperties.Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8);
+constructor TSQLDBZEOSConnectionProperties.Create(
+  const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8);
 const
   PCHARS: array[0..8] of PAnsiChar = (
     'ORACLE','FREETDS_MSSQL','MSSQL','INTERBASE','FIREBIRD','MYSQL','SQLITE','POSTGRESQL','JET');
@@ -783,14 +784,15 @@ begin
 end;
 
 procedure TSQLDBZEOSConnection.Connect;
-var Log: ISynLog;
+var log: ISynLog;
 begin
   if fDatabase=nil then
     raise ESQLDBZEOS.CreateUTF8('%.Connect() on % failed: Database=nil',
       [self,fProperties.ServerName]);
-  with (fProperties as TSQLDBZEOSConnectionProperties).fURL do
-    Log := SynDBLog.Enter(Self,pointer(FormatUTF8('Connect to % % for % at %:%',
-      [Protocol,Database,HostName,Port])),true);
+  log := SynDBLog.Enter(self, 'Connect');
+  if log<>nil then
+    with (fProperties as TSQLDBZEOSConnectionProperties).fURL do
+      log.Log(sllTrace,'Connect to % % for % at %:%',[Protocol,Database,HostName,Port]);
   try
     // about transactions, see https://synopse.info/forum/viewtopic.php?id=2209
     // two statement below do not require DB to be connected, so can be before Open
@@ -798,13 +800,14 @@ begin
     fDatabase.SetTransactionIsolation(tiReadCommitted);
     fDatabase.Open;
     fDatabase.SetReadOnly(false);
-
-    Log.Log(sllDB,'Connected to % using % %',
-      [fProperties.ServerName,fProperties.DatabaseName,fDatabase.GetClientVersion]);
+    if log<>nil then
+      log.log(sllDB,'Connected to % using % %',[fProperties.ServerName,
+        fProperties.DatabaseNameSafe,fDatabase.GetClientVersion]);
     inherited Connect; // notify any re-connection
   except
     on E: Exception do begin
-      Log.Log(sllError,E);
+      if log<>nil then
+        log.log(sllError,E);
       Disconnect; // clean up on fail
       raise;
     end;
@@ -860,17 +863,20 @@ end;
 
 { TSQLDBZEOSStatement }
 
-procedure TSQLDBZEOSStatement.Prepare(const aSQL: RawUTF8;
-  ExpectResults: boolean);
-var Log: ISynLog;
+procedure TSQLDBZEOSStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
+var
+  log: TSynLog;
+  timer: TPrecisionTimer;
 begin
-  Log := SynDBLog.Enter(Self, 'Prepare');
+  log := GetSQLLog(timer);
   if (fStatement<>nil) or (fResultSet<>nil) then
     raise ESQLDBZEOS.CreateUTF8('%.Prepare() shall be called once',[self]);
   inherited Prepare(aSQL,ExpectResults); // connect if necessary
   fStatement := (fConnection as TSQLDBZEOSConnection).fDatabase.
     PrepareStatementWithParams({$ifdef UNICODE}UTF8ToString(fSQL){$else}fSQL{$endif}, // see controls_cp=CP_UTF8
     (fConnection.Properties as TSQLDBZEOSConnectionProperties).fStatementParams);
+  if log<>nil then
+    log.Log(sllDB,'Prepare % %',[timer.Stop,aSQL],self);
 end;
 
 {$ifdef ZEOS72UP}
@@ -986,71 +992,19 @@ begin
 end;
 {$endif ZEOS72UP}
 
-/// Convert array of RawUTF8 to PostgreSQL ARRAY
-// ['one', 't"wo'] -> '{"one","t\"wo"}'
-// ['1', '2', '3'] -> '{1,2,3}'
-procedure UTF8Array2PostgreArray(const Values: array of RawUTF8; out postgreArray: RawByteString);
-var i, j, k, n, L: Integer;
-    P: PUTF8Char;
-begin
-  if high(Values)<0 then 
-    exit;
-  L := 2; // '{}'
-  inc(L,high(Values)); // , after each element
-  for i := 0 to high(Values) do begin
-    inc(L,length(Values[i]));
-    for j := 2 to length(Values[i])-1 do
-      if Values[i][j] = '"' then 
-        inc(L); // \ before "
-  end;
-  SetLength(postgreArray,L);
-  P := pointer(postgreArray);
-  P[0] := '{'; 
-  i := 1;
-  for n := 0 to high(Values) do begin
-    if Values[n] = '' then continue;
-    if Values[n][1] = '''' then begin
-      P[i] := '"'; 
-      inc(i);
-      for k := 2 to length(Values[n])-1 do begin // skip first and last "
-        if Values[n][k] = '"' then begin
-          p[i] := '\';
-          inc(i);
-        end;
-        p[i] := Values[n][k];
-        inc(i);
-      end;
-      P[i] := '"'; 
-      inc(i);
-    end else
-      for k := 1 to length(Values[n]) do begin
-        p[i] := Values[n][k];
-        inc(i);
-      end;
-    p[i] := ','; 
-    inc(i);
-  end;
-  if (i > 1) then begin
-    p[i-1] := '}';
-    SetLength(postgreArray,i);
-  end else
-    p[i] := '}';
-end;
-
 procedure TSQLDBZEOSStatement.ExecutePrepared;
 var i,n: integer;
     Props: TSQLDBZEOSConnectionProperties;
-    Log: ISynLog;
     name: string;
     {$ifdef ZEOS72UP}
     arrayBinding: TZeosArrayBinding;
     {$endif}
+    log: TSynLog;
+    logsql: RaWUTF8;
+    timer: TPrecisionTimer;
 begin
-  Log := SynDBLog.Enter(Self, 'ExecutePrepared');
+  log := GetSQLLog(timer,@logsql);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
-  with Log.Instance do
-    if sllSQL in Family.Level then
-      Log(sllSQL,SQLWithInlinedParams,self,2048);
   if fStatement=nil then
     raise ESQLDBZEOS.CreateUTF8('%.ExecutePrepared() invalid call',[self]);
   {$ifndef ZEOS72UP} //commenting this makes it possible to seek cursor pos to 0 and use the interface again -> e.g. ReadOneByOneRate
@@ -1076,9 +1030,10 @@ begin
     for i := 0 to fParamCount-1 do
     with fParams[i] do begin
       if (Length(VArray)>0) and (fConnection.Properties.DBMS = dPostgreSQL) then begin
-        if VType in [ftInt64, ftUTF8] then
-          UTF8Array2PostgreArray(VArray, VData) else
-          raise ESQLDBZEOS.CreateUTF8('%.ExecutePrepared: Invalid array type on bound parameter #%', [Self,i]);
+        if VType in [ftInt64,ftCurrency,ftDouble,ftUTF8] then
+          VData := BoundArrayToJSONArray(VArray) else
+          raise ESQLDBZEOS.CreateUTF8('%.ExecutePrepared: Invalid array type % ' +
+            'on bound parameter #%', [Self, ToText(VType)^, i]);
         VType := ftUTF8;
       end;
       case VType of
@@ -1116,8 +1071,7 @@ begin
       fResultSet := fStatement.ExecuteQueryPrepared;
       if fResultSet=nil then begin
         // e.g. PRAGMA in TZSQLiteCAPIPreparedStatement.ExecuteQueryPrepared
-        Log.Log(sllWarning,'TSQLDBZEOSStatement.ExecutePrepared(%s) returned nil',
-          [SQLWithInlinedParams]);
+        SynDBLog.Add.Log(sllWarning,'ExecutePrepared(%) returned nil',[logsql],self);
       end else begin
         Props := fConnection.Properties as TSQLDBZEOSConnectionProperties;
         fResultInfo := fResultSet.GetMetadata;
@@ -1142,6 +1096,8 @@ begin
     arrayBinding.Free;
   end;
   {$endif}
+  if log <> nil then
+    log.Log(sllSQL, 'ExecutePrepared: % %', [timer.Stop, logsql], self);
 end;
 
 procedure TSQLDBZEOSStatement.Reset;
