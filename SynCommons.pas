@@ -8764,8 +8764,9 @@ type
     // - will convert the Unicode chars into UTF-8
     procedure AddNoJSONEscapeW(WideChar: PWord; WideCharCount: integer);
     /// append some UTF-8 encoded chars to the buffer
-    // - if Len is 0, Len is calculated from zero-ended char
     // - escapes chars according to the JSON RFC
+    // - if Len is 0, writing will stop at #0 (default Len=0 is slightly faster
+    // than specifying Len>0 if you are sure P is zero-ended - e.g. from RawUTF8)
     procedure AddJSONEscape(P: Pointer; Len: PtrInt=0); overload;
     /// append some UTF-8 encoded chars to the buffer, from a generic string type
     // - faster than AddJSONEscape(pointer(StringToUTF8(string))
@@ -12418,7 +12419,7 @@ type
     /// fill Value from specified File Date
     procedure From(FileDate: integer); overload;
     /// fill Value from Iso-8601 encoded text
-    procedure From(P: PUTF8Char; L: integer); overload;
+    procedure From(P: PUTF8Char; L: integer); overload; {$ifdef HASINLINE}inline;{$endif}
     /// fill Value from Iso-8601 encoded text
     procedure From(const S: RawUTF8); overload;
     /// fill Value from specified Date/Time individual fields
@@ -47225,7 +47226,7 @@ begin
         W.AddNoJSONEscape(pointer(VName[ndx]),Length(VName[ndx]));
       end else begin
         W.Add('"');
-        W.AddJSONEscape(pointer(VName[ndx]),Length(VName[ndx]));
+        W.AddJSONEscape(pointer(VName[ndx]));
         W.Add('"');
       end;
       W.Add(':');
@@ -47831,7 +47832,7 @@ begin
           W.AddNoJSONEscape(pointer(VName[ndx]),Length(VName[ndx]));
         end else begin
           W.Add('"');
-          W.AddJSONEscape(pointer(VName[ndx]),Length(VName[ndx]));
+          W.AddJSONEscape(pointer(VName[ndx]));
           W.Add('"');
         end;
         W.Add(':');
@@ -53318,7 +53319,7 @@ procedure TTextWriter.AddJSONEscape(Source: TTextWriter);
 begin
   if Source.fTotalFileSize=0 then
     AddJSONEscape(Source.fTempBuf,Source.B-Source.fTempBuf+1) else
-    AddJSONEscape(Pointer(Source.Text),0);
+    AddJSONEscape(Pointer(Source.Text));
 end;
 
 procedure TTextWriter.AddNoJSONEscape(Source: TTextWriter);
@@ -54702,67 +54703,63 @@ end;
 
 procedure TTextWriter.AddJSONEscape(P: Pointer; Len: PtrInt);
 var i,c: PtrInt;
-    {$ifndef CPUX86NOTPIC}tab: ^TSynByteBoolean;{$endif}
+    {$ifdef CPUX86NOTPIC}tab: TSynByteBoolean absolute JSON_ESCAPE_BYTE;
+    {$else}tab: ^TSynByteBoolean;{$endif}
 label noesc;
 begin
   if P=nil then
     exit;
   if Len=0 then
-    Len := MaxInt;
+    dec(Len); // -1 = no end
   i := 0;
-  {$ifdef CPUX86NOTPIC}
-  repeat
-    if not(PByteArray(P)[i] in JSON_ESCAPE) then begin
+  {$ifndef CPUX86NOTPIC} tab := @JSON_ESCAPE_BYTE; {$endif}
+  if not tab[PByteArray(P)[i]] then begin
 noesc:c := i;
+    if Len<0 then
       repeat
         inc(i);
-      until (i>=Len) or (PByteArray(P)[i] in JSON_ESCAPE);
-  {$else}
-  tab := @JSON_ESCAPE_BYTE;
-  repeat
-    if not tab^[PByteArray(P)[i]] then begin
-noesc:c := i;
+      until tab[PByteArray(P)[i]] else
       repeat
         inc(i);
-      until (i>=Len) or tab^[PByteArray(P)[i]];
-  {$endif CPUX86NOTPIC}
-      inc(PByte(P),c);
-      dec(i,c);
+      until (i>=Len) or tab[PByteArray(P)[i]];
+    inc(PByte(P),c);
+    dec(i,c);
+    if Len>=0 then
       dec(Len,c);
-      if BEnd-B<=i then
-        AddNoJSONEscape(P,i) else begin
-        MoveFast(P^,B[1],i);
-        inc(B,i);
-      end;
-      if i>=Len then
-        exit;
+    if BEnd-B<=i then
+      AddNoJSONEscape(P,i) else begin
+      MoveFast(P^,B[1],i);
+      inc(B,i);
     end;
-    repeat
-      c := PByteArray(P)[i];
-      case c of
-      0:  exit;
-      8:  c := ord('\')+ord('b')shl 8;
-      9:  c := ord('\')+ord('t')shl 8;
-      10: c := ord('\')+ord('n')shl 8;
-      12: c := ord('\')+ord('f')shl 8;
-      13: c := ord('\')+ord('r')shl 8;
-      ord('\'): c := ord('\')+ord('\')shl 8;
-      ord('"'): c := ord('\')+ord('"')shl 8;
-      1..7,11,14..31: begin // characters below ' ', #7 e.g. -> // 'u0007'
-        AddShort('\u00');
-        c := TwoDigitsHexWB[c];
-      end;
-      else goto noesc;
-      end;
-      if BEnd-B<=1 then
+    if (Len>=0) and (i>=Len) then
+      exit;
+  end;
+  repeat
+    c := PByteArray(P)[i];
+    case c of
+    0:  exit;
+    8:  c := ord('\')+ord('b')shl 8;
+    9:  c := ord('\')+ord('t')shl 8;
+    10: c := ord('\')+ord('n')shl 8;
+    12: c := ord('\')+ord('f')shl 8;
+    13: c := ord('\')+ord('r')shl 8;
+    ord('\'): c := ord('\')+ord('\')shl 8;
+    ord('"'): c := ord('\')+ord('"')shl 8;
+    1..7,11,14..31: begin // characters below ' ', #7 e.g. -> // 'u0007'
+      if BEnd-B<=10 then
         FlushToStream;
-      inc(i);
-      PWord(B+1)^ := c;
-      inc(B,2);
-      if i>=Len then
-        exit;
-    until false;
-  until i>=Len;
+      PCardinal(B+1)^ := ord('\')+ord('u')shl 8+ord('0')shl 16+ord('0')shl 24;
+      inc(B,4);
+      c := TwoDigitsHexWB[c];
+    end;
+    else goto noesc;
+    end;
+    if BEnd-B<=10 then
+      FlushToStream;
+    inc(i);
+    PWord(B+1)^ := c;
+    inc(B,2);
+  until (Len>=0) and (i>=Len);
 end;
 
 procedure TTextWriter.AddJSONEscapeW(P: PWord; Len: PtrInt);
@@ -54812,7 +54809,7 @@ begin
       Add('"');
       case VType of
         vtString: if VString^[0]<>#0 then AddJSONEscape(@VString^[1],ord(VString^[0]));
-        vtAnsiString: AddJSONEscape(pointer(RawUTF8(VAnsiString)));
+        vtAnsiString: AddJSONEscape(VAnsiString);
         {$ifdef HASVARUSTRING}
         vtUnicodeString: AddJSONEscapeW(
           pointer(UnicodeString(VUnicodeString)),length(UnicodeString(VUnicodeString)));
@@ -61575,7 +61572,7 @@ begin
     with List[i] do begin
       AddProp(pointer(Name),length(Name));
       Add('"');
-      AddJSONEscape(pointer(Value),length(Value));
+      AddJSONEscape(pointer(Value));
       Add('"',',');
     end;
     CancelLastComma;
