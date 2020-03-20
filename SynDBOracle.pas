@@ -1736,7 +1736,7 @@ class function TSQLDBOracleConnectionProperties.ExtractTnsName(
   const aServerName: RawUTF8): RawUTF8;
 var i: integer;
 begin
-  i := PosEx('/',aServerName);
+  i := PosExChar('/',aServerName);
   if i=0 then
     result := aServerName else
     result := copy(aServerName,i+1,100);
@@ -1744,7 +1744,7 @@ end;
 
 function TSQLDBOracleConnectionProperties.IsCachable(P: PUTF8Char): boolean;
 begin
-  result := false;
+  result := false; // no client-side cache, only server-side
 end;
 
 constructor TSQLDBOracleConnectionProperties.Create(const aServerName,
@@ -1754,8 +1754,13 @@ begin
   fBatchSendingAbilities := [cCreate,cUpdate,cDelete]; // array DML feature
   fBatchMaxSentAtOnce := 10000;  // iters <= 32767 for better performance
   inherited Create(aServerName,'',aUserID,aPassWord);
-  if OCI=nil then
-    GarbageCollectorFreeAndNil(OCI,TSQLDBOracleLib.Create);
+  GlobalLock;
+  try
+    if OCI=nil then
+      GarbageCollectorFreeAndNil(OCI,TSQLDBOracleLib.Create);
+  finally
+    GlobalUnLock;
+  end;
   fBlobPrefetchSize := 4096;
   fRowsPrefetchSize := 128*1024;
   fStatementCacheSize := 30; // default is 20
