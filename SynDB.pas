@@ -1445,10 +1445,10 @@ type
     property VariantStringAsWideString: boolean read fVariantWideString write fVariantWideString;
     {$endif}
     /// SQL statements what will be executed for each new connection
-    // The usage scenarious examples:
+    // The usage scenarios examples:
     //  - Oracle: force case-insensitive like
     //    ['ALTER SESSION SET NLS_COMP=LINGUISTIC', 'ALTER SESSION SET NLS_SORT=BINARY_CI']
-    //  - Postgres: disable nitices and warnings ['SET client_min_messages to ERROR']
+    //  - Postgres: disable notices and warnings ['SET client_min_messages to ERROR']
     property ExecuteWhenConnected: TRawUTF8DynArray read fExecuteWhenConnected
       write fExecuteWhenConnected;
   end;
