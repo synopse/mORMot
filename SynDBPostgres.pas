@@ -665,10 +665,11 @@ begin
   fDBMS := dPostgreSQL;
   FillOidMapping;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
-  // TSQLRestStorageExternal.JSONDecodedPrepareToSQL will detect it and set
-  // DecodedFieldTypesToUnnest -> fast bulk insert/delete/update
+  // disable MultiInsert to enable cCreate array binding and "unnest" statements
+  fOnBatchInsert := nil; // see TSQLRestStorageExternal.InternalBatchStop
+  // JSONDecodedPrepareToSQL will detect it and set DecodedFieldTypesToUnnest
+  //  -> fast bulk insert/delete/update
   fBatchSendingAbilities := [cCreate, cDelete, cUpdate];
-  fOnBatchInsert := nil;
 end;
 
 function TSQLDBPostgresConnectionProperties.NewConnection: TSQLDBConnection;
