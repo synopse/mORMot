@@ -964,12 +964,20 @@ begin
           WR.AddShort('null');
         ftInt64, ftDouble, ftCurrency:
           WR.AddNoJSONEscape(P, PQ.GetLength(fRes, fCurrentRow, col));
-        ftUTF8, ftDate:
+        ftUTF8:
           if (ColumnAttr = JSONOID) or (ColumnAttr = JSONBOID) then
             WR.AddNoJSONEscape(P, PQ.GetLength(fRes, fCurrentRow, col))
           else
           begin
             WR.Add('"');
+            WR.AddJSONEscape(P);
+            WR.Add('"');
+          end;
+        ftDate:
+          begin
+            WR.Add('"');
+            if (PQ.GetLength(fRes, fCurrentRow, col) > 10) and (PAnsiChar(P)[10] = ' ') then
+              PAnsiChar(P)[10] := 'T'; // ensure strict ISO-8601 encoding
             WR.AddJSONEscape(P);
             WR.Add('"');
           end;
