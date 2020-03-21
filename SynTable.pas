@@ -725,6 +725,7 @@ type
   /// array of field/parameter/column types for abstract database access
   // - this array as a fixed size, ready to handle up to MAX_SQLFIELDS items
   TSQLDBFieldTypeArray = array[0..MAX_SQLFIELDS-1] of TSQLDBFieldType;
+  PSQLDBFieldTypeArray = ^TSQLDBFieldTypeArray;
 
   /// how TSQLVar may be processed
   // - by default, ftDate will use seconds resolution unless svoDateWithMS is set

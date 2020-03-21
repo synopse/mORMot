@@ -106,7 +106,7 @@ type
     /// connect to the specified server
     // - should raise an ESQLDBPostgres on error
     procedure Connect; override;
-    /// stop connection to the specified ZEOS database server
+    /// stop connection to the specified PostgreSQL database server
     // - should raise an ESQLDBPostgres on error
     procedure Disconnect; override;
     /// return TRUE if Connect has been already successfully called
@@ -158,8 +158,7 @@ type
     procedure Prepare(const aSQL: RawUTF8; ExpectResults: boolean = False); overload; override;
     /// Execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
-    // - this implementation will also handle bound array of values (if any),
-    // if IZDatabaseInfo.SupportsArrayBindings is true for this provider
+    // - this implementation will also handle bound array of values (if any)
     // - this overridden method will log the SQL statement if sllSQL has been
     // enabled in SynDBLog.Family.Level
     // - raise an ESQLDBPostgres on any error
@@ -666,6 +665,8 @@ begin
   fDBMS := dPostgreSQL;
   FillOidMapping;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
+  // TSQLRestStorageExternal.JSONDecodedPrepareToSQL -> DecodedFieldTypesToUnnest
+  fOnBatchInsert := nil;
 end;
 
 function TSQLDBPostgresConnectionProperties.NewConnection: TSQLDBConnection;

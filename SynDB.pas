@@ -1361,8 +1361,8 @@ type
     /// the associated server name, as specified at creation
     property ServerName: RawUTF8 read fServerName;
     /// the associated database name, safely trimmed from the password
-    // - this property would have any matching Password value content deleted
-    // before serialization, for security reasons
+    // - would replace any matching Password value content from DatabaseName
+    // by '***' for security reasons, e.g. before serialization
     property DatabaseNameSafe: RawUTF8 read GetDatabaseNameSafe;
     /// the associated User Identifier, as specified at creation
     property UserID: RawUTF8 read fUserID;
@@ -1445,10 +1445,11 @@ type
     property VariantStringAsWideString: boolean read fVariantWideString write fVariantWideString;
     {$endif}
     /// SQL statements what will be executed for each new connection
-    // The usage scenarios examples:
-    //  - Oracle: force case-insensitive like
-    //    ['ALTER SESSION SET NLS_COMP=LINGUISTIC', 'ALTER SESSION SET NLS_SORT=BINARY_CI']
-    //  - Postgres: disable notices and warnings ['SET client_min_messages to ERROR']
+    // usage scenarios examples:
+    // - Oracle: force case-insensitive like
+    // $  ['ALTER SESSION SET NLS_COMP=LINGUISTIC', 'ALTER SESSION SET NLS_SORT=BINARY_CI']
+    //  - Postgres: disable notices and warnings
+    // $  ['SET client_min_messages to ERROR']
     property ExecuteWhenConnected: TRawUTF8DynArray read fExecuteWhenConnected
       write fExecuteWhenConnected;
   end;
@@ -3932,14 +3933,12 @@ begin
       fServerTimestampAtConnection := Now;
     end;
   for i := 0 to length(fProperties.ExecuteWhenConnected)-1 do
-  begin
     with NewStatement do
     try
-      Execute(fProperties.ExecuteWhenConnected[I], false);
+      Execute(fProperties.ExecuteWhenConnected[i],false);
     finally
       Free;
     end;
-  end;
 end;
 
 procedure TSQLDBConnection.Disconnect;

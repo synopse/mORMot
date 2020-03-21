@@ -1895,6 +1895,10 @@ begin
   end;
   // compute SQL statement and associated bound parameters
   Decoder.DecodedFieldNames := pointer(ExternalFields);
+  if (Occasion=soInsert) and not Assigned(fProperties.OnBatchInsert) and
+     (fProperties.DBMS=dPostgreSQL) and (cCreate in fProperties.BatchSendingAbilities) then
+    // enable SynDBPostgres bulk insert via 'insert into ... values (unnest...)'
+    Decoder.DecodedFieldTypesToUnnest := @Types;
   result := Decoder.EncodeAsSQLPrepared(fTableName,Occasion,
     fStoredClassMapping^.RowIDFieldName,BatchOptions);
   if Occasion=soUpdate then

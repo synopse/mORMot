@@ -646,6 +646,10 @@ type
     DecodedFieldNames: PRawUTF8Array;
     /// the ID=.. value as sent within the JSON object supplied to Decode()
     DecodedRowID: TID;
+    /// internal pointer over field types to be used after Decode() call
+    // - to create 'INSERT INTO ... SELECT UNNEST(...)' statement for very
+    // efficient bulk insertion in a PostgreSQL database
+    DecodedFieldTypesToUnnest: PSQLDBFieldTypeArray;
     /// decode the JSON object fields into FieldNames[] and FieldValues[]
     // - if Fields=nil, P should be a true JSON object, i.e. defined
     // as "COL1"="VAL1" pairs, stopping at '}' or ']'; otherwise, Fields[]
@@ -27260,6 +27264,7 @@ var FN: PUTF8Char;
 begin
   FieldCount := 0;
   DecodedRowID := 0;
+  DecodedFieldTypesToUnnest := nil;
   FillCharFast(FieldTypeApproximation,SizeOf(FieldTypeApproximation),ord(ftaNumber{TID}));
   InlinedParams := Params;
   if pointer(Fields)=nil then begin
@@ -27353,6 +27358,10 @@ end;
   {$WARNINGS OFF} // circument Delphi 2007 false positive warning
 {$endif}
 
+const
+  PG_FT: array[TSQLDBFieldType] of string[9] = (
+    'int4', 'text', 'int8', 'float8', 'numeric', 'timestamp', 'text', 'bytea');
+
 function TJSONObjectDecoder.EncodeAsSQLPrepared(const TableName: RawUTF8;
   Occasion: TSQLOccasion; const UpdateIDFieldName: RawUTF8;
   BatchOptions: TSQLRestBatchOptions): RawUTF8;
@@ -27394,7 +27403,14 @@ begin
         end;
         W.CancelLastComma;
         W.AddShort(') values (');
-        W.AddStrings('?,',FieldCount);
+        if DecodedFieldTypesToUnnest<>nil then begin
+          for F := 0 to FieldCount-1 do begin
+            W.AddShort('unnest(?::');
+            W.AddShort(PG_FT[DecodedFieldTypesToUnnest^[F]]);
+            W.AddShort('[]),');
+          end;
+        end else
+          W.AddStrings('?,',FieldCount);
         W.CancelLastComma;
         W.Add(')');
       end;

@@ -605,7 +605,7 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
   if UseMetadata and not (fDBMS = dFirebird) then
     if GetMetadata.GetDatabaseInfo.SupportsArrayBindings then begin
       fBatchSendingAbilities := [cCreate, cUpdate, cDelete];
-      OnBatchInsert := nil;
+      fOnBatchInsert := nil;
       fSupportsArrayBindings := true;
     end;
   {$endif}
