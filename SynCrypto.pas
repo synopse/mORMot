@@ -716,32 +716,32 @@ type
   end;
 
   /// handle AES cypher/uncypher with 64-bit Counter mode (CTR)
-  // - the CTR will be done in bytes 7..0 - which is safe but not standard
+  // - the CTR will use a counter in bytes 7..0 by default - which is safe
+  // but not standard - call ComposeIV() to change e.g. to NIST behavior
   // - this class will use AES-NI hardware instructions, e.g.
   // ! CTR256: 28.13ms in x86 optimized code, 10.63ms with AES-NI
   // - expect IV to be set before process, or IVAtBeginning=true
   TAESCTR = class(TAESAbstractEncryptOnly)
   protected
-    fCTROffset: integer;
+    fCTROffset, fCTROffsetMin: PtrInt;
   public
     /// Initialize AES context for cypher
     // - will pre-generate the encryption key (aKeySize in bits, i.e. 128,192,256)
     constructor Create(const aKey; aKeySize: cardinal); override;
+    /// defines how the IV is set and updated in CTR mode
+    // - default (if you don't call this method) uses a Counter in bytes 7..0
+    // - you can specify startup Nonce and Counter, and the Counter position
+    // - NonceLen + CounterLen should be 16 - otherwise it fails and returns false
+    function ComposeIV(Nonce, Counter: PAESBlock; NonceLen, CounterLen: integer;
+      LSBCounter: boolean): boolean; overload;
+    /// defines how the IV is set and updated in CTR mode
+    // - you can specify startup Nonce and Counter, and the Counter position
+    // - Nonce + Counter lengths should add to 16 - otherwise returns false
+    function ComposeIV(const Nonce, Counter: TByteDynArray; LSBCounter: boolean): boolean; overload;
     /// perform the AES cypher in the CTR mode
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
     /// perform the AES un-cypher in the CTR mode
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
-  end;
-
-  /// handle AES cypher/uncypher with 128-bit Counter mode (CTR)
-  // - the CTR will be done in bytes 15..0 - which is the NIST standard way
-  // - this class will use AES-NI hardware instructions, e.g.
-  // - expect IV to be set before process, or IVAtBeginning=true
-  TAESCTRNIST = class(TAESCTR)
-  public
-    /// Initialize AES context for cypher
-    // - will pre-generate the encryption key (aKeySize in bits, i.e. 128,192,256)
-    constructor Create(const aKey; aKeySize: cardinal); override;
   end;
 
   /// internal 256-bit structure used for TAESAbstractAEAD MAC storage
@@ -13059,15 +13059,35 @@ end;
 
 { TAESCTR }
 
-procedure TAESCTR.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
-begin
-  Encrypt(BufIn, BufOut, Count); // by definition
-end;
-
 constructor TAESCTR.Create(const aKey; aKeySize: cardinal);
 begin
   inherited Create(aKey, aKeySize);
   fCTROffset := 7; // counter is in the lower 64 bits, nonce in the upper 64 bits
+end;
+
+function TAESCTR.ComposeIV(Nonce, Counter: PAESBlock; NonceLen, CounterLen: integer;
+  LSBCounter: boolean): boolean;
+begin
+  result := (NonceLen + CounterLen = 16) and (CounterLen > 0);
+  if result then
+    if LSBCounter then begin
+      MoveFast(Nonce[0], fIV[0], NonceLen);
+      MoveFast(Counter[0], fIV[NonceLen], CounterLen);
+      fCTROffset := 15;
+      fCTROffsetMin := 16-CounterLen;
+    end else begin
+      MoveFast(Counter[0], fIV[0], CounterLen);
+      MoveFast(Nonce[0], fIV[CounterLen], NonceLen);
+      fCTROffset := CounterLen-1;
+      fCTROffsetMin := 0;
+    end;
+end;
+
+function TAESCTR.ComposeIV(const Nonce, Counter: TByteDynArray;
+  LSBCounter: boolean): boolean;
+begin
+  result := ComposeIV(pointer(Nonce), pointer(Counter),
+    length(Nonce), length(Counter), LSBCounter);
 end;
 
 procedure TAESCTR.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
@@ -13080,14 +13100,13 @@ begin
     TAESContext(AES.Context).DoBlock(AES.Context,fCV,tmp);
     offs := fCTROffset;
     inc(fCV[offs]);
-    if fCV[offs]=0 then begin // manual big-endian increment
+    if fCV[offs]=0 then // manual big-endian increment
       repeat
         dec(offs);
         inc(fCV[offs]);
-        if (fCV[offs]<>0) or (offs=0) then
+        if (fCV[offs]<>0) or (offs=fCTROffsetMin) then
           break;
       until false;
-    end;
     XorBlock16(pointer(fIn),pointer(fOut),pointer(@tmp));
     inc(fIn);
     inc(fOut);
@@ -13099,13 +13118,9 @@ begin
   end;
 end;
 
-
-{ TAESCTRNIST }
-
-constructor TAESCTRNIST.Create(const aKey; aKeySize: cardinal);
+procedure TAESCTR.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 begin
-  inherited Create(aKey, aKeySize);
-  fCTROffset := 15; // counter covers 128-bit
+  Encrypt(BufIn, BufOut, Count); // by definition
 end;
 
 

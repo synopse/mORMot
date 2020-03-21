@@ -898,6 +898,7 @@ type
       RefCount: integer;
       Connection: TSQLDBConnection;
     end;
+    fExecuteWhenConnected: TRawUTF8DynArray;
     procedure SetConnectionTimeOutMinutes(minutes: cardinal);
     function GetConnectionTimeOutMinutes: cardinal;
     // this default implementation just returns the fDBMS value or dDefault
@@ -1360,8 +1361,8 @@ type
     /// the associated server name, as specified at creation
     property ServerName: RawUTF8 read fServerName;
     /// the associated database name, safely trimmed from the password
-    // - this property would have any matching Password value content deleted
-    // before serialization, for security reasons
+    // - would replace any matching Password value content from DatabaseName
+    // by '***' for security reasons, e.g. before serialization
     property DatabaseNameSafe: RawUTF8 read GetDatabaseNameSafe;
     /// the associated User Identifier, as specified at creation
     property UserID: RawUTF8 read fUserID;
@@ -1443,6 +1444,14 @@ type
     // this won't affect other Column*() methods, or JSON production
     property VariantStringAsWideString: boolean read fVariantWideString write fVariantWideString;
     {$endif}
+    /// SQL statements what will be executed for each new connection
+    // usage scenarios examples:
+    // - Oracle: force case-insensitive like
+    // $  ['ALTER SESSION SET NLS_COMP=LINGUISTIC', 'ALTER SESSION SET NLS_SORT=BINARY_CI']
+    //  - Postgres: disable notices and warnings
+    // $  ['SET client_min_messages to ERROR']
+    property ExecuteWhenConnected: TRawUTF8DynArray read fExecuteWhenConnected
+      write fExecuteWhenConnected;
   end;
 
   {$ifdef WITH_PROXY}
@@ -3911,6 +3920,7 @@ begin
 end;
 
 procedure TSQLDBConnection.Connect;
+var i: integer;
 begin
   inc(fTotalConnectionCount);
   InternalProcess(speConnected);
@@ -3921,6 +3931,13 @@ begin
       fServerTimestampAtConnection := ServerDateTime;
     except
       fServerTimestampAtConnection := Now;
+    end;
+  for i := 0 to length(fProperties.ExecuteWhenConnected)-1 do
+    with NewStatement do
+    try
+      Execute(fProperties.ExecuteWhenConnected[i],false);
+    finally
+      Free;
     end;
 end;
 

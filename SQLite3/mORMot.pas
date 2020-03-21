@@ -646,6 +646,11 @@ type
     DecodedFieldNames: PRawUTF8Array;
     /// the ID=.. value as sent within the JSON object supplied to Decode()
     DecodedRowID: TID;
+    /// internal pointer over field types to be used after Decode() call
+    // - to create 'INSERT INTO ... SELECT UNNEST(...)' or 'UPDATE ... FROM
+    // SELECT UNNEST(...)' statements for very efficient bulk writes in a
+    // PostgreSQL database
+    DecodedFieldTypesToUnnest: PSQLDBFieldTypeArray;
     /// decode the JSON object fields into FieldNames[] and FieldValues[]
     // - if Fields=nil, P should be a true JSON object, i.e. defined
     // as "COL1"="VAL1" pairs, stopping at '}' or ']'; otherwise, Fields[]
@@ -27260,6 +27265,7 @@ var FN: PUTF8Char;
 begin
   FieldCount := 0;
   DecodedRowID := 0;
+  DecodedFieldTypesToUnnest := nil;
   FillCharFast(FieldTypeApproximation,SizeOf(FieldTypeApproximation),ord(ftaNumber{TID}));
   InlinedParams := Params;
   if pointer(Fields)=nil then begin
@@ -27353,6 +27359,10 @@ end;
   {$WARNINGS OFF} // circument Delphi 2007 false positive warning
 {$endif}
 
+const
+  PG_FT: array[TSQLDBFieldType] of string[9] = (
+    'int4', 'text', 'int8', 'float8', 'numeric', 'timestamp', 'text', 'bytea');
+
 function TJSONObjectDecoder.EncodeAsSQLPrepared(const TableName: RawUTF8;
   Occasion: TSQLOccasion; const UpdateIDFieldName: RawUTF8;
   BatchOptions: TSQLRestBatchOptions): RawUTF8;
@@ -27364,19 +27374,48 @@ begin
   try
     case Occasion of
     soUpdate: begin
-      if FieldCount=0 then
-        raise EORMException.Create('Invalid EncodeAsSQLPrepared(0)');
+      if FieldCount<2 then
+        raise EORMException.CreateUTF8('Invalid EncodeAsSQLPrepared(%)',[FieldCount]);
       W.AddShort('update ');
       W.AddString(TableName);
-      W.AddShort(' set ');
-      for F := 0 to FieldCount-1 do begin // append 'COL1=?,COL2=?'
-        W.AddString(DecodedFieldNames^[F]);
-        W.AddShort('=?,');
+      if DecodedFieldTypesToUnnest<>nil then begin
+        // PostgreSQL bulk update via nested array binding
+        W.AddShort(' as t set ');
+        for F := 0 to FieldCount-1 do begin
+          W.AddString(DecodedFieldNames^[F]);
+          W.AddShort('=v.');
+          W.AddString(DecodedFieldNames^[F]);
+          W.Add(',');
+        end;
+        W.CancelLastComma;
+        W.AddShort(' from ( select');
+        for F := 0 to FieldCount-1 do begin
+          W.AddShort(' unnest(?::');
+          W.AddShort(PG_FT[DecodedFieldTypesToUnnest^[F]]);
+          W.AddShort('[]),');
+        end;
+        W.AddShort(' unnest(?::int8[]) ) as v('); // last param is ID
+        for F := 0 to FieldCount-1 do begin
+          W.AddString(DecodedFieldNames^[F]);
+          W.Add(',');
+        end;
+        W.AddString(UpdateIDFieldName);
+        W.AddShort(') where t.');
+        W.AddString(UpdateIDFieldName);
+        W.AddShort('=v.');
+        W.AddString(UpdateIDFieldName);
+      end else begin
+        // regular UPDATE statement
+        W.AddShort(' set ');
+        for F := 0 to FieldCount-1 do begin // append 'COL1=?,COL2=?'
+          W.AddString(DecodedFieldNames^[F]);
+          W.AddShort('=?,');
+        end;
+        W.CancelLastComma;
+        W.AddShort(' where ');
+        W.AddString(UpdateIDFieldName);
+        W.Add('=','?'); // last param is ID
       end;
-      W.CancelLastComma;
-      W.AddShort(' where ');
-      W.AddString(UpdateIDFieldName);
-      W.Add('=','?');
     end;
     soInsert: begin
       if boInsertOrIgnore in BatchOptions then
@@ -27394,7 +27433,15 @@ begin
         end;
         W.CancelLastComma;
         W.AddShort(') values (');
-        W.AddStrings('?,',FieldCount);
+        if DecodedFieldTypesToUnnest<>nil then
+          // PostgreSQL bulk insert via nested array binding
+          for F := 0 to FieldCount-1 do begin
+            W.AddShort('unnest(?::');
+            W.AddShort(PG_FT[DecodedFieldTypesToUnnest^[F]]);
+            W.AddShort('[]),');
+          end else
+          // regular INSERT statement
+          W.AddStrings('?,',FieldCount);
         W.CancelLastComma;
         W.Add(')');
       end;
