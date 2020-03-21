@@ -1450,6 +1450,8 @@ type
     // $  ['ALTER SESSION SET NLS_COMP=LINGUISTIC', 'ALTER SESSION SET NLS_SORT=BINARY_CI']
     //  - Postgres: disable notices and warnings
     // $  ['SET client_min_messages to ERROR']
+    // - SQLite3: turn foreign keys ON
+    // $  ['PRAGMA foreign_keys = ON']
     property ExecuteWhenConnected: TRawUTF8DynArray read fExecuteWhenConnected
       write fExecuteWhenConnected;
   end;
