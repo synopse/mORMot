@@ -5968,8 +5968,7 @@ var data: TSynTableData absolute result;
 begin
   if SynTableVariantType=nil then
     SynTableVariantType := SynRegisterCustomVariantType(TSynTableVariantType);
-  {$ifndef FPC}if data.VType and VTYPE_STATIC<>0 then{$endif}
-    VarClear(result);
+  VarClear(result);
   data.VType := SynTableVariantType.VarType;
   data.VID := aID;
   data.VTable := self;

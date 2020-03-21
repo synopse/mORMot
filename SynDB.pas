@@ -3525,7 +3525,6 @@ begin
   CheckExists;
 {$ifdef DELPHI5OROLDER}
   with TVarData(fValue) do begin
-    if VType and VTYPE_STATIC<>0 then
       VarClear(fValue);
     VType := varInt64;
     VInt64 := aValue;
@@ -3547,9 +3546,8 @@ begin
   {$ifdef UNICODE}
   fValue := aValue;
   {$else}
+  VarClear(fValue);
   with TVarData(fValue) do begin
-    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
-      VarClear(fValue);
     VType := varString;
     VAny := nil; // avoid GPF below when assigning a string variable to VAny
     StringToUTF8(aValue,RawUTF8(VAny));
@@ -6674,9 +6672,8 @@ var tmp: RawByteString;
 begin
   ColumnToSQLVar(Col,V,tmp);
   result := V.VType;
+  VarClear(Value);
   with TVarData(Value) do begin
-    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
-      VarClear(Value);
     VType := MAP_FIELDTYPE2VARTYPE[V.VType];
     case result of
       ftNull: ; // do nothing
@@ -7379,9 +7376,8 @@ function TSQLDBStatement.RowData: Variant;
 begin
   if SQLDBRowVariantType=nil then
     SQLDBRowVariantType := SynRegisterCustomVariantType(TSQLDBRowVariantType);
+  VarClear(result);
   with TVarData(result) do begin
-    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
-      VarClear(result);
     VType := SQLDBRowVariantType.VarType;
     VPointer := self;
   end;

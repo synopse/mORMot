@@ -1606,9 +1606,8 @@ begin // dedicated version to avoid as much memory allocation than possible
   if V=nil then
     result := ftNull else
     result := C^.ColumnType;
+  VarClear(Value);
   with TVarData(Value) do begin
-    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
-      VarClear(Value);
     VType := MAP_FIELDTYPE2VARTYPE[result];
     case result of
       ftInt64, ftDouble, ftCurrency, ftDate:
