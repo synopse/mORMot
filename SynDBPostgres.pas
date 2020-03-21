@@ -665,7 +665,9 @@ begin
   fDBMS := dPostgreSQL;
   FillOidMapping;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
-  // TSQLRestStorageExternal.JSONDecodedPrepareToSQL -> DecodedFieldTypesToUnnest
+  // TSQLRestStorageExternal.JSONDecodedPrepareToSQL will detect it and set
+  // DecodedFieldTypesToUnnest -> fast bulk insert/delete/update
+  fBatchSendingAbilities := [cCreate, cDelete, cUpdate];
   fOnBatchInsert := nil;
 end;
 

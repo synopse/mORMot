@@ -647,8 +647,9 @@ type
     /// the ID=.. value as sent within the JSON object supplied to Decode()
     DecodedRowID: TID;
     /// internal pointer over field types to be used after Decode() call
-    // - to create 'INSERT INTO ... SELECT UNNEST(...)' statement for very
-    // efficient bulk insertion in a PostgreSQL database
+    // - to create 'INSERT INTO ... SELECT UNNEST(...)' or 'UPDATE ... FROM
+    // SELECT UNNEST(...)' statements for very efficient bulk writes in a
+    // PostgreSQL database
     DecodedFieldTypesToUnnest: PSQLDBFieldTypeArray;
     /// decode the JSON object fields into FieldNames[] and FieldValues[]
     // - if Fields=nil, P should be a true JSON object, i.e. defined
@@ -27377,15 +27378,44 @@ begin
         raise EORMException.Create('Invalid EncodeAsSQLPrepared(0)');
       W.AddShort('update ');
       W.AddString(TableName);
-      W.AddShort(' set ');
-      for F := 0 to FieldCount-1 do begin // append 'COL1=?,COL2=?'
-        W.AddString(DecodedFieldNames^[F]);
-        W.AddShort('=?,');
+      if DecodedFieldTypesToUnnest<>nil then begin
+        // PostgreSQL bulk update via nested array binding
+        W.AddShort(' as t set ');
+        for F := 0 to FieldCount-1 do begin
+          W.AddString(DecodedFieldNames^[F]);
+          W.AddShort('=v.');
+          W.AddString(DecodedFieldNames^[F]);
+          W.Add(',');
+        end;
+        W.CancelLastComma;
+        W.AddShort(' from ( select');
+        for F := 0 to FieldCount-1 do begin
+          W.AddShort(' unnest(?::');
+          W.AddShort(PG_FT[DecodedFieldTypesToUnnest^[F]]);
+          W.AddShort('[]),');
+        end;
+        W.AddShort(' unnest(?::int8[]) ) as v('); // last param is ID
+        for F := 0 to FieldCount-1 do begin
+          W.AddString(DecodedFieldNames^[F]);
+          W.Add(',');
+        end;
+        W.AddString(UpdateIDFieldName);
+        W.AddShort(') where t.');
+        W.AddString(UpdateIDFieldName);
+        W.AddShort('=v.');
+        W.AddString(UpdateIDFieldName);
+      end else begin
+        // regular UPDATE statement
+        W.AddShort(' set ');
+        for F := 0 to FieldCount-1 do begin // append 'COL1=?,COL2=?'
+          W.AddString(DecodedFieldNames^[F]);
+          W.AddShort('=?,');
+        end;
+        W.CancelLastComma;
+        W.AddShort(' where ');
+        W.AddString(UpdateIDFieldName);
+        W.Add('=','?'); // last param is ID
       end;
-      W.CancelLastComma;
-      W.AddShort(' where ');
-      W.AddString(UpdateIDFieldName);
-      W.Add('=','?');
     end;
     soInsert: begin
       if boInsertOrIgnore in BatchOptions then
@@ -27403,13 +27433,14 @@ begin
         end;
         W.CancelLastComma;
         W.AddShort(') values (');
-        if DecodedFieldTypesToUnnest<>nil then begin
+        if DecodedFieldTypesToUnnest<>nil then
+          // PostgreSQL bulk insert via nested array binding
           for F := 0 to FieldCount-1 do begin
             W.AddShort('unnest(?::');
             W.AddShort(PG_FT[DecodedFieldTypesToUnnest^[F]]);
             W.AddShort('[]),');
-          end;
-        end else
+          end else
+          // regular INSERT statement
           W.AddStrings('?,',FieldCount);
         W.CancelLastComma;
         W.Add(')');
