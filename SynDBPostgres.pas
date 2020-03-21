@@ -55,7 +55,7 @@ type
     fOidsCount: integer;
   protected
     procedure GetForeignKeys; override;
-    /// fill mapping of OID
+    /// fill mapping of standard OID
     // - at runtime mapping can be defined using Oid2FieldType() method
     // - OIDs defined in DB can be retrieved using query
     //  "select oid, typname from pg_type where typtype = 'b' order by oid"
@@ -213,6 +213,81 @@ uses
 
 
 { *********** minimal access to libpq native Postgres client library }
+
+const // see pg_type.h
+  BOOLOID = 16;
+  BYTEAOID = 17;
+  INT8OID = 20;
+  INT2OID = 21;
+  INT4OID = 23;
+  REGPROCOID = 24;
+  TEXTOID = 25;
+  OIDOID = 26;
+  FLOAT4OID = 700;
+  FLOAT8OID = 701;
+  ABSTIMEOID = 702;
+  CASHOID = 790;
+  DATEOID = 1082;
+  TIMEOID = 1083;
+  TIMESTAMPOID = 1114;
+  TIMESTAMPTZOID = 1184;
+  TIMETZOID = 1266;
+  NUMERICOID = 1700;
+
+  CHAROID = 18;
+  NAMEOID = 19;
+  INT2VECTOROID	= 22;
+  TIDOID = 27;
+  XIDOID = 28;
+  CIDOID = 29;
+  OIDVECTOROID	= 30;
+  JSONOID = 114;
+  XMLOID = 142;
+  PGNODETREEOID	= 194;
+  PGDDLCOMMANDOID = 32;
+  POINTOID= 600;
+  LSEGOID = 601;
+  PATHOID = 602;
+  BOXOID = 603;
+  POLYGONOID = 604;
+  LINEOID = 628;
+  RELTIMEOID = 703;
+  TINTERVALOID = 704;
+  UNKNOWNOID = 705;
+  CIRCLEOID = 718;
+  MACADDROID = 829;
+  INETOID = 869;
+  CIDROID = 650;
+  INT2ARRAYOID = 1005;
+  INT4ARRAYOID = 1007;
+  TEXTARRAYOID= 1009;
+  OIDARRAYOID = 1028;
+  FLOAT4ARRAYOID = 1021;
+  ACLITEMOID = 1033;
+  CSTRINGARRAYOID = 1263;
+  BPCHAROID = 1042;
+  VARCHAROID = 1043;
+  INTERVALOID = 1186;
+  BITOID = 1560;
+  VARBITOID = 1562;
+  REFCURSOROID= 1790;
+  REGPROCEDUREOID = 2202;
+  REGOPEROID = 2203;
+  REGOPERATOROID = 2204;
+  REGCLASSOID = 2205;
+  REGTYPEOID = 2206;
+  REGROLEOID = 4096;
+  REGNAMESPACEOID = 4089;
+  REGTYPEARRAYOID = 2211;
+  UUIDOID = 2950;
+  LSNOID = 3220;
+  TSVECTOROID = 3614;
+  GTSVECTOROID = 3642;
+  TSQUERYOID = 3615;
+  REGCONFIGOID = 3734;
+  REGDICTIONARYOID = 3769;
+  JSONBOID = 3802;
+  INT4RANGEOID	  = 3904;
 
 const
   PGRES_EMPTY_QUERY = 0;
@@ -556,24 +631,24 @@ end;
 
 procedure TSQLDBPostgresConnectionProperties.FillOidMapping;
 begin // see pg_type.h (most used first)
-  mapOid(23, ftInt64);     // int4
-  mapOid(20, ftInt64);     // int8
-  mapOid(25, ftUTF8);      // text
-  mapOid(701, ftDouble);   // float8
-  mapOid(1114, ftDate);    // timestamp
-  mapOid(17, ftBlob);      // bytea
-  mapOid(1700, ftCurrency);// numeric - our ORM uses NUMERIC(19,4) for currency
-  mapOid(16, ftInt64);     // bool
-  mapOid(21, ftInt64);     // int2
-  mapOid(790, ftCurrency); // money
-  mapOid(1184, ftDate);    // timestampz
-  mapOid(702, ftDate);     // abstime
-  mapOid(1082, ftDate);    // date
-  mapOid(1083, ftDate);    // time
-  mapOid(1266, ftDate);    // timez
-  mapOid(24, ftInt64);     // regproc
-  mapOid(26, ftInt64);     // oid
-  mapOid(700, ftDouble);   // float4
+  mapOid(INT4OID, ftInt64);
+  mapOid(INT8OID, ftInt64);
+  mapOid(TEXTOID, ftUTF8);
+  mapOid(FLOAT8OID, ftDouble);
+  mapOid(TIMESTAMPOID, ftDate);
+  mapOid(BYTEAOID, ftBlob);
+  mapOid(NUMERICOID, ftCurrency);// our ORM uses NUMERIC(19,4) for currency
+  mapOid(BOOLOID, ftInt64);
+  mapOid(INT2OID, ftInt64);
+  mapOid(CASHOID, ftCurrency);
+  mapOid(TIMESTAMPTZOID, ftDate);
+  mapOid(ABSTIMEOID, ftDate);
+  mapOid(DATEOID, ftDate);
+  mapOid(TIMEOID, ftDate);
+  mapOid(TIMETZOID, ftDate);
+  mapOid(REGPROCOID, ftInt64);
+  mapOid(OIDOID, ftInt64);
+  mapOid(FLOAT4OID, ftDouble);
 end; // any unregistered OID will be handled as ftUTF8
 
 constructor TSQLDBPostgresConnectionProperties.Create(
@@ -649,8 +724,11 @@ begin
   begin
     cName := PQ.fname(fRes, c);
     with PSQLDBColumnProperty(fColumn.AddAndMakeUniqueName(cName))^ do
+    begin
+      ColumnAttr := PQ.ftype(fRes, c);
       ColumnType := TSQLDBPostgresConnectionProperties(Connection.
-        Properties).Oid2FieldType(PQ.ftype(fRes, c));
+        Properties).Oid2FieldType(ColumnAttr);
+    end;
   end;
 end;
 
@@ -884,11 +962,12 @@ begin
       case ColumnType of
         ftNull:
           WR.AddShort('null');
-        ftInt64:
-          WR.AddNoJSONEscape(P);
-        ftDouble, ftCurrency:
-          WR.AddFloatStr(P);
+        ftInt64, ftDouble, ftCurrency:
+          WR.AddNoJSONEscape(P, PQ.GetLength(fRes, fCurrentRow, col));
         ftUTF8, ftDate:
+          if (ColumnAttr = JSONOID) or (ColumnAttr = JSONBOID) then
+            WR.AddNoJSONEscape(P, PQ.GetLength(fRes, fCurrentRow, col))
+          else
           begin
             WR.Add('"');
             WR.AddJSONEscape(P);
