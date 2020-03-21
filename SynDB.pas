@@ -512,13 +512,10 @@ type
     // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
-    // - you can go back to the first row of data before creating the JSON, if
-    // RewindToFirst is TRUE (could be used e.g. for TQuery.FetchAllAsJSON)
     // - if ReturnedRowCount points to an integer variable, it will be filled with
     // the number of row data returned (excluding field names)
     // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
-    function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt=nil;
-      RewindToFirst: boolean=false): RawUTF8;
+    function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt=nil): RawUTF8;
     // append all rows content as a JSON stream
     // - JSON data is added to the supplied TStream, with UTF-8 encoding
     // - if Expanded is true, JSON data is an array of objects, for direct use
@@ -529,11 +526,8 @@ type
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
     // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
-    // - you can go back to the first row of data before creating the JSON, if
-    // RewindToFirst is TRUE (could be used e.g. for TQuery.FetchAllAsJSON)
     // - returns the number of row data returned (excluding field names)
-    function FetchAllToJSON(JSON: TStream; Expanded: boolean;
-      RewindToFirst: boolean=false): PtrInt;
+    function FetchAllToJSON(JSON: TStream; Expanded: boolean): PtrInt;
     /// append all rows content as binary stream
     // - will save the column types and name, then every data row in optimized
     // binary format (faster and smaller than JSON)
@@ -2082,13 +2076,10 @@ type
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
     // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
-    // - you can go back to the first row of data before creating the JSON, if
-    // RewindToFirst is TRUE (could be used e.g. for TQuery.FetchAllAsJSON)
     // - returns the number of row data returned (excluding field names)
     // - warning: TSQLRestStorageExternal.EngineRetrieve in mORMotDB unit
     // expects the Expanded=true format to return '[{...}]'#10
-    function FetchAllToJSON(JSON: TStream; Expanded: boolean;
-      RewindToFirst: boolean=false): PtrInt;
+    function FetchAllToJSON(JSON: TStream; Expanded: boolean): PtrInt;
     // Append all rows content as a CSV stream
     // - CSV data is added to the supplied TStream, with UTF-8 encoding
     // - if Tab=TRUE, will use TAB instead of ',' between columns
@@ -2111,11 +2102,8 @@ type
     // format and contains true BLOB data
     // - if ReturnedRowCount points to an integer variable, it will be filled with
     // the number of row data returned (excluding field names)
-    // - you can go back to the first row of data before creating the JSON, if
-    // RewindToFirst is TRUE (could be used e.g. for TQuery.FetchAllAsJSON)
     // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
-    function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt=nil;
-      RewindToFirst: boolean=false): RawUTF8;
+    function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt=nil): RawUTF8;
     /// append all rows content as binary stream
     // - will save the column types and name, then every data row in optimized
     // binary format (faster and smaller than JSON)
@@ -2678,9 +2666,6 @@ type
     /// after a statement has been prepared via Prepare() + ExecutePrepared() or
     //   Execute(), this method must be called one or more times to evaluate it
     function Step(SeekFirst: boolean=false): boolean; override;
-    /// Reset the previous prepared statement
-    // - always raise an ESQLDBException, since this method is not to be allowed
-    procedure Reset; override;
   end;
 
   /// client-side implementation of a remote connection to any SynDB engine
@@ -3648,7 +3633,7 @@ begin
     if fPrepared.Step(true) then
       // cursor sucessfully set to 1st row
       fRowIndex := 1 else
-      // no row is available -> empty result
+      // no row is available, or unable to seek first row -> empty result
       fRowIndex := -1; // =-1 if empty, =0 if eof, >=1 if cursor on row data
 end;
 
@@ -6851,8 +6836,7 @@ begin
   end;
 end;
 
-function TSQLDBStatement.FetchAllToJSON(JSON: TStream; Expanded: boolean;
-  RewindToFirst: boolean): PtrInt;
+function TSQLDBStatement.FetchAllToJSON(JSON: TStream; Expanded: boolean): PtrInt;
 var W: TJSONWriter;
     col: integer;
 begin
@@ -6868,8 +6852,7 @@ begin
     if Expanded then
       W.Add('[');
     // write rows data
-    while Step(RewindToFirst) do begin
-      RewindToFirst := false;
+    while Step do begin
       ColumnsToJSON(W);
       W.Add(',');
       inc(result);
@@ -6962,13 +6945,13 @@ begin
 end;
 
 function TSQLDBStatement.FetchAllAsJSON(Expanded: boolean;
-  ReturnedRowCount: PPtrInt; RewindToFirst: boolean): RawUTF8;
+  ReturnedRowCount: PPtrInt): RawUTF8;
 var Stream: TRawByteStringStream;
     RowCount: PtrInt;
 begin
   Stream := TRawByteStringStream.Create;
   try
-    RowCount := FetchAllToJSON(Stream,Expanded,RewindToFirst);
+    RowCount := FetchAllToJSON(Stream,Expanded);
     if ReturnedRowCount<>nil then
       ReturnedRowCount^ := RowCount;
     result := Stream.DataString;
@@ -8688,11 +8671,6 @@ begin
     // TSQLDBProxyStatementRandomAccess.Create() will recompute it fast enough
     DataRowPosition^ := nil;
   result := fDataRowCount;
-end;
-
-procedure TSQLDBProxyStatement.Reset;
-begin
-  raise ESQLDBException.CreateUTF8('Unexpected %.Reset',[self]);
 end;
 
 function TSQLDBProxyStatement.Step(SeekFirst: boolean): boolean;
