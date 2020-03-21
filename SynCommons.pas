@@ -2427,6 +2427,13 @@ function GetExtended(P: PUTF8Char; out err: integer): TSynExtended; overload;
 function GetExtended(P: PUTF8Char): TSynExtended; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// copy a floating-point text buffer with proper correction and validation
+// - will correct on the fly '.5' -> '0.5' and '-.5' -> '-0.5'
+// - will end not only on #0 but on any char not matching 1[.2[e[-]3]] pattern
+// - is used when the input comes from a third-party source with no regular
+// output, e.g. a database driver, via TTextWriter.AddFloatStr
+function FloatStrCopy(s, d: PUTF8Char): PUTF8Char;
+
 /// get the WideChar stored in P^ (decode UTF-8 if necessary)
 // - any surrogate (UCS4>$ffff) will be returned as '?'
 function GetUTF8Char(P: PUTF8Char): cardinal;
@@ -8526,6 +8533,7 @@ type
     procedure Add(Value: Extended; precision: integer; noexp: boolean=false); overload;
     /// append a floating-point text buffer
     // - will correct on the fly '.5' -> '0.5' and '-.5' -> '-0.5'
+    // - will end not only on #0 but on any char not matching 1[.2[e[-]3]] pattern
     // - is used when the input comes from a third-party source with no regular
     // output, e.g. a database driver
     procedure AddFloatStr(P: PUTF8Char);
@@ -32729,6 +32737,57 @@ asm     // in: eax=text, edx=@err  out: st(0)=result
 end;
 {$endif CPU32DELPHI}
 
+function FloatStrCopy(s, d: PUTF8Char): PUTF8Char;
+var c: AnsiChar;
+begin
+  while s^=' ' do inc(s);
+  if PWord(s)^=ord('-')+ord('.')shl 8 then begin
+    PCardinal(d)^ := ord('-')+ord('0')shl 8; // '-.3' -> '-0.3'
+    inc(d,2);
+    inc(s);
+  end;
+  c := s^;
+  if (c='+') or (c='-') then begin
+    inc(s);
+    d^ := c;
+    inc(d);
+    c := s^;
+  end else
+  if c='.' then begin
+    d^ := '0'; // '.5' -> '0.5'
+    inc(d);
+  end;
+  if (c>='0') and (c<='9') then
+    repeat
+      inc(s);
+      d^ := c;
+      inc(d);
+      c := s^;
+      if ((c>='0') and (c<='9')) or (c='.') then
+        continue;
+      if (c<>'e') and (c<>'E') then
+        break;
+      inc(s);
+      d^ := c; // 1.23e120 or 1.23e-45
+      inc(d);
+      c := s^;
+      if c='-' then begin
+        inc(s);
+        d^ := c;
+        inc(d);
+        c := s^;
+      end;
+      while (c>='0') and (c<='9') do begin
+        inc(s);
+        d^ := c;
+        inc(d);
+        c := s^;
+      end;
+      break;
+    until false;
+  result := d;
+end;
+
 function GetUTF8Char(P: PUTF8Char): cardinal;
 begin
   if P<>nil then begin
@@ -53120,35 +53179,15 @@ begin
 end;
 
 procedure TTextWriter.AddFloatStr(P: PUTF8Char);
-var c: AnsiChar;
-    D: PUTF8Char;
 begin
-  if BEnd-B<=31 then
+  if StrLen(P)>127 then
+    exit; // clearly invalid input
+  if BEnd-B<=127 then
     FlushToStream;
-  D := B+1;
-  if P<>nil then begin
-    while P^=' ' do inc(P);
-    if PWord(P)^=ord('-')+ord('.')shl 8 then begin
-      PCardinal(D)^ := ord('-')+ord('0')shl 8; // '-.3' -> '-0.3'
-      inc(D,2);
-      inc(P);
-    end;
-    c := P^;
-    if c='.' then begin
-      D^ := '0'; // '.5' -> '0.5'
-      inc(D);
-    end;
-    repeat
-      inc(P);
-      if c=#0 then
-        break;
-      D^ := c;
-      inc(D);
-      c := P^;
-    until false;
-  end else
-    D^ := '0';
-  B := D;
+  inc(B);
+  if P<>nil then
+    B := FloatStrCopy(P,B)-1 else
+    B^ := '0';
 end;
 
 procedure TTextWriter.Add({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID);
