@@ -898,6 +898,7 @@ type
       RefCount: integer;
       Connection: TSQLDBConnection;
     end;
+    fExecuteWhenConnected: TRawUTF8DynArray;
     procedure SetConnectionTimeOutMinutes(minutes: cardinal);
     function GetConnectionTimeOutMinutes: cardinal;
     // this default implementation just returns the fDBMS value or dDefault
@@ -1443,6 +1444,13 @@ type
     // this won't affect other Column*() methods, or JSON production
     property VariantStringAsWideString: boolean read fVariantWideString write fVariantWideString;
     {$endif}
+    /// SQL statements what will be executed for each new connection
+    // The usage scenarios examples:
+    //  - Oracle: force case-insensitive like
+    //    ['ALTER SESSION SET NLS_COMP=LINGUISTIC', 'ALTER SESSION SET NLS_SORT=BINARY_CI']
+    //  - Postgres: disable notices and warnings ['SET client_min_messages to ERROR']
+    property ExecuteWhenConnected: TRawUTF8DynArray read fExecuteWhenConnected
+      write fExecuteWhenConnected;
   end;
 
   {$ifdef WITH_PROXY}
@@ -3911,6 +3919,7 @@ begin
 end;
 
 procedure TSQLDBConnection.Connect;
+var i: integer;
 begin
   inc(fTotalConnectionCount);
   InternalProcess(speConnected);
@@ -3922,6 +3931,15 @@ begin
     except
       fServerTimestampAtConnection := Now;
     end;
+  for i := 0 to length(fProperties.ExecuteWhenConnected)-1 do
+  begin
+    with NewStatement do
+    try
+      Execute(fProperties.ExecuteWhenConnected[I], false);
+    finally
+      Free;
+    end;
+  end;
 end;
 
 procedure TSQLDBConnection.Disconnect;
