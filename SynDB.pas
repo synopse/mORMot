@@ -7795,9 +7795,9 @@ end;
 
 procedure TSQLDBStatementWithParams.Reset;
 begin
-  inherited Reset;
   fParam.Clear;
   fParamsArrayCount := 0;
+  inherited Reset;
 end;
 
 

@@ -10,6 +10,7 @@ unit SynDBPostgres;
    Features:
     - fast, minimum memory allocation
     - includes its own simple wrapper to the libpq native client
+    - perfect fit for our ORM (JSON results, bulk insert/update/delete)
     - array binding for select statements (caller should use =ANY(?) etc.)
 
    Limitations:
@@ -403,8 +404,7 @@ begin
     begin
       FreeLibrary(fHandle);
       fHandle := 0;
-      raise ESQLDBPostgres.CreateUTF8('Invalid %: missing % - should be 8.3+',
-        [LIBNAME, PQ_ENTRIES[i]]);
+      raise ESQLDBPostgres.CreateUTF8('Invalid %: missing %', [LIBNAME, PQ_ENTRIES[i]]);
     end;
     inc(P);
   end;

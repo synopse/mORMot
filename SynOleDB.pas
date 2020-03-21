@@ -2079,7 +2079,6 @@ end;
 
 procedure TOleDBStatement.Reset;
 begin
-  inherited Reset;
   if fParamCount>0 then begin
     fParam.Clear;
     Finalize(fParamBindings);
@@ -2094,6 +2093,7 @@ begin
     Prepare(fSQL,fExpectResults);
   end;
   fUpdateCount := 0;
+  inherited Reset;
 end;
 
 function TOleDBStatement.UpdateCount: integer;

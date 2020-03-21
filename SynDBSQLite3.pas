@@ -734,10 +734,10 @@ end;
 
 procedure TSQLDBSQLite3Statement.Reset;
 begin
-  inherited Reset;
   fStatement.Reset;
   fUpdateCount := 0;
   // fStatement.BindReset; // slow down the process, and is not mandatory
+  inherited Reset;
 end;
 
 function TSQLDBSQLite3Statement.Step(SeekFirst: boolean): boolean;

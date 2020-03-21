@@ -1827,12 +1827,12 @@ end;
 procedure TODBCStatement.Reset;
 begin
   if fStatement<>nil then
-  with ODBC do begin
-    if fColumnCount>0 then
-      Check(nil,self,CloseCursor(fStatement),SQL_HANDLE_STMT,fStatement);
-    if fParamCount>0 then
-      Check(nil,self,FreeStmt(fStatement,SQL_RESET_PARAMS),SQL_HANDLE_STMT,fStatement);
-  end;
+    with ODBC do begin
+      if fColumnCount>0 then
+        Check(nil,self,CloseCursor(fStatement),SQL_HANDLE_STMT,fStatement);
+      if fParamCount>0 then
+        Check(nil,self,FreeStmt(fStatement,SQL_RESET_PARAMS),SQL_HANDLE_STMT,fStatement);
+    end;
   inherited Reset;
 end;
 

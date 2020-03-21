@@ -447,7 +447,8 @@ end;
 
 procedure TSQLDBDatasetStatementAbstract.Reset;
 begin
-  fQuery.Close;
+  if (fQuery<>nil) and fQuery.Active then
+    fQuery.Close;
   inherited Reset;
 end;
 
