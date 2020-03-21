@@ -13398,7 +13398,7 @@ var ext: TSynExtended;
   begin
     SynCommons.FillRandom(@data.Hi,8); // QueryPerformanceCounter+8*Random32
     sha3.Update(@data,sizeof(data));
-    CreateGUID(g); // not random, but genuine
+    CreateGUID(g); // not random, but genuine (at least on Windows)
     sha3.Update(@g,sizeof(g));
   end;
 begin

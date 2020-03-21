@@ -240,6 +240,7 @@ type
     // - for TSQLDBOracleStatement: contains an offset to this column values
     // inside fRowBuffer[] internal buffer
     // - for TSQLDBDatasetStatement: maps TField pointer value
+    // - for TSQLDBPostgresStatement: contains the column type OID
     ColumnAttr: PtrUInt;
     /// the Column type, used for storage
     // - for SQLCreate: should not be ftUnknown nor ftNull

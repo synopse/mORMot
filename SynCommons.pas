@@ -11009,6 +11009,19 @@ var
 // order (most-signignifican byte first)
 function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer): boolean; overload;
 
+/// fast conversion with no validity check from hexa chars into binary data
+procedure HexToBinFast(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer);
+
+/// conversion from octal C-like escape into binary data
+// - \xxx is converted into a single xxx byte from octal, and \\ into \
+// - will stop the conversion when Oct^=#0 or when invalid \xxx is reached 
+// - returns the number of bytes written to Bin^
+function OctToBin(Oct: PAnsiChar; Bin: PByteArray): PtrInt; overload;
+
+/// conversion from octal C-like escape into binary data
+// - \xxx is converted into a single xxx byte from octal, and \\ into \
+function OctToBin(const Oct: RawUTF8): RawByteString; overload;
+
 /// fast conversion from one hexa char pair into a 8 bit AnsiChar
 // - return false if any invalid (non hexa) char is found in Hex^
 // - similar to HexToBin(Hex,nil,1)
@@ -27518,6 +27531,71 @@ begin
         dec(BinBytes);
       until BinBytes=0;
   result := true; // conversion OK
+end;
+
+procedure HexToBinFast(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer);
+var tab: {$ifdef CPUX86NOTPIC}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
+    c: byte;
+begin
+  {$ifndef CPUX86NOTPIC}tab := @ConvertHexToBin;{$endif} // faster on PIC and x86_64
+  if BinBytes>0 then
+    repeat
+      c := tab[ord(Hex[0])] shl 4;
+      Bin^ := tab[ord(Hex[1])] or c;
+      inc(Hex,2);
+      inc(Bin);
+      dec(BinBytes);
+    until BinBytes=0;
+end;
+
+function OctToBin(Oct: PAnsiChar; Bin: PByteArray): PtrInt;
+var c, v: cardinal;
+label _nxt;
+begin
+  result := 0;
+  if Oct <> nil then
+    repeat
+      c := ord(Oct^);
+      inc(Oct);
+      if c <> ord('\') then begin
+        if c = 0 then
+          exit;
+_nxt:   Bin[result] := c;
+        inc(result);
+        continue;
+      end;
+      c := ord(Oct^);
+      inc(Oct);
+      if c = ord('\') then
+        goto _nxt;
+      dec(c, ord('0'));
+      if c > 3 then
+        exit; // stop at malformated input (includes #0)
+      v := c shl 6;
+      c := ord(Oct[0]) - ord('0');
+      if c > 7 then
+        exit;
+      v := v or (c shl 3);
+      c := ord(Oct[1]) - ord('0');
+      if c > 7 then
+        exit;
+      Bin[result] := v or c;
+      inc(result);
+      inc(Oct, 2);
+    until false;
+end;
+
+function OctToBin(const Oct: RawUTF8): RawByteString;
+var tmp: TSynTempBuffer;
+    L: integer;
+begin
+  tmp.Init(length(Oct));
+  try
+    L := OctToBin(pointer(Oct), tmp.buf);
+    SetString(result, PAnsiChar(tmp.buf), L);
+  finally
+    tmp.Done;
+  end;
 end;
 
 function IsHex(const Hex: RawByteString; BinBytes: integer): boolean;
@@ -55405,7 +55483,7 @@ procedure TTextWriter.WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean);
 var trailing, main, n: PtrUInt;
 begin
   if withMagic then
-    if len<=0 then begin
+    if Len<=0 then begin
       AddShort('null'); // JSON null is better than "" for BLOBs
       exit;
     end else
