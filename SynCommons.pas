@@ -8526,6 +8526,7 @@ type
     procedure Add(Value: Extended; precision: integer; noexp: boolean=false); overload;
     /// append a floating-point text buffer
     // - will correct on the fly '.5' -> '0.5' and '-.5' -> '-0.5'
+    // - will end not only on #0 but on any char not in 0123456789.+-eE set
     // - is used when the input comes from a third-party source with no regular
     // output, e.g. a database driver
     procedure AddFloatStr(P: PUTF8Char);
@@ -53123,7 +53124,9 @@ procedure TTextWriter.AddFloatStr(P: PUTF8Char);
 var c: AnsiChar;
     D: PUTF8Char;
 begin
-  if BEnd-B<=31 then
+  if StrLen(P)>127 then
+    exit; // clearly invalid input
+  if BEnd-B<=127 then
     FlushToStream;
   D := B+1;
   if P<>nil then begin
@@ -53134,18 +53137,45 @@ begin
       inc(P);
     end;
     c := P^;
+    if (c='+') or (c='-') then begin
+      inc(P);
+      D^ := c;
+      inc(D);
+      c := P^;
+    end else
     if c='.' then begin
       D^ := '0'; // '.5' -> '0.5'
       inc(D);
     end;
-    repeat
-      inc(P);
-      if c=#0 then
+    if (c>='0') and (c<='9') then
+      repeat
+        inc(P);
+        D^ := c;
+        inc(D);
+        c := P^;
+        if ((c>='0') and (c<='9')) or (c='.') then
+          continue;
+        if (c<>'e') and (c<>'E') then
+          break;
+        inc(P);
+        D^ := c; // 1.23e120 or 1.23e-45
+        inc(D);
+        c := P^;
+        if c='-' then begin
+          inc(P);
+          D^ := c;
+          inc(D);
+          c := P^;
+        end;
+        while (c>='0') and (c<='9') do begin
+          inc(P);
+          D^ := c;
+          inc(D);
+          c := P^;
+        end;
         break;
-      D^ := c;
-      inc(D);
-      c := P^;
-    until false;
+      until false;
+    dec(D);
   end else
     D^ := '0';
   B := D;

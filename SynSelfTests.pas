@@ -4241,6 +4241,18 @@ begin
   end;
 end;
 
+function TestAddFloatStr(const str: RawUTF8): RawUTF8;
+var tmp: TTextWriterStackBuffer;
+begin
+  with TTextWriter.CreateOwnedStream(tmp) do
+    try
+      AddFloatStr(pointer(str));
+      SetText(result);
+    finally
+      Free;
+    end;
+end;
+
 procedure TTestLowLevelCommon.NumericalConversions;
 var i, j, b, err: integer;
     juint: cardinal absolute j;
@@ -4262,6 +4274,21 @@ var i, j, b, err: integer;
     crc, u32, n: cardinal;
     Timer: TPrecisionTimer;
 begin
+  CheckEqual(TestAddFloatStr(''),'0');
+  CheckEqual(TestAddFloatStr(' 123'),'123');
+  CheckEqual(TestAddFloatStr(' 1a23'),'1');
+  CheckEqual(TestAddFloatStr(' 123z'),'123');
+  CheckEqual(TestAddFloatStr(' 12.3'),'12.3');
+  CheckEqual(TestAddFloatStr('12.'),'12.');
+  CheckEqual(TestAddFloatStr(' +12.3'),'+12.3');
+  CheckEqual(TestAddFloatStr(' -12.3'),'-12.3');
+  CheckEqual(TestAddFloatStr('12.3e230'),'12.3e230');
+  CheckEqual(TestAddFloatStr('12.3E230'),'12.3E230');
+  CheckEqual(TestAddFloatStr('12.3e-230'),'12.3e-230');
+  CheckEqual(TestAddFloatStr('12.3E-230'),'12.3E-230');
+  CheckEqual(TestAddFloatStr('12.3e 230'),'12.3e');
+  CheckEqual(TestAddFloatStr('12.3f230'),'12.3');
+  CheckEqual(TestAddFloatStr('12.3E23.0'),'12.3E23');
   CheckEqual(OctToBin(''),'');
   CheckEqual(OctToBin('123'),'123');
   CheckEqual(OctToBin('\\123'),'\123');
@@ -4494,6 +4521,7 @@ begin
     s := RawUTF8(a);
     u := string(a);
     CheckEqual(OctToBin(s),s);
+    CheckEqual(TestAddFloatStr(s),s);
     Check(SysUtils.IntToStr(j)=u);
     s2 := Int32ToUtf8(j);
     CheckEqual(s2,s);
@@ -4547,6 +4575,7 @@ begin
     str(k,a);
     s := RawUTF8(a);
     u := string(a);
+    CheckEqual(TestAddFloatStr(s),s);
     Check(SysUtils.IntToStr(k)=u);
     Check(Int64ToUtf8(k)=s);
     Check(IntToString(k)=u);
@@ -4583,6 +4612,7 @@ begin
     e := GetExtended(Pointer(s),err);
     Check(SameValue(e,d)); // test str()
     s := ExtendedToStr(d,DOUBLE_PRECISION);
+    CheckEqual(TestAddFloatStr(s),s);
     e := GetExtended(Pointer(s),err);
     Check(SameValue(e,d));
     Check(not SameValue(e+1,d));
