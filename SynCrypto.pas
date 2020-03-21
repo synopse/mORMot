@@ -723,7 +723,7 @@ type
   // - expect IV to be set before process, or IVAtBeginning=true
   TAESCTR = class(TAESAbstractEncryptOnly)
   protected
-    fCTROffset, fCTROffsetMin: integer;
+    fCTROffset, fCTROffsetMin: PtrInt;
   public
     /// Initialize AES context for cypher
     // - will pre-generate the encryption key (aKeySize in bits, i.e. 128,192,256)
@@ -13059,11 +13059,6 @@ end;
 
 { TAESCTR }
 
-procedure TAESCTR.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
-begin
-  Encrypt(BufIn, BufOut, Count); // by definition
-end;
-
 constructor TAESCTR.Create(const aKey; aKeySize: cardinal);
 begin
   inherited Create(aKey, aKeySize);
@@ -13121,6 +13116,11 @@ begin
     TAESContext(AES.Context).DoBlock(AES.Context,fCV,tmp);
     XorMemory(pointer(fOut),pointer(fIn),@tmp,Count);
   end;
+end;
+
+procedure TAESCTR.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
+begin
+  Encrypt(BufIn, BufOut, Count); // by definition
 end;
 
 
