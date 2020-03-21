@@ -715,16 +715,33 @@ type
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
   end;
 
-  /// handle AES cypher/uncypher with Counter mode (CTR)
+  /// handle AES cypher/uncypher with 64-bit Counter mode (CTR)
+  // - the CTR will be done in bytes 7..0 - which is safe but not standard
   // - this class will use AES-NI hardware instructions, e.g.
   // ! CTR256: 28.13ms in x86 optimized code, 10.63ms with AES-NI
   // - expect IV to be set before process, or IVAtBeginning=true
   TAESCTR = class(TAESAbstractEncryptOnly)
+  protected
+    fCTROffset: integer;
   public
+    /// Initialize AES context for cypher
+    // - will pre-generate the encryption key (aKeySize in bits, i.e. 128,192,256)
+    constructor Create(const aKey; aKeySize: cardinal); override;
     /// perform the AES cypher in the CTR mode
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
     /// perform the AES un-cypher in the CTR mode
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
+  end;
+
+  /// handle AES cypher/uncypher with 128-bit Counter mode (CTR)
+  // - the CTR will be done in bytes 15..0 - which is the NIST standard way
+  // - this class will use AES-NI hardware instructions, e.g.
+  // - expect IV to be set before process, or IVAtBeginning=true
+  TAESCTRNIST = class(TAESCTR)
+  public
+    /// Initialize AES context for cypher
+    // - will pre-generate the encryption key (aKeySize in bits, i.e. 128,192,256)
+    constructor Create(const aKey; aKeySize: cardinal); override;
   end;
 
   /// internal 256-bit structure used for TAESAbstractAEAD MAC storage
@@ -13047,21 +13064,28 @@ begin
   Encrypt(BufIn, BufOut, Count); // by definition
 end;
 
+constructor TAESCTR.Create(const aKey; aKeySize: cardinal);
+begin
+  inherited Create(aKey, aKeySize);
+  fCTROffset := 7; // counter is in the lower 64 bits, nonce in the upper 64 bits
+end;
+
 procedure TAESCTR.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
-var i,j: integer;
+var i: integer;
+    offs: PtrInt;
     tmp: TAESBlock;
 begin
   inherited; // CV := IV + set fIn,fOut
   for i := 1 to Count shr 4 do begin
     TAESContext(AES.Context).DoBlock(AES.Context,fCV,tmp);
-    inc(fCV[7]); // counter is in the lower 64 bits, nonce in the upper 64 bits
-    if fCV[7]=0 then begin // manual big-endian increment
-      j := 6;
+    offs := fCTROffset;
+    inc(fCV[offs]);
+    if fCV[offs]=0 then begin // manual big-endian increment
       repeat
-        inc(fCV[j]);
-        if (fCV[j]<>0) or (j=0) then
+        dec(offs);
+        inc(fCV[offs]);
+        if (fCV[offs]<>0) or (offs=0) then
           break;
-        dec(j);
       until false;
     end;
     XorBlock16(pointer(fIn),pointer(fOut),pointer(@tmp));
@@ -13073,6 +13097,15 @@ begin
     TAESContext(AES.Context).DoBlock(AES.Context,fCV,tmp);
     XorMemory(pointer(fOut),pointer(fIn),@tmp,Count);
   end;
+end;
+
+
+{ TAESCTRNIST }
+
+constructor TAESCTRNIST.Create(const aKey; aKeySize: cardinal);
+begin
+  inherited Create(aKey, aKeySize);
+  fCTROffset := 15; // counter covers 128-bit
 end;
 
 

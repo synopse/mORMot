@@ -381,7 +381,11 @@ end;
 
 procedure SynLogNoticeProcessor({%H-}arg: Pointer; message: PUTF8Char); cdecl;
 begin
-  SynDBLog.Add.Log(sllInfo, 'PGINFO: %', [message]);
+  SynDBLog.Add.Log(sllTrace, 'PGINFO: %', [message], TObject(arg));
+end;
+
+procedure DummyNoticeProcessor({%H-}arg: Pointer; message: PUTF8Char); cdecl;
+begin
 end;
 
 procedure TSQLDBPostgresConnection.Connect;
@@ -402,7 +406,9 @@ begin
       PQ.SetNoticeProcessor(fPGConn, SynLogNoticeProcessor, pointer(self));
       log.Log(sllDB, 'Connected to % % using % v%', [fProperties.ServerName,
         fProperties.DatabaseNameSafe, PQ.fLibraryPath, PQ.LibVersion]);
-    end;
+    end
+    else // to ensure no performance drop due to notice to console
+      PQ.SetNoticeProcessor(fPGConn, DummyNoticeProcessor, nil);
     inherited Connect; // notify any re-connection
   except
     on E: Exception do
@@ -493,24 +499,26 @@ begin
 end;
 
 procedure TSQLDBPostgresConnectionProperties.FillOidMapping;
-begin
+begin // see pg_type.h (most used first)
+  mapOid(23, ftInt64);     // int4
+  mapOid(20, ftInt64);     // int8
+  mapOid(25, ftUTF8);      // text
+  mapOid(701, ftDouble);   // float8
+  mapOid(1114, ftDate);    // timestamp
+  mapOid(17, ftBlob);      // bytea
+  mapOid(1700, ftCurrency);// numeric - our ORM uses NUMERIC(19,4) for currency
+  mapOid(16, ftInt64);     // bool
+  mapOid(21, ftInt64);     // int2
+  mapOid(790, ftCurrency); // money
+  mapOid(1184, ftDate);    // timestampz
   mapOid(702, ftDate);     // abstime
   mapOid(1082, ftDate);    // date
   mapOid(1083, ftDate);    // time
-  mapOid(1114, ftDate);    // timestamp
-  mapOid(1184, ftDate);    // timestampz
   mapOid(1266, ftDate);    // timez
-  mapOid(20, ftInt64);     // int8
-  mapOid(21, ftInt64);     // int2
-  mapOid(23, ftInt64);     // int4
   mapOid(24, ftInt64);     // regproc
   mapOid(26, ftInt64);     // oid
   mapOid(700, ftDouble);   // float4
-  mapOid(701, ftDouble);   // float8
-  mapOid(1700, ftDouble);  // numeric
-  mapOid(790, ftCurrency); // money
-  mapOid(17, ftBlob);      // bytea
-end;
+end; // any unregistered OID will be handled as ftUTF8
 
 constructor TSQLDBPostgresConnectionProperties.Create(
   const aServerName, aDatabaseName, aUserID, aPassword: RawUTF8);
@@ -825,15 +833,14 @@ begin
       case ColumnType of
         ftNull:
           WR.AddShort('null');
-        ftInt64, ftDate:
+        ftInt64:
           WR.AddNoJSONEscape(PQ.GetValue(fRes, fCurrentRow, col));
         ftDouble, ftCurrency:
           WR.AddFloatStr(PQ.GetValue(fRes, fCurrentRow, col));
-        ftUTF8:
+        ftUTF8, ftDate:
           begin
             WR.Add('"');
-            WR.AddJSONEscape(PQ.GetValue(fRes, fCurrentRow, col),
-              PQ.GetLength(fRes, fCurrentRow, col));
+            WR.AddJSONEscape(PQ.GetValue(fRes, fCurrentRow, col));
             WR.Add('"');
           end;
         ftBlob:

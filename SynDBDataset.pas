@@ -250,7 +250,6 @@ begin
   fBatchSendingAbilities := [cCreate,cUpdate,cDelete]; // always emulated
 end;
 
-
 { TSQLDBDatasetStatementAbstract }
 
 function TSQLDBDatasetStatementAbstract.ColumnBlob(Col: Integer): RawByteString;
@@ -569,8 +568,8 @@ var P: TParam;
     I64: Int64;
     tmp: RawUTF8;
 begin
+  P := fQueryParams[aParamIndex];
   with aParam do begin
-    P := fQueryParams[aParamIndex];
     P.ParamType := SQLParamTypeToDBParamType(VInOut);
     if VinOut <> paramInOut then
       case VType of
@@ -627,12 +626,11 @@ begin
               P.Value := UTF8ToWideString(VData) else
               P.AsString := UTF8ToString(VData);
         SynTable.ftBlob:
-          {$ifdef UNICODE}
           if aArrayIndex>=0 then
+          {$ifdef UNICODE}
             P.SetBlobData(TValueBuffer(VArray[aArrayIndex]),Length(VArray[aArrayIndex])) else
             P.SetBlobData(TValueBuffer(VData),Length(VData));
           {$else}
-          if aArrayIndex>=0 then
             P.AsString := VArray[aArrayIndex] else
             P.AsString := VData;
           {$endif}

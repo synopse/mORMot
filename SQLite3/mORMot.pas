@@ -20651,9 +20651,8 @@ begin
   GetValueVar(Instance,false,tmp,@wasString);
   if wasString then begin
     W.Add('"');
-    if PtrUInt(tmp)<>0 then
-      W.AddJSONEscape(pointer(tmp),
-        {$ifdef FPC}length(tmp){$else}PInteger(PtrUInt(tmp)-4)^{$endif});
+    if tmp<>'' then
+      W.AddJSONEscape(pointer(tmp));
     W.Add('"');
   end else
     W.AddRawJSON(tmp);
@@ -22090,9 +22089,8 @@ begin
   if fPropType=TypeInfo(RawJSON) then
     W.AddRawJSON(tmp) else begin
     W.Add('"');
-    if PtrUInt(tmp)<>0 then
-      W.AddJSONEscape(pointer(tmp),
-        {$ifdef FPC}length(tmp){$else}PInteger(PtrUInt(tmp)-4)^{$endif});
+    if tmp<>'' then
+      W.AddJSONEscape(pointer(tmp));
     W.Add('"');
   end;
 end;
@@ -25262,8 +25260,8 @@ begin
         ftInt64,ftDouble,ftCurrency:
 nostr:      W.AddNoJSONEscape(U^,StrLen(U^));
         ftDate,ftUTF8,ftBlob: begin
-str:        W.Add('"');
-          W.AddJSONEscape(U^,StrLen(U^));
+str:      W.Add('"');
+          W.AddJSONEscape(U^);
           W.Add('"');
         end;
         else if IsStringJSON(U^) then // fast and safe enough
@@ -59073,7 +59071,7 @@ procedure TServiceMethodArgument.AddValueJSON(WR: TTextWriter; const Value: RawU
 begin
   if vIsString in ValueKindAsm then begin
     WR.Add('"');
-    WR.AddJSONEscape(pointer(Value),length(Value));
+    WR.AddJSONEscape(pointer(Value));
     WR.Add('"',',');
   end else begin
     WR.AddString(Value);

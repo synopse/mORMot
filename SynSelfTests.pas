@@ -10931,12 +10931,13 @@ begin
     Check(Hash32(s)=$6DE61E87);
     {$endif}
     s := T.GetJSONValues(false,true,soSelect);
-    Check(s='{"fieldCount":'+{$ifndef NOVARIANTS}'10'{$else}'9'{$endif}+
+    s1 := '{"fieldCount":'+{$ifndef NOVARIANTS}'10'{$else}'9'{$endif}+
       ',"values":["RowID","Int","Test","Unicode","Ansi",'+
       '"ValFloat","ValWord","ValDate","Next"'{$ifndef NOVARIANTS}+
       ',"ValVariant"'{$endif}+',0,0,"'+T.Test+'","'+
       T.Test+'","'+T.Test+'",3.141592653,1203,"2009-03-10T21:19:36",0'
-      {$ifndef NOVARIANTS}+',3.1416'{$endif}+']}');
+      {$ifndef NOVARIANTS}+',3.1416'{$endif}+']}';
+    CheckEqual(s,s1);
     Check(T.SameValues(T));
     Check(not T.SameValues(T2));
     T2.FillFrom(s);
