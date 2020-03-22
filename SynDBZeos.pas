@@ -326,6 +326,8 @@ type
     fStatement: IZPreparedStatement;
     fResultSet: IZResultSet;
     fResultInfo: IZResultSetMetaData;
+    /// set fResultSet/fResultInfo=nil when ISQLDBStatement is back in cache
+    procedure ReleaseResources; override;
   public
     /// Prepare an UTF-8 encoded SQL statement
     // - parameters marked as ? will be bound later, before ExecutePrepared call
@@ -1029,7 +1031,7 @@ begin
   {$endif}
     for i := 0 to fParamCount-1 do
     with fParams[i] do begin
-      if (Length(VArray)>0) and (fConnection.Properties.DBMS = dPostgreSQL) then begin
+      if (Length(VArray)>0) and (fConnection.Properties.DBMS=dPostgreSQL) then begin
         if VType in [ftInt64,ftCurrency,ftDouble,ftUTF8] then
           VData := BoundArrayToJSONArray(VArray) else
           raise ESQLDBZEOS.CreateUTF8('%.ExecutePrepared: Invalid array type % ' +
@@ -1102,15 +1104,19 @@ end;
 
 procedure TSQLDBZEOSStatement.Reset;
 begin
-  if fResultSet<>nil then begin
-    fResultInfo := nil;
-    {$ifndef ZEOS72UP}
-    fResultSet := nil; //commenting this makes it possible to seek cursor pos to 0 and use the interface again -> e.g. ReadOneByOneRate
-    {$ENDIF}
-  end;
+  ReleaseResources;
   if fStatement<>nil then
     fStatement.ClearParameters;
   inherited Reset;
+end;
+
+procedure TSQLDBZEOSStatement.ReleaseResources;
+begin
+  if fResultSet<>nil then begin
+    fResultInfo := nil;
+    fResultSet := nil;
+  end;
+  inherited ReleaseResources;
 end;
 
 function TSQLDBZEOSStatement.Step(SeekFirst: boolean): boolean;

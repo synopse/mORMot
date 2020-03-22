@@ -12,10 +12,11 @@ uses
   SynTable,
   SynLog,
   mORMot,
-  mORMotSQlite3,
+  mORMotSQLite3,
   SynSQLite3,
   SynSQLite3Static,
-  mORMotHttpServer;
+  mORMotHttpServer,
+  SynCrtSock;
 
 type
   TSQLRecordPeople = class(TSQLRecord)
@@ -56,7 +57,9 @@ begin
       aServer.NoAJAXJSON := true;
       aServer.CreateMissingTables;
       // launch the server
-      aHTTPServer := TSQLHttpServer.Create('888',[aServer]);
+      aHTTPServer := TSQLHttpServer.Create('8881',[aServer]);
+      // disable keep-alive to prevent threan psawn for every HTTP connection
+      (aHTTPServer.HttpServer as THttpServer).ServerKeepAliveTimeOut := 0;
       try
         writeln(#13#10'Background server is running at http://localhost:888'#13#10+
                 #13#10'Press [Enter] to close the server.');

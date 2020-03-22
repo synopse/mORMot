@@ -180,12 +180,13 @@ type
   TSQLDBSQLite3Statement = class(TSQLDBStatement)
   protected
     fStatement: TSQLRequest;
-    fShouldLogSQL: boolean; // sllSQL in SynDBLog.Family.Level
-    fBindValues: TRawUTF8DynArray;
-    fBindIsString: TByteDynArray;
+    fShouldLogSQL: boolean; // sllSQL in SynDBLog.Level -> set fLogSQLValues[]
+    fLogSQLValues: TVariantDynArray;
     fUpdateCount: integer;
     // retrieve the inlined value of a given parameter, e.g. 1 or 'name'
-    function GetParamValueAsText(Param: integer; MaxCharCount: integer=4096): RawUTF8; override;
+    procedure AddParamValueAsText(Param: integer; Dest: TTextWriter;
+      MaxCharCount: integer); override;
+    procedure ReleaseResources; override;
   public
     /// create a SQLite3 statement instance, from an existing SQLite3 connection
     // - the Execute method can be called once per TSQLDBSQLite3Statement instance,
@@ -482,40 +483,40 @@ end;
 procedure TSQLDBSQLite3Statement.Bind(Param: Integer; Value: double;
   IO: TSQLDBParamInOutType);
 begin
-  if fShouldLogSQL and (cardinal(Param-1)<cardinal(fParamCount)) then
-    ExtendedToStr(Value,DOUBLE_PRECISION,fBindValues[Param-1]);
+  if fShouldLogSQL and (cardinal(Param-1)<cardinal(length(fLogSQLValues))) then
+    fLogSQLValues[Param-1] := Value;
   fStatement.Bind(Param,Value);
 end;
 
 procedure TSQLDBSQLite3Statement.Bind(Param: Integer; Value: Int64;
   IO: TSQLDBParamInOutType);
 begin
-  if fShouldLogSQL and (cardinal(Param-1)<cardinal(fParamCount)) then
-    fBindValues[Param-1] := Int64ToUtf8(Value);
+  if fShouldLogSQL and (cardinal(Param-1)<cardinal(length(fLogSQLValues))) then
+    fLogSQLValues[Param-1] := Value;
   fStatement.Bind(Param,Value);
 end;
 
 procedure TSQLDBSQLite3Statement.BindBlob(Param: Integer; Data: pointer;
   Size: integer; IO: TSQLDBParamInOutType);
 begin
-  if fShouldLogSQL and (cardinal(Param-1)<cardinal(fParamCount)) then
-    fBindValues[Param-1] := '*BLOB*';
+  if fShouldLogSQL and (cardinal(Param-1)<cardinal(length(fLogSQLValues))) then
+    fLogSQLValues[Param-1] := Size;
   fStatement.Bind(Param,Data,Size);
 end;
 
 procedure TSQLDBSQLite3Statement.BindBlob(Param: Integer;
   const Data: RawByteString; IO: TSQLDBParamInOutType);
 begin
-  if fShouldLogSQL and (cardinal(Param-1)<cardinal(fParamCount)) then
-    fBindValues[Param-1] := '*BLOB*';
+  if fShouldLogSQL and (cardinal(Param-1)<cardinal(length(fLogSQLValues))) then
+    fLogSQLValues[Param-1] := length(Data);
   fStatement.BindBlob(Param,Data);
 end;
 
 procedure TSQLDBSQLite3Statement.BindCurrency(Param: Integer;
   Value: currency; IO: TSQLDBParamInOutType);
 begin
-  if fShouldLogSQL and (cardinal(Param-1)<cardinal(fParamCount)) then
-    fBindValues[Param-1] := Curr64ToStr(PInt64(@Value)^);
+  if fShouldLogSQL and (cardinal(Param-1)<cardinal(length(fLogSQLValues))) then
+    fLogSQLValues[Param-1] := Value;
   fStatement.Bind(Param,Value);
 end;
 
@@ -528,8 +529,6 @@ end;
 procedure TSQLDBSQLite3Statement.BindNull(Param: Integer;
   IO: TSQLDBParamInOutType; BoundType: TSQLDBFieldType);
 begin
-  if fShouldLogSQL and (cardinal(Param-1)<cardinal(fParamCount)) then
-    fBindValues[Param-1] := 'NULL';
   fStatement.BindNull(Param);
 end;
 
@@ -540,7 +539,7 @@ procedure TSQLDBSQLite3Statement.BindTextP(Param: Integer;
   Value: PUTF8Char; IO: TSQLDBParamInOutType);
 var V: RawUTF8;
 begin
-  SetString(V,PAnsiChar(Value),StrLen(Value));
+  FastSetString(V,Value,StrLen(Value));
   BindTextU(Param,V);
 end;
 
@@ -553,10 +552,8 @@ end;
 procedure TSQLDBSQLite3Statement.BindTextU(Param: Integer;
   const Value: RawUTF8; IO: TSQLDBParamInOutType);
 begin
-  if fShouldLogSQL and (cardinal(Param-1)<cardinal(fParamCount)) then begin
-    fBindValues[Param-1] := Value;
-    SetBit(pointer(fBindIsString)^,Param-1);
-  end;
+  if fShouldLogSQL and (cardinal(Param-1)<cardinal(length(fLogSQLValues))) then
+    RawUTF8ToVariant(Value,fLogSQLValues[Param-1]);
   fStatement.Bind(Param,Value);
 end;
 
@@ -700,16 +697,16 @@ begin
   result := fUpdateCount;
 end;
 
-function TSQLDBSQLite3Statement.GetParamValueAsText(Param: integer; MaxCharCount: integer=4096): RawUTF8;
+procedure TSQLDBSQLite3Statement.AddParamValueAsText(Param: integer;
+  Dest: TTextWriter; MaxCharCount: integer);
+var v: PVarData;
 begin
   dec(Param);
-  if not fShouldLogSQL or (cardinal(Param)>=cardinal(fParamCount)) then
-    result := '' else begin
-    if length(result)>MaxCharCount Then
-      result := copy(fBindValues[Param],1,MaxCharCount) else
-      result := fBindValues[Param];
-    if GetBitPtr(pointer(fBindIsString),Param) then
-      result := QuotedStr(result);
+  if fShouldLogSQL and (cardinal(Param)<cardinal(length(fLogSQLValues))) then begin
+    v := @fLogSQLValues[Param];
+    if v^.vtype=varString then
+      Dest.AddQuotedStr(v^.VAny,'''',MaxCharCount) else
+      Dest.AddVariant(PVariant(v)^);
   end;
 end;
 
@@ -724,20 +721,27 @@ begin
   fColumnCount := fStatement.FieldCount;
   if fShouldLogSQL then begin
     fParamCount := fStatement.ParamCount;
-    SetLength(fBindValues,fParamCount);
-    SetLength(fBindIsString,(fParamCount shr 3)+1);
+    SetLength(fLogSQLValues,fParamCount);
+    if PosExChar('?',SQL)>0 then
+      SynDBLog.Add.Log(sllDB,'Prepare % % %',[Timer.Stop,
+        TSQLDBSQLite3Connection(Connection).DB.FileNameWithoutPath,SQL],self);
   end;
-  if fShouldLogSQL and (PosExChar('?',SQL)>0) then
-    SynDBLog.Add.Log(sllDB,'Prepare % % %',[Timer.Stop,
-      TSQLDBSQLite3Connection(Connection).DB.FileNameWithoutPath,SQL],self);
 end;
 
 procedure TSQLDBSQLite3Statement.Reset;
 begin
-  inherited Reset;
   fStatement.Reset;
   fUpdateCount := 0;
   // fStatement.BindReset; // slow down the process, and is not mandatory
+  VariantDynArrayClear(fLogSQLValues);
+  SetLength(fLogSQLValues,fParamCount);
+  inherited Reset;
+end;
+
+procedure TSQLDBSQLite3Statement.ReleaseResources;
+begin
+  VariantDynArrayClear(fLogSQLValues);
+  inherited ReleaseResources;
 end;
 
 function TSQLDBSQLite3Statement.Step(SeekFirst: boolean): boolean;

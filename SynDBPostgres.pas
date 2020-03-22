@@ -10,6 +10,7 @@ unit SynDBPostgres;
    Features:
     - fast, minimum memory allocation
     - includes its own simple wrapper to the libpq native client
+    - perfect fit for our ORM (JSON results, bulk insert/update/delete)
     - array binding for select statements (caller should use =ANY(?) etc.)
 
    Limitations:
@@ -147,6 +148,8 @@ type
     /// raise an exception if Col is out of range according to fColumnCount
     // or rowset is not initialized
     procedure CheckColAndRowset(const Col: integer);
+    /// Clear(fRes) when ISQLDBStatement is back in cache
+    procedure ReleaseResources; override;
   public
     /// finalize the statement for a given connection
     destructor Destroy; override;
@@ -403,8 +406,7 @@ begin
     begin
       FreeLibrary(fHandle);
       fHandle := 0;
-      raise ESQLDBPostgres.CreateUTF8('Invalid %: missing % - should be 8.3+',
-        [LIBNAME, PQ_ENTRIES[i]]);
+      raise ESQLDBPostgres.CreateUTF8('Invalid %: missing %', [LIBNAME, PQ_ENTRIES[i]]);
     end;
     inc(P);
   end;
@@ -877,13 +879,18 @@ end;
 
 procedure TSQLDBPostgresStatement.Reset;
 begin
-  if fRes <> nil then
-  begin
-    PQ.clear(fRes);
-    fRes := nil;
-  end;
+  ReleaseResources;
   fResStatus := PGRES_EMPTY_QUERY;
   inherited Reset;
+end;
+
+procedure TSQLDBPostgresStatement.ReleaseResources;
+begin
+  if fRes = nil then
+    exit;
+  PQ.clear(fRes);
+  fRes := nil;
+  inherited ReleaseResources;
 end;
 
 function TSQLDBPostgresStatement.Step(SeekFirst: boolean): boolean;

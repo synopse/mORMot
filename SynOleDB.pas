@@ -970,6 +970,8 @@ type
     function BindColumns(ColumnInfo: IColumnsInfo; var Column: TDynArrayHashed;
       out Bindings: TDBBindingDynArray): integer;
     procedure LogStatusError(Status: integer; Column: PSQLDBColumnProperty);
+    /// clear result rows when ISQLDBStatement is back in cache
+    procedure ReleaseResources; override;
   public
     /// create an OleDB statement instance, from an OleDB connection
     // - the Execute method can be called only once per TOleDBStatement instance
@@ -1606,9 +1608,8 @@ begin // dedicated version to avoid as much memory allocation than possible
   if V=nil then
     result := ftNull else
     result := C^.ColumnType;
+  VarClear(Value);
   with TVarData(Value) do begin
-    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
-      VarClear(Value);
     VType := MAP_FIELDTYPE2VARTYPE[result];
     case result of
       ftInt64, ftDouble, ftCurrency, ftDate:
@@ -1702,7 +1703,7 @@ Write:case ColumnType of
 end;
 
 function TOleDBStatement.ParamToVariant(Param: Integer; var Value: Variant;
-  CheckIsOutParameter: boolean=true): TSQLDBFieldType;
+  CheckIsOutParameter: boolean): TSQLDBFieldType;
 begin
   inherited ParamToVariant(Param,Value); // raise exception if Param incorrect
   dec(Param); // start at #1
@@ -2080,14 +2081,8 @@ end;
 
 procedure TOleDBStatement.Reset;
 begin
-  inherited Reset;
-  if fParamCount>0 then begin
-    fParam.Clear;
-    Finalize(fParamBindings);
-  end;
+  ReleaseResources;
   if fColumnCount>0 then begin
-    CloseRowSet;
-    Finalize(fColumnBindings);
     fColumn.Clear;
     fColumn.ReHash;
     // faster if full command is re-prepared!
@@ -2095,6 +2090,18 @@ begin
     Prepare(fSQL,fExpectResults);
   end;
   fUpdateCount := 0;
+  inherited Reset;
+end;
+
+
+procedure TOleDBStatement.ReleaseResources;
+begin
+  if fParamCount>0 then
+    fParam.Clear;
+  fParamBindings := nil;
+  CloseRowSet;
+  fColumnBindings := nil;
+  inherited ReleaseResources;
 end;
 
 function TOleDBStatement.UpdateCount: integer;

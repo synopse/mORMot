@@ -2694,9 +2694,8 @@ procedure TBSONElement.ToVariant(var result: variant;
 var res: TVarData absolute result;
     resBSON: TBSONVariantData absolute result;
 begin
-  {$ifndef FPC}if res.VType and VTYPE_STATIC<>0 then{$endif}
-    VarClear(result);
-  ZeroFill(@result); // set result.VType=varEmpty and result.VAny=nil
+  VarClear(result);
+  res.VAny := nil; // avoid GPF below
   case Kind of
   betFloat:
     res.VDouble := unaligned(PDouble(Element)^);
@@ -3150,8 +3149,7 @@ procedure BSONToDoc(BSON: PByte; var Result: Variant; ExpectedBSONLen: Integer;
 begin
   if Option=asBSONVariant then
     raise EBSONException.Create('BSONToDoc(option=asBSONVariant) is not allowed');
-  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
-    VarClear(result);
+  VarClear(result);
   BSONParseLength(BSON,ExpectedBSONLen);
   BSONItemsToDocVariant(betDoc,BSON,TDocVariantData(Result),Option);
 end;
@@ -3906,8 +3904,7 @@ end;
 
 function TBSONObjectID.ToVariant: variant;
 begin
-  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
-    VarClear(result);
+  VarClear(result);
   with TBSONVariantData(result) do begin
     VType := BSONVariantType.VarType;
     VKind := betObjectID;
@@ -3995,9 +3992,8 @@ procedure TBSONVariant.FromBinary(const Bin: RawByteString;
   BinType: TBSONElementBinaryType; var result: variant);
 var Len: integer;
 begin // "\x05" e_name int32 subtype (byte*)
+  VarClear(result);
   with TBSONVariantData(result) do begin
-    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
-      VarClear(result);
     if Bin='' then begin
       VType := varNull; // stores a NULL
       exit;
@@ -4016,9 +4012,8 @@ end;
 procedure TBSONVariant.FromBSONDocument(const BSONDoc: TBSONDocument;
   var result: variant; Kind: TBSONElementType);
 begin
+  VarClear(result);
   with TBSONVariantData(result) do begin
-    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
-      VarClear(result);
     VType := VarType;
     VKind := Kind;
     VBlob := nil; // avoid GPF here below
@@ -4028,8 +4023,7 @@ end;
 
 procedure TBSONVariant.FromJSON(json: PUTF8Char; var result: variant);
 begin
-  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
-    VarClear(result);
+  VarClear(result);
   if json=nil then
     exit;
   if json^ in [#1..' '] then repeat inc(json) until not(json^ in [#1..' ']);
@@ -4238,8 +4232,7 @@ begin
   if AVarType=VarType then begin
     VariantToUTF8(Variant(Source),tmp,wasString);
     if wasString then begin
-      {$ifndef FPC}if Dest.VType and VTYPE_STATIC<>0 then{$endif}
-        VarClear(variant(Dest));
+      VarClear(variant(Dest));
       if TBSONVariantData(Dest).VObjectID.FromText(tmp) then begin
         Dest.VType := VarType;
         TBSONVariantData(Dest).VKind := betObjectID;
@@ -4278,8 +4271,7 @@ procedure TBSONVariant.Copy(var Dest: TVarData;
 begin
   if Indirect then
     SimplisticCopy(Dest,Source,true) else begin
-    {$ifndef FPC}if Dest.VType and VTYPE_STATIC<>0 then{$endif}
-      VarClear(variant(Dest)); // Dest may be a complex type
+    VarClear(variant(Dest)); // Dest may be a complex type
     Dest := Source;
     with TBSONVariantData(Dest) do
     if VKind in BSON_ELEMENTVARIANTMANAGED then begin
@@ -4359,9 +4351,8 @@ end;
 
 function JavaScript(const JS: RawUTF8): variant;
 begin
+  VarClear(result);
   with TBSONVariantData(result) do begin
-    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
-      VarClear(result);
     VType := BSONVariantType.VarType;
     VKind := betJS;
     VText := nil; // avoid GPF
@@ -4372,9 +4363,8 @@ end;
 function JavaScript(const JS: RawUTF8; const Scope: TBSONDocument): variant;
 var Len, JSLen: integer;
 begin
+  VarClear(result);
   with TBSONVariantData(result) do begin
-    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
-      VarClear(result);
     VType := BSONVariantType.VarType;
     VKind := betJSScope;
     JSLen := Length(JS)+1;                        // string = int32 text#0

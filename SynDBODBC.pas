@@ -222,6 +222,7 @@ type
     procedure GetData(var Col: TSQLDBColumnProperty; ColIndex: integer);
     function GetCol(Col: integer; ExpectedType: TSQLDBFieldType): TSQLDBStatementGetCol;
     function MoreResults: boolean;
+    procedure ReleaseResources; override;
   public
     /// create a ODBC statement instance, from an existing ODBC connection
     // - the Execute method can be called once per TODBCStatement instance,
@@ -1341,11 +1342,7 @@ var nCols, NameLength, DataType, DecimalDigits, Nullable: SqlSmallint;
     c, siz: integer;
     Name: array[byte] of WideChar;
 begin
-  if (fColumnCount>0) or (fColData<>nil) then begin
-    Finalize(fColData);
-    fColumn.Clear;
-    fColumn.ReHash;
-  end;
+  ReleaseResources;
   with ODBC do begin
     Check(nil,self,NumResultCols(fStatement,nCols),SQL_HANDLE_STMT,fStatement);
     SetLength(fColData,nCols);
@@ -1459,7 +1456,7 @@ begin // colNull, colWrongType, colTmpUsed, colTmpUsedTruncated
     result := colWrongType;
 end;
 
-function TODBCStatement.MoreResults: Boolean;
+function TODBCStatement.MoreResults: boolean;
 var R: SqlReturn;
 begin
   R := ODBC.MoreResults(fStatement);
@@ -1826,14 +1823,24 @@ end;
 
 procedure TODBCStatement.Reset;
 begin
-  if fStatement<>nil then
-  with ODBC do begin
-    if fColumnCount>0 then
-      Check(nil,self,CloseCursor(fStatement),SQL_HANDLE_STMT,fStatement);
+  if fStatement<>nil then begin
+    ReleaseResources;
     if fParamCount>0 then
-      Check(nil,self,FreeStmt(fStatement,SQL_RESET_PARAMS),SQL_HANDLE_STMT,fStatement);
+      ODBC.Check(nil,self,ODBC.FreeStmt(fStatement,SQL_RESET_PARAMS),SQL_HANDLE_STMT,fStatement);
   end;
   inherited Reset;
+end;
+
+procedure TODBCStatement.ReleaseResources;
+begin
+  fColData := nil;
+  if fColumnCount>0 then begin
+    if fStatement<>nil then
+      ODBC.CloseCursor(fStatement); // no check needed
+    fColumn.Clear;
+    fColumn.ReHash;
+  end;
+  inherited ReleaseResources;
 end;
 
 function TODBCStatement.UpdateCount: integer;

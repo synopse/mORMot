@@ -512,13 +512,10 @@ type
     // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
-    // - you can go back to the first row of data before creating the JSON, if
-    // RewindToFirst is TRUE (could be used e.g. for TQuery.FetchAllAsJSON)
     // - if ReturnedRowCount points to an integer variable, it will be filled with
     // the number of row data returned (excluding field names)
     // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
-    function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt=nil;
-      RewindToFirst: boolean=false): RawUTF8;
+    function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt=nil): RawUTF8;
     // append all rows content as a JSON stream
     // - JSON data is added to the supplied TStream, with UTF-8 encoding
     // - if Expanded is true, JSON data is an array of objects, for direct use
@@ -529,11 +526,8 @@ type
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
     // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
-    // - you can go back to the first row of data before creating the JSON, if
-    // RewindToFirst is TRUE (could be used e.g. for TQuery.FetchAllAsJSON)
     // - returns the number of row data returned (excluding field names)
-    function FetchAllToJSON(JSON: TStream; Expanded: boolean;
-      RewindToFirst: boolean=false): PtrInt;
+    function FetchAllToJSON(JSON: TStream; Expanded: boolean): PtrInt;
     /// append all rows content as binary stream
     // - will save the column types and name, then every data row in optimized
     // binary format (faster and smaller than JSON)
@@ -1676,15 +1670,9 @@ type
     // - internal conversion will use a temporary Variant and ColumnToVariant method
     // - expects Dest to be of the exact type (e.g. Int64, not Integer)
     function ColumnToTypedValue(Col: integer; DestType: TSQLDBFieldType; var Dest): TSQLDBFieldType;
-    /// retrieve the inlined value of a given parameter, e.g. 1 or 'name'
-    // - use ParamToVariant() virtual method
+    /// append the inlined value of a given parameter, mainly for GetSQLWithInlinedParams
     // - optional MaxCharCount will truncate the text to a given number of chars
-    function GetParamValueAsText(Param, MaxCharCount: integer): RawUTF8; virtual;
-    /// append the inlined value of a given parameter
-    // - use GetParamValueAsText() method
-    // - optional MaxCharCount will truncate the text to a given number of chars
-    procedure AddParamValueAsText(Param: integer; Dest: TTextWriter;
-      MaxCharCount: integer); virtual;
+    procedure AddParamValueAsText(Param: integer; Dest: TTextWriter; MaxCharCount: integer); virtual;
     {$ifndef LVCL}
     /// return a Column as a variant
     function GetColumnVariant(const ColName: RawUTF8): Variant;
@@ -1693,6 +1681,14 @@ type
     function Instance: TSQLDBStatement;
     /// a wrapper to compute sllSQL context and start a local timer
     function GetSQLLog(var timer: TPrecisionTimer; SQL: PRawUTF8 = nil): TSynLog;
+    /// when RefCount=1, call Reset to release DB cursor resources
+    {$ifdef FPC}
+    function _Release: longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    {$else}
+    function _Release: Integer; stdcall;
+    {$endif}
+    /// override to free cursor memory when ISQLDBStatement is back in cache
+    procedure ReleaseResources; virtual;
   public
     /// create a statement instance
     constructor Create(aConnection: TSQLDBConnection); virtual;
@@ -2082,13 +2078,10 @@ type
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
     // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
-    // - you can go back to the first row of data before creating the JSON, if
-    // RewindToFirst is TRUE (could be used e.g. for TQuery.FetchAllAsJSON)
     // - returns the number of row data returned (excluding field names)
     // - warning: TSQLRestStorageExternal.EngineRetrieve in mORMotDB unit
     // expects the Expanded=true format to return '[{...}]'#10
-    function FetchAllToJSON(JSON: TStream; Expanded: boolean;
-      RewindToFirst: boolean=false): PtrInt;
+    function FetchAllToJSON(JSON: TStream; Expanded: boolean): PtrInt;
     // Append all rows content as a CSV stream
     // - CSV data is added to the supplied TStream, with UTF-8 encoding
     // - if Tab=TRUE, will use TAB instead of ',' between columns
@@ -2111,11 +2104,8 @@ type
     // format and contains true BLOB data
     // - if ReturnedRowCount points to an integer variable, it will be filled with
     // the number of row data returned (excluding field names)
-    // - you can go back to the first row of data before creating the JSON, if
-    // RewindToFirst is TRUE (could be used e.g. for TQuery.FetchAllAsJSON)
     // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
-    function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt=nil;
-      RewindToFirst: boolean=false): RawUTF8;
+    function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt=nil): RawUTF8;
     /// append all rows content as binary stream
     // - will save the column types and name, then every data row in optimized
     // binary format (faster and smaller than JSON)
@@ -2678,9 +2668,6 @@ type
     /// after a statement has been prepared via Prepare() + ExecutePrepared() or
     //   Execute(), this method must be called one or more times to evaluate it
     function Step(SeekFirst: boolean=false): boolean; override;
-    /// Reset the previous prepared statement
-    // - always raise an ESQLDBException, since this method is not to be allowed
-    procedure Reset; override;
   end;
 
   /// client-side implementation of a remote connection to any SynDB engine
@@ -3525,8 +3512,7 @@ begin
   CheckExists;
 {$ifdef DELPHI5OROLDER}
   with TVarData(fValue) do begin
-    if VType and VTYPE_STATIC<>0 then
-      VarClear(fValue);
+    VarClear(fValue);
     VType := varInt64;
     VInt64 := aValue;
   end;
@@ -3547,9 +3533,8 @@ begin
   {$ifdef UNICODE}
   fValue := aValue;
   {$else}
+  VarClear(fValue);
   with TVarData(fValue) do begin
-    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
-      VarClear(fValue);
     VType := varString;
     VAny := nil; // avoid GPF below when assigning a string variable to VAny
     StringToUTF8(aValue,RawUTF8(VAny));
@@ -3650,7 +3635,7 @@ begin
     if fPrepared.Step(true) then
       // cursor sucessfully set to 1st row
       fRowIndex := 1 else
-      // no row is available -> empty result
+      // no row is available, or unable to seek first row -> empty result
       fRowIndex := -1; // =-1 if empty, =0 if eof, >=1 if cursor on row data
 end;
 
@@ -5506,7 +5491,7 @@ end;
 
 function TSQLDBConnectionProperties.ColumnTypeNativeToDB(
   const aNativeType: RawUTF8; aScale: integer): TSQLDBFieldType;
-procedure ColumnTypeNativeDefault;
+function ColumnTypeNativeDefault: TSQLDBFieldType;
 const
   DECIMAL=18; // change it if you update PCHARS[] below before 'DECIMAL'
   NUMERIC=DECIMAL+1;
@@ -5542,7 +5527,7 @@ begin
     result := ftInt64 else
     result := TYPES[ndx];
 end;
-procedure ColumnTypeNativeToDBOracle;
+function ColumnTypeNativeToDBOracle: TSQLDBFieldType;
 begin
   if PosEx('CHAR',aNativeType)>0 then
     result := ftUTF8 else
@@ -5565,12 +5550,12 @@ begin
     // all other types will be converted to text
     result := ftUTF8;
 end;
-procedure ColumnTypeNativeToDBFirebird;
+function ColumnTypeNativeToDBFirebird: TSQLDBFieldType;
 var i,err: integer;
 begin
   i := GetInteger(pointer(aNativeType),err);
   if err<>0 then
-    ColumnTypeNativeDefault else
+    result := ColumnTypeNativeDefault else
     case i of // see blr_* definitions
     10,11,27: result := ftDouble;
     12,13,35,120: result := ftDate;
@@ -5586,9 +5571,9 @@ begin
 end;
 begin
   case DBMS of
-  dOracle:   ColumnTypeNativeToDBOracle;
-  dFireBird: ColumnTypeNativeToDBFirebird;
-  else       ColumnTypeNativeDefault;
+  dOracle:   result := ColumnTypeNativeToDBOracle;
+  dFireBird: result := ColumnTypeNativeToDBFirebird;
+  else       result := ColumnTypeNativeDefault;
   end;
 end;
 
@@ -6674,9 +6659,8 @@ var tmp: RawByteString;
 begin
   ColumnToSQLVar(Col,V,tmp);
   result := V.VType;
+  VarClear(Value);
   with TVarData(Value) do begin
-    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
-      VarClear(Value);
     VType := MAP_FIELDTYPE2VARTYPE[V.VType];
     case result of
       ftNull: ; // do nothing
@@ -6854,8 +6838,7 @@ begin
   end;
 end;
 
-function TSQLDBStatement.FetchAllToJSON(JSON: TStream; Expanded: boolean;
-  RewindToFirst: boolean): PtrInt;
+function TSQLDBStatement.FetchAllToJSON(JSON: TStream; Expanded: boolean): PtrInt;
 var W: TJSONWriter;
     col: integer;
 begin
@@ -6871,8 +6854,7 @@ begin
     if Expanded then
       W.Add('[');
     // write rows data
-    while Step(RewindToFirst) do begin
-      RewindToFirst := false;
+    while Step do begin
       ColumnsToJSON(W);
       W.Add(',');
       inc(result);
@@ -6965,13 +6947,13 @@ begin
 end;
 
 function TSQLDBStatement.FetchAllAsJSON(Expanded: boolean;
-  ReturnedRowCount: PPtrInt; RewindToFirst: boolean): RawUTF8;
+  ReturnedRowCount: PPtrInt): RawUTF8;
 var Stream: TRawByteStringStream;
     RowCount: PtrInt;
 begin
   Stream := TRawByteStringStream.Create;
   try
-    RowCount := FetchAllToJSON(Stream,Expanded,RewindToFirst);
+    RowCount := FetchAllToJSON(Stream,Expanded);
     if ReturnedRowCount<>nil then
       ReturnedRowCount^ := RowCount;
     result := Stream.DataString;
@@ -7196,6 +7178,13 @@ begin
   Result := Self;
 end;
 
+function TSQLDBStatement._Release: {$ifdef FPC}longint{$else}integer{$endif};
+begin
+  result := inherited _Release;
+  if result=1 then
+    ReleaseResources;
+end;
+
 function TSQLDBStatement.GetSQLLog(var timer: TPrecisionTimer; SQL: PRawUTF8): TSynLog;
 var level: TSynLogInfo;
 begin
@@ -7234,7 +7223,7 @@ begin
     if fConnection=nil then
       maxSize := 0 else
       maxSize := fConnection.fProperties.fLoggedSQLMaxSize;
-    if integer(maxSize)<0 then begin
+    if (integer(maxSize)<0) or (PosExChar('?',fSQL)=0) then begin
       result := fSQL; // -1 -> log statement without any parameter value (just ?)
       exit;
     end;
@@ -7278,96 +7267,41 @@ begin
   end;
 end;
 
-function TSQLDBStatement.GetParamValueAsText(Param,MaxCharCount: integer): RawUTF8;
-{$ifdef LVCL}
-begin
-  result := '?'; // no variant support with LVCL
-end;
-{$else}
-var V: variant;
-    i64: Int64;
-    Truncated: boolean;
-    L: integer;
-begin
-  if cardinal(Param-1)>=cardinal(fParamCount) then
-    result := '?' else begin
-    if MaxCharCount<=0 then
-      MaxCharCount := maxInt;
-    case ParamToVariant(Param,V,false) of
-    ftUnknown:
-      result := '???';
-    ftNull:
-      result := 'NULL';
-    ftDate:
-      result := ''''+DateTimeToIso8601Text(V,' ')+'''';
-    ftInt64: begin
-      VariantToInt64(V,i64);
-      Int64ToUTF8(i64,result);
-    end;
-    ftBlob:
-      result := '*BLOB*';
-    ftDouble, ftCurrency:
-      result := DoubleToStr(V);
-    ftUTF8: begin
-      Truncated := false;
-      with TVarData(V) do
-      case VType of
-        varEmpty, varNull: result := '';
-        varOleStr: begin // as returned e.g. by TOleDBStatement.ParamToVariant()
-          L := StrLenW(VOleStr);
-          if L>MaxCharCount then begin
-            Truncated := true;
-            L := MaxCharCount;
-          end;
-          RawUnicodeToUtf8(VOleStr,L,result);
-        end;
-        varString: begin // RawUTF8 by TSQLDBStatementWithParams.ParamToVariant()
-          L := length(AnsiString(VAny));
-          if L>MaxCharCount then begin
-            Truncated := true;
-            L := MaxCharCount;
-            while (L>0) and (PByteArray(VAny)^[L-1]>126) do
-              dec(L); // avoid return of invalid UTF-8 buffer
-            if L=0 then
-              L := MaxCharCount;
-            FastSetString(result,VAny,L);
-          end else
-            result := RawUTF8(VAny);
-        end;
-        {$ifdef HASVARUSTRING}
-        varUString: begin
-          L := length(UnicodeString(VAny));
-          if L>MaxCharCount then begin
-            Truncated := true;
-            L := MaxCharCount;
-          end;
-          RawUnicodeToUtf8(VAny,L,result);
-        end;
-        {$endif}
-        {$ifdef NOVARIANTS}
-        else result := StringToUTF8(string(V));
-        {$else}
-        else result := VariantToUTF8(V);
-        {$endif}
-      end;
-      if truncated then // truncate very long TEXT in log
-        result := QuotedStr(result+'...') else
-        result := QuotedStr(result);
-    end;
-    {$ifdef NOVARIANTS}
-    else result := StringToUTF8(string(V));
-    {$else}
-    else result := VariantToUTF8(V);
-    {$endif}
-    end;
-  end;
-end;
-{$endif}
-
 procedure TSQLDBStatement.AddParamValueAsText(Param: integer; Dest: TTextWriter;
   MaxCharCount: integer);
+  procedure AppendUnicode(W: PWideChar; WLen: integer);
+  var tmp: TSynTempBuffer;
+  begin
+    if MaxCharCount<WLen then
+      WLen := MaxCharCount;
+    tmp.Init(WLen);
+    try
+      RawUnicodeToUtf8(tmp.buf,tmp.Len,W,WLen,[ccfNoTrailingZero]);
+      Dest.AddQuotedStr(tmp.buf,'''',MaxCharCount);
+    finally
+      tmp.Done;
+    end;
+  end;
+var v: variant;
+    ft: TSQLDBFieldType;
 begin
-  Dest.AddString(GetParamValueAsText(Param,MaxCharCount));
+  ft := ParamToVariant(Param,v,false);
+  with TVarData(v) do
+    case cardinal(VType) of
+      varString:
+        if ft=ftBlob then
+          Dest.AddU(length(RawByteString(VString))) else
+          Dest.AddQuotedStr(VString,'''',MaxCharCount);
+      varOleStr:
+        AppendUnicode(VString, length(WideString(VString)));
+      {$ifdef HASVARUSTRING}
+      varUString:
+        AppendUnicode(VString, length(UnicodeString(VString)));
+      {$endif}
+      else if (ft=ftDate) and (cardinal(VType) in [varDouble,varDate]) then
+        Dest.AddDateTime(vdate) else
+        Dest.AddVariant(v);
+    end;
 end;
 
 {$ifndef DELPHI5OROLDER}
@@ -7379,9 +7313,8 @@ function TSQLDBStatement.RowData: Variant;
 begin
   if SQLDBRowVariantType=nil then
     SQLDBRowVariantType := SynRegisterCustomVariantType(TSQLDBRowVariantType);
+  VarClear(result);
   with TVarData(result) do begin
-    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
-      VarClear(result);
     VType := SQLDBRowVariantType.VarType;
     VPointer := self;
   end;
@@ -7406,8 +7339,7 @@ end;
 {$endif}
 {$endif}
 
-procedure TSQLDBStatement.Prepare(const aSQL: RawUTF8;
-  ExpectResults: Boolean);
+procedure TSQLDBStatement.Prepare(const aSQL: RawUTF8; ExpectResults: Boolean);
 var L: integer;
 begin
   Connection.InternalProcess(speActive);
@@ -7438,6 +7370,11 @@ procedure TSQLDBStatement.Reset;
 begin
   fSQLWithInlinedParams := '';
   // a do-nothing default method (used e.g. for OCI)
+end;
+
+procedure TSQLDBStatement.ReleaseResources;
+begin
+  fSQLWithInlinedParams := '';
 end;
 
 function TSQLDBStatement.ColumnsToSQLInsert(const TableName: RawUTF8;
@@ -7651,8 +7588,8 @@ begin
       ftDouble:    Value := unaligned(PDouble(@VInt64)^);
       ftCurrency:  Value := PCurrency(@VInt64)^;
       ftDate:      Value := PDateTime(@VInt64)^;
-      ftUTF8:      Value := RawUTF8(VData);
-      ftBlob:      Value := VData;
+      ftUTF8:      RawUTF8ToVariant(RawUTF8(VData),Value);
+      ftBlob:      RawByteStringToVariant(VData,Value);
       else         SetVariantNull(Value)
     end;
   end;
@@ -7667,13 +7604,13 @@ begin
     Dest.Add(',') else
     with fParams[Param] do
     case VType of
-      ftNull:     Dest.AddShort('NULL');
+      ftNull:     Dest.AddShort('null');
       ftInt64:    Dest.Add({$ifdef DELPHI5OROLDER}integer{$endif}(VInt64));
       ftDouble:   Dest.AddDouble(unaligned(PDouble(@VInt64)^));
       ftCurrency: Dest.AddCurr64(VInt64);
       ftDate:     Dest.AddDateTime(PDateTime(@VInt64),' ','''');
       ftUTF8:     Dest.AddQuotedStr(pointer(VData),'''',MaxCharCount);
-      ftBlob:     Dest.AddShort('*BLOB*');
+      ftBlob:     Dest.AddU(length(VData));
       else        Dest.AddShort(ToText(VType)^);
     end;
 end;
@@ -7816,9 +7753,9 @@ end;
 
 procedure TSQLDBStatementWithParams.Reset;
 begin
-  inherited Reset;
   fParam.Clear;
   fParamsArrayCount := 0;
+  inherited Reset;
 end;
 
 
@@ -7849,7 +7786,8 @@ end;
 constructor TSQLDBStatementWithParamsAndColumns.Create(aConnection: TSQLDBConnection);
 begin
   inherited Create(aConnection);
-  fColumn.InitSpecific(TypeInfo(TSQLDBColumnPropertyDynArray),fColumns,djRawUTF8,@fColumnCount,True);
+  fColumn.InitSpecific(TypeInfo(TSQLDBColumnPropertyDynArray),
+    fColumns,djRawUTF8,@fColumnCount,True);
 end;
 
 
@@ -8692,11 +8630,6 @@ begin
     // TSQLDBProxyStatementRandomAccess.Create() will recompute it fast enough
     DataRowPosition^ := nil;
   result := fDataRowCount;
-end;
-
-procedure TSQLDBProxyStatement.Reset;
-begin
-  raise ESQLDBException.CreateUTF8('Unexpected %.Reset',[self]);
 end;
 
 function TSQLDBProxyStatement.Step(SeekFirst: boolean): boolean;

@@ -864,12 +864,11 @@ end;
 procedure TSQLDBFirebirdStatement.Reset;
 begin
   ReleaseMainStatementIfAny; // global transaction context may have changed
-  inherited Reset;
-  with TFirebirdLib(TSQLDBFirebirdConnection(fConnection).fFirebirdInstance) do begin
+  with TFirebirdLib(TSQLDBFirebirdConnection(fConnection).fFirebirdInstance) do
     if fExpectResults and (fCurrent<>nil) then
         // release opened cursor for queries
         Check(isc_dsql_free_statement(fStatus,fCurrent.Statement,DSQL_close),fStatus);
-  end;
+  inherited Reset;
 end;
 
 
