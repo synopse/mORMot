@@ -253,11 +253,12 @@ type
     // - optional aAdditionalURL parameter can be used e.g. to registry an URI
     // to server static file content, by overriding TSQLHttpServer.Request
     // - for THttpApiServer, you can specify an optional name for the HTTP queue
+    // - for THttpServer, you can force aHeadersUnFiltered flag
     constructor Create(const aPort: AnsiString;
       const aServers: array of TSQLRestServer; const aDomainName: AnsiString='+';
       aHttpServerKind: TSQLHttpServerOptions=HTTP_DEFAULT_MODE; ServerThreadPoolCount: Integer=32;
-      aHttpServerSecurity: TSQLHttpServerSecurity=secNone;
-      const aAdditionalURL: AnsiString=''; const aQueueName: SynUnicode=''); reintroduce; overload;
+      aHttpServerSecurity: TSQLHttpServerSecurity=secNone; const aAdditionalURL: AnsiString='';
+      const aQueueName: SynUnicode=''; aHeadersUnFiltered: boolean=false); reintroduce; overload;
     /// create a Server instance, binded and listening on a TCP port to HTTP requests
     // - raise a EHttpServer exception if binding failed
     // - specify one TSQLRestServer server class to be used
@@ -583,7 +584,7 @@ constructor TSQLHttpServer.Create(const aPort: AnsiString;
   const aServers: array of TSQLRestServer; const aDomainName: AnsiString;
   aHttpServerKind: TSQLHttpServerOptions; ServerThreadPoolCount: Integer;
   aHttpServerSecurity: TSQLHttpServerSecurity; const aAdditionalURL: AnsiString;
-  const aQueueName: SynUnicode);
+  const aQueueName: SynUnicode; aHeadersUnFiltered: boolean);
 var i,j: integer;
     ServersRoot: RawUTF8;
     ErrMsg: RawUTF8;
@@ -657,7 +658,7 @@ begin
       fHttpServer := TWebSocketServerRest.Create(
         fPort,HttpThreadStart,HttpThreadTerminate,GetDBServerNames) else
       fHttpServer := THttpServer.Create(fPort,HttpThreadStart,HttpThreadTerminate,
-        GetDBServerNames,ServerThreadPoolCount);
+        GetDBServerNames,ServerThreadPoolCount,30000,aHeadersUnFiltered);
     {$ifdef USETCPPREFIX}
     THttpServer(fHttpServer).TCPPrefix := 'magic';
     {$endif}
