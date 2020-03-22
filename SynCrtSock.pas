@@ -6750,11 +6750,13 @@ begin
     case IdemPCharArray(P,['CONTENT-', 'TRANSFER-ENCODING: CHUNKED', 'CONNECTION: ',
       'ACCEPT-ENCODING:', 'UPGRADE:', 'SERVER-INTERNALSTATE:', 'X-POWERED-BY']) of
     0: case IdemPCharArray(P+8,['LENGTH:', 'TYPE:', 'ENCODING:']) of
-       0: ContentLength := GetCardinal(P+16);
+       0: begin
+         ContentLength := GetCardinal(P+16);
+         P := nil; // can be useful
+       end;
        1: begin
             trimcopy(s,14,255,ContentType);
-            if (ContentType<>'') and
-               not IdemPChar(pointer(ContentType),'APPLICATION/JSON') then
+            if (ContentType<>'') then
               P := nil; // is searched by HEADER_CONTENT_TYPE_UPPER later on
           end;
        2: if fCompress<>nil then begin
