@@ -1127,7 +1127,7 @@ type
   public
     /// initialize the server instance, in non suspended state
     constructor Create(CreateSuspended: boolean; OnStart,OnStop: TNotifyThreadEvent;
-      const ProcessName: SockString); virtual; reintroduce;
+      const ProcessName: SockString); reintroduce; virtual;
     /// override this function to customize your http server
     // - InURL/InMethod/InContent properties are input parameters
     // - OutContent/OutContentType/OutCustomHeader are output parameters
@@ -8784,7 +8784,6 @@ begin
   fOnBeforeRequest := From.fOnBeforeRequest;
   fOnAfterRequest := From.fOnAfterRequest;
   fCanNotifyCallback := From.fCanNotifyCallback;
-  fHeadersNotFiltered := From.fHeadersNotFiltered;
   fCompress := From.fCompress;
   fCompressAcceptEncoding := From.fCompressAcceptEncoding;
   fReceiveBufferSize := From.fReceiveBufferSize;
