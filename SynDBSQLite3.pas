@@ -186,6 +186,7 @@ type
     fUpdateCount: integer;
     // retrieve the inlined value of a given parameter, e.g. 1 or 'name'
     function GetParamValueAsText(Param: integer; MaxCharCount: integer=4096): RawUTF8; override;
+    procedure ReleaseResources; override;
   public
     /// create a SQLite3 statement instance, from an existing SQLite3 connection
     // - the Execute method can be called once per TSQLDBSQLite3Statement instance,
@@ -738,6 +739,11 @@ begin
   fUpdateCount := 0;
   // fStatement.BindReset; // slow down the process, and is not mandatory
   inherited Reset;
+end;
+
+procedure TSQLDBSQLite3Statement.ReleaseResources;
+begin
+   inherited ReleaseResources;
 end;
 
 function TSQLDBSQLite3Statement.Step(SeekFirst: boolean): boolean;

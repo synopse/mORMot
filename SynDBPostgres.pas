@@ -148,6 +148,8 @@ type
     /// raise an exception if Col is out of range according to fColumnCount
     // or rowset is not initialized
     procedure CheckColAndRowset(const Col: integer);
+    /// Clear(fRes) when ISQLDBStatement is back in cache
+    procedure ReleaseResources; override;
   public
     /// finalize the statement for a given connection
     destructor Destroy; override;
@@ -877,13 +879,18 @@ end;
 
 procedure TSQLDBPostgresStatement.Reset;
 begin
-  if fRes <> nil then
-  begin
-    PQ.clear(fRes);
-    fRes := nil;
-  end;
+  ReleaseResources;
   fResStatus := PGRES_EMPTY_QUERY;
   inherited Reset;
+end;
+
+procedure TSQLDBPostgresStatement.ReleaseResources;
+begin
+  if fRes = nil then
+    exit;
+  PQ.clear(fRes);
+  fRes := nil;
+  inherited ReleaseResources;
 end;
 
 function TSQLDBPostgresStatement.Step(SeekFirst: boolean): boolean;

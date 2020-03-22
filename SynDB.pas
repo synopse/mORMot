@@ -1687,6 +1687,14 @@ type
     function Instance: TSQLDBStatement;
     /// a wrapper to compute sllSQL context and start a local timer
     function GetSQLLog(var timer: TPrecisionTimer; SQL: PRawUTF8 = nil): TSynLog;
+    /// when RefCount=1, call Reset to release DB cursor resources
+    {$ifdef FPC}
+    function _Release: longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    {$else}
+    function _Release: Integer; stdcall;
+    {$endif}
+    /// override to free cursor memory when ISQLDBStatement is back in cache
+    procedure ReleaseResources; virtual;
   public
     /// create a statement instance
     constructor Create(aConnection: TSQLDBConnection); virtual;
@@ -7176,6 +7184,13 @@ begin
   Result := Self;
 end;
 
+function TSQLDBStatement._Release: {$ifdef FPC}longint{$else}integer{$endif};
+begin
+  result := inherited _Release;
+  if result=1 then
+    ReleaseResources;
+end;
+
 function TSQLDBStatement.GetSQLLog(var timer: TPrecisionTimer; SQL: PRawUTF8): TSynLog;
 var level: TSynLogInfo;
 begin
@@ -7417,6 +7432,11 @@ procedure TSQLDBStatement.Reset;
 begin
   fSQLWithInlinedParams := '';
   // a do-nothing default method (used e.g. for OCI)
+end;
+
+procedure TSQLDBStatement.ReleaseResources;
+begin
+  fSQLWithInlinedParams := '';
 end;
 
 function TSQLDBStatement.ColumnsToSQLInsert(const TableName: RawUTF8;

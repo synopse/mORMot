@@ -156,6 +156,8 @@ type
     /// set the returned parameter after a stored proc execution
     procedure DataSetOutSQLParam(const aParamIndex: integer;
       var aParam: TSQLDBParam); virtual; abstract;
+    /// close the associated TQuery when ISQLDBStatement is back in cache
+    procedure ReleaseResources; override;
   public
     /// create a statement instance
     constructor Create(aConnection: TSQLDBConnection); override;
@@ -447,9 +449,15 @@ end;
 
 procedure TSQLDBDatasetStatementAbstract.Reset;
 begin
+  ReleaseResources;
+  inherited Reset;
+end;
+
+procedure TSQLDBDatasetStatementAbstract.ReleaseResources;
+begin
   if (fQuery<>nil) and fQuery.Active then
     fQuery.Close;
-  inherited Reset;
+  inherited ReleaseResources;
 end;
 
 function TSQLDBDatasetStatementAbstract.SQLParamTypeToDBParamType(IO: TSQLDBParamInOutType): TParamType;

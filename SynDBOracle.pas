@@ -287,6 +287,7 @@ type
     fUseServerSideStatementCache: boolean;
     function DateTimeToDescriptor(aDateTime: TDateTime): pointer;
     procedure FreeHandles(AfterError: boolean);
+    procedure ReleaseResources; override;
     procedure FetchTest(Status: integer);
     /// Col=0...fColumnCount-1
     function GetCol(Col: Integer; out Column: PSQLDBColumnProperty): pointer;
@@ -2430,7 +2431,7 @@ begin
 end;
 
 constructor TSQLDBOracleStatement.CreateFromExistingStatement(
-  aConnection: TSQLDBConnection; aStatement: POCIStmt);
+  aConnection: TSQLDBConnection; aStatement: pointer);
 begin
   Create(aConnection);
   fTimeElapsed.Resume;
@@ -2937,6 +2938,11 @@ begin
   end else
     DecodeTime(aDateTime,HH,MM,SS,MS);
   OCI.Check(nil,nil,OCI.DateTimeConstruct(env,fError,result,Y,M,D,HH,MM,SS,0,nil,0),fError);
+end;
+
+procedure TSQLDBOracleStatement.ReleaseResources;
+begin // not implemented yet
+  inherited ReleaseResources;
 end;
 
 procedure TSQLDBOracleStatement.FreeHandles(AfterError: boolean);
