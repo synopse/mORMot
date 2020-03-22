@@ -287,7 +287,6 @@ type
     fUseServerSideStatementCache: boolean;
     function DateTimeToDescriptor(aDateTime: TDateTime): pointer;
     procedure FreeHandles(AfterError: boolean);
-    procedure ReleaseResources; override;
     procedure FetchTest(Status: integer);
     /// Col=0...fColumnCount-1
     function GetCol(Col: Integer; out Column: PSQLDBColumnProperty): pointer;
@@ -330,6 +329,8 @@ type
     // otherwise, it will fetch one row of data, to be called within a loop
     // - raise an ESQLDBOracle on any error
     function Step(SeekFirst: boolean=false): boolean; override;
+    /// finalize the OCI cursor resources - not implemented yet
+    procedure ReleaseRows; override;
     /// returns TRUE if the column contains NULL
     function ColumnNull(Col: integer): boolean; override;
     /// return a Column integer value of the current Row, first Col is 0
@@ -2940,9 +2941,9 @@ begin
   OCI.Check(nil,nil,OCI.DateTimeConstruct(env,fError,result,Y,M,D,HH,MM,SS,0,nil,0),fError);
 end;
 
-procedure TSQLDBOracleStatement.ReleaseResources;
+procedure TSQLDBOracleStatement.ReleaseRows;
 begin // not implemented yet
-  inherited ReleaseResources;
+  inherited ReleaseRows;
 end;
 
 procedure TSQLDBOracleStatement.FreeHandles(AfterError: boolean);

@@ -962,7 +962,7 @@ type
     procedure GetCol64(Col: integer; DestType: TSQLDBFieldType; var Dest);
       {$ifdef HASINLINE}inline;{$endif}
     procedure FlushRowSetData;
-    procedure ReleaseRows;
+    procedure ReleaseRowSetDataAndRows;
     procedure CloseRowSet;
     ///  retrieve column information, and initialize Bindings[]
     // - add the high-level column information in Column[], initializes
@@ -970,8 +970,6 @@ type
     function BindColumns(ColumnInfo: IColumnsInfo; var Column: TDynArrayHashed;
       out Bindings: TDBBindingDynArray): integer;
     procedure LogStatusError(Status: integer; Column: PSQLDBColumnProperty);
-    /// clear result rows when ISQLDBStatement is back in cache
-    procedure ReleaseResources; override;
   public
     /// create an OleDB statement instance, from an OleDB connection
     // - the Execute method can be called only once per TOleDBStatement instance
@@ -1084,7 +1082,7 @@ type
     function ParamToVariant(Param: Integer; var Value: Variant;
       CheckIsOutParameter: boolean=true): TSQLDBFieldType; override;
 
-    /// After a statement has been prepared via Prepare() + ExecutePrepared() or
+    /// after a statement has been prepared via Prepare() + ExecutePrepared() or
     // Execute(), this method must be called one or more times to evaluate it
     // - you shall call this method before calling any Column*() methods
     // - return TRUE on success, with data ready to be retrieved by Column*()
@@ -1095,6 +1093,8 @@ type
     // otherwise, it will fetch one row of data, to be called within a loop
     // - raise an ESQLEOleDBException on any error
     function Step(SeekFirst: boolean=false): boolean; override;
+    /// clear result rowset when ISQLDBStatement is back in cache
+    procedure ReleaseRows; override;
     /// retrieve a column name of the current Row
     // - Columns numeration (i.e. Col value) starts with 0
     // - it's up to the implementation to ensure than all column names are unique
@@ -2015,13 +2015,13 @@ begin
   end else
   if SeekFirst then begin
     // rewind to first row
-    ReleaseRows;
+    ReleaseRowSetDataAndRows;
     OleDBConnection.OleDBCheck(self,fRowSet.RestartPosition(DB_NULL_HCHAPTER));
     fRowStepResult := 0;
   end else
     FlushRowSetData;
   if fRowStepHandleCurrent>=fRowStepHandleRetrieved then begin
-    ReleaseRows;
+    ReleaseRowSetDataAndRows;
     if fRowStepResult=DB_S_ENDOFROWSET then
       exit; // no more row available -> return false
     fRowStepResult := fRowSet.GetNextRows(DB_NULL_HCHAPTER,0,length(fRowStepHandles),
@@ -2057,7 +2057,7 @@ begin
   fRowBufferSize := Value;
 end;
 
-procedure TOleDBStatement.ReleaseRows;
+procedure TOleDBStatement.ReleaseRowSetDataAndRows;
 begin
   FlushRowSetData;
   if fRowStepHandleRetrieved<>0 then begin
@@ -2071,7 +2071,7 @@ procedure TOleDBStatement.CloseRowSet;
 begin
   if not Assigned(fRowSet) then
     exit;
-  ReleaseRows;
+  ReleaseRowSetDataAndRows;
   if fRowSetAccessor<>0 then begin
     (fRowSet as IAccessor).ReleaseAccessor(fRowSetAccessor,nil);
     fRowSetAccessor := 0;
@@ -2081,7 +2081,7 @@ end;
 
 procedure TOleDBStatement.Reset;
 begin
-  ReleaseResources;
+  ReleaseRows;
   if fColumnCount>0 then begin
     fColumn.Clear;
     fColumn.ReHash;
@@ -2093,15 +2093,14 @@ begin
   inherited Reset;
 end;
 
-
-procedure TOleDBStatement.ReleaseResources;
+procedure TOleDBStatement.ReleaseRows;
 begin
   if fParamCount>0 then
     fParam.Clear;
   fParamBindings := nil;
   CloseRowSet;
   fColumnBindings := nil;
-  inherited ReleaseResources;
+  inherited ReleaseRows;
 end;
 
 function TOleDBStatement.UpdateCount: integer;

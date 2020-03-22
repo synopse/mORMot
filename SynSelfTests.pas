@@ -15636,7 +15636,7 @@ var Props: TSQLDBConnectionProperties;
     {$ifndef LVCL}
     Row := res.RowData;
     {$endif}
-    if res.Step(true) then
+    if res.Step({rewind=}true) then
     repeat
       {$ifdef LVCL}
       Check(res.ColumnInt('ID')>0);
@@ -15650,6 +15650,7 @@ var Props: TSQLDBConnectionProperties;
       {$endif}
       inc(n);
     until not res.Step;
+    res.ReleaseRows;
     Check(n=n1);
     SetLength(IDs,50);
     FillIncreasing(pointer(IDs),50000,length(IDs));

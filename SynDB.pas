@@ -354,7 +354,7 @@ type
   // you only have access to the Step() and Column*() methods
   ISQLDBRows = interface
     ['{11291095-9C15-4984-9118-974F1926DB9F}']
-    /// After a prepared statement has been prepared returning a ISQLDBRows
+    /// after a prepared statement has been prepared returning a ISQLDBRows
     // interface, this method must be called one or more times to evaluate it
     // - you shall call this method before calling any Column*() methods
     // - return TRUE on success, with data ready to be retrieved by Column*()
@@ -367,11 +367,20 @@ type
     // - typical use may be:
     // ! var Customer: Variant;
     // ! begin
-    // !   with Props.Execute( 'select * from Sales.Customer where AccountNumber like ?', ['AW000001%'],@Customer) do
+    // !   with Props.Execute( 'select * from Sales.Customer where AccountNumber like ?',
+    // !       ['AW000001%'],@Customer) do begin
     // !     while Step do //  loop through all matching data rows
     // !       assert(Copy(Customer.AccountNumber,1,8)='AW000001');
+    // !     ReleaseRows;
+    // !   end;
     // ! end;
     function Step(SeekFirst: boolean=false): boolean;
+    /// release cursor memory and resources once Step loop is finished
+    // - this method call is optional, but is better be used if the ISQLDBRows
+    // statement from taken from cache, and returned a lot of content which
+    // may still be in client (and server) memory
+    // - will also free all temporary memory used for optional logging
+    procedure ReleaseRows;
 
     /// the column/field count of the current Row
     function ColumnCount: integer;
@@ -474,6 +483,7 @@ type
     // !   I := MyConnProps.Execute('select * from table where name=?',[aName]);
     // !   while I.Step do
     // !     writeln(I['FirstName'],' ',DateToStr(I['BirthDate']));
+    // !   I.ReleaseRows;
     // ! end;
     // - of course, using a variant and a column name will be a bit slower than
     // direct access via the Column*() dedicated methods, but resulting code
@@ -493,6 +503,7 @@ type
     // !    Row := RowData;
     // !    while Step do
     // !      writeln(Row.FirstName,Row.BirthDate);
+    // !    ReleaseRows;
     // !  end;
     function RowData: Variant;
     /// create a TDocVariant custom variant containing all columns values
@@ -1136,15 +1147,18 @@ type
     // !   I := MyConnProps.Execute('select * from table where name=?',[aName]);
     // !   while I.Step do
     // !     writeln(I['FirstName'],' ',DateToStr(I['BirthDate']));
+    // !   I.ReleaseRows;
     // ! end;
     // - if RowsVariant is set, you can use it to row column access via late
     // binding, as such:
     // ! procedure WriteFamily(const aName: RawUTF8);
     // ! var R: Variant;
     // ! begin
-    // !   with MyConnProps.Execute('select * from table where name=?',[aName],@R) do
-    // !   while Step do
-    // !     writeln(R.FirstName,' ',DateToStr(R.BirthDate));
+    // !   with MyConnProps.Execute('select * from table where name=?',[aName],@R) do begin
+    // !     while Step do
+    // !       writeln(R.FirstName,' ',DateToStr(R.BirthDate));
+    // !     ReleaseRows;
+    // !   end;
     // ! end;
     // - you can any BLOB field to be returned as null with the ForceBlobAsNull
     // optional parameter
@@ -1681,14 +1695,6 @@ type
     function Instance: TSQLDBStatement;
     /// a wrapper to compute sllSQL context and start a local timer
     function GetSQLLog(var timer: TPrecisionTimer; SQL: PRawUTF8 = nil): TSynLog;
-    /// when RefCount=1, call Reset to release DB cursor resources
-    {$ifdef FPC}
-    function _Release: longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
-    {$else}
-    function _Release: Integer; stdcall;
-    {$endif}
-    /// override to free cursor memory when ISQLDBStatement is back in cache
-    procedure ReleaseResources; virtual;
   public
     /// create a statement instance
     constructor Create(aConnection: TSQLDBConnection); virtual;
@@ -1841,6 +1847,12 @@ type
     // - should raise an Exception on any error
     // - this void default implementation will call set fConnection.fLastAccess
     procedure ExecutePrepared; virtual;
+    /// release cursor memory and resources once Step loop is finished
+    // - this method call is optional, but is better be used if the ISQLDBRows
+    // statement from taken from cache, and returned a lot of content which
+    // may still be in client (and server) memory
+    // - override to free cursor memory when ISQLDBStatement is back in cache
+    procedure ReleaseRows; virtual;
     /// Reset the previous prepared statement
     // - some drivers expect an explicit reset before binding parameters and
     // executing the statement another time
@@ -1931,6 +1943,7 @@ type
     // !     assert(SameTextU(Query.ColumnName(0),'AccountNumber'));
     // !     while Query.Step do //  loop through all matching data rows
     // !       assert(Copy(Query.ColumnUTF8(0),1,8)='AW000001');
+    // !     Query.ReleaseRows;
     // !   end;
     // ! end;
     function Step(SeekFirst: boolean=false): boolean; virtual; abstract;
@@ -2036,6 +2049,7 @@ type
     // !    Row := RowDaa;
     // !    while Step do
     // !      writeln(Row.FirstName,Row.BirthDate);
+    // !    ReleaseRows;
     // !  end;
     function RowData: Variant; virtual;
     /// create a TDocVariant custom variant containing all columns values
@@ -4179,6 +4193,7 @@ begin
           Ins := NewStatement;
           Ins.Prepare(SQL,false);
         end;
+        Rows.ReleaseRows;
         // write row data
         Ins.BindFromRows(ColumnForcedTypes,Rows);
         Ins.ExecutePrepared;
@@ -6859,6 +6874,7 @@ begin
       W.Add(',');
       inc(result);
     end;
+    ReleaseRows;
     if (result=0) and W.Expand then begin
       // we want the field names at least, even with no data (RowCount=0)
       W.Expand := false; //  {"FieldCount":2,"Values":["col1","col2"]}
@@ -6940,6 +6956,7 @@ begin
       end;
       inc(result);
     end;
+    ReleaseRows;
     W.FlushFinal;
   finally
     W.Free;
@@ -7068,6 +7085,7 @@ begin
         if (MaxRowCount>0) and (result>=MaxRowCount) then
           break;
       until not Step;
+      ReleaseRows;
     end;
     W.Write(@result,SizeOf(result)); // fixed size at the end for row count
     W.Flush;
@@ -7176,13 +7194,6 @@ end;
 function TSQLDBStatement.Instance: TSQLDBStatement;
 begin
   Result := Self;
-end;
-
-function TSQLDBStatement._Release: {$ifdef FPC}longint{$else}integer{$endif};
-begin
-  result := inherited _Release;
-  if result=1 then
-    ReleaseResources;
 end;
 
 function TSQLDBStatement.GetSQLLog(var timer: TPrecisionTimer; SQL: PRawUTF8): TSynLog;
@@ -7372,7 +7383,7 @@ begin
   // a do-nothing default method (used e.g. for OCI)
 end;
 
-procedure TSQLDBStatement.ReleaseResources;
+procedure TSQLDBStatement.ReleaseRows;
 begin
   fSQLWithInlinedParams := '';
 end;

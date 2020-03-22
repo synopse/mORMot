@@ -222,7 +222,6 @@ type
     procedure GetData(var Col: TSQLDBColumnProperty; ColIndex: integer);
     function GetCol(Col: integer; ExpectedType: TSQLDBFieldType): TSQLDBStatementGetCol;
     function MoreResults: boolean;
-    procedure ReleaseResources; override;
   public
     /// create a ODBC statement instance, from an existing ODBC connection
     // - the Execute method can be called once per TODBCStatement instance,
@@ -261,6 +260,8 @@ type
     //   otherwise, it will fetch one row of data, to be called within a loop
     // - raise an EODBCException or ESQLDBException exception on any error
     function Step(SeekFirst: boolean=false): boolean; override;
+    /// close the ODBC statement cursor resources
+    procedure ReleaseRows; override;
     /// returns TRUE if the column contains NULL
     function ColumnNull(Col: integer): boolean; override;
     /// return a Column integer value of the current Row, first Col is 0
@@ -1342,7 +1343,7 @@ var nCols, NameLength, DataType, DecimalDigits, Nullable: SqlSmallint;
     c, siz: integer;
     Name: array[byte] of WideChar;
 begin
-  ReleaseResources;
+  ReleaseRows;
   with ODBC do begin
     Check(nil,self,NumResultCols(fStatement,nCols),SQL_HANDLE_STMT,fStatement);
     SetLength(fColData,nCols);
@@ -1824,14 +1825,14 @@ end;
 procedure TODBCStatement.Reset;
 begin
   if fStatement<>nil then begin
-    ReleaseResources;
+    ReleaseRows;
     if fParamCount>0 then
       ODBC.Check(nil,self,ODBC.FreeStmt(fStatement,SQL_RESET_PARAMS),SQL_HANDLE_STMT,fStatement);
   end;
   inherited Reset;
 end;
 
-procedure TODBCStatement.ReleaseResources;
+procedure TODBCStatement.ReleaseRows;
 begin
   fColData := nil;
   if fColumnCount>0 then begin
@@ -1840,7 +1841,7 @@ begin
     fColumn.Clear;
     fColumn.ReHash;
   end;
-  inherited ReleaseResources;
+  inherited ReleaseRows;
 end;
 
 function TODBCStatement.UpdateCount: integer;

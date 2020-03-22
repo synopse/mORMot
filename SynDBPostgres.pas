@@ -148,8 +148,6 @@ type
     /// raise an exception if Col is out of range according to fColumnCount
     // or rowset is not initialized
     procedure CheckColAndRowset(const Col: integer);
-    /// Clear(fRes) when ISQLDBStatement is back in cache
-    procedure ReleaseResources; override;
   public
     /// finalize the statement for a given connection
     destructor Destroy; override;
@@ -180,6 +178,8 @@ type
     // - if SeekFirst is TRUE, will put the cursor on the first row of results
     // - raise an ESQLDBPostgres on any error
     function Step(SeekFirst: boolean = False): boolean; override;
+    /// clear(fRes) when ISQLDBStatement is back in cache
+    procedure ReleaseRows; override;
     /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: integer): int64; override;
     /// returns TRUE if the column contains NULL
@@ -879,18 +879,9 @@ end;
 
 procedure TSQLDBPostgresStatement.Reset;
 begin
-  ReleaseResources;
+  ReleaseRows;
   fResStatus := PGRES_EMPTY_QUERY;
   inherited Reset;
-end;
-
-procedure TSQLDBPostgresStatement.ReleaseResources;
-begin
-  if fRes = nil then
-    exit;
-  PQ.clear(fRes);
-  fRes := nil;
-  inherited ReleaseResources;
 end;
 
 function TSQLDBPostgresStatement.Step(SeekFirst: boolean): boolean;
@@ -903,6 +894,16 @@ begin
   if not result then
     exit;
   inc(fCurrentRow);
+end;
+
+procedure TSQLDBPostgresStatement.ReleaseRows;
+begin
+  if fRes <> nil then
+  begin
+    PQ.clear(fRes);
+    fRes := nil;
+  end;
+  inherited ReleaseRows;
 end;
 
 function TSQLDBPostgresStatement.ColumnInt(Col: integer): int64;
