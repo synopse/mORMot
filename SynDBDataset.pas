@@ -363,15 +363,15 @@ begin
 end;
 
 procedure TSQLDBDatasetStatementAbstract.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
-var Log: ISynLog;
-    oSQL: RawUTF8;
+var oSQL: RawUTF8;
 begin
-  Log := SynDBLog.Enter(Self, 'Prepare');
+  SQLLogBegin(sllDB);
   if fPrepared then
     raise ESQLDBDataset.CreateUTF8('%.Prepare() shall be called once',[self]);
   inherited Prepare(aSQL,ExpectResults); // connect if necessary
   fPreparedParamsCount := ReplaceParamsByNames(aSQL,oSQL);
   fPrepared := DatasetPrepare(UTF8ToString(oSQL));
+  SQLLogEnd;
   if not fPrepared then
     raise ESQLDBDataset.CreateUTF8('%.DatasetPrepare not prepared',[self]);
 end;
@@ -380,11 +380,8 @@ procedure TSQLDBDatasetStatementAbstract.ExecutePrepared;
 var i,p: Integer;
     lArrayIndex: integer;
     Field: TField;
-    log: TSynLog;
-    logsql: RawUTF8;
-    timer: TPrecisionTimer;
 begin
-  log := GetSQLLog(timer,@logsql);
+  SQLLogBegin(sllSQL);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   // 1. bind parameters in fParams[] to fQuery.Params
   if fPreparedParamsCount<>fParamCount then
@@ -429,8 +426,7 @@ begin
       for p := 0 to fParamCount-1 do
         if fParams[p].VInOut<>paramIn then
           DataSetOutSQLParam(p,fParams[p]);
-  if log <> nil then
-    log.Log(sllSQL, 'ExecutePrepared: % %', [timer.Stop, logsql], self);
+  SQLLogEnd;
 end;
 
 function TSQLDBDatasetStatementAbstract.Step(SeekFirst: boolean): boolean;

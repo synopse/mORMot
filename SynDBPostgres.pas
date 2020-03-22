@@ -758,11 +758,9 @@ end;
 
 procedure TSQLDBPostgresStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
 var
-  log: TSynLog;
-  timer: TPrecisionTimer;
   fromcache: integer;
 begin
-  log := GetSQLLog(timer);
+  SQLLogBegin(sllDB);
   if aSQL = '' then
     raise ESQLDBPostgres.CreateUTF8('%.Prepare: empty statement', [self]);
   inherited Prepare(aSQL, ExpectResults); // will strip last ;
@@ -772,12 +770,10 @@ begin
   begin // preparable
     fromcache := TSQLDBPostgresConnection(fConnection).PrepareCached(
       fParsedSQL, fPreparedParamsCount, fPreparedStmtName);
-    if log<>nil then
-      log.Log(sllDB,'Prepare % name=% cache=% %',
-        [timer.Stop, fPreparedStmtName, fromcache, fParsedSQL], self);
+    SQLLogEnd(' name=% cache=%', [fPreparedStmtName, fromcache]);
   end
-  else if log<>nil then
-    log.Log(sllDB,'Prepare % (no cache) %', [timer.Stop, fParsedSQL], self);
+  else
+    SQLLogEnd;
   SetLength(fPGParams, fPreparedParamsCount);
   SetLength(fPGParamFormats, fPreparedParamsCount);
   SetLength(fPGparamLengths, fPreparedParamsCount);
@@ -788,11 +784,8 @@ var
   i: PtrInt;
   p: PSQLDBParam;
   c: TSQLDBPostgresConnection;
-  log: TSynLog;
-  logsql: RaWUTF8;
-  timer: TPrecisionTimer;
 begin
-  log := GetSQLLog(timer, @logsql);
+  SQLLogBegin(sllSQL);
   if fParsedSQL = '' then
     raise ESQLDBPostgres.CreateUTF8('%.ExecutePrepared: Statement not prepared', [self]);
   if fParamCount <> fPreparedParamsCount then
@@ -867,9 +860,10 @@ begin
     fCurrentRow := -1;
     if fColumn.Count = 0 then // if columns exist then statement is already cached
       BindColumns;
-  end;
-  if log <> nil then
-    log.Log(sllSQL, 'ExecutePrepared: % %', [timer.Stop, logsql], self);
+    SQLLogEnd(' rows=%', [fTotalRowsRetrieved]);
+  end
+  else
+    SQLLogEnd;
 end;
 
 function TSQLDBPostgresStatement.UpdateCount: integer;

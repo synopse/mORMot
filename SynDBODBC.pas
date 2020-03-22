@@ -1648,14 +1648,11 @@ var p, k: integer;
       StrLen_or_Ind: array of PtrInt;
       WData: RawUnicode;
     end;
-    log: TSynLog;
-    logsql: RawUTF8;
-    timer: TPrecisionTimer;
 label retry;
 begin
+  SQLLogBegin(sllSQL);
   if fStatement=nil then
     raise EODBCException.CreateUTF8('%.ExecutePrepared called without previous Prepare',[self]);
-  log := GetSQLLog(timer,@logsql);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   ansitext := TODBCConnection(fConnection).fODBCProperties.fDriverDoesNotHandleUnicode;
   try
@@ -1818,8 +1815,7 @@ begin
           VData := RawUnicodeToUtf8(pointer(VData),StrLenW(pointer(VData)));
     end;
   end;
-  if log <> nil then
-    log.Log(sllSQL, 'ExecutePrepared: % %', [timer.Stop, logsql], self);
+  SQLLogEnd;
 end;
 
 procedure TODBCStatement.Reset;
@@ -1854,10 +1850,8 @@ begin
 end;
 
 procedure TODBCStatement.Prepare(const aSQL: RawUTF8; ExpectResults: Boolean);
-var log: TSynLog;
-    timer: TPrecisionTimer;
 begin
-  log := GetSQLLog(timer);
+  SQLLogBegin(sllDB);
   if (fStatement<>nil) or (fColumnCount>0) then
     raise EODBCException.CreateUTF8('%.Prepare should be called only once',[self]);
   // 1. process SQL
@@ -1868,8 +1862,7 @@ begin
   try
     ODBC.Check(nil,self,ODBC.PrepareW(fStatement,pointer(fSQLW),length(fSQLW) shr 1),
       SQL_HANDLE_STMT,fStatement);
-    if log<>nil then
-      log.Log(sllDB,'Prepare % %', [timer.Stop, aSQL], self);
+    SQLLogEnd;
   except
     on E: Exception do begin
       ODBC.FreeHandle(SQL_HANDLE_STMT,fStatement);
