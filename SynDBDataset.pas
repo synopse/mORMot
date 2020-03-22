@@ -156,8 +156,6 @@ type
     /// set the returned parameter after a stored proc execution
     procedure DataSetOutSQLParam(const aParamIndex: integer;
       var aParam: TSQLDBParam); virtual; abstract;
-    /// close the associated TQuery when ISQLDBStatement is back in cache
-    procedure ReleaseResources; override;
   public
     /// create a statement instance
     constructor Create(aConnection: TSQLDBConnection); override;
@@ -184,13 +182,15 @@ type
     // - raise an ESQLDBDataset on any error
     procedure Reset; override;
 
-    /// Access the next or first row of data from the SQL Statement result
+    /// access the next or first row of data from the SQL Statement result
     // - return true on success, with data ready to be retrieved by Column*() methods
     // - return false if no more row is available (e.g. if the SQL statement
     // is not a SELECT but an UPDATE or INSERT command)
     // - if SeekFirst is TRUE, will put the cursor on the first row of results
     // - raise an ESQLDBDataset on any error
     function Step(SeekFirst: boolean = false): boolean; override;
+    /// close the associated TQuery when ISQLDBStatement is back in cache
+    procedure ReleaseRows; override;
     /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: Integer): Int64; override;
     /// returns TRUE if the column contains NULL
@@ -449,15 +449,15 @@ end;
 
 procedure TSQLDBDatasetStatementAbstract.Reset;
 begin
-  ReleaseResources;
+  ReleaseRows;
   inherited Reset;
 end;
 
-procedure TSQLDBDatasetStatementAbstract.ReleaseResources;
+procedure TSQLDBDatasetStatementAbstract.ReleaseRows;
 begin
   if (fQuery<>nil) and fQuery.Active then
     fQuery.Close;
-  inherited ReleaseResources;
+  inherited ReleaseRows;
 end;
 
 function TSQLDBDatasetStatementAbstract.SQLParamTypeToDBParamType(IO: TSQLDBParamInOutType): TParamType;

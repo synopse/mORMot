@@ -186,7 +186,6 @@ type
     // retrieve the inlined value of a given parameter, e.g. 1 or 'name'
     procedure AddParamValueAsText(Param: integer; Dest: TTextWriter;
       MaxCharCount: integer); override;
-    procedure ReleaseResources; override;
   public
     /// create a SQLite3 statement instance, from an existing SQLite3 connection
     // - the Execute method can be called once per TSQLDBSQLite3Statement instance,
@@ -266,6 +265,8 @@ type
     // otherwise, it will fetch one row of data, to be called within a loop
     // - raise an ESQLite3Exception exception on any error
     function Step(SeekFirst: boolean=false): boolean; override;
+    /// finalize the cursor
+    procedure ReleaseRows; override;
     /// retrieve a column name of the current Row
     // - Columns numeration (i.e. Col value) starts with 0
     // - it's up to the implementation to ensure than all column names are unique
@@ -738,10 +739,10 @@ begin
   inherited Reset;
 end;
 
-procedure TSQLDBSQLite3Statement.ReleaseResources;
+procedure TSQLDBSQLite3Statement.ReleaseRows;
 begin
   VariantDynArrayClear(fLogSQLValues);
-  inherited ReleaseResources;
+  inherited ReleaseRows;
 end;
 
 function TSQLDBSQLite3Statement.Step(SeekFirst: boolean): boolean;

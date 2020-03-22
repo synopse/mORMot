@@ -318,6 +318,8 @@ type
     // on exception, release fStatement and optionally clear the pool
     procedure HandleClearPoolOnConnectionIssue;
   public
+    /// finalize the external cursor by calling ReleaseRows
+    destructor Destroy; override;
     /// called to begin a search in the virtual table, creating a SQL query
     // - the TSQLVirtualTablePrepared parameters were set by
     // TSQLVirtualTable.Prepare and will contain both WHERE and ORDER BY statements
@@ -1133,6 +1135,7 @@ begin
             Query.BindArray(1,ftInt64,Values[0],n);
           end;
           Query.ExecutePrepared;
+          Query.ReleaseRows;
           Query := nil;
         end;
       except
@@ -1327,8 +1330,7 @@ begin // TableModelIndex is not useful here
   end;
 end;
 
-function TSQLRestStorageExternal.EngineExecute(
-  const aSQL: RawUTF8): boolean;
+function TSQLRestStorageExternal.EngineExecute(const aSQL: RawUTF8): boolean;
 begin
   if aSQL='' then
     result := false else
@@ -1373,6 +1375,7 @@ begin
   if (rows<>nil) and rows.Step then
   try
     BlobData := rows.ColumnBlob(0);
+    rows.ReleaseRows;
     rows := nil;
     result := true; // success
   except
@@ -1400,6 +1403,7 @@ begin
         rows.ColumnToSQLVar(f,data,temp);
         BlobFields[f].SetFieldSQLVar(Value,data);
       end;
+      rows.ReleaseRows;
       rows := nil;
       result := true; // success
     except
@@ -1429,6 +1433,7 @@ begin
           JSONEncodeNameSQLValue(SetFieldName,SetValue,JSON);
           while rows.Step do
             Owner.InternalUpdateEvent(seUpdate,TableModelIndex,rows.ColumnInt(0),JSON,nil);
+          rows.ReleaseRows;
         end;
         Owner.FlushInternalDBCache;
       end;
@@ -1558,6 +1563,8 @@ begin
     if ExpectResults and (sftDateTimeMS in fStoredClassRecordProps.HasTypeFields) then
       stmt.ForceDateWithMS := true;
     stmt.ExecutePrepared;
+    if not ExpectResults then
+      stmt.ReleaseRows;
     result := stmt;
   except
     stmt := nil;
@@ -1657,9 +1664,11 @@ begin
     n := 0;
     rows := ExecuteDirect('select % from % where %=?',
       [fStoredClassMapping^.RowIDFieldName,fTableName,FieldName],FieldValue,true);
-    if rows<>nil then
+    if rows<>nil then begin
       while rows.Step do
         AddInt64(TInt64DynArray(ResultID),n,rows.ColumnInt(0));
+      rows.ReleaseRows;
+    end;
     SetLength(ResultID,n);
     result := n>0;
   except
@@ -1971,6 +1980,13 @@ begin
   fHasData := false;
   if (self<>nil) and (Table<>nil) and (Table.Static<>nil) then
     (Table.Static as TSQLRestStorageExternal).HandleClearPoolOnConnectionIssue;
+end;
+
+destructor TSQLVirtualTableCursorExternal.Destroy;
+begin
+  if fStatement <> nil then
+    fStatement.ReleaseRows;
+  inherited Destroy;
 end;
 
 function TSQLVirtualTableCursorExternal.Column(aColumn: integer;

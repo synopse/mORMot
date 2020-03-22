@@ -7090,11 +7090,13 @@ procedure DynArraySortIndexed(Values: pointer; ElemSize, Count: Integer;
 
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
-function IsEqualGUID(const guid1, guid2: TGUID): Boolean; overload; {$ifdef HASINLINE}inline;{$endif}
+function IsEqualGUID(const guid1, guid2: TGUID): Boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
-function IsEqualGUID(guid1, guid2: PGUID): Boolean; overload; {$ifdef HASINLINE}inline;{$endif}
+function IsEqualGUID(guid1, guid2: PGUID): Boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns the index of a matching TGUID in an array
 // - returns -1 if no item matched

@@ -326,8 +326,6 @@ type
     fStatement: IZPreparedStatement;
     fResultSet: IZResultSet;
     fResultInfo: IZResultSetMetaData;
-    /// set fResultSet/fResultInfo=nil when ISQLDBStatement is back in cache
-    procedure ReleaseResources; override;
   public
     /// Prepare an UTF-8 encoded SQL statement
     // - parameters marked as ? will be bound later, before ExecutePrepared call
@@ -364,6 +362,8 @@ type
     // - if SeekFirst is TRUE, will put the cursor on the first row of results
     // - raise an ESQLDBZeos on any error
     function Step(SeekFirst: boolean = false): boolean; override;
+    /// free IZResultSet/IZResultSetMetaData when ISQLDBStatement is back in cache
+    procedure ReleaseRows; override;
     /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: Integer): Int64; override;
     /// returns TRUE if the column contains NULL
@@ -1104,19 +1104,19 @@ end;
 
 procedure TSQLDBZEOSStatement.Reset;
 begin
-  ReleaseResources;
+  ReleaseRows;
   if fStatement<>nil then
     fStatement.ClearParameters;
   inherited Reset;
 end;
 
-procedure TSQLDBZEOSStatement.ReleaseResources;
+procedure TSQLDBZEOSStatement.ReleaseRows;
 begin
   if fResultSet<>nil then begin
     fResultInfo := nil;
     fResultSet := nil;
   end;
-  inherited ReleaseResources;
+  inherited ReleaseRows;
 end;
 
 function TSQLDBZEOSStatement.Step(SeekFirst: boolean): boolean;
