@@ -19861,17 +19861,26 @@ end;
 
 {$ifndef NOVARIANTS}
 
-procedure TRawUTF8Interning.UniqueVariant(var aResult: variant; const aText: RawUTF8);
-var vd: TVarData absolute aResult;
+procedure ClearVariantForString(var Value: variant); {$ifdef HASINLINE} inline; {$endif}
+var v: TVarData absolute Value;
 begin
-  VarClear(aResult);
-  vd.VType := varString;
-  vd.VAny := nil;
-  Unique(RawUTF8(vd.VAny),aText);
+  if cardinal(v.VType) = varString then
+    Finalize(RawByteString(v.VString))
+  else
+    begin
+      VarClear(Value);
+      PInteger(@v.VType)^ := varString;
+      v.VString := nil; // to avoid GPF when assign a RawByteString
+    end;
 end;
 
-procedure TRawUTF8Interning.UniqueVariantString(var aResult: variant;
-  const aText: string);
+procedure TRawUTF8Interning.UniqueVariant(var aResult: variant; const aText: RawUTF8);
+begin
+  ClearVariantForString(aResult);
+  Unique(RawUTF8(TVarData(aResult).VAny),aText);
+end;
+
+procedure TRawUTF8Interning.UniqueVariantString(var aResult: variant; const aText: string);
 var tmp: RawUTF8;
 begin
   StringToUTF8(aText,tmp);
@@ -44440,28 +44449,18 @@ end;
 
 procedure RawByteStringToVariant(Data: PByte; DataLen: Integer; var Value: variant);
 begin
-  VarClear(Value);
-  with TVarData(Value) do begin
-    if (Data=nil) or (DataLen<=0) then
-      VType := varNull else begin
-      VType := varString;
-      VAny := nil; // avoid GPF below when assigning a string variable to VAny
-      SetString(RawByteString(VAny),PAnsiChar(Data),DataLen);
-    end;
-  end;
+  ClearVariantForString(Value);
+  if (Data=nil) or (DataLen<=0) then
+    TVarData(Value).VType := varNull else
+    SetString(RawByteString(TVarData(Value).VAny),PAnsiChar(Data),DataLen);
 end;
 
 procedure RawByteStringToVariant(const Data: RawByteString; var Value: variant);
 begin
-  VarClear(Value);
-  with TVarData(Value) do begin
-    if Data='' then
-      VType := varNull else begin
-      VType := varString;
-      VAny := nil; // avoid GPF below when assigning a string variable to VAny
-      RawByteString(VAny) := Data;
-    end;
-  end;
+  ClearVariantForString(Value);
+  if Data='' then
+    TVarData(Value).VType := varNull else
+    RawByteString(TVarData(Value).VAny) := Data;
 end;
 
 procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
@@ -44633,25 +44632,9 @@ end;
 procedure FillZero(var value: variant);
 begin
   with TVarData(Value) do
-    case cardinal(VType) of
-    varString: FillZero(RawByteString(VAny));
-    end;
+    if cardinal(VType)=varString then
+      FillZero(RawByteString(VString));
   VarClear(Value);
-end;
-
-procedure ClearVariantForString(var Value: variant); {$ifdef HASINLINE} inline; {$endif}
-var
-  v: cardinal;
-begin
-  v := TVarData(Value).VType;
-  if v = varString then
-    Finalize(RawByteString(TVarData(Value).VAny))
-  else
-    begin
-      VarClear(Value);
-      TVarData(Value).VType := varString;
-      TVarData(Value).VAny := nil; // to avoid GPF when assigned to a RawByteString
-    end;
 end;
 
 procedure RawUTF8ToVariant(Txt: PUTF8Char; TxtLen: integer; var Value: variant);
@@ -44665,7 +44648,7 @@ begin
   ClearVariantForString(Value);
   if Txt='' then
     exit;
-  RawByteString(TVarData(Value).VAny) := Txt;
+  RawByteString(TVarData(Value).VString) := Txt;
   {$ifdef HASCODEPAGE} // force explicit UTF-8
   SetCodePage(RawByteString(TVarData(Value).VAny),CP_UTF8,false);
   {$endif HASCODEPAGE}
@@ -45349,13 +45332,15 @@ begin
       ProcessField;
 end;
 
-function TextToVariantNumberTypeNoDouble(JSON: PUTF8Char): word;
+function TextToVariantNumberTypeNoDouble(json: PUTF8Char): word;
 var start: PUTF8Char;
+    c: AnsiChar;
 begin
   start := json;
-  if (json[0] in ['1'..'9']) or // is first char numeric?
-     ((json[0]='0') and not (json[1] in ['0'..'9'])) or // '012' is invalid JSON
-     ((json[0]='-') and (json[1] in ['0'..'9'])) then begin
+  c := json[0];
+  if (c in ['1'..'9']) or // is first char numeric?
+     ((c='0') and not (json[1] in ['0'..'9'])) or // '012' is invalid JSON
+     ((c='-') and (json[1] in ['0'..'9'])) then begin
     inc(json);
     repeat
       case json^ of
@@ -45364,8 +45349,7 @@ begin
       '.':
         if (json[1] in ['0'..'9']) and (json[2] in [#0,'e','E','0'..'9']) then
           if (json[2]=#0) or (json[3]=#0) or
-             ((json[3] in ['0'..'9']) and
-              (json[4]=#0) or
+             ((json[3] in ['0'..'9']) and (json[4]=#0) or
               ((json[4] in ['0'..'9']) and (json[5]=#0))) then begin
             result := varCurrency; // currency ###.1234 number
             exit;
@@ -45388,12 +45372,14 @@ end;
 function TextToVariantNumberType(json: PUTF8Char): word;
 var start: PUTF8Char;
     exp,err: integer;
+    c: AnsiChar;
 label exponent;
 begin
   start := json;
-  if (json[0] in ['1'..'9']) or // is first char numeric?
-     ((json[0]='0') and not (json[1] in ['0'..'9'])) or // '012' is invalid JSON
-     ((json[0]='-') and (json[1] in ['0'..'9'])) then begin
+  c := json[0];
+  if (c in ['1'..'9']) or // is first char numeric?
+     ((c='0') and not (json[1] in ['0'..'9'])) or // '012' is invalid JSON
+     ((c='-') and (json[1] in ['0'..'9'])) then begin
     inc(json);
     repeat
       case json^ of
@@ -45403,7 +45389,7 @@ begin
         if (json[1] in ['0'..'9']) and (json[2] in [#0,'e','E','0'..'9']) then
           if (json[2]=#0) or (json[3]=#0) or
              ((json[3] in ['0'..'9']) and (json[4]=#0) or
-             ((json[4] in ['0'..'9']) and (json[5]=#0))) then begin
+              ((json[4] in ['0'..'9']) and (json[5]=#0))) then begin
             result := varCurrency; // currency ###.1234 number
             exit;
           end else begin
@@ -54257,46 +54243,46 @@ end;
 procedure TTextWriter.AddQuotedStr(Text: PUTF8Char; Quote: AnsiChar;
   TextMaxLen: PtrInt);
 var BMax: PUTF8Char;
+    c: AnsiChar;
 begin
+  if TextMaxLen<=0 then
+    TextMaxLen := maxInt else
+    if TextMaxLen>5 then
+      dec(TextMaxLen,5);
   BMax := BEnd-3;
   if B>=BMax then begin
     FlushToStream;
     BMax := BEnd-3;
   end;
-  B[1] := Quote;
+  inc(B);
+  B^ := Quote;
   inc(B);
   if Text<>nil then
     repeat
       if B<BMax then begin
-        if Text^=#0 then
-          break;
-        if TextMaxLen>0 then begin
-          if TextMaxLen=3 then begin
-            B[1] := '.'; // indicates truncated
-            B[2] := '.';
-            B[3] := '.';
-            inc(B,3);
-            break;
-          end else
-            dec(TextMaxLen);
-        end;
-        if Text^<>Quote then begin
-          B[1] := Text^;
+        dec(TextMaxLen);
+        if TextMaxLen<>0 then begin
+          c := Text^;
           inc(Text);
+          if c=#0 then
+            break;
+          B^ := c;
+          inc(B);
+          if c<>Quote then
+            continue;
+          B^ := c;
           inc(B);
         end else begin
-          B[1] := Quote;
-          B[2] := Quote;
-          inc(B,2);
-          inc(Text);
+          PCardinal(B)^ := ord('.')+ord('.')shl 8+ord('.')shl 16;
+          inc(B,3);
+          break;
         end;
       end else begin
         FlushToStream;
         BMax := BEnd-2;
       end;
     until false;
-  B[1] := Quote;
-  inc(B);
+  B^ := Quote;
 end;
 
 const
