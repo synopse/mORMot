@@ -657,39 +657,21 @@ end;
 
 procedure TSQLDBSQLite3Statement.ExecutePrepared;
 var DB: TSQLDataBase;
-    timer: TPrecisionTimer;
-    log: TSynLog;
-    logsql: RawUTF8;
 begin
   fCurrentRow := 0; // mark cursor on the first row
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
-  if fShouldLogSQL then begin
-    log := SynDBLog.Add;
-    logsql := SQLWithInlinedParams;
-  end else
-    log := nil;
   DB := TSQLDBSQLite3Connection(Connection).DB;
-  if fExpectResults then begin
-    // not executed here, but in TSQLDBSQLite3Statement.Step method
-    if log<>nil then
-      log.Log(sllSQL,'% %',[DB.FileNameWithoutPath,logsql],self);
-    exit;
-  end;
+  if fExpectResults then
+    exit; // execution done in Step()
+  if fShouldLogSQL then
+    SQLLogBegin(sllSQL);
   try  // INSERT/UPDATE/DELETE (i.e. not SELECT) -> try to execute directly now
-    if log<>nil then
-      timer.Start;
     repeat // Execute all steps of the first statement
     until fStatement.Step<>SQLITE_ROW;
     fUpdateCount := DB.LastChangeCount;
-    if log<>nil then
-      log.Log(sllSQL,'% % %',[timer.Stop,DB.FileNameWithoutPath,logsql],self);
-  except
-    on E: Exception do begin
-      if log<>nil then
-        log.Log(sllSQL,'Error % on % for [%] as [%]',
-          [E,DB.FileNameWithoutPath,SQL,logsql],self);
-      raise;
-    end;
+  finally
+    if fShouldLogSQL then
+      SQLLogEnd;
   end;
 end;
 
@@ -713,19 +695,16 @@ end;
 
 procedure TSQLDBSQLite3Statement.Prepare(const aSQL: RawUTF8;
   ExpectResults: Boolean);
-var Timer: TPrecisionTimer;
 begin
   if fShouldLogSQL then
-    Timer.Start;
+    SQLLogBegin(sllDB);
   inherited Prepare(aSQL,ExpectResults); // set fSQL + Connect if necessary
   fStatement.Prepare(TSQLDBSQLite3Connection(Connection).fDB.DB,aSQL);
   fColumnCount := fStatement.FieldCount;
   if fShouldLogSQL then begin
     fParamCount := fStatement.ParamCount;
     SetLength(fLogSQLValues,fParamCount);
-    if PosExChar('?',SQL)>0 then
-      SynDBLog.Add.Log(sllDB,'Prepare % % %',[Timer.Stop,
-        TSQLDBSQLite3Connection(Connection).DB.FileNameWithoutPath,SQL],self);
+    SQLLogEnd(' %',[TSQLDBSQLite3Connection(Connection).fDB.FileNameWithoutPath]);
   end;
 end;
 

@@ -1668,11 +1668,15 @@ type
     fColumnCount: integer;
     fTotalRowsRetrieved: Integer;
     fCurrentRow: Integer;
-    fSQLWithInlinedParams: RawUTF8;
     fForceBlobAsNull: boolean;
     fForceDateWithMS: boolean;
     fDBMS: TSQLDBDefinition;
+    fSQLLogLog: TSynLog;
+    fSQLLogLevel: TSynLogInfo;
+    fSQLWithInlinedParams: RawUTF8;
+    fSQLLogTimer: TPrecisionTimer;
     function GetSQLWithInlinedParams: RawUTF8;
+    procedure ComputeSQLWithInlinedParams;
     function GetForceBlobAsNull: boolean;
     procedure SetForceBlobAsNull(value: boolean);
     function GetForceDateWithMS: boolean;
@@ -1693,8 +1697,10 @@ type
     {$endif}
     /// return the associated statement instance for a ISQLDBRows interface
     function Instance: TSQLDBStatement;
-    /// a wrapper to compute sllSQL context and start a local timer
-    function GetSQLLog(var timer: TPrecisionTimer; SQL: PRawUTF8 = nil): TSynLog;
+    /// wrappers to compute sllSQL/sllDB SQL context with a local timer
+    function SQLLogBegin(level: TSynLogInfo): TSynLog;
+    function SQLLogEnd(const Fmt: RawUTF8; const Args: array of const): Int64; overload;
+    function SQLLogEnd(msg: PShortString=nil): Int64; overload;
   public
     /// create a statement instance
     constructor Create(aConnection: TSQLDBConnection); virtual;
@@ -2414,6 +2420,10 @@ type
     /// Reset the previous prepared statement
     // - this overridden implementation will just do reset the internal fParams[]
     procedure Reset; override;
+    /// Release used memory
+    // - this overridden implementation will free the fParams[] members (e.g.
+    // VData) but not the parameters themselves
+    procedure ReleaseRows; override;
   end;
 
   /// generic abstract class handling prepared statements with binding
@@ -7196,85 +7206,128 @@ begin
   Result := Self;
 end;
 
-function TSQLDBStatement.GetSQLLog(var timer: TPrecisionTimer; SQL: PRawUTF8): TSynLog;
-var level: TSynLogInfo;
+function TSQLDBStatement.SQLLogBegin(level: TSynLogInfo): TSynLog;
 begin
   result := SynDBLog.Add;
-  if result = nil then
+  if result <> nil then
+    if level in result.Family.Level then
+    begin
+      fSQLLogLevel := level;
+      fSQLLogTimer.Start;
+      if level = sllSQL then
+        ComputeSQLWithInlinedParams;
+    end
+    else
+      result := nil;
+  fSQLLogLog := result;
+end;
+
+function TSQLDBStatement.SQLLogEnd(msg: PShortString): Int64;
+var tmp: TShort16;
+begin
+  result := 0;
+  if fSQLLogLog=nil then
     exit;
-  if SQL = nil then
-    level := sllDB else
-    level := sllSQL;
-  if level in result.Family.Level then
-  begin
-    timer.Start;
-    if SQL <> nil then
-      SQL^ := GetSQLWithInlinedParams;
-  end else
-    result := nil;
+  tmp[0] := #0;
+  if fSQLLogLevel=sllSQL then begin
+    if msg=nil then begin
+      if not fExpectResults then
+        FormatShort16(' wr=%',[UpdateCount],tmp);
+      msg := @tmp;
+    end;
+    fSQLLogLog.Log(fSQLLogLevel, 'ExecutePrepared %% %',
+      [fSQLLogTimer.Stop, msg^, fSQLWithInlinedParams], self)
+  end
+  else begin
+    if msg=nil then
+      msg := @tmp;
+    fSQLLogLog.Log(fSQLLogLevel, 'Prepare %% %', [fSQLLogTimer.Stop, msg^, fSQL], self);
+  end;
+  result := fSQLLogTimer.LastTimeInMicroSec;
+  fSQLLogLog := nil;
+end;
+
+function TSQLDBStatement.SQLLogEnd(const Fmt: RawUTF8; const Args: array of const): Int64;
+var tmp: shortstring;
+begin
+  result := 0;
+  if fSQLLogLog=nil then
+    exit;
+  if Fmt='' then
+    tmp[0] := #0 else
+    FormatShort(Fmt,Args,tmp);
+  result := SQLLogEnd(@tmp);
 end;
 
 function TSQLDBStatement.GetSQLWithInlinedParams: RawUTF8;
+begin
+  if fSQL='' then
+    result := '' else begin
+    if fSQLWithInlinedParams='' then
+      ComputeSQLWithInlinedParams;
+    result := fSQLWithInlinedParams;
+  end;
+end;
+
+function GotoNextParam(P: PUTF8Char): PUTF8Char;
+  {$ifdef HASINLINE} inline; {$endif}
+var c: AnsiChar;
+begin
+  repeat
+    c := P^;
+    if (c=#0) or (c='?') then
+      break;
+    if (c='''') and (P[1]<>'''') then begin
+      repeat // ignore ? inside ' quotes
+        inc(P);
+        c := P^;
+      until (c=#0) or ((c='''') and (P[1]<>''''));
+      if c=#0 then
+        break;
+    end;
+    inc(P);
+  until false;
+  result := P;
+end;
+
+procedure TSQLDBStatement.ComputeSQLWithInlinedParams;
 var P,B: PUTF8Char;
     num: integer;
     maxSize,maxAllowed: cardinal;
     W: TTextWriter;
     tmp: TTextWriterStackBuffer;
 begin
+  fSQLWithInlinedParams := fSQL;
+  if fConnection=nil then
+    maxSize := 0 else
+    maxSize := fConnection.fProperties.fLoggedSQLMaxSize;
+  if (integer(maxSize)<0) or (PosExChar('?',fSQL)=0) then
+    // maxsize=-1 -> log statement without any parameter value (just ?)
+    exit;
+  P := pointer(fSQL);
+  num := 1;
+  W := nil;
   try
-    P := pointer(fSQL);
-    if P=nil then begin
-      result := '';
-      exit;
-    end;
-    if fSQLWithInlinedParams<>'' then begin
-      result := fSQLWithInlinedParams; // already computed
-      exit;
-    end;
-    if fConnection=nil then
-      maxSize := 0 else
-      maxSize := fConnection.fProperties.fLoggedSQLMaxSize;
-    if (integer(maxSize)<0) or (PosExChar('?',fSQL)=0) then begin
-      result := fSQL; // -1 -> log statement without any parameter value (just ?)
-      exit;
-    end;
-    num := 1;
-    W := nil;
-    try
-      repeat
-        B := P;
-        while not (P^ in ['?',#0]) do begin
-          if (P[0]='''') and (P[1]<>'''') then begin
-            repeat // ignore chars inside ' quotes
-              inc(P);
-            until (P[0]=#0) or ((P[0]='''')and(P[1]<>''''));
-            if P[0]=#0 then break;
-          end;
-          inc(P);
-        end;
-        if W=nil then
-          if P^=#0 then begin
-            result := fSQL;
-            exit;
-          end else
-          W := TTextWriter.CreateOwnedStream(tmp);
-        W.AddNoJSONEscape(B,P-B);
+    repeat
+      B := P;
+      P := GotoNextParam(P);
+      if W=nil then
         if P^=#0 then
-          break;
-        inc(P); // jump P^='?'
-        if maxSize>0 then
-          maxAllowed := W.TextLength-maxSize else
-          maxAllowed := maxInt;
-        AddParamValueAsText(num,W,maxAllowed);
-        inc(num);
-      until (P^=#0) or ((maxSize>0) and (W.TextLength>=maxSize));
-      W.SetText(result);
-      fSQLWithInlinedParams := result;
-    finally
-      W.Free;
-    end;
-  except
-    result := '';
+          exit else
+          W := TTextWriter.CreateOwnedStream(tmp);
+      W.AddNoJSONEscape(B,P-B);
+      if P^=#0 then
+        break;
+      inc(P); // jump P^='?'
+      if maxSize>0 then
+        maxAllowed := W.TextLength-maxSize else
+        maxAllowed := maxInt;
+      AddParamValueAsText(num,W,maxAllowed);
+      inc(num);
+    until (P^=#0) or ((maxSize>0) and (W.TextLength>=maxSize));
+    W.SetText(fSQLWithInlinedParams);
+  finally
+    W.Free;
   end;
 end;
 
@@ -7767,6 +7820,22 @@ begin
   fParam.Clear;
   fParamsArrayCount := 0;
   inherited Reset;
+end;
+
+procedure TSQLDBStatementWithParams.ReleaseRows;
+var i: PtrInt;
+    p: PSQLDBParam;
+begin
+  p := pointer(fParams);
+  if p<>nil then
+    for i := 1 to fParamCount do begin
+      if p^.VData<>'' then
+        p^.VData := ''; // release bound value, but keep fParams[] reusable
+      if p^.VArray<>nil then
+        RawUTF8DynArrayClear(p^.VArray);
+      inc(p);
+    end;
+  inherited ReleaseRows;
 end;
 
 

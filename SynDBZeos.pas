@@ -866,19 +866,15 @@ end;
 { TSQLDBZEOSStatement }
 
 procedure TSQLDBZEOSStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
-var
-  log: TSynLog;
-  timer: TPrecisionTimer;
 begin
-  log := GetSQLLog(timer);
+  SQLLogBegin(sllDB);
   if (fStatement<>nil) or (fResultSet<>nil) then
     raise ESQLDBZEOS.CreateUTF8('%.Prepare() shall be called once',[self]);
   inherited Prepare(aSQL,ExpectResults); // connect if necessary
   fStatement := (fConnection as TSQLDBZEOSConnection).fDatabase.
     PrepareStatementWithParams({$ifdef UNICODE}UTF8ToString(fSQL){$else}fSQL{$endif}, // see controls_cp=CP_UTF8
     (fConnection.Properties as TSQLDBZEOSConnectionProperties).fStatementParams);
-  if log<>nil then
-    log.Log(sllDB,'Prepare % %',[timer.Stop,aSQL],self);
+  SQLLogEnd;
 end;
 
 {$ifdef ZEOS72UP}
@@ -1001,11 +997,8 @@ var i,n: integer;
     {$ifdef ZEOS72UP}
     arrayBinding: TZeosArrayBinding;
     {$endif}
-    log: TSynLog;
-    logsql: RaWUTF8;
-    timer: TPrecisionTimer;
 begin
-  log := GetSQLLog(timer,@logsql);
+  SQLLogBegin(sllSQL);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   if fStatement=nil then
     raise ESQLDBZEOS.CreateUTF8('%.ExecutePrepared() invalid call',[self]);
@@ -1073,7 +1066,7 @@ begin
       fResultSet := fStatement.ExecuteQueryPrepared;
       if fResultSet=nil then begin
         // e.g. PRAGMA in TZSQLiteCAPIPreparedStatement.ExecuteQueryPrepared
-        SynDBLog.Add.Log(sllWarning,'ExecutePrepared(%) returned nil',[logsql],self);
+        SynDBLog.Add.Log(sllWarning,'ZDBC.ExecutePrepared returned nil %',[fSQL],self);
       end else begin
         Props := fConnection.Properties as TSQLDBZEOSConnectionProperties;
         fResultInfo := fResultSet.GetMetadata;
@@ -1098,8 +1091,7 @@ begin
     arrayBinding.Free;
   end;
   {$endif}
-  if log <> nil then
-    log.Log(sllSQL, 'ExecutePrepared: % %', [timer.Stop, logsql], self);
+  SQLLogEnd;
 end;
 
 procedure TSQLDBZEOSStatement.Reset;
@@ -1205,8 +1197,8 @@ end;
 function TSQLDBZEOSStatement.UpdateCount: integer;
 begin
   if fStatement<>nil then
-    result:= fStatement.GetUpdateCount else
-    result:= inherited UpdateCount; // returns 0
+    result := fStatement.GetUpdateCount else
+    result := 0;
 end;
 
 {$ifdef ZEOS72UP}

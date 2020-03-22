@@ -1741,16 +1741,11 @@ const
    IDList_type: WideString = 'IDList';
    StrList_TYPE: WideString = 'StrList';
 
-
-
-procedure TOleDBStatement.Prepare(const aSQL: RawUTF8;
-  ExpectResults: Boolean);
+procedure TOleDBStatement.Prepare(const aSQL: RawUTF8; ExpectResults: Boolean);
 var L: integer;
     SQLW: RawUnicode;
-    log: TSynLog;
-    timer: TPrecisionTimer;
 begin
-  log := GetSQLLog(timer);
+  SQLLogBegin(sllDB);
   if Assigned(fCommand) or Assigned(fRowSet) or (fColumnCount>0) or
      (fColumnBindings<>nil) or (fParamBindings<>nil) then
     raise EOleDBException.CreateUTF8('%.Prepare should be called once',[self]);
@@ -1768,8 +1763,7 @@ begin
   SetLength(SQLW,L*2+1);
   UTF8ToWideChar(pointer(SQLW),pointer(fSQL),L);
   fCommand.SetCommandText(DBGUID_DEFAULT,pointer(SQLW));
-  if log<>nil then
-    log.Log(sllDB,'Prepare % %',[timer.Stop,fSQL],self);
+  SQLLogEnd;
 end;
 
 procedure TOleDBStatement.ExecutePrepared;
@@ -1778,9 +1772,6 @@ var i: integer;
     B: PDBBinding;
     ParamsStatus: TCardinalDynArray;
     RowSet: IRowSet;
-    log: TSynLog;
-    logsql: RawUTF8;
-    timer: TPrecisionTimer;
     mr: IMultipleResults;
     res: HResult;
     fParamBindInfo: TDBParamBindInfoDynArray;
@@ -1796,7 +1787,7 @@ var i: integer;
     ssParamPropsCount: integer;
     IDLists: array of TIDListRowset;
 begin
-  log := GetSQLLog(timer,@logsql);
+  SQLLogBegin(sllSQL);
   // 1. check execution context
   if not Assigned(fCommand) then
     raise EOleDBException.CreateUTF8('%s.Prepare should have been called',[self]);
@@ -1954,15 +1945,14 @@ begin
       // 3.2 ExpectResults=false (e.g. SQL UPDATE) -> leave fRowSet=nil
       OleDBConnection.OleDBCheck(self,
         fCommand.Execute(nil,DB_NULLGUID,fDBParams,@fUpdateCount,nil));
-    if log<>nil then
-      log.Log(sllSQL,'ExecutePrepared: % %',[timer.Stop,logsql],self);
   finally
     for i := 0 to fParamCount - 1 do
       if Assigned(IDLists[i]) then begin
         fParams[i].VIUnknown := nil;
-        IDLists[i].free;
+        IDLists[i].Free;
       end;
   end;
+  SQLLogEnd;
 end;
 
 procedure TOleDBStatement.FromRowSet(RowSet: IRowSet);

@@ -1795,7 +1795,7 @@ end;
 
 procedure TSQLDBOracleConnectionProperties.PasswordChanged(const ANewPassword: RawUTF8);
 begin
-  SynDBLog.Add.Log(sllDB, 'PasswordChanged called',self);
+  SynDBLog.Add.Log(sllDB, 'PasswordChanged method called',self);
   fPassWord := ANewPassword;
   if Assigned(FOnPasswordChanged) then
     FOnPasswordChanged(Self);
@@ -1827,7 +1827,7 @@ begin
 end;
 
 procedure TSQLDBOracleConnection.Connect;
-var Log: ISynLog;
+var log: ISynLog;
     Props: TSQLDBOracleConnectionProperties;
     mode: ub4;
     msg: RawUTF8;
@@ -1837,7 +1837,7 @@ const
     type_Varchar2ListName: RawUTF8 = 'ODCIVARCHAR2LIST';
     type_Credential: array[boolean] of integer = (OCI_CRED_RDBMS,OCI_CRED_EXT);
 begin
-  Log := SynDBLog.Enter(self,'Connect');
+  log := SynDBLog.Enter(self,'Connect');
   Disconnect; // force fTrans=fError=fServer=fContext=nil
   Props := Properties as TSQLDBOracleConnectionProperties;
   with OCI do
@@ -1900,8 +1900,8 @@ begin
     if Props.UseWallet then
       msg := 'using Oracle Wallet' else
       msg := 'as '+Props.UserID;
-    if Log<>nil then
-      Log.Log(sllInfo,'Connected to % % with %, codepage % (%/%)',
+    if log<>nil then
+      log.log(sllInfo,'Connected to % % with %, codepage % (%/%)',
         [Props.ServerName,msg,Props.ClientVersion,fAnsiConvert.CodePage,
          fOCICharSet,OracleCharSetName(fOCICharSet)],self);
     with NewStatement do
@@ -1920,8 +1920,8 @@ begin
     inherited Connect; // notify any re-connection
   except
     on E: Exception do begin
-      if Log<>nil then
-        Log.Log(sllError,E);
+      if log<>nil then
+        log.log(sllError,E);
       Disconnect; // clean up on fail
       raise;
     end;
@@ -1929,9 +1929,9 @@ begin
 end;
 
 constructor TSQLDBOracleConnection.Create(aProperties: TSQLDBConnectionProperties);
-var Log: ISynLog;
+var log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self,'Create');
+  log := SynDBLog.Enter(self,'Create');
   if not aProperties.InheritsFrom(TSQLDBOracleConnectionProperties) then
     raise ESQLDBOracle.CreateUTF8('Invalid %.Create(%)',[self,aProperties]);
   OCI.RetrieveVersion;
@@ -1946,14 +1946,12 @@ begin
 end;
 
 procedure TSQLDBOracleConnection.Disconnect;
-var Log: ISynLog;
 begin
   try
     inherited Disconnect; // flush any cached statement
   finally
     if (fError<>nil) and (OCI<>nil) then
-    with OCI do begin
-      Log := SynDBLog.Enter(self,'Disconnect');
+    with SynDBLog.Enter(self,'Disconnect'), OCI do begin
       if fTrans<>nil then begin
         // close any opened session
         HandleFree(fTrans,OCI_HTYPE_TRANS);
@@ -2010,9 +2008,9 @@ begin
 end;
 
 procedure TSQLDBOracleConnection.StartTransaction;
-var Log: ISynLog;
+var log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self,'StartTransaction');
+  log := SynDBLog.Enter(self,'StartTransaction');
   if TransactionCount>0 then
     raise ESQLDBOracle.CreateUTF8('Invalid %.StartTransaction: nested '+
       'transactions are not supported by the Oracle driver',[self]);
@@ -2447,7 +2445,6 @@ begin
         fCurrentRow := 0; // mark cursor on the first row
     except
       on E: Exception do begin
-        SynDBLog.Add.Log(sllError,E);
         fStatement := nil; // do not release the statement in constructor
         FreeHandles(True);
         raise;
@@ -2565,7 +2562,7 @@ var i,j: PtrInt;
     ociArrays: array of POCIArray;
     ociArraysCount: byte;
     num_val: OCINumber;
-    tmp, logsql: RawUTF8;
+    tmp: RawUTF8;
     str_val: POCIString;
     {$ifdef FPC_64}
     wasStringHacked: TByteDynArray;
@@ -2575,12 +2572,8 @@ begin
   if (fStatement=nil) then
     raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared without previous Prepare',[self]);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
-  fTimeElapsed.Resume;
+  SQLLogBegin(sllSQL);
   try
-    if SynDBLog<>nil then
-      with SynDBLog.Add do
-        if sllSQL in Family.Level then
-          logsql := SQLWithInlinedParams;
     ociArraysCount := 0;
     Env := (Connection as TSQLDBOracleConnection).fEnv;
     Context := TSQLDBOracleConnection(Connection).fContext;
@@ -2871,7 +2864,7 @@ begin
             fBoundCursor[i] := PPointer(@VInt64)^; // available via BoundCursor()
           end else // on error, release bound statement resource
             if OCI.HandleFree(PPointer(@VInt64)^,OCI_HTYPE_STMT)<>OCI_SUCCESS then
-              SynDBLog.Add.Log(sllError,'ExecutePrepared: SQLT_RSET param release',self);
+              SynDBLog.Add.Log(sllError,'ExecutePrepared: HandleFree(SQLT_RSET)',self);
       ftInt64:
         if VDBType=SQLT_FLT then // retrieve OUT integer parameter
           VInt64 := trunc(unaligned(PDouble(@VInt64)^));
@@ -2885,7 +2878,7 @@ begin
         SQLT_TIMESTAMP: begin // release OCIDateTime resource
           oOCIDateTime := PPointer(VData)^;
           if OCI.DescriptorFree(oOCIDateTime,OCI_DTYPE_TIMESTAMP)<>OCI_SUCCESS then
-            SynDBLog.Add.Log(sllError,'ExecutePrepared: OCI_DTYPE_TIMESTAMP param release',self);
+            SynDBLog.Add.Log(sllError,'ExecutePrepared: DescriptorFree(OCI_DTYPE_TIMESTAMP)',self);
           VData := '';
         end;
         end;
@@ -2895,9 +2888,7 @@ begin
       end;
     end;
   finally
-    fTimeElapsed.Pause;
-    if logsql<>'' then
-      SynDBLog.Add.Log(sllSQL,'ExecutePrepared: % % ',[fTimeElapsed.LastTime,logsql],self);
+    fTimeElapsed.FromExternalMicroSeconds(SQLLogEnd);
   end;
 end;
 
@@ -2964,10 +2955,10 @@ begin
             case ColumnValueDBType of
             SQLT_CLOB, SQLT_BLOB:
               if OCI.DescriptorFree(P^,OCI_DTYPE_LOB)<>OCI_SUCCESS then
-                SynDBLog.Add.Log(sllError,'FreeHandles: Invalid Blob Release',self);
+                SynDBLog.Add.Log(sllError,'FreeHandles: Invalid OCI_DTYPE_LOB',self);
             SQLT_RSET:
               if OCI.HandleFree(P^,OCI_HTYPE_STMT)<>OCI_SUCCESS then
-                SynDBLog.Add.Log(sllError,'FreeHandles: Invalid Cursor Release',self);
+                SynDBLog.Add.Log(sllError,'FreeHandles: Invalid SQLT_RSET',self);
             else raise ESQLDBOracle.CreateUTF8(
               '%.FreeHandles: Wrong % type for inlined column %',
               [self,ColumnValueDBType,ColumnName]);
@@ -3204,7 +3195,7 @@ begin
       end;
       // avoid memory leak for cached statement
       if DescriptorFree(oHandle, OCI_DTYPE_PARAM)<>OCI_SUCCESS then
-        SynDBLog.Add.Log(sllError, 'Invalid column descriptor release',self);
+        SynDBLog.Add.Log(sllError, 'Invalid DescriptorFree(OCI_DTYPE_PARAM)',self);
     end;
     assert(fColumn.Count=integer(ColCount));
     // 3. Dispatch data in row buffer
@@ -3278,7 +3269,7 @@ var oSQL: RawUTF8;
     cached: boolean;
 begin
   cached := false;
-  fTimeElapsed.Resume;
+  SQLLogBegin(sllDB);
   try
     try
       if (fStatement<>nil) or (fColumnCount>0) then
@@ -3307,14 +3298,12 @@ begin
       SetColumnsForPreparedStatement;
     except
       on E: Exception do begin
-        SynDBLog.Add.Log(sllError,E);
         FreeHandles(True);
         raise;
       end;
     end;
   finally
-    fTimeElapsed.Pause;
-    SynDBLog.Add.Log(sllDB,'Prepare % cache=% %',[fTimeElapsed.LastTime,cached,SQL],self);
+    fTimeElapsed.FromExternalMicroSeconds(SQLLogEnd(' cache=%',[cached]));
   end;
 end;
 
