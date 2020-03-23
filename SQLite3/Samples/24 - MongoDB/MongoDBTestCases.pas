@@ -21,6 +21,11 @@ uses
   mORMotSQLite3,
   mORMotMongoDB;
 
+const
+  MONGOSERVER = 'localhost';
+  // MONGOSERVER = '10.0.2.2'; // from a VirtualBox VM
+  MONGOPORT = 27017;
+
 type
   TTestDirect = class(TSynTestCase)
   protected
@@ -145,7 +150,7 @@ begin
   assert(fClient=nil);
   {$ifdef TESTMONGOAUTH}
   if not UserCreated then begin
-    fClient := TMongoClient.Create('localhost',27017);
+    fClient := TMongoClient.Create(MONGOSERVER,MONGOPORT);
     with fClient.Database[DB_NAME] do begin
       DropUser(USER_NAME);
       Check(CreateUserForThisDatabase(USER_NAME,USER_PWD,true)='');
@@ -154,7 +159,7 @@ begin
     UserCreated := true;
   end;
   {$endif}
-  fClient := TMongoClient.Create('localhost',27017);
+  fClient := TMongoClient.Create(MONGOSERVER,MONGOPORT);
   if ClassType=TTestDirectWithAcknowledge then
     fClient.WriteConcern := wcAcknowledged else
   if ClassType=TTestDirectWithoutAcknowledge then
@@ -217,7 +222,7 @@ end;
 
 procedure TTestDirect.FillCollection;
 var Coll: TMongoCollection;
-    oid: TBSONObjectID;
+    oid, oid2: TBSONObjectID;
     i: integer;
     jsonArray: RawUTF8;
     bytes: Int64;
@@ -230,7 +235,8 @@ begin
   for i := 0 to COLL_COUNT-1 do begin
     Check(Coll.Save(fValues[i],@oid)=(i<50));
     Check(BSONVariantType.IsOfKind(fValues[i]._id,betObjectID));
-    Check(fValues[i]._id=oid.ToVariant,'EnsureDocumentHasID failure');
+    Check(oid2.FromVariant(fValues[i]._id));
+    Check(oid2.Equal(oid),'EnsureDocumentHasID failure');
   end;
   NotifyTestSpeed('rows inserted',COLL_COUNT,fClient.BytesTransmitted-bytes);
   Check(Coll.Count=COLL_COUNT);
@@ -370,7 +376,7 @@ end;
 
 procedure TTestORM.ConnectToLocalServer;
 begin
-  fMongoClient := TMongoClient.Create('localhost',27017);
+  fMongoClient := TMongoClient.Create(MONGOSERVER,MONGOPORT);
   if ClassType=TTestORMWithAcknowledge then
     fMongoClient.WriteConcern := wcAcknowledged else
   if ClassType=TTestORMWithoutAcknowledge then

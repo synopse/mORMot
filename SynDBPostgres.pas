@@ -17,9 +17,9 @@ unit SynDBPostgres;
     - works with PostgreSQL>=7.4 and (v3 protocol)
     - consider creating the database with UTF8 collation
     - notifications are not implemented
-    - Postgres level prepared statements works only for SQLs what starts
+    - Postgres level prepared cached statements works only for SQLs what starts
       exactly with SELECT INSERT UPDATE DELETE VALUES and not contains ";"
-    - parameter parser will fails in case SQL contains comments with ? inside
+    - parameters parser will fails in case SQL contains comments with ? inside
       (TODO - will be fixed)
     - all query rows are returned at once, caller should care about pagination
       (TODO - implement singleRowMode?)
@@ -93,7 +93,7 @@ type
     // fServerSettings: set of (ssByteAasHex);
     // maintain fPrepared[] hash list to identify already cached
     function PrepareCached(const aSQL: RawUTF8; aParamCount: integer;
-      out aName: RaWUTF8): integer;
+      out aName: RawUTF8): integer;
     /// direct execution of SQL statement what do not returns a result
     // - statement should not contains parameters
     // - raise an ESQLDBPostgres on error
@@ -446,7 +446,7 @@ end;
 { TSQLDBPostgresConnection }
 
 function TSQLDBPostgresConnection.PrepareCached(const aSQL: RawUTF8; aParamCount: integer;
-  out aName: RaWUTF8): integer;
+  out aName: RawUTF8): integer;
 var
   dig: TSHA256Digest;
 begin
