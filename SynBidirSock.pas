@@ -1071,7 +1071,7 @@ type
     // once it has been upgraded to WebSockets
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
       const ProcessName: SockString; ServerThreadPoolCount: integer=2;
-      KeepAliveTimeOut: integer=30000); override;
+      KeepAliveTimeOut: integer=30000; HeadersNotFiltered: boolean=false); override;
     /// close the server
     destructor Destroy; override;
     /// will send a given frame to all connected clients
@@ -3147,7 +3147,8 @@ end;
 { TWebSocketServer }
 
 constructor TWebSocketServer.Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
-  const ProcessName: SockString; ServerThreadPoolCount, KeepAliveTimeOut: integer);
+  const ProcessName: SockString; ServerThreadPoolCount, KeepAliveTimeOut: integer;
+  HeadersNotFiltered: boolean);
 begin
   // override with custom processing classes
   fSocketClass := TWebSocketServerSocket;
@@ -3159,7 +3160,8 @@ begin
   fSettings.HeartbeatDelay := 20000;
   fCanNotifyCallback := true;
   // start the server
-  inherited Create(aPort,OnStart,OnStop,ProcessName,ServerThreadPoolCount,KeepAliveTimeOut);
+  inherited Create(aPort,OnStart,OnStop,ProcessName,ServerThreadPoolCount,
+    KeepAliveTimeOut,HeadersNotFiltered);
 end;
 
 function TWebSocketServer.WebSocketProcessUpgrade(ClientSock: THttpServerSocket;
@@ -3551,7 +3553,7 @@ begin
       SockSend; // CRLF
       SockSendFlush('');
       SockRecvLn(cmd);
-      GetHeader;
+      GetHeader(false);
       prot := HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
       result := 'Invalid HTTP Upgrade Header';
       if not IdemPChar(pointer(cmd),'HTTP/1.1 101') or

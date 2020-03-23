@@ -713,7 +713,7 @@ begin
   fStatement.Reset;
   fUpdateCount := 0;
   // fStatement.BindReset; // slow down the process, and is not mandatory
-  VariantDynArrayClear(fLogSQLValues);
+  ReleaseRows;
   SetLength(fLogSQLValues,fParamCount);
   inherited Reset;
 end;

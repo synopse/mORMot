@@ -8717,7 +8717,7 @@ type
     /// append some UTF-8 chars to the buffer
     // - if supplied json is '', will write 'null'
     procedure AddRawJSON(const json: RawJSON);
-    /// append some chars, quoting all " chars
+    /// append some UTF-8 text, quoting all " chars
     // - same algorithm than AddString(QuotedStr()) - without memory allocation,
     // and with an optional maximum text length (truncated with ending '...')
     // - this function implements what is specified in the official SQLite3
@@ -54281,7 +54281,7 @@ begin
         end;
       end else begin
         FlushToStream;
-        BMax := BEnd-2;
+        BMax := BEnd-3;
       end;
     until false;
   B^ := Quote;

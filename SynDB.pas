@@ -7668,14 +7668,13 @@ begin
     Dest.Add(',') else
     with fParams[Param] do
     case VType of
-      ftNull:     Dest.AddShort('null');
       ftInt64:    Dest.Add({$ifdef DELPHI5OROLDER}integer{$endif}(VInt64));
       ftDouble:   Dest.AddDouble(unaligned(PDouble(@VInt64)^));
       ftCurrency: Dest.AddCurr64(VInt64);
       ftDate:     Dest.AddDateTime(PDateTime(@VInt64),' ','''');
       ftUTF8:     Dest.AddQuotedStr(pointer(VData),'''',MaxCharCount);
       ftBlob:     Dest.AddU(length(VData));
-      else        Dest.AddShort(ToText(VType)^);
+      else        Dest.AddShort('null');
     end;
 end;
 
