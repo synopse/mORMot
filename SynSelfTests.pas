@@ -5001,10 +5001,14 @@ begin
     U := WinAnsiToUtf8(W);
     if len>0 then begin
       check(PosEx(U[1],U)=1);
+      check(PosExChar(U[1],U)=1);
       if (len>1) and (U[1]<>U[2]) then begin
         check(PosEx(U[2],U)=2);
-        if (len>2) and (U[1]<>U[2]) and (U[2]<>U[3]) and (U[1]<>U[3]) then
+        check(PosExChar(U[2],U)=2);
+        if (len>2) and (U[1]<>U[2]) and (U[2]<>U[3]) and (U[1]<>U[3]) then begin
           check(PosEx(U[3],U)=3);
+          check(PosExChar(U[3],U)=3);
+        end;
       end;
     end;
     for j := 1 to lenup100 do begin // validates with offset parameter
@@ -5014,6 +5018,7 @@ begin
         check(PosEx(U[j],U,j-1)=j);
       k := PosEx(U[j],U);
       check((k>0) and (U[k]=U[j]));
+      check(PosExChar(U[j],U)=k);
     end;
     Unic := Utf8DecodeToRawUnicode(U);
     {$ifndef FPC_HAS_CPSTRING} // buggy FPC

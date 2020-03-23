@@ -4194,7 +4194,7 @@ begin
     if efMetaData in features then begin
       if (Decrypted='') or (Decrypted[1]<>'{') then
         exit;
-      metaend := PosEx(#0,Decrypted); // {metadata}+#0+plain
+      metaend := PosExChar(#0,Decrypted); // {metadata}+#0+plain
       if metaend=0 then
         exit;
       if MetaData<>nil then

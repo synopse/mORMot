@@ -1998,7 +1998,7 @@ begin
         fORM.ServerName := Server else
         if Server = '' then
           fORM.ServerName := 'http://localhost:' + Port else
-          if PosEx(':', Server) = 0 then
+          if PosExChar(':', Server) = 0 then
             fORM.ServerName := 'http://' + Server + ':' + Port else
             fORM.ServerName := Server;
     if fClient.WebSocketsPassword = '' then

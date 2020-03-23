@@ -1210,7 +1210,7 @@ var json: RawUTF8;
 begin
   json := StringFromFile(fFileName);
   Owner.TestTimer.Start;
-  start := PosEx('[',json);
+  start := PosExChar('[',json);
   if CheckFailed(start>0) then
     exit;
   Check(JSONBufferToBSONArray(@json[start],docs,true));
