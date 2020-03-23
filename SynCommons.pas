@@ -391,6 +391,7 @@ type
   TVariantArray = array[0..MaxInt div SizeOf(Variant)-1] of Variant;
   PVariantArray = ^TVariantArray;
   TVariantDynArray = array of variant;
+  PPVariant = ^PVariant;
   {$endif}
 
   PIntegerDynArray = ^TIntegerDynArray;
@@ -13838,6 +13839,7 @@ type
     procedure Iterate(var Dest: TVarData; const V: TVarData; Index: integer); virtual;
     /// returns TRUE if the supplied variant is of the exact custom type
     function IsOfType(const V: variant): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// class-reference type (metaclass) of custom variant type definition
@@ -45187,14 +45189,19 @@ end;
 
 function TSynInvokeableVariantType.IsOfType(const V: variant): boolean;
 var vt: cardinal;
+    vd: PVarData;
 begin
-  if self=nil then
-    result := false else begin
-    vt := TVarData(V).VType;
-    if vt=varByRef or varVariant then
-      result := IsOfType(PVariant(TVarData(V).VPointer)^) else
-      result := vt=VarType;
-  end;
+  if self<>nil then begin
+    vd := @V;
+    repeat
+      vt := vd^.VType;
+      if vt<>varByRef or varVariant then
+        break;
+      vd := vd^.VPointer;
+    until false;
+    result := vt=VarType;
+  end else
+    result := false;
 end;
 
 var // owned by Variants.pas as TInvokeableVariantType/TCustomVariantType
