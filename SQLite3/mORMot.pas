@@ -642,7 +642,8 @@ type
     /// set to TRUE if parameters are to be :(...): inlined
     InlinedParams: TJSONObjectDecoderParams;
     /// internal pointer over field names to be used after Decode() call
-    // - either FieldNames, either Fields[] array as defined in Decode()
+    // - either FieldNames, either Fields[] array as defined in Decode(), or
+    // external names as set by TSQLRestStorageExternal.JSONDecodedPrepareToSQL
     DecodedFieldNames: PRawUTF8Array;
     /// the ID=.. value as sent within the JSON object supplied to Decode()
     DecodedRowID: TID;
@@ -650,6 +651,8 @@ type
     // - to create 'INSERT INTO ... SELECT UNNEST(...)' or 'UPDATE ... FROM
     // SELECT UNNEST(...)' statements for very efficient bulk writes in a
     // PostgreSQL database
+    // - as set by TSQLRestStorageExternal.JSONDecodedPrepareToSQL when
+    // cPostgreBulkArray flag is detected (for SynDBPostgres)
     DecodedFieldTypesToUnnest: PSQLDBFieldTypeArray;
     /// decode the JSON object fields into FieldNames[] and FieldValues[]
     // - if Fields=nil, P should be a true JSON object, i.e. defined

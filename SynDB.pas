@@ -316,8 +316,11 @@ type
   TSQLDBColumnCreateDynArray = array of TSQLDBColumnCreate;
 
   /// identify a CRUD mode of a statement
+  // - in addition to CRUD states, cPostgreBulkArray would identify if the ORM
+  // should generate unnested/any bound array statements - currently only
+  // supported by SynDBPostgres for bulk insert/update/delete
   TSQLDBStatementCRUD = (
-    cCreate, cRead, cUpdate, cDelete);
+    cCreate, cRead, cUpdate, cDelete, cPostgreBulkArray);
 
   /// identify the CRUD modes of a statement
   // - used e.g. for batch send abilities of a DB engine

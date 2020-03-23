@@ -667,11 +667,11 @@ begin
   fDBMS := dPostgreSQL;
   FillOidMapping;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
-  // disable MultiInsert to enable cCreate array binding and "unnest" statements
+  // JSONDecodedPrepareToSQL will detect cPostgreBulkArray and set
+  // DecodedFieldTypesToUnnest -> fast bulk insert/delete/update
+  fBatchSendingAbilities := [cCreate, cDelete, cUpdate, cPostgreBulkArray];
+  // disable MultiInsert SQL and rely on cPostgreBulkArray process for cCreate
   fOnBatchInsert := nil; // see TSQLRestStorageExternal.InternalBatchStop
-  // JSONDecodedPrepareToSQL will detect it and set DecodedFieldTypesToUnnest
-  //  -> fast bulk insert/delete/update
-  fBatchSendingAbilities := [cCreate, cDelete, cUpdate];
 end;
 
 function TSQLDBPostgresConnectionProperties.NewConnection: TSQLDBConnection;

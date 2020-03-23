@@ -1102,8 +1102,10 @@ begin
         end;
       end;
       mDelete: begin
-        if fProperties.DBMS=dPostgreSQL then // for SynDBPostgres array binding
+        if cPostgreBulkArray in fProperties.BatchSendingAbilities then
+          // for SynDBPostgres array binding
           SQL := 'delete from % where %=ANY(?)' else
+          // regular SQL
           SQL := 'delete from % where %=?';
         SQL := FormatUTF8(SQL,[fTableName,fStoredClassMapping^.RowIDFieldName]);
         n := BatchEnd-BatchBegin+1;
@@ -1906,8 +1908,8 @@ begin
   end;
   // compute SQL statement and associated bound parameters
   Decoder.DecodedFieldNames := pointer(ExternalFields);
-  if (fProperties.DBMS=dPostgreSQL) and not Assigned(fProperties.OnBatchInsert) then
-    // enable SynDBPostgres bulk insert via 'insert into ... values (unnest...)'
+  if cPostgreBulkArray in fProperties.BatchSendingAbilities then
+    // SynDBPostgres array binding e.g. via 'insert into ... values (unnest...)'
     Decoder.DecodedFieldTypesToUnnest := @Types;
   result := Decoder.EncodeAsSQLPrepared(fTableName,Occasion,
     fStoredClassMapping^.RowIDFieldName,BatchOptions);
