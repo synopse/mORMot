@@ -27376,8 +27376,8 @@ begin
   try
     case Occasion of
     soUpdate: begin
-      if FieldCount<2 then
-        raise EORMException.CreateUTF8('Invalid EncodeAsSQLPrepared(%)',[FieldCount]);
+      if FieldCount=0 then
+        raise EORMException.Create('Invalid EncodeAsSQLPrepared(0)');
       W.AddShort('update ');
       W.AddString(TableName);
       if DecodedFieldTypesToUnnest<>nil then begin
