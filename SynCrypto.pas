@@ -3340,6 +3340,8 @@ asm {$else} asm .noframe {$endif}
         mov     dword ptr[d + 16], eax
 end;
 
+// see http://nicst.de/crc.pdf
+
 function gf2_multiply(x,y,m,bits: PtrUInt): PtrUInt; {$ifdef FPC} nostackframe; assembler;
 asm {$else} asm .noframe {$endif}
         mov     rax, x

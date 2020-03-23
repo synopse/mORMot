@@ -119,8 +119,6 @@ end;
 
 const
   DB_NAME = 'test24';
-  USER_NAME = 'toto';
-  USER_PWD = 'pass';
   COLL_NAME = 'direct';
   {$ifndef ADD5000}
   COLL_COUNT = 100;
@@ -133,6 +131,9 @@ const
   {$endif}
 
 {$ifdef TESTMONGOAUTH}
+const
+  USER_NAME = 'toto';
+  USER_PWD = 'pass';
 var
   UserCreated: boolean;
 {$endif}
@@ -209,7 +210,7 @@ begin
   SetLength(fValues,COLL_COUNT);
   for i := 0 to COLL_COUNT-1 do begin
     TDocVariant.New(fValues[i]);
-    if i<50 then
+    if i<0 then
       fValues[i]._id := null else
       fValues[i]._id := ObjectID;
     fValues[i].Name := 'Name '+IntToStr(i+1);
@@ -222,7 +223,7 @@ end;
 
 procedure TTestDirect.FillCollection;
 var Coll: TMongoCollection;
-    oid, oid2: TBSONObjectID;
+    oid: TBSONObjectID;
     i: integer;
     jsonArray: RawUTF8;
     bytes: Int64;
@@ -233,10 +234,9 @@ begin
   Coll.EnsureIndex(['Name']);
   bytes := fClient.BytesTransmitted;
   for i := 0 to COLL_COUNT-1 do begin
-    Check(Coll.Save(fValues[i],@oid)=(i<50));
+    Check(Coll.Save(fValues[i],@oid)=(i<0));
     Check(BSONVariantType.IsOfKind(fValues[i]._id,betObjectID));
-    Check(oid2.FromVariant(fValues[i]._id));
-    Check(oid2.Equal(oid),'EnsureDocumentHasID failure');
+    Check(oid.Equal(fValues[i]._id),'EnsureDocumentHasID failure');
   end;
   NotifyTestSpeed('rows inserted',COLL_COUNT,fClient.BytesTransmitted-bytes);
   Check(Coll.Count=COLL_COUNT);
