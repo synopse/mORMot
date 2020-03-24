@@ -458,7 +458,7 @@ type
   public
     /// create the test instance and initialize associated LogFile instance
     // - this will allow logging of all exceptions to the LogFile
-    constructor Create(const Ident: string = ''); reintroduce;
+    constructor Create(const Ident: string = ''); virtual; reintroduce;
     /// release associated memory
     destructor Destroy; override;
     /// the .log file generator created if any test case failed
