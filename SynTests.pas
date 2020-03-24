@@ -174,15 +174,15 @@ type
     fCheckLogTime: TPrecisionTimer;
     fCheckLastMsg: cardinal;
     fCheckLastTix: cardinal;
-    /// called before all published properties are executed
+    /// called before all published methods are executed
     procedure Setup; virtual;
-    /// called after all published properties are executed
+    /// called after all published methods are executed
     // - WARNING: this method should be re-entrant - so using FreeAndNil() is
     // a good idea in this method :)
     procedure CleanUp; virtual;
-    /// called before each published properties execution
+    /// called before each published methods execution
     procedure MethodSetup; virtual;
-    /// called after each published properties execution
+    /// called after each published methods execution
     procedure MethodCleanUp; virtual;
     procedure AddLog(condition: Boolean; const msg: string);
   public
@@ -458,7 +458,7 @@ type
   public
     /// create the test instance and initialize associated LogFile instance
     // - this will allow logging of all exceptions to the LogFile
-    constructor Create(const Ident: string = ''); reintroduce;
+    constructor Create(const Ident: string = ''); override;
     /// release associated memory
     destructor Destroy; override;
     /// the .log file generator created if any test case failed
@@ -1203,7 +1203,7 @@ end;
 
 constructor TSynTestsLogged.Create(const Ident: string);
 begin
-  inherited;
+  inherited Create(Ident);
   with TSynLogTestLog.Family do begin
     if integer(Level)=0 then // if no exception is set
       Level := [sllException,sllExceptionOS,sllFail];
