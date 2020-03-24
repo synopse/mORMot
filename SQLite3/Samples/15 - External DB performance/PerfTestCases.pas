@@ -18,7 +18,7 @@ interface
 {.$define USELOCALMSSQLEXPRESS}    // SQL Server 2008 R2 Express locally
 {.$define USELOCALDBMSSQLEXPRESS}  // SQL Server 2012 LocalDB edition
 {.$define USELOCALDB2}
-{$define USELOCALPOSTGRESQL}
+{.$define USELOCALPOSTGRESQL}
 {.$define USELOCALMYSQL}
 {.$define USEMONGODB}
 
@@ -81,7 +81,7 @@ type
     fCreateTable: RawUTF8;
     fNumberOfElements: integer;
     fInsertTime: RawUTF8;
-    fEngine: string;
+    fEngine: RawUTF8;
     fClientCloseTime: RawUTF8;
     fInsertRate: integer;
     fReadOneByOneTime: RawUTF8;
@@ -101,7 +101,7 @@ type
     fReadOneByNameTime: RawUTF8;
     {$endif}
   published
-    property Engine: string read fEngine;
+    property Engine: RawUTF8 read fEngine;
     property CreateTableTime: RawUTF8 read fCreateTable write fCreateTable;
     property NumberOfElements: integer read fNumberOfElements write fNumberOfElements;
     property InsertTime: RawUTF8 read fInsertTime;
@@ -173,7 +173,7 @@ type
     ValueLastName, ValueFirstName: TRawUTF8DynArray;
     Res: TIDDynArray;
     Flags: set of (dbIsFile, dbInMemory, dbInMemoryVirtual, dbPropIsMemory,
-      dbPropUntouched);
+      dbPropUntouched, dbDropTable);
     procedure Setup; override;
     procedure Cleanup; override;
     procedure MethodSetup; override;
@@ -245,6 +245,9 @@ type
   TTestPostgresql = class(TTestDatabaseExternalAbstract)
   published
     procedure _SynDBPostgres;
+    {$ifdef USEZEOS}
+    procedure ZeosPostgres;
+    {$endif}
   end;
   {$endif USELOCALPOSTGRESQL}
 
@@ -273,7 +276,7 @@ procedure TTestDatabaseAbstract.MethodSetup;
 begin
   Flags := [];
   Stat := TStat.Create;
-  Stat.fEngine := Owner.CurrentMethodInfo^.TestName;
+  Stat.fEngine := ToUTF8(Owner.CurrentMethodInfo^.TestName);
 end;
 
 procedure TTestDatabaseAbstract.MethodCleanup;
@@ -345,9 +348,9 @@ begin
   NotifyTestSpeed('read one',Stat.NumberOfElements,0,@RunTimer);
   Stat.fReadOneByOneTime := RunTimer.LastTime;
   Stat.fReadOneByOneRate := RunTimer.PerSec(Stat.NumberOfElements);
+  log := nil;
   {$ifdef UNIK}
   // one by one retrieve values using Name property
-  log := nil;
   log := TSynLog.Enter('% Read Unique',[Owner.CurrentMethodInfo^.IdentTestName],self);
   RunTimer.Start;
   for i := 0 to Stat.NumberOfElements-1 do
@@ -355,12 +358,12 @@ begin
     Client.Retrieve('LastName=?',[],[ValueLastName[i]],Value);
     Check((Value.IDValue=Res[i]) and
       (PInt64(@Value.Amount)^=(i+1)*100) and
-      (Value.LastChange>=Start));
+      (Value.LastChange>=ChangeStart));
   end;
   NotifyTestSpeed('read unique',Stat.NumberOfElements,0,@RunTimer);
   Stat.fReadOneByNameTime := RunTimer.LastTime;
   Stat.fReadOneByNameRate := RunTimer.PerSec(Stat.NumberOfElements);
-  {$endif}
+  {$endif UNIK}
   // retrieve all rows with or without the virtual module
   for UseDirect := false to true do
   begin
@@ -591,7 +594,7 @@ end;
 
 procedure TTestDatabaseExternalAbstract.ClientCreate;
 begin
-  if Props <> nil then
+  if (Props <> nil) and (dbDropTable in Flags) then
     Props.ExecuteNoResult('drop table SAMPLERECORD', []);
   inherited ClientCreate;
 end;
@@ -605,7 +608,7 @@ end;
 
 procedure TTestDatabaseExternalAbstract.RunExternal(P: TSQLDBConnectionProperties);
 begin
-  Flags := [dbPropUntouched];
+  Flags := [dbPropUntouched, dbDropTable];
   Props := P;
   try
     Props.ThreadSafeConnection.Connect;
@@ -699,15 +702,30 @@ begin
     'localhost','postgres','postgres','docker'));
 end;
 
+
+{$ifdef USEZEOS}
+procedure TTestPostgresql.ZeosPostgres;
+begin
+  RunExternal(TSQLDBZEOSConnectionProperties.Create(TSQLDBZEOSConnectionProperties.URI(
+    dPostgreSQL,'localhost','libpq.so.5',false),'postgres','postgres','docker'));
+end;
+{$endif}
+
 {$endif USELOCALPOSTGRESQL}
 
 
 { TTestDatabaseBenchmark }
 
 constructor TTestDatabaseBenchmark.Create(const Ident: string);
+var
+  fn: TFileName;
 begin
   Stats := TSynObjectList.Create;
-  Ini := StringFromFile(ChangeFileExt(ExeVersion.ProgramFileName,'.ini'));
+  fn := ChangeFileExt(ExeVersion.ProgramFileName, '.ini');
+  if FileExists(fn) then
+    Ini := StringFromFile(fn)
+  else
+    FileFromString('', fn);
   inherited Create(Ident);
 end;
 
@@ -722,109 +740,142 @@ procedure TTestDatabaseBenchmark.SaveStats;
 type TStatArray = array[0..1000] of TStat;
 var Stat: ^TStatArray;
     mode,s,txt: RawUTF8;
-    m,nCat: integer;
+    m,nCat, col1len: integer;
     max,Cat1,Cat2,Eng1,Eng2,Eng: RawUTF8;
     Rows: TRawUTF8DynArray;
-    Doc: RawUTF8;
-procedure SetCategories(const Title: RawUTF8; const Cat: array of RawUTF8);
-var i: integer;
-begin
-  mode := UrlEncode(Title);
-  s := s+'<h1>'+copy(Title,1,posEx(' (',Title)-1)+'</h1>'#13#10;
-  max := Int32ToUtf8(m);
-  nCat := length(Cat);
-  Cat1 := '';
-  Cat2 := '';
-  SetLength(Rows,Stats.Count+1);
-  Rows[0] := '<td>&nbsp;</td>';
-  for i := 0 to high(Cat) do begin
-    Rows[0] := Rows[0]+'<td><b>'+Cat[i]+'</b></td>';
-    Cat1 := Cat1+UrlEncode(Cat[i])+'|';
-    Cat2 := Cat2+UrlEncode(Cat[high(Cat)-i])+'|';
+    Doc, Cons: RawUTF8;
+  procedure SetCategories(const Title: RawUTF8; const Cat: array of RawUTF8);
+  var i: integer;
+  begin
+    mode := UrlEncode(Title);
+    s := s+'<h1>'+copy(Title,1,posEx(' (',Title)-1)+'</h1>'#13#10;
+    max := Int32ToUtf8(m);
+    nCat := length(Cat);
+    Cat1 := '';
+    Cat2 := '';
+    SetLength(Rows,Stats.Count+1);
+    Rows[0] := '<td>&nbsp;</td>';
+    cons := cons+#13#10+Title+#13#10+StringOfChar(' ',col1len+2);
+    for i := 0 to high(Cat) do begin
+      Rows[0] := Rows[0]+'<td><b>'+Cat[i]+'</b></td>';
+      Cat1 := Cat1+UrlEncode(Cat[i])+'|';
+      Cat2 := Cat2+UrlEncode(Cat[high(Cat)-i])+'|';
+      cons := cons+Cat[i];
+      if i<>high(Cat) then
+        cons := cons+StringOfChar(' ',12-length(Cat[i]));
+    end;
+    cons := cons+#13#10;
+    SetLength(Cat1,length(Cat1)-1);
+    SetLength(Cat2,length(Cat2)-1);
+    Eng1 := '';
+    Eng2 := '';
+    for i := 0 to Stats.Count-1 do begin
+      Eng := Stat[i].Engine;
+     { j := PosEx(' ',Eng);
+      if j>0 then begin
+        Delete(Eng,j,1);
+        insert('<br>',Eng,j);
+      end;}
+      Rows[i+1] := '<td><b>'+Eng+'</b></td>';
+      Eng1 := Eng1+UrlEncode(Stat[i].Engine)+'|';
+      Eng2 := Eng2+UrlEncode(Stat[Stats.Count-1-i].Engine)+'|';
+    end;
+    SetLength(Eng1,length(Eng1)-1);
+    SetLength(Eng2,length(Eng2)-1);
   end;
-  SetLength(Cat1,length(Cat1)-1);
-  SetLength(Cat2,length(Cat2)-1);
-  Eng1 := '';
-  Eng2 := '';
-  for i := 0 to Stats.Count-1 do begin
-    Eng := Stat[i].Engine;
-   { j := PosEx(' ',Eng);
-    if j>0 then begin
-      Delete(Eng,j,1);
-      insert('<br>',Eng,j);
-    end;}
-    Rows[i+1] := '<td><b>'+Eng+'</b></td>';
-    Eng1 := Eng1+UrlEncode(Stat[i].Engine)+'|';
-    Eng2 := Eng2+UrlEncode(Stat[Stats.Count-1-i].Engine)+'|';
+  procedure Pic1(const Leg: RawUTF8; n: integer);
+  var i: integer;
+  begin
+    txt := 'http://chart.apis.google.com/chart?chtt='+mode+'&chxl=1:|'+Leg+
+      '&chxt=x,y&chbh=a&chs=600x500&cht=bhg&chco=';
+  //  for i := 1 to 5 do txt := txt+IntToHex($309F30+i*$010101,3)+',';
+  //  txt[length(txt)] := '&';
+  //    '3D7930,3D8930,309F30,6070F0,5070E0,40C355,65D055,80C1A2,F05050,F0A280'+
+    txt := txt+'3D7930,3D8930,309F30,40C355&';//,6070F0,5070E0,65D055,80C1A2,3D7930,3D8930,F05050,F04050,F04040,F01040,F0A280&';
+    txt := txt+'chxr=0,0,'+max+'&chds=';
+    for i := 1 to n do
+      txt := txt+'0,'+max+',';
+    txt[length(txt)] := '&';
+    txt := txt+'chd=t:';
   end;
-  SetLength(Eng1,length(Eng1)-1);
-  SetLength(Eng2,length(Eng2)-1);
-end;
-procedure Pic1(const Leg: RawUTF8; n: integer);
-var i: integer;
-begin
-  txt := 'http://chart.apis.google.com/chart?chtt='+mode+'&chxl=1:|'+Leg+
-    '&chxt=x,y&chbh=a&chs=600x500&cht=bhg&chco=';
-//  for i := 1 to 5 do txt := txt+IntToHex($309F30+i*$010101,3)+',';
-//  txt[length(txt)] := '&';
-//    '3D7930,3D8930,309F30,6070F0,5070E0,40C355,65D055,80C1A2,F05050,F0A280'+
-  txt := txt+'3D7930,3D8930,309F30,40C355&';//,6070F0,5070E0,65D055,80C1A2,3D7930,3D8930,F05050,F04050,F04040,F01040,F0A280&';
-  txt := txt+'chxr=0,0,'+max+'&chds=';
-  for i := 1 to n do
-    txt := txt+'0,'+max+',';
-  txt[length(txt)] := '&';
-  txt := txt+'chd=t:';
-end;
-procedure PicEnd(const Legend: RawUTF8);
-begin
-  txt[length(txt)] := '&';
-  s := s+'<p><img src='+txt+'chdl='+Legend+'></p>'#13#10;
-  txt := '';
-end;
-procedure Table;
-var i: integer;
-begin
-  s := s+'<p><table>';
-  for i := 0 to High(Rows) do
-    s := s+'<tr align=center>'+Rows[i]+'</tr>'#13#10;
-  s := s+'</table></p>';
-  Doc := Doc+'|%30';
-  for i := 1 to nCat do
-    Doc := Doc+'%15';
-  Doc := Doc+#13#10;
-  for i := 0 to High(Rows) do begin
-    Doc := Doc+StringReplaceAll(Rows[i], ['</td>','', '</tr>','', '<tr align=center>','',
-      '</b>','}', '</td>','', '<b>','{\b ', '<td>','|', '&nbsp;',''])+#13#10;
+  procedure PicEnd(const Legend: RawUTF8);
+  begin
+    txt[length(txt)] := '&';
+    s := s+'<p><img src='+txt+'chdl='+Legend+'></p>'#13#10;
+    txt := '';
   end;
-  Doc := Doc+'|%'#13#10;
-end;
-var i: integer;
+  procedure SetValues(var Rows: RawUTF8; const eng: RawUTF8; const v: array of const);
+  var j: integer;
+      fmt,s: RawUTF8;
+  begin
+    for j := 2 to length(v) do
+      fmt := fmt+'%,';
+    fmt := fmt+'%|';
+    txt := txt+FormatUTF8(fmt,v);
+    fmt := '';
+    for j := 1 to length(v) do
+      fmt := fmt+'<td>%</td>';
+    Rows := Rows+FormatUTF8(fmt,v);
+    fmt := eng+StringOfChar(' ',col1len-length(eng)+2);
+    for j := 0 to high(v) do begin
+      VarRecToUTF8(v[j],s);
+      if j<>high(v) then
+        s := s+StringOfChar(' ',12-length(s));
+      fmt := fmt+s;
+    end;
+    cons := cons+fmt+#13#10;
+  end;
+  procedure Table;
+  var i: integer;
+  begin
+    s := s+'<p><table>';
+    for i := 0 to High(Rows) do
+      s := s+'<tr align=center>'+Rows[i]+'</tr>'#13#10;
+    s := s+'</table></p>';
+    Doc := Doc+'|%30';
+    for i := 1 to nCat do
+      Doc := Doc+'%15';
+    Doc := Doc+#13#10;
+    for i := 0 to High(Rows) do begin
+      Doc := Doc+StringReplaceAll(Rows[i], ['</td>','', '</tr>','', '<tr align=center>','',
+        '</b>','}', '</td>','', '<b>','{\b ', '<td>','|', '&nbsp;',''])+#13#10;
+    end;
+    Doc := Doc+'|%'#13#10;
+  end;
+var i,j: integer;
 begin
+  // introducting text
   Stat := pointer(Stats.List);
-  s := FormatUTF8('<p>Running tests using Synopse mORMot framework %, '+
-    'compiled with %, against SQLite %, on %, at %.</p>',
+  s := FormatUTF8('Running tests using Synopse mORMot framework %, '+
+    'compiled with %, against SQLite %, on %, at %.',
     [SYNOPSE_FRAMEWORK_VERSION, GetDelphiCompilerVersion, SQLite3.libversion,
      OSVersionText, NowToString]);
+  cons := '[code]'#13#10+s+#13#10#13#10;
+  s := '<p>'+s+'</p>';
+  // compute max Insertion rate value for charts
   m := 0;
+  col1len := 0;
   for i := 0 to Stats.Count-1 do
     with Stat[i] do begin
       if InsertRate>m then m := InsertRate;
       if InsertBatchRate>m then m := InsertBatchRate;
       if InsertTransactionRate>m then m := InsertTransactionRate;
       if InsertBatchTransactionRate>m then m := InsertBatchTransactionRate;
+      j := length(Engine);
+      if j>col1len then
+        col1len := j;
     end;
+  // Insertion Categories
   SetCategories('Insertion speed (rows/second)',['Direct','Batch','Trans','Batch Trans']);
+  // Insertion per-Engine Values and Chart
   Pic1(Cat2,5);
   for i := 0 to Stats.Count-1 do
-  with Stat[i] do begin
-    txt := FormatUTF8('%%,%,%,%|',
-      [txt,InsertRate,InsertBatchRate,InsertTransactionRate,InsertBatchTransactionRate]);
-    Rows[i+1] := FormatUTF8('%<td>%</td><td>%</td><td>%</td><td>%</td>',
-      [Rows[i+1],InsertRate,InsertBatchRate,InsertTransactionRate,InsertBatchTransactionRate]);
-  end;
+  with Stat[i] do
+    SetValues(Rows[i+1], Engine,
+      [InsertRate,InsertBatchRate,InsertTransactionRate,InsertBatchTransactionRate]);
   Table;
   PicEnd(Eng1);
-
+  // Insertion per-Category Chart
   Pic1(Eng2,Stats.Count);
   for i := 0 to Stats.Count-1 do
     txt := txt+Int32ToUtf8(Stat[i].InsertRate)+',';
@@ -838,7 +889,7 @@ begin
   for i := 0 to Stats.Count-1 do
     txt := txt+Int32ToUtf8(Stat[i].InsertBatchTransactionRate)+',';
   PicEnd(Cat1);
-
+  // compute max Reading rate value for charts
   m := 0;
   for i := 0 to Stats.Count-1 do
     with Stat[i] do begin
@@ -849,24 +900,19 @@ begin
       if ReadAllVirtualRate>m then m := ReadAllVirtualRate;
       if ReadAllDirectRate>m then m := ReadAllDirectRate;
     end;
+  // Reading Categories
   SetCategories('Read speed (rows/second)',['By one',
     {$ifdef UNIK}'By name',{$endif}'All Virtual','All Direct']);
+  // Reading per-Engine Values and Chart
   Pic1(Cat2,{$ifdef UNIK}4{$else}3{$endif});
   for i := 0 to Stats.Count-1 do
-  with Stat[i] do begin
-    txt := FormatUTF8({$ifdef UNIK}'%%,%,%,%|'{$else}'%%,%,%|'{$endif},
-      [txt,ReadOneByOneRate,{$ifdef UNIK}ReadOneByNameRate,{$endif}
-        ReadAllVirtualRate,ReadAllDirectRate]);
-    Rows[i+1] := FormatUTF8('%<td>%</td>',[Rows[i+1],ReadOneByOneRate]);
-    {$ifdef UNIK}
-    Rows[i+1] := FormatUTF8('%<td>%</td>',[Rows[i+1],ReadOneByNameRate]);
-    {$endif}
-    Rows[i+1] := FormatUTF8('%<td>%</td><td>%</td>',
-      [Rows[i+1],ReadAllVirtualRate,ReadAllDirectRate]);
-  end;
+    with Stat[i] do
+      SetValues(Rows[i+1], Engine,
+        [ReadOneByOneRate,{$ifdef UNIK}ReadOneByNameRate,{$endif}
+          ReadAllVirtualRate,ReadAllDirectRate]);
   Table;
   PicEnd(Eng1);
-
+  // Reading per-Category Chart
   Pic1(Eng2,Stats.Count);
   for i := 0 to Stats.Count-1 do
     txt := txt+Int32ToUtf8(Stat[i].ReadOneByOneRate)+',';
@@ -882,24 +928,24 @@ begin
   for i := 0 to Stats.Count-1 do
     txt := txt+Int32ToUtf8(Stat[i].ReadAllDirectRate)+',';
   PicEnd(Cat1);
-
-  FileFromString(Doc,ChangeFileExt(ExeVersion.ProgramFileName,'.txt'));
+  // save to local files
+  FileFromString(Doc,ChangeFileExt(ExeVersion.ProgramFileName,'.doc'));
+  FileFromString(cons+'[/code]',ChangeFileExt(ExeVersion.ProgramFileName,'.txt'));
   FileFromString('<html><body>'#13#10+s,ChangeFileExt(ExeVersion.ProgramFileName,'.htm'));
 end;
 
 procedure TTestDatabaseBenchmark.DirectDatabaseAccess;
 begin
-  //
-  exit;
+  //exit;
   AddCase(TTestDirectSqliteEngine);
   AddCase(TTestInMemoryEngine);
 end;
 
 procedure TTestDatabaseBenchmark.ExternalDatabaseAccess;
 begin
-  // exit;
-//  AddCase(TTestSqliteExternal);
-//  AddCase(TTestSqliteRemote);
+  //exit;
+  AddCase(TTestSqliteExternal);
+  AddCase(TTestSqliteRemote);
   {$ifdef USELOCALPOSTGRESQL}
   AddCase(TTestPostgresql);
   {$endif}
