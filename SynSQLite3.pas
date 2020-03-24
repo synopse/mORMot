@@ -2767,7 +2767,9 @@ type
     // - if specified, the password will be used to cypher this file on disk
     // (the main SQLite3 database file is encrypted, not the wal file during run);
     // the password may be a JSON-serialized TSynSignerParams object, or will use
-    // AES-OFB-128 after SHAKE_128 with rounds=1000 and a fixed salt on plain password text
+    // AES-OFB-128 after SHAKE_128 with rounds=1000 and a fixed salt on plain
+    // password text; note that our custom encryption is not compatible with the
+    // official SQLite Encryption Extension module
     // - you can specify some optional flags for sqlite3.open_v2() as
     // SQLITE_OPEN_READONLY or SQLITE_OPEN_READWRITE instead of supplied default
     // value (which corresponds to the sqlite3.open() behavior)
