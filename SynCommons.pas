@@ -4502,21 +4502,21 @@ function DeduplicateInt64Sorted(val: PInt64Array; last: PtrInt): PtrInt;
 procedure CopyInt64(const Source: TInt64DynArray; out Dest: TInt64DynArray);
 
 /// find the maximum 32-bit integer in Values[]
-function MaxInteger(const Values: TIntegerDynArray; ValuesCount: integer;
+function MaxInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt;
   MaxStart: integer=-1): Integer;
 
 /// sum all 32-bit integers in Values[]
-function SumInteger(const Values: TIntegerDynArray; ValuesCount: integer): Integer;
+function SumInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt): Integer;
 
 /// fill already allocated Reversed[] so that Reversed[Values[i]]=i
-procedure Reverse(const Values: TIntegerDynArray; ValuesCount: integer;
+procedure Reverse(const Values: TIntegerDynArray; ValuesCount: PtrInt;
   Reversed: PIntegerArray);
 
 /// fill some values with i,i+1,i+2...i+Count-1
 procedure FillIncreasing(Values: PIntegerArray; StartValue: integer; Count: PtrUInt);
 
 /// copy some Int64 values into an unsigned integer array
-procedure Int64ToUInt32(Values64: PInt64Array; Values32: PCardinalArray; Count: integer);
+procedure Int64ToUInt32(Values64: PInt64Array; Values32: PCardinalArray; Count: PtrInt);
 
 /// append the strings in the specified CSV text into a dynamic array of integer
 procedure CSVToIntegerDynArray(CSV: PUTF8Char; var Result: TIntegerDynArray;
@@ -30946,26 +30946,29 @@ begin
   MoveFast(Source[0],Dest[0],n*SizeOf(Int64));
 end;
 
-function MaxInteger(const Values: TIntegerDynArray; ValuesCount, MaxStart: integer): Integer;
-var i: integer;
+function MaxInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt; MaxStart: integer): Integer;
+var i: PtrInt;
+    v: integer;
 begin
   result := MaxStart;
-  for i := 0 to ValuesCount-1 do
-    if Values[i]>result then
-      result := Values[i];
+  for i := 0 to ValuesCount-1 do begin
+    v := Values[i];
+    if v>result then
+      result := v; // branchless opcode on FPC
+  end;
 end;
 
-function SumInteger(const Values: TIntegerDynArray; ValuesCount: integer): Integer;
-var i: integer;
+function SumInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt): Integer;
+var i: PtrInt;
 begin
   result := 0;
   for i := 0 to ValuesCount-1 do
     inc(result,Values[i]);
 end;
 
-procedure Reverse(const Values: TIntegerDynArray; ValuesCount: integer;
+procedure Reverse(const Values: TIntegerDynArray; ValuesCount: PtrInt;
   Reversed: PIntegerArray);
-var i: integer;
+var i: PtrInt;
 begin
   i := 0;
   if ValuesCount>=4 then begin
@@ -30999,8 +31002,8 @@ begin
       end;
 end;
 
-procedure Int64ToUInt32(Values64: PInt64Array; Values32: PCardinalArray; Count: integer);
-var i: integer;
+procedure Int64ToUInt32(Values64: PInt64Array; Values32: PCardinalArray; Count: PtrInt);
+var i: PtrInt;
 begin
   for i := 0 to Count-1 do
     Values32[i] := Values64[i];
