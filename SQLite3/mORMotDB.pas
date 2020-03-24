@@ -187,7 +187,8 @@ type
     /// compute the INSERT or UPDATE statement as decoded from a JSON object
     function JSONDecodedPrepareToSQL(var Decoder: TJSONObjectDecoder;
       out ExternalFields: TRawUTF8DynArray; out Types: TSQLDBFieldTypeArray;
-      Occasion: TSQLOccasion; BatchOptions: TSQLRestBatchOptions): RawUTF8;
+      Occasion: TSQLOccasion; BatchOptions: TSQLRestBatchOptions;
+      BoundArray: boolean): RawUTF8;
     function GetConnectionProperties: TSQLDBConnectionProperties;
     /// check rpmClearPoolOnConnectionIssue in fStoredClassMapping.Options
     function HandleClearPoolOnConnectionIssue: boolean;
@@ -1078,7 +1079,8 @@ begin
             RecordVersionFieldHandle(Occasion,Decode);
             if Fields=nil then begin
               Decode.AssignFieldNamesTo(Fields);
-              SQL := JSONDecodedPrepareToSQL(Decode,ExternalFields,Types,Occasion,[]);
+              SQL := JSONDecodedPrepareToSQL(
+                Decode,ExternalFields,Types,Occasion,[],{array=}true);
               SetLength(Values,Decode.FieldCount);
               ValuesMax := fBatchCount-BatchBegin;
               if ValuesMax>max then
@@ -1615,6 +1617,9 @@ begin
     if ExpectResults and (sftDateTimeMS in fStoredClassRecordProps.HasTypeFields) then
       stmt.ForceDateWithMS := true;
     stmt.ExecutePrepared;
+    if IdemPChar(SQLFormat, 'DROP TABLE ') then begin
+      fEngineLockedMaxID := 0;
+    end;
     result := stmt;
   except
     stmt := nil;
@@ -1849,7 +1854,8 @@ begin
     end;
     RecordVersionFieldHandle(Occasion,Decoder);
     // compute SQL statement and associated bound parameters
-    SQL := JSONDecodedPrepareToSQL(Decoder,ExternalFields,Types,Occasion,[]);
+    SQL := JSONDecodedPrepareToSQL(
+      Decoder,ExternalFields,Types,Occasion,[],{array=}false);
     if Occasion=soUpdate then  // Int64ToUTF8(var) fails on D2007
       Decoder.FieldValues[Decoder.FieldCount-1] := Int64ToUTF8(UpdatedID);
     // execute statement
@@ -1892,7 +1898,7 @@ end;
 function TSQLRestStorageExternal.JSONDecodedPrepareToSQL(
   var Decoder: TJSONObjectDecoder; out ExternalFields: TRawUTF8DynArray;
   out Types: TSQLDBFieldTypeArray; Occasion: TSQLOccasion;
-  BatchOptions: TSQLRestBatchOptions): RawUTF8;
+  BatchOptions: TSQLRestBatchOptions; BoundArray: boolean): RawUTF8;
 var f,k: Integer;
 begin
   SetLength(ExternalFields,Decoder.FieldCount);
@@ -1908,7 +1914,7 @@ begin
   end;
   // compute SQL statement and associated bound parameters
   Decoder.DecodedFieldNames := pointer(ExternalFields);
-  if cPostgreBulkArray in fProperties.BatchSendingAbilities then
+  if BoundArray and (cPostgreBulkArray in fProperties.BatchSendingAbilities) then
     // SynDBPostgres array binding e.g. via 'insert into ... values (unnest...)'
     Decoder.DecodedFieldTypesToUnnest := @Types;
   result := Decoder.EncodeAsSQLPrepared(fTableName,Occasion,

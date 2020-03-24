@@ -537,7 +537,7 @@ begin
     begin
       PQ.SetNoticeProcessor(fPGConn, SynLogNoticeProcessor, pointer(self));
       log.Log(sllDB, 'Connected to % % using % v%', [fProperties.ServerName,
-        fProperties.DatabaseNameSafe, PQ.fLibraryPath, PQ.LibVersion]);
+        fProperties.DatabaseNameSafe, PQ.fLibraryPath, PQ.LibVersion], self);
     end
     else // to ensure no performance drop due to notice to console
       PQ.SetNoticeProcessor(fPGConn, DummyNoticeProcessor, nil);
@@ -801,7 +801,7 @@ begin
     p := @fParams[i];
     if p^.VArray <> nil then
     begin
-      if not (p^.VType in [ftInt64, ftDouble, ftCurrency, ftUTF8]) then
+      if not (p^.VType in [ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8]) then
         raise ESQLDBPostgres.CreateUTF8('%.ExecutePrepared: Invalid array type % ' +
           'on bound parameter #%', [Self, ToText(p^.VType)^, i]);
       p^.VData := BoundArrayToJSONArray(p^.VArray);

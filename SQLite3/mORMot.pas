@@ -40285,7 +40285,7 @@ begin
       TableID := TableEngine.EngineAdd(TableIndex,Call.InBody);
       if TableID<>0 then begin
         Call.OutStatus := HTTP_CREATED; // 201 Created
-        Call.OutHead := 'Location: '+URI+'/'+Int64ToUtf8(TableID);
+        FormatUTF8('Location: %/%',[URI,TableID],Call.OutHead);
         if rsoAddUpdateReturnsContent in Server.Options then begin
           Server.fCache.NotifyDeletion(TableIndex,TableID);
           Call.OutBody := TableEngine.EngineRetrieve(TableIndex,TableID);
