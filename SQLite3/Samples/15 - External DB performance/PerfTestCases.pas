@@ -309,6 +309,7 @@ begin
       NotifyTestSpeed('insert%',[_ID[Num[1]]],Stat.NumberOfElements,0,@RunTimer);
       time := RunTimer.LastTime;
       rate := RunTimer.PerSec(Stat.NumberOfElements);
+      log := nil;
       case Num[1] of
       '1':
         begin
@@ -334,7 +335,6 @@ begin
       end;
       inc(Num[1]);
       ClientFree;
-      log := nil;
     end;
   // Read tests
   log := TSynLog.Enter('% Read One',[Owner.CurrentMethodInfo^.IdentTestName],self);

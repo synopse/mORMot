@@ -11,5 +11,5 @@ uses
 
 begin
   TTestDatabaseBenchmark.RunAsConsole(
-    'mORMot Framework Database Benchmark', LOG_VERBOSE);
+    'mORMot Framework Database Benchmark'{, LOG_VERBOSE});
 end.
