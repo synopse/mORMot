@@ -1943,8 +1943,6 @@ type
   TSynAnsicharSet = set of AnsiChar;
   /// used to store a set of 8-bit unsigned integers
   TSynByteSet = set of Byte;
-  /// used to store a set of 8-bit unsigned integers as 256 booleans
-  TSynByteBoolean = array[byte] of boolean;
 
 /// check all character within text are spaces or control chars
 // - i.e. a faster alternative to trim(text)=''
@@ -2644,11 +2642,17 @@ function JsonPropNameValid(P: PUTF8Char): boolean;
 // - e.g. if contains " or \ characters, as defined by
 // http://www.ietf.org/rfc/rfc4627.txt
 function NeedsJsonEscape(const Text: RawUTF8): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns TRUE if the given text buffers would be escaped when written as JSON
 // - e.g. if contains " or \ characters, as defined by
 // http://www.ietf.org/rfc/rfc4627.txt
 function NeedsJsonEscape(P: PUTF8Char): boolean; overload;
+
+/// returns TRUE if the given text buffers would be escaped when written as JSON
+// - e.g. if contains " or \ characters, as defined by
+// http://www.ietf.org/rfc/rfc4627.txt
+function NeedsJsonEscape(P: PUTF8Char; PLen: integer): boolean; overload;
 
 /// case insensitive comparison of ASCII identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
@@ -11000,7 +11004,7 @@ var
   // - returns 255 for any character out of 0..9,A..Z,a..z range
   // - used e.g. by HexToBin() function
   // - is defined globally, since may be used from an inlined function
-  ConvertHexToBin: array[byte] of byte;
+  ConvertHexToBin: TNormTableByte;
 
   /// naive but efficient cache to avoid string memory allocation for
   // 0..999 small numbers by Int32ToUTF8/UInt32ToUTF8
@@ -22733,7 +22737,9 @@ var temp: TTextWriterStackBuffer;
     Lp,Ls: PtrInt;
     D: PUTF8Char;
 begin
-  if (pointer(result)=pointer(P)) or NeedsJsonEscape(P) then
+  if (P=nil) or (PLen<=0) then
+    result := '""' else
+  if (pointer(result)=pointer(P)) or NeedsJsonEscape(P,PLen) then
     with TTextWriter.CreateOwnedStream(temp) do
     try
       AddString(aPrefix);
@@ -27475,7 +27481,7 @@ Next: // find beginning of next word
 end;
 
 function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
-var b,c: PtrUInt;
+var b,c: byte;
     tab: {$ifdef CPUX86NOTPIC}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
 begin
   result := false; // return false if any invalid char
@@ -27593,12 +27599,14 @@ _nxt:   Bin^ := c;
         break; // stop at malformated input (includes #0)
       c := c shl 6;
       v := c;
-      c := ord(Oct[0]) - ord('0');
+      c := ord(Oct[0]);
+      dec(c, ord('0'));
       if c > 7 then
         break;
       c := c shl 3;
       v := v or c;
-      c := ord(Oct[1]) - ord('0');
+      c := ord(Oct[1]);
+      dec(c, ord('0'));
       if c > 7 then
         break;
       c := c or v;
@@ -54651,43 +54659,49 @@ begin
   end;
 end;
 
-const
-{$ifdef OPT4AMD} // circumvent Delphi 5 and Delphi 6 compilation issues :(
-  JSON_ESCAPE: TSynByteSet = [0..31,ord('\'),ord('"')];
-{$else}
-  // see http://www.ietf.org/rfc/rfc4627.txt
-  JSON_ESCAPE = [0..31,ord('\'),ord('"')];
-  // "set of byte" uses BT[mem] opcode which is actually slower than three SUB
-{$endif}
 var
-  // fast 256-byte branchless lookup table
-  JSON_ESCAPE_BYTE: TSynByteBoolean;
+  /// fast 256-byte branchless lookup table
+  // - 0 indicates no escape needed
+  // - 1 indicates #0 (end of string)
+  // - 2 should be escaped as \u00xx
+  // - b,t,n,f,r,\," as escaped character for #8,#9,#10,#12,#13,\,"
+  JSON_ESCAPE: TNormTableByte;
 
-function NeedsJsonEscape(const Text: RawUTF8): boolean;
-var tab: ^TSynByteBoolean;
-    P: PByteArray;
-    i: PtrInt;
+function NeedsJsonEscape(P: PUTF8Char; PLen: integer): boolean;
+var tab: PNormTableByte;
 begin
   result := true;
-  tab := @JSON_ESCAPE_BYTE;
-  P := pointer(Text);
-  for i := 0 to length(Text)-1 do
-    if tab[P^[i]] then
-      exit;
+  tab := @JSON_ESCAPE;
+  if PLen>0 then
+    repeat
+      if tab[ord(P^)]<>0 then
+        exit;
+      inc(P);
+      dec(PLen);
+    until PLen=0;
   result := false;
 end;
 
+function NeedsJsonEscape(const Text: RawUTF8): boolean;
+begin
+  result := NeedsJsonEscape(pointer(Text),length(Text));
+end;
+
 function NeedsJsonEscape(P: PUTF8Char): boolean;
-var tab: ^TSynByteBoolean;
+var tab: PNormTableByte;
+    esc: byte;
 begin
   result := false;
-  tab := @JSON_ESCAPE_BYTE;
+  if P=nil then
+    exit;
+  tab := @JSON_ESCAPE;
   repeat
-    if tab[ord(P^)] then
-      if P^=#0 then
-        exit else
-        break;
-    inc(P);
+    esc := tab[ord(P^)];
+    if esc=0 then
+      inc(P) else
+    if esc=1 then
+      exit else  // #0 reached
+      break;
   until false;
   result := true;
 end;
@@ -54695,10 +54709,13 @@ end;
 procedure TTextWriter.InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: Cardinal;
   const AnsiToWide: TWordDynArray; Escape: TTextWriterKind);
 var c: cardinal;
+    esc: byte;
 begin
   while SourceChars>0 do begin
     c := byte(Source^);
     if c<=$7F then begin
+      if c=0 then
+        exit;
       if B>=BEnd then
         FlushToStream;
       case Escape of
@@ -54706,12 +54723,20 @@ begin
         inc(B);
         B^ := AnsiChar(c);
       end;
-      twJSONEscape:
-        if c in JSON_ESCAPE then
-          AddJsonEscape(Source,1) else begin
+      twJSONEscape: begin
+        esc := JSON_ESCAPE[c];
+        if esc=0 then begin // no escape needed
           inc(B);
           B^ := AnsiChar(c);
-        end;
+        end else
+        if esc=1 then // #0
+          exit else
+        if esc=2 then begin // characters below ' ', #7 e.g. -> \u0007
+          AddShort('\u00');
+          AddByteToHex(c);
+        end else
+          Add('\',AnsiChar(esc)); // escaped as \ + b,t,n,f,r,\,"
+      end;
       twOnSameLine: begin
         inc(B);
         if c<32 then
@@ -54797,9 +54822,9 @@ begin
 end;
 
 procedure TTextWriter.AddJSONEscape(P: Pointer; Len: PtrInt);
-var i,c: PtrInt;
-    {$ifdef CPUX86NOTPIC}tab: TSynByteBoolean absolute JSON_ESCAPE_BYTE;
-    {$else}tab: ^TSynByteBoolean;{$endif}
+var i,start: PtrInt;
+    {$ifdef CPUX86NOTPIC}tab: TNormTableByte absolute JSON_ESCAPE;
+    {$else}tab: PNormTableByte;{$endif}
 label noesc;
 begin
   if P=nil then
@@ -54807,20 +54832,20 @@ begin
   if Len=0 then
     dec(Len); // -1 = no end
   i := 0;
-  {$ifndef CPUX86NOTPIC} tab := @JSON_ESCAPE_BYTE; {$endif}
-  if not tab[PByteArray(P)[i]] then begin
-noesc:c := i;
+  {$ifndef CPUX86NOTPIC} tab := @JSON_ESCAPE; {$endif}
+  if tab[PByteArray(P)[i]]=0 then begin
+noesc:start := i;
     if Len<0 then
       repeat
         inc(i);
-      until tab[PByteArray(P)[i]] else
+      until tab[PByteArray(P)[i]]<>0 else
       repeat
         inc(i);
-      until (i>=Len) or tab[PByteArray(P)[i]];
-    inc(PByte(P),c);
-    dec(i,c);
+      until (i>=Len) or (tab[PByteArray(P)[i]]<>0);
+    inc(PByte(P),start);
+    dec(i,start);
     if Len>=0 then
-      dec(Len,c);
+      dec(Len,start);
     if BEnd-B<=i then
       AddNoJSONEscape(P,i) else begin
       MoveFast(P^,B[1],i);
@@ -54830,35 +54855,27 @@ noesc:c := i;
       exit;
   end;
   repeat
-    c := PByteArray(P)[i];
-    case c of
-    0:  exit;
-    8:  c := ord('\')+ord('b')shl 8;
-    9:  c := ord('\')+ord('t')shl 8;
-    10: c := ord('\')+ord('n')shl 8;
-    12: c := ord('\')+ord('f')shl 8;
-    13: c := ord('\')+ord('r')shl 8;
-    ord('\'): c := ord('\')+ord('\')shl 8;
-    ord('"'): c := ord('\')+ord('"')shl 8;
-    1..7,11,14..31: begin // characters below ' ', #7 e.g. -> // 'u0007'
-      if BEnd-B<=10 then
-        FlushToStream;
-      PCardinal(B+1)^ := ord('\')+ord('u')shl 8+ord('0')shl 16+ord('0')shl 24;
-      inc(B,4);
-      c := TwoDigitsHexWB[c];
-    end;
-    else goto noesc;
-    end;
     if BEnd-B<=10 then
       FlushToStream;
+    case tab[PByteArray(P)[i]] of
+    0: goto noesc;
+    1: exit; // #0
+    2: begin // characters below ' ', #7 e.g. -> // 'u0007'
+      PCardinal(B+1)^ := ord('\')+ord('u')shl 8+ord('0')shl 16+ord('0')shl 24;
+      inc(B,4);
+      PWord(B+1)^ := TwoDigitsHexWB[PByteArray(P)[i]];
+    end;
+    else // escaped as \ + b,t,n,f,r,\,"
+      PWord(B+1)^ := (integer(tab[PByteArray(P)[i]]) shl 8) or ord('\');
+    end;
     inc(i);
-    PWord(B+1)^ := c;
     inc(B,2);
   until (Len>=0) and (i>=Len);
 end;
 
 procedure TTextWriter.AddJSONEscapeW(P: PWord; Len: PtrInt);
-var i,c: PtrInt;
+var i,c,s: PtrInt;
+    esc: byte;
 begin
   if P=nil then
     exit;
@@ -54866,31 +54883,28 @@ begin
     Len := MaxInt;
   i := 0;
   while i<Len do begin
-    c := i;
-    if not(PWordArray(P)[i] in JSON_ESCAPE) then begin
-      repeat
-        inc(i);
-      until (i>=Len) or (PWordArray(P)[i] in JSON_ESCAPE);
-      AddNoJSONEscapeW(@PWordArray(P)[c],i-c);
-    end;
-    while i<Len do begin
+    s := i;
+    repeat
       c := PWordArray(P)[i];
-      case c of
-      0:  exit;
-      8:  Add('\','b');
-      9:  Add('\','t');
-      10: Add('\','n');
-      12: Add('\','f');
-      13: Add('\','r');
-      ord('\'),ord('"'): Add('\',AnsiChar(c));
-      1..7,11,14..31: begin // characters below ' ', #7 e.g. -> // 'u0007'
-        AddShort('\u00');
-        AddByteToHex(c);
-      end;
-      else break;
-      end;
+      if (c<128) and (JSON_ESCAPE[c]<>0) then
+        break;
       inc(i);
-    end;
+    until i>=Len;
+    AddNoJSONEscapeW(@PWordArray(P)[s],i-s);
+    if i>=Len then
+      exit;
+    c := PWordArray(P)[i];
+    if c=0 then
+      exit;
+    esc := JSON_ESCAPE[c];
+    if esc=1 then // #0
+      exit else
+    if esc=2 then begin // characters below ' ', #7 e.g. -> \u0007
+      AddShort('\u00');
+      AddByteToHex(c);
+    end else
+      Add('\',AnsiChar(esc)); // escaped as \ + b,t,n,f,r,\,"
+    inc(i);
   end;
 end;
 
@@ -62236,9 +62250,16 @@ begin
       Char2Baudot[Baudot2Char[i]] := i;
   for i := ord('a') to ord('z') do
     Char2Baudot[AnsiChar(i-32)] := Char2Baudot[AnsiChar(i)]; // A-Z -> a-z
-  for i := 0 to 127 do
-    if i in JSON_ESCAPE then
-      JSON_ESCAPE_BYTE[i] := true;
+  JSON_ESCAPE[0] := 1;         // 1 for #0 end of input
+  for i := 1 to 31 do          // 0 indicates no JSON escape needed
+    JSON_ESCAPE[i] := 2;       // 2 should be escaped as \u00xx
+  JSON_ESCAPE[8] := ord('b');  // others contain the escaped character
+  JSON_ESCAPE[9] := ord('t');
+  JSON_ESCAPE[10] := ord('n');
+  JSON_ESCAPE[12] := ord('f');
+  JSON_ESCAPE[13] := ord('r');
+  JSON_ESCAPE[ord('\')] := ord('\');
+  JSON_ESCAPE[ord('"')] := ord('"');
   TSynAnsiConvert.Engine(0); // define CurrentAnsi/WinAnsi/UTF8AnsiConvert
   for i := 0 to 255 do begin
     crc := i;
