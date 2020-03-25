@@ -11027,7 +11027,7 @@ procedure HexToBinFast(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer);
 // - \xxx is converted into a single xxx byte from octal, and \\ into \
 // - will stop the conversion when Oct^=#0 or when invalid \xxx is reached 
 // - returns the number of bytes written to Bin^
-function OctToBin(Oct: PAnsiChar; Bin: PByteArray): PtrInt; overload;
+function OctToBin(Oct: PAnsiChar; Bin: PByte): PtrInt; overload;
 
 /// conversion from octal C-like escape into binary data
 // - \xxx is converted into a single xxx byte from octal, and \\ into \
@@ -27475,7 +27475,7 @@ Next: // find beginning of next word
 end;
 
 function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
-var B,C: PtrUInt;
+var b,c: PtrUInt;
     tab: {$ifdef CPUX86NOTPIC}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
 begin
   result := false; // return false if any invalid char
@@ -27485,11 +27485,13 @@ begin
   if BinBytes>0 then begin
     inc(Bin,BinBytes-1);
     repeat
-      B := tab[Ord(Hex[0])];
-      C := tab[Ord(Hex[1])];
-      if (B>15) or (C>15) then
+      b := tab[Ord(Hex[0])];
+      c := tab[Ord(Hex[1])];
+      if (b>15) or (c>15) then
         exit;
-      Bin^ := B shl 4+C;
+      b := b shl 4; // better FPC generation code in small explicit steps
+      b := b or c;
+      Bin^ := b;
       dec(Bin);
       inc(Hex,2);
       dec(BinBytes);
@@ -27519,7 +27521,7 @@ begin
 end;
 
 function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer): boolean;
-var B,C: PtrUInt;
+var b,c: byte;
     tab: {$ifdef CPUX86NOTPIC}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
 begin
   result := false; // return false if any invalid char
@@ -27529,12 +27531,14 @@ begin
   if BinBytes>0 then
     if Bin<>nil then
       repeat
-        B := tab[Ord(Hex[0])];
-        C := tab[Ord(Hex[1])];
-        if (B>15) or (C>15) then
+        b := tab[Ord(Hex[0])];
+        c := tab[Ord(Hex[1])];
+        if (b>15) or (c>15) then
           exit;
         inc(Hex,2);
-        Bin^ := B shl 4+C;
+        b := b shl 4;
+        b := b or c;
+        Bin^ := b;
         inc(Bin);
         dec(BinBytes);
       until BinBytes=0 else
@@ -27554,28 +27558,30 @@ begin
   {$ifndef CPUX86NOTPIC}tab := @ConvertHexToBin;{$endif} // faster on PIC and x86_64
   if BinBytes>0 then
     repeat
-      c := tab[ord(Hex[0])] shl 4;
-      Bin^ := tab[ord(Hex[1])] or c;
+      c := tab[ord(Hex[0])];
+      c := c shl 4;
+      c := tab[ord(Hex[1])] or c;
+      Bin^ := c;
       inc(Hex,2);
       inc(Bin);
       dec(BinBytes);
     until BinBytes=0;
 end;
 
-function OctToBin(Oct: PAnsiChar; Bin: PByteArray): PtrInt;
-var c, v: cardinal;
+function OctToBin(Oct: PAnsiChar; Bin: PByte): PtrInt;
+var c, v: byte;
 label _nxt;
 begin
-  result := 0;
+  result := PtrInt(Bin);
   if Oct <> nil then
     repeat
       c := ord(Oct^);
       inc(Oct);
       if c <> ord('\') then begin
         if c = 0 then
-          exit;
-_nxt:   Bin[result] := c;
-        inc(result);
+          break;
+_nxt:   Bin^ := c;
+        inc(Bin);
         continue;
       end;
       c := ord(Oct^);
@@ -27584,19 +27590,23 @@ _nxt:   Bin[result] := c;
         goto _nxt;
       dec(c, ord('0'));
       if c > 3 then
-        exit; // stop at malformated input (includes #0)
-      v := c shl 6;
+        break; // stop at malformated input (includes #0)
+      c := c shl 6;
+      v := c;
       c := ord(Oct[0]) - ord('0');
       if c > 7 then
-        exit;
-      v := v or (c shl 3);
+        break;
+      c := c shl 3;
+      v := v or c;
       c := ord(Oct[1]) - ord('0');
       if c > 7 then
-        exit;
-      Bin[result] := v or c;
-      inc(result);
+        break;
+      c := c or v;
+      Bin^ := c;
+      inc(Bin);
       inc(Oct, 2);
     until false;
+  result := PtrInt(Bin)-result;
 end;
 
 function OctToBin(const Oct: RawUTF8): RawByteString;
@@ -27747,21 +27757,23 @@ end;
 
 {$ifdef PUREPASCAL}
 function Base64EncodeMain(rp, sp: PAnsiChar; len: cardinal): integer;
-var i: integer;
-    c: cardinal;
+var c: cardinal;
     enc: PBase64Enc; // use local register
 begin
   enc := @b64enc;
-  result := len div 3;
-  for i := 1 to result do begin
-    c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8 + ord(sp[2]);
-    rp[0] := enc[(c shr 18) and $3f];
-    rp[1] := enc[(c shr 12) and $3f];
-    rp[2] := enc[(c shr 6) and $3f];
-    rp[3] := enc[c and $3f];
-    inc(rp,4);
-    inc(sp,3);
-  end;
+  len := len div 3;
+  result := len;
+  if len<>0 then
+    repeat
+      c := (ord(sp[0]) shl 16) or (ord(sp[1]) shl 8) or ord(sp[2]);
+      rp[0] := enc[(c shr 18) and $3f];
+      rp[1] := enc[(c shr 12) and $3f];
+      rp[2] := enc[(c shr 6) and $3f];
+      rp[3] := enc[c and $3f];
+      inc(rp,4);
+      inc(sp,3);
+      dec(len);
+    until len=0;
 end;
 {$else PUREPASCAL}
 function Base64EncodeMain(rp, sp: PAnsiChar; len: cardinal): integer;
@@ -27835,7 +27847,7 @@ begin
       PWord(rp+2)^ := ord('=')+ord('=') shl 8;
     end;
     2: begin
-      c := ord(sp[0]) shl 10 + ord(sp[1]) shl 2;
+      c := (ord(sp[0]) shl 10) or (ord(sp[1]) shl 2);
       rp[0] := enc[(c shr 12) and $3f];
       rp[1] := enc[(c shr 6) and $3f];
       rp[2] := enc[c and $3f];
@@ -28064,28 +28076,32 @@ end;
 
 {$ifdef PUREPASCAL}
 procedure Base64uriEncode(rp, sp: PAnsiChar; len: cardinal);
-var i, main, c: cardinal;
-    enc: PBase64Enc; // slightly faster
+var main, c: cardinal;
+    enc: PBase64Enc; // faster especially on x86_64 and PIC
 begin
   enc := @b64URIenc;
   main := len div 3;
-  for i := 1 to main do begin
-    c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8 + ord(sp[2]);
-    rp[0] := enc[(c shr 18) and $3f];
-    rp[1] := enc[(c shr 12) and $3f];
-    rp[2] := enc[(c shr 6) and $3f];
-    rp[3] := enc[c and $3f];
-    inc(rp,4);
-    inc(sp,3);
+  if main<>0 then begin
+    dec(len,main*3); // fast modulo
+    repeat
+      c := (ord(sp[0]) shl 16) or (ord(sp[1]) shl 8) or ord(sp[2]);
+      rp[0] := enc[(c shr 18) and $3f];
+      rp[1] := enc[(c shr 12) and $3f];
+      rp[2] := enc[(c shr 6) and $3f];
+      rp[3] := enc[c and $3f];
+      inc(rp,4);
+      inc(sp,3);
+      dec(main)
+    until main=0;
   end;
-  case len-main*3 of
+  case len of
     1: begin
       c := ord(sp[0]) shl 4;
       rp[0] := enc[(c shr 6) and $3f];
       rp[1] := enc[c and $3f];
     end;
     2: begin
-      c := ord(sp[0]) shl 10 + ord(sp[1]) shl 2;
+      c := (ord(sp[0]) shl 10) or (ord(sp[1]) shl 2);
       rp[0] := enc[(c shr 12) and $3f];
       rp[1] := enc[(c shr 6) and $3f];
       rp[2] := enc[c and $3f];
