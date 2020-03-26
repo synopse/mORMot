@@ -1832,7 +1832,7 @@ var CompareMemFixed: function(P1, P2: Pointer; Length: PtrInt): Boolean = Compar
 {$endif HASINLINE}
 
 /// a CompareMem()-like function designed for small (a few bytes) content
-function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): Boolean; {$ifdef HASINLINE}inline;{$endif}
+function CompareMemSmall(P1, P2: Pointer; Length: PtrUInt): Boolean; {$ifdef HASINLINE}inline;{$endif}
 
 /// convert some ASCII-7 text into binary, using Emile Baudot code
 // - as used in telegraphs, covering #10 #13 #32 a-z 0-9 - ' , ! : ( + ) $ ? @ . / ;
@@ -22330,20 +22330,23 @@ end;
 {$endif LVCL}
 {$endif PUREPASCAL}
 
-function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): Boolean;
+function CompareMemSmall(P1, P2: Pointer; Length: PtrUInt): Boolean;
 label zero;
+var c: AnsiChar; // explicit temp variable for better FPC code generation
 begin
   {$ifndef CPUX86} result := false; {$endif}
-  inc(Length,PtrInt(PtrUInt(P1)));
-  dec(PtrUInt(P2),PtrUInt(P1));
-  if PtrInt(PtrUInt(P1))<Length then
+  inc(PtrUInt(P1),PtrUInt(Length));
+  inc(PtrUInt(P2),PtrUInt(Length));
+  Length := -Length;
+  if Length<>0 then
     repeat
-      if PByte(P1)^<>PByteArray(P2)[PtrUInt(P1)] then
+      c := PAnsiChar(P1)[Length];
+      if c<>PAnsiChar(P2)[Length] then
         goto zero;
-      inc(PByte(P1));
-    until PtrInt(PtrUInt(P1))>=Length;
+      inc(Length);
+    until Length=0;
   result := true;
-  exit;
+  {$ifdef CPUX86} exit; {$endif}
 zero:
   {$ifdef CPUX86} result := false; {$endif}
 end;
