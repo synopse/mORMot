@@ -16808,12 +16808,13 @@ end;
 
 procedure MoveSmall(Source, Dest: Pointer; Count: PtrUInt);
 begin
-  dec(PtrUInt(Source),PtrUInt(Dest));
-  inc(Count,PtrUInt(Dest));
+  inc(PtrUInt(Source),Count);
+  inc(PtrUInt(Dest),Count);
+  PtrInt(Count) := -PtrInt(Count);
   repeat
-    PAnsiChar(Dest)^ := PAnsiChar(Source)[PtrUInt(Dest)];
-    inc(PtrUInt(Dest));
-  until PtrUInt(Dest)=Count;
+    PAnsiChar(Dest)[Count] := PAnsiChar(Source)[Count];
+    inc(Count);
+  until Count=0;
 end;
 
 
@@ -22725,7 +22726,7 @@ begin
     FastSetString(result,nil,PLen+Lp+Ls+2);
     D := pointer(result); // we checked dest result <> source P above
     if Lp>0 then begin
-      MoveSmall(pointer(aPrefix),D,Lp);
+      MoveFast(pointer(aPrefix)^,D^,Lp);
       inc(D,Lp);
     end;
     D^ := '"';
@@ -22733,7 +22734,7 @@ begin
     inc(D,PLen);
     D[1] := '"';
     if Ls>0 then
-      MoveSmall(pointer(aSuffix),D+2,Ls);
+      MoveFast(pointer(aSuffix)^,D[2],Ls);
   end;
 end;
 
@@ -60092,13 +60093,7 @@ begin
     repeat
       inc(P);
     until not(jcJsonIdentifier in tab[P^]);
-    if P^=#0 then begin
-      result := true;
-      exit;
-    end else begin
-      result := false;
-      exit;
-    end;
+    result := P^ = #0;
   end else
     result := false;
 end;
