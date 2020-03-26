@@ -386,6 +386,8 @@ var
 const
   LIBNAME = {$ifdef MSWINDOWS}'libpq.dll'{$else}
     {$ifdef darwin}'libpq.dylib'{$else}'libpq.so.5'{$endif}{$endif};
+  LIBNAME2 = {$ifdef MSWINDOWS}''{$else}
+    {$ifdef darwin}''{$else}'libpq.so.4'{$endif}{$endif};
 
 constructor TSQLDBPostgresLib.Create;
 var
@@ -396,6 +398,14 @@ begin
   if fLibraryPath = '' then
     fLibraryPath := LIBNAME;
   fHandle := SafeLoadLibrary(fLibraryPath);
+  if (fHandle = 0) and (fLibraryPath <> LIBNAME) then begin
+    fLibraryPath := LIBNAME; // try standard name
+    fHandle := SafeLoadLibrary(fLibraryPath);
+  end;
+  if (fHandle = 0) and (LIBNAME2 <> '') then begin
+    fLibraryPath := LIBNAME2; // try alternate (older) revision
+    fHandle := SafeLoadLibrary(fLibraryPath);
+  end;
   if fHandle = 0 then
     raise ESQLDBPostgres.CreateUTF8('Unable to find %', [fLibraryPath]);
   P := @@LibVersion;
