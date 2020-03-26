@@ -12990,8 +12990,8 @@ var
 
 type
   /// char categories for text line/word/identifiers/uri parsing
-  TTextChar = set of (tcNot01013, tc1013, tcNot1013, tcCtrlNotLF, tcWord,
-    tcIdentifierFirstChar, tcIdentifier, tcURIUnreserved);
+  TTextChar = set of (tcNot01013, tc1013, tcCtrlNotLF, tcCtrlNot0Comma,
+    tcWord, tcIdentifierFirstChar, tcIdentifier, tcURIUnreserved);
   TTextCharSet = array[AnsiChar] of TTextChar;
   PTextCharSet = ^TTextCharSet;
   TTextByteSet = array[byte] of TTextChar;
@@ -60058,11 +60058,14 @@ begin
   tab := @TEXT_CHARS;
   if (P=nil) or not (tcIdentifierFirstChar in tab[P^]) then
     exit; // first char must be alphabetical
-  inc(P);
-  while P^<>#0 do
-    if not (tcIdentifier in tab[P^]) then
-      exit else // following chars can be alphanumerical
-      inc(P);
+  repeat
+    inc(P); // following chars can be alphanumerical
+    if tcIdentifier in tab[P^] then
+      continue;
+    if P^=#0 then
+      break;
+    exit;
+  until false;
   result := true;
 end;
 
@@ -60177,12 +60180,12 @@ function GetNextFieldProp(var P: PUTF8Char; var Prop: RawUTF8): boolean;
 var B: PUTF8Char;
     tab: PTextCharSet;
 begin
-  while P^ in [#1..' ',';'] do inc(P);
-  B := P;
   tab := @TEXT_CHARS;
+  while tcCtrlNot0Comma in tab[P^] do inc(P);
+  B := P;
   while tcIdentifier in tab[P^] do inc(P); // go to end of field name
   FastSetString(Prop,B,P-B);
-  while P^ in [#1..' ',';'] do inc(P);
+  while tcCtrlNot0Comma in tab[P^] do inc(P);
   result := Prop<>'';
 end;
 
@@ -62232,8 +62235,7 @@ begin
     if not (c in [#0,#10,#13]) then
       include(TEXT_CHARS[c], tcNot01013);
     if c in [#10,#13] then
-      include(TEXT_CHARS[c], tc1013) else
-      include(TEXT_CHARS[c], tcNot1013);
+      include(TEXT_CHARS[c], tc1013);
     if c in ['0'..'9','a'..'z','A'..'Z'] then
       include(TEXT_CHARS[c], tcWord);
     if c in ['_','a'..'z','A'..'Z'] then
@@ -62244,6 +62246,8 @@ begin
       include(TEXT_CHARS[c], tcURIUnreserved);
     if c in [#1..#9,#11,#12,#14..' '] then
       include(TEXT_CHARS[c], tcCtrlNotLF);
+    if c in [#1..' ',';'] then
+      include(TEXT_CHARS[c], tcCtrlNot0Comma);
     if c in [',',']','}',':'] then begin
       include(JSON_CHARS[c], jcEndOfJSONField);
       include(JSON_CHARS[c], jcEndOfJSONFieldOr0);
