@@ -6871,9 +6871,10 @@ end;
 function TSQLDBStatement.FetchAllToJSON(JSON: TStream; Expanded: boolean): PtrInt;
 var W: TJSONWriter;
     col: integer;
+    tmp: TTextWriterStackBuffer;
 begin
   result := 0;
-  W := TJSONWriter.Create(JSON,Expanded,false);
+  W := TJSONWriter.Create(JSON,Expanded,false,nil,0,@tmp);
   try
     Connection.InternalProcess(speActive);
     // get col names and types

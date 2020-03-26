@@ -25292,8 +25292,9 @@ end;
 procedure TSQLTable.GetJSONValues(JSON: TStream; Expand: boolean;
   RowFirst, RowLast, IDBinarySize: integer);
 var W: TJSONWriter;
+    tmp: TTextWriterStackBuffer;
 begin
-  W := TJSONWriter.Create(JSON,Expand,false);
+  W := TJSONWriter.Create(JSON,Expand,false,nil,0,@tmp);
   try
     GetJSONValues(W,RowFirst,RowLast,IDBinarySize);
     W.FlushFinal;

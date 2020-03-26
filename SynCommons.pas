@@ -8384,6 +8384,7 @@ type
   /// may be used to allocate on stack a 8KB work buffer for a TTextWriter
   // - via the TTextWriter.CreateOwnedStream overloaded constructor
   TTextWriterStackBuffer = array[0..8191] of AnsiChar;
+  PTextWriterStackBuffer = ^TTextWriterStackBuffer;
 
   /// simple writer to a Stream, specialized for the TEXT format
   // - use an internal buffer, faster than string+string

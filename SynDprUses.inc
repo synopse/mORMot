@@ -1,8 +1,11 @@
 {$ifndef LVCL}
   {$ifdef FPC} // we may be on Kylix or upcoming Delphi for Linux
+    {$ifdef Unix} // we may also be on Darwin / OSX
+      cthreads, // should be the very first unit - before FastMM4 e.g.
+    {$endif Unix}
     {$ifdef FPC_FASTMM4}
-      FastMM4Messages in '..\RTL7\FastMM4Messages.pas',
-      FastMM4 in '..\RTL7\FastMM4.pas',
+      fpcFastMM4Messages in '..\fpcfmm4\fpcFastMM4Messages.pas',
+      fpcFastMM4 in '..\fpcfmm4\fpcFastMM4.pas',
     {$else}
       {$ifdef FPC_SYNJEMALLOC}
         SynFPCCMemAligned, // after "apt-get install libjemalloc1"
@@ -21,7 +24,6 @@
       {$endif FPC_SYNJEMALLOC}
     {$endif FPC_FASTMM4}
     {$ifdef Unix} // we may also be on Darwin / OSX
-      cthreads, // if you use threads: always needed for servers
       {$ifdef Darwin}
         iosxwstr, // optional WideString manager for Mac, but won't hurt
       {$else}
@@ -36,7 +38,8 @@
   {$else}  // enable FastMM4 on older versions of Delphi
     {$IFDEF CONDITIONALEXPRESSIONS}
       {$if CompilerVersion <= 17} // Delphi 2006 (and up) have FastMM4 integrated
-        FastMM4,
+      fpcFastMM4Messages in '..\fpcfmm4\fpcFastMM4Messages.pas',
+      fpcFastMM4 in '..\fpcfmm4\fpcFastMM4.pas',
       {$ifend}
       {$ifdef UNICODE}
         {$WARN DUPLICATE_CTOR_DTOR OFF} // global at .dpr level - see QC 100815

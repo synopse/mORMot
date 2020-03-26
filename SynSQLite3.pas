@@ -5004,14 +5004,15 @@ begin
 end;
 
 function TSQLRequest.Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; JSON: TStream;
-  Expand: boolean=false): PtrInt;
+  Expand: boolean): PtrInt;
 // expand=true: [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
 // expand=false: { "FieldCount":2,"Values":["col1","col2",val11,"val12",val21,..] }
 var i: integer;
     W: TJSONWriter;
+    tmp: TTextWriterStackBuffer;
 begin
   result := 0;
-  W := TJSONWriter.Create(JSON,Expand,false,nil,{bufsize=}65536);
+  W := TJSONWriter.Create(JSON,Expand,false,nil,0,@tmp);
   try
     // prepare the SQL request
     if aSQL<>'' then // if not already prepared, reset and bound by caller

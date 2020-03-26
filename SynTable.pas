@@ -824,7 +824,8 @@ type
     // - if no Stream is supplied, a temporary memory stream will be created
     // (it's faster to supply one, e.g. any TSQLRest.TempMemoryStream)
     constructor Create(aStream: TStream; Expand, withID: boolean;
-      const Fields: TSQLFieldIndexDynArray=nil; aBufSize: integer=8192); overload;
+      const Fields: TSQLFieldIndexDynArray=nil; aBufSize: integer=8192;
+      aStackBuffer: PTextWriterStackBuffer=nil); overload;
     /// rewind the Stream position and write void JSON object
     procedure CancelAllVoid;
     /// write or init field names for appropriate JSON Expand later use
@@ -14485,11 +14486,16 @@ begin
 end;
 
 constructor TJSONWriter.Create(aStream: TStream; Expand, withID: boolean;
-  const Fields: TSQLFieldIndexDynArray; aBufSize: integer);
+  const Fields: TSQLFieldIndexDynArray; aBufSize: integer;
+  aStackBuffer: PTextWriterStackBuffer);
 begin
   if aStream=nil then
-    CreateOwnedStream else
-    inherited Create(aStream,aBufSize);
+    if aStackBuffer<>nil then
+      CreateOwnedStream(aStackBuffer^) else
+      CreateOwnedStream(aBufSize) else
+    if aStackBuffer<>nil then
+      inherited Create(aStream,aStackBuffer,SizeOf(aStackBuffer^)) else
+      inherited Create(aStream,aBufSize);
   fExpand := Expand;
   fWithID := withID;
   fFields := Fields;
