@@ -55393,24 +55393,25 @@ end;
 
 procedure TTextWriter.FlushToStream;
 var i: PtrInt;
-    written: PtrUInt;
+    s: PtrUInt;
 begin
   i := B-fTempBuf+1;
   if i<=0 then
     exit;
   fStream.WriteBuffer(fTempBuf^,i);
   inc(fTotalFileSize,i);
-  if not (twoFlushToStreamNoAutoResize in fCustomOptions) and
-     not (twoBufferIsExternal in fCustomOptions) then begin
-    written := fTotalFileSize-fInitialStreamPosition;
-    if (fTempBufSize<49152) and (written>1 shl 18) then // 256KB -> 64KB buffer
-      written := 65536 else
-    if (fTempBufSize<1 shl 20) and (written>40 shl 20) then // 40MB -> 1MB buffer
-      written := 1 shl 20 else
-      written := 0;
-    if written>0 then begin
-      fTempBufSize := written;
-      FreeMem(fTempBuf); // with big content comes bigger buffer
+  if not (twoFlushToStreamNoAutoResize in fCustomOptions) then begin
+    s := fTotalFileSize-fInitialStreamPosition;
+    if (fTempBufSize<49152) and (s>PtrUInt(fTempBufSize)*4) then
+      s := fTempBufSize*2 else // tune small (stack-alloc?) buffer
+    if (fTempBufSize<1 shl 20) and (s>40 shl 20) then
+      s := 1 shl 20 else // 40MB -> 1MB buffer
+      s := 0;
+    if s>0 then begin
+      fTempBufSize := s;
+      if twoBufferIsExternal in fCustomOptions then // use heap, not stack
+        exclude(fCustomOptions,twoBufferIsExternal) else
+        FreeMem(fTempBuf); // with big content comes bigger buffer
       GetMem(fTempBuf,fTempBufSize);
       BEnd := fTempBuf+(fTempBufSize-2);
     end;
