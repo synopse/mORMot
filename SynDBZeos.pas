@@ -397,7 +397,7 @@ type
     // object json but you also have to finalize each row-object then.
     // - jcoMongoISODate:
     // formats the date,time,datetime values as mongo
-    // ISODate("YYYY-MM-DDTHH:NN:ssZ"). Millisecongs are included.
+    // ISODate("YYYY-MM-DDTHH:NN:ssZ"). Milliseconds are included.
     // So the values are recognized as date type by mongodb.
     // Otherwise mongo threads them as strings.
     // This option might be usefull if you export sql rows using a
@@ -429,7 +429,7 @@ procedure SetZEOSProtocols;
 implementation
 
 {$ifdef ZEOS72UP}
-uses ZDbcMetadata;
+uses ZDbcMetadata {$IFDEF ZEOS73UP} , ZDbcProperties {$ENDIF};
 {$else}
 const
   FirstDbcIndex = 1;
@@ -612,6 +612,9 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
   dPostgreSQL: begin
     // see https://synopse.info/forum/viewtopic.php?pid=13260#p13260
     fURL.Properties.Add('NoTableInfoCache=true');
+    {$IFDEF ZEOS73UP}
+    //fURL.Properties.Add(DSProps_BinaryWireResultMode+'=False');
+    {$ENDIF}
   end;
   dMSSQL: begin
     fUseCache := true;
@@ -675,18 +678,10 @@ begin
   if result then
     meta.ClearCache; // we need to retrieve the actual metadata
   {$ifdef ZEOS72UP} // new since 7.2up
-  // ZDBC: MultipleValuesInsertFirebird is buggy, MultipleValuesInsert slower
-  // comment by EH to this stmt:
-  // The multiple values of FB have never been buggy! The test is wrong and
-  // blames the FB insert performance -> permanental drop the whole db-file
-  // after a test run is complete. note FB recreates more system-tables than SQLite.
-  if (GetDBMS <> dMSSQL) and Result and meta.GetDatabaseInfo.SupportsArrayBindings then begin
-    // the Ole/odbc batch API for SQLServer is not realy faster than multiple cloned params
-    // zdbc supports the batches native but i don't see a performance win using it.
-    // ergo I excluded the SQLDBDefinition of MS SQLServer for mormot project
+  if Result and meta.GetDatabaseInfo.SupportsArrayBindings then begin
     case GetDBMS of
       dPostgreSQL: 
-        fBatchSendingAbilities := [cCreate, cDelete] // EH: array logic isn't ready with pg yet
+        fBatchSendingAbilities := [cCreate, cDelete] // EH: array logic isn't ready 4updates yet
       else
         fBatchSendingAbilities := [cCreate, cUpdate, cDelete];
     end;
@@ -734,6 +729,7 @@ begin
     { mormot does not create the Tables casesensitive but gives mixed cased strings as tablename
       so we normalize the identifiers to database defaults : }
     sTableName := meta.GetIdentifierConvertor.ExtractQuote(UTF8ToString(TableName));
+    sTableName := meta.AddEscapeCharToWildcards(sTableName); //do not use "like" search patterns ['_','%'] so they need to be escaped
     res := meta.GetColumns('',sSchema,sTableName,'');
     FA.InitSpecific(TypeInfo(TSQLDBColumnDefineDynArray),Fields,djRawUTF8,@n,true);
     FillChar(F,sizeof(F),0);
@@ -811,7 +807,10 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
   if aServerName<>'' then
     result := result+'//'+aServerName;
   if aLibraryLocation<>'' then begin
-    result := result+'?LibLocation=';
+    if (aServerName <> '') and (aServerName[1] = '?') then 
+      result := result+';LibLocation=' else 
+      result := result+'?LibLocation=';
+
     if aLibraryLocationAppendExePath then
       result := result+StringToUTF8(ExeVersion.ProgramFilePath);
     result := result+StringToUTF8(aLibraryLocation);
@@ -828,10 +827,10 @@ begin
   url := (fProperties as TSQLDBZEOSConnectionProperties).fURL;
   fDatabase := DriverManager.GetConnectionWithParams(url.URL,url.Properties);
   // EG: setup the connection transaction behavior now, not once Opened in Connect
-  fDatabase.SetReadOnly(false);
+  //fDatabase.SetReadOnly(false); // is default
   // about transactions, see https://synopse.info/forum/viewtopic.php?id=2209
-  fDatabase.SetAutoCommit(true);
-  fDatabase.SetTransactionIsolation(tiReadCommitted);
+  //fDatabase.SetAutoCommit(true); // is default
+  fDatabase.SetTransactionIsolation(tiReadCommitted); // will be swapped to tiSerialiable for SQLite
 end;
 
 procedure TSQLDBZEOSConnection.Connect;
@@ -875,13 +874,19 @@ end;
 
 function TSQLDBZEOSConnection.NewStatement: TSQLDBStatement;
 begin
+  if not IsConnected then
+    Connect;
   result := TSQLDBZEOSStatement.Create(self);
 end;
 
 procedure TSQLDBZEOSConnection.StartTransaction;
 begin
   inherited StartTransaction;
+  {$IFDEF ZEOS73UP}
+  fDatabase.StartTransaction; //returns the txn level
+  {$ELSE}
   fDatabase.SetAutoCommit(false);
+  {$ENDIF}
 end;
 
 procedure TSQLDBZEOSConnection.Commit;
@@ -893,17 +898,19 @@ begin
     inc(fTransactionCount); // the transaction is still active
     raise;
   end;
+  {$IFNDEF ZEOS73UP} //no longer required zdbc falls back to AC automatically
   fDatabase.SetAutoCommit(true);
+  {$ENDIF}
 end;
 
 procedure TSQLDBZEOSConnection.Rollback;
 begin
   inherited Rollback;
   fDatabase.Rollback;
+  {$IFNDEF ZEOS73UP} //no longer required zdbc falls back to AC automatically
   fDatabase.SetAutoCommit(true);
+  {$ENDIF}
 end;
-
-
 
 { TSQLDBZEOSStatement }
 
@@ -1149,10 +1156,8 @@ end;
 
 procedure TSQLDBZEOSStatement.ReleaseRows;
 begin
-  if fResultSet<>nil then begin
-    fResultInfo := nil;
-    fResultSet := nil;
-  end;
+  if fResultSet<>nil then 
+    fResultSet.ResetCursor;
   inherited ReleaseRows;
 end;
 
