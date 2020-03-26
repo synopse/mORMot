@@ -31636,7 +31636,7 @@ var aSQLFields, aSQLFrom, aSQLWhere, aSQLJoin: RawUTF8;
     begin
       result := true;
       B := F;
-      while ord(F^) in IsIdentifier do inc(F); // go to end of sub-field name
+      while tcIdentifier in TEXT_CHARS[F^] do inc(F); // go to end of sub-field name
       if B=F then begin
         result := false;
         exit;
@@ -31648,7 +31648,7 @@ var aSQLFields, aSQLFrom, aSQLWhere, aSQLJoin: RawUTF8;
     end;
   begin
     B := P;
-    while ord(P^) in IsIdentifier do inc(P); // go to end of field name
+    while tcIdentifier in TEXT_CHARS[P^] do inc(P); // go to end of field name
     FastSetString(result,B,P-B);
     if (result='') or IdemPropNameU(result,'AND') or IdemPropNameU(result,'OR') or
        IdemPropNameU(result,'LIKE') or IdemPropNameU(result,'NOT') or
@@ -31772,7 +31772,7 @@ begin
     JBeg := pointer(aSQLJoin);
     repeat
       J := JBeg;
-      while not (ord(J^) in IsIdentifier) do begin
+      while not (tcIdentifier in TEXT_CHARS[J^]) do begin
         case J^ of
         '"':  repeat inc(J) until J^ in [#0,'"'];
         '''': repeat inc(J) until J^ in [#0,''''];
@@ -33017,7 +33017,7 @@ begin
     inc(i,6);
     while SQL[i] in [#1..' '] do inc(i);
     j := 0;
-    while ord(SQL[i+j]) in IsIdentifier do inc(j);
+    while tcIdentifier in TEXT_CHARS[SQL[i+j]] do inc(j);
     if cardinal(j-1)<64 then begin
       k := i+j;
       while SQL[k] in [#1..' '] do inc(k);
@@ -33041,7 +33041,7 @@ begin
     repeat
       while SQL[i] in [#1..' '] do inc(i);
       j := 0;
-      while ord(SQL[i+j]) in IsIdentifier do inc(j);
+      while tcIdentifier in TEXT_CHARS[SQL[i+j]] do inc(j);
       if cardinal(j-1)>64 then begin
         result := nil;
         exit; // seems too big

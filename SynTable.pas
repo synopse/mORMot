@@ -7171,7 +7171,7 @@ begin
       soContains: begin
         dec(L,ValueLen);
         while L>=0 do begin
-          while (L>=0) and not(byte(SBF^) in IsWord) do begin
+          while (L>=0) and not(tcWord in TEXT_CHARS[SBF^]) do begin
             dec(L);
             inc(SBF);
           end; // begin of next word reached
@@ -7183,7 +7183,7 @@ begin
           end else
             if StrCompIL(SBF,Value,ValueLen,0)=0 then
               exit;
-          while (L>=0) and (byte(SBF^) in IsWord) do begin
+          while (L>=0) and (tcWord in TEXT_CHARS[SBF^]) do begin
             dec(L);
             inc(SBF);
           end; // end of word reached
@@ -7311,7 +7311,7 @@ begin
       B := P;
       repeat
         inc(P);
-      until not(ord(P^) in IsJsonIdentifier);
+      until not (jcJsonIdentifier in JSON_CHARS[P^]);
       FastSetString(select.SubField,B,P-B);
       fHasSelectSubFields := true;
     end;
@@ -7441,7 +7441,7 @@ begin
     B := P;
     repeat
       inc(P);
-    until not(ord(P^) in IsJsonIdentifier);
+    until not (jcJsonIdentifier in JSON_CHARS[P^]);
     FastSetString(Where.SubField,B,P-B);
     fWhereHasSubFields := true;
     P := GotoNextNotSpace(P);
@@ -8863,7 +8863,7 @@ begin
     {$else}
     v := NormToUpperAnsi7Byte[ord(p^)]; // 7 bit char uppercase
     {$endif}
-    if not (v in IsWord) then break;
+    if not (tcWord in TEXT_BYTES[v]) then break;
     inc(p);
     dec(v,ord('B'));
     if v>high(TSoundExValues) then continue;
@@ -8906,7 +8906,7 @@ begin
   if Values<>nil then
   repeat
     v := GetNextUTF8Upper(U);
-    if not (v in IsWord) then break;
+    if not (tcWord in TEXT_BYTES[v]) then break;
     dec(v,ord('B'));
     if v>high(TSoundExValues) then continue;
     v := Values[v]; // get soundex value
@@ -8984,15 +8984,15 @@ begin
     repeat
       if A^=#0 then exit else
 {$ifdef USENORMTOUPPER}
-        if not(NormToUpperByte[ord(A^)] in IsWord) then break else inc(A);
-{$else} if not(ord(A^) in IsWord) then break else inc(A); {$endif}
+        if not(tcWord in TEXT_CHARS[NormToUpper[A^]]) then break else inc(A);
+{$else} if not(tcWord in TEXT_CHARS[A^]) then break else inc(A); {$endif}
     until false;
     // find beginning of next word
     repeat
       if A^=#0 then exit else
 {$ifdef USENORMTOUPPER}
-        if NormToUpperByte[ord(A^)] in IsWord then break else inc(A);
-{$else} if ord(A^) in IsWord then break else inc(A); {$endif}
+        if tcWord in TEXT_CHARS[NormToUpper[A^]] then break else inc(A);
+{$else} if tcWord in TEXT_CHARS[A^] then break else inc(A); {$endif}
     until false;
   until false;
 end;
@@ -9020,7 +9020,7 @@ begin
       c := GetNextUTF8Upper(U);
       if c=0 then
         exit;
-    until not(c in IsWord);
+    until not(tcWord in TEXT_BYTES[c]);
     // find beginning of next word
     repeat
       if U=nil then exit;
@@ -9028,7 +9028,7 @@ begin
       c := GetNextUTF8Upper(U);
       if c=0 then
         exit;
-    until c in IsWord;
+    until tcWord in TEXT_BYTES[c];
     U := V;
   until U=nil;
 end;
@@ -9059,9 +9059,9 @@ begin
   end;
   if next<>nil then begin
     {$ifdef USENORMTOUPPER}
-    while NormToUpperByte[ord(A^)] in IsWord do inc(A); // go to end of word
+    while tcWord in TEXT_CHARS[NormToUpper[A^]] do inc(A); // go to end of word
     {$else}
-    while ord(A^) in IsWord do inc(A); // go to end of word
+    while tcWord in TEXT_CHARS[A^] do inc(A); // go to end of word
     {$endif}
     next^ := A;
   end;

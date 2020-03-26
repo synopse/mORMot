@@ -2632,6 +2632,18 @@ function PropNameValid(P: PUTF8Char): boolean;
 // - this function won't check the first char the same way than PropNameValid()
 function PropNamesValid(const Values: array of RawUTF8): boolean;
 
+type
+  /// kind of character used from JSON_CHARS[] for efficient JSON parsing
+  TJsonChar = set of (jcJsonIdentifierFirstChar, jcJsonIdentifier,
+    jcEndOfJSONField, jcEndOfJSONFieldOr0, jcEndOfJSONValueField,
+    jcDigitChars, jcDigitFirstChars, jcDigitFloatChars);
+  /// defines a branch-less table used for JSON parsing
+  TJsonCharSet = array[AnsiChar] of TJsonChar;
+  PJsonCharSet = ^TJsonCharSet;
+var
+  /// branch-less table used for JSON parsing
+  JSON_CHARS: TJsonCharSet;
+
 /// returns TRUE if the given text buffer contains simple characters as
 // recognized by JSON extended syntax
 // - follow GetJSONPropName and GotoNextJSONObjectOrArray expectations
@@ -10500,7 +10512,7 @@ function JSONRetrieveStringField(P: PUTF8Char; out Field: PUTF8Char;
   out FieldLen: integer; ExpectNameField: boolean): PUTF8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// decode a JSON field in an UTF-8 encoded buffer (used in TSQLTableJSON.Create)
+/// efficient JSON field in-place decoding, within a UTF-8 encoded buffer
 // - this function decodes in the P^ buffer memory itself (no memory allocation
 // or copy), for faster process - so take care that P^ is not shared
 // - PDest points to the next field to be decoded, or nil when end is reached
@@ -12976,57 +12988,18 @@ var
   // 0 to 99 into their ASCII equivalence
   TwoDigitLookupW: packed array[0..99] of word absolute TwoDigitLookup;
 
-const
-{$ifdef OPT4AMD} // circumvent Delphi 5 and Delphi 6 compilation issues :(
-  ANSICHARNOT01310: TSynAnsicharSet = [#1..#9,#11,#12,#14..#255];
-  IsWord: TSynByteSet =
-    [ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')];
-  IsIdentifier: TSynByteSet =
-    [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')];
-  IsJsonIdentifierFirstChar: TSynByteSet =
-    [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z'),ord('$')];
-  IsJsonIdentifier: TSynByteSet =
-    [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z'),
-     ord('.'),ord('['),ord(']')];
-  IsURIUnreserved: TSynByteSet =
-    [ord('a')..ord('z'),ord('A')..ord('Z'),ord('0')..ord('9'),
-     ord('-'),ord('.'),ord('_'),ord('~')];
-{$else}
-  /// used e.g. by inlined function GetLineContains()
-  ANSICHARNOT01310 = [#1..#9,#11,#12,#14..#255];
-
-  /// used internaly for fast word recognition (32 bytes const)
-  IsWord =
-    [ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')];
-
-  /// used internaly for fast identifier recognition (32 bytes const)
-  // - can be used e.g. for field or table name
-  // - this char set matches the classical pascal definition of identifiers
-  // - see also PropNameValid() and PropNamesValid()
-  IsIdentifier =
-    [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')];
-
-  /// used internaly for fast extended JSON property name recognition (32 bytes const)
-  // - can be used e.g. for extended JSON object field
-  // - follow JsonPropNameValid, GetJSONPropName and GotoNextJSONObjectOrArray
-  IsJsonIdentifierFirstChar =
-    [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z'),ord('$')];
-
-  /// used internaly for fast extended JSON property name recognition (32 bytes const)
-  // - can be used e.g. for extended JSON object field
-  // - follow JsonPropNameValid, GetJSONPropName and GotoNextJSONObjectOrArray
-  IsJsonIdentifier =
-    [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z'),
-     ord('.'),ord('['),ord(']')];
-
-  /// used internaly for fast URI "unreserved" characters identifier
-  // - defined as unreserved  = ALPHA / DIGIT / "-" / "." / "_" / "~"
-  // in @http://tools.ietf.org/html/rfc3986#section-2.3
-  IsURIUnreserved =
-    [ord('a')..ord('z'),ord('A')..ord('Z'),ord('0')..ord('9'),
-     ord('-'),ord('.'),ord('_'),ord('~')];
-
-{$endif OPT4AMD}
+type
+  /// char categories for text line/word/identifiers/uri parsing
+  TTextChar = set of (tcNot01013, tc1013, tcNot1013, tcCtrlNotLF, tcWord,
+    tcIdentifierFirstChar, tcIdentifier, tcURIUnreserved);
+  TTextCharSet = array[AnsiChar] of TTextChar;
+  PTextCharSet = ^TTextCharSet;
+  TTextByteSet = array[byte] of TTextChar;
+  PTextByteSet = ^TTextByteSet;
+var
+  /// branch-less table used for text line/word/identifiers/uri parsing
+  TEXT_CHARS: TTextCharSet;
+  TEXT_BYTES: TTextByteSet absolute TEXT_CHARS;
 
 {$M+} // to have existing RTTI for published properties
 type
@@ -16973,13 +16946,13 @@ begin
     PCardinal(Dest+2)^ := (c shl 8 or c) and $00ff00ff;
     inc(Dest,4);
   until SourceChars<4;
-  if (SourceChars>0) and (ord(Source^)<128) then
-  repeat
-    dec(SourceChars);
-    PWord(Dest)^ := ord(Source^); // much faster than dest^ := WideChar(c) for FPC
-    inc(Source);
-    inc(Dest);
-  until (SourceChars=0) or (ord(Source^)>=128);
+  if (SourceChars>0) and (ord(Source^)<=127) then
+    repeat
+      dec(SourceChars);
+      PWord(Dest)^ := ord(Source^); // much faster than dest^ := WideChar(c) for FPC
+      inc(Source);
+      inc(Dest);
+    until (SourceChars=0) or (ord(Source^)>=128);
   // rely on the Operating System for all remaining ASCII characters
   if SourceChars=0 then
     result := Dest else begin
@@ -17036,7 +17009,7 @@ begin
       inc(Source,4);
       inc(Dest,4);
     until SourceChars<4;
-  if (SourceChars>0) and (ord(Source^)<128) then
+  if (SourceChars>0) and (ord(Source^)<=127) then
     repeat
       Dest^ := Source^;
       dec(SourceChars);
@@ -17197,7 +17170,7 @@ begin
       PWord(Dest)^ := c;
       inc(Dest,2);
     until SourceChars<2;
-  if (SourceChars>0) and (ord(Source^)<128) then
+  if (SourceChars>0) and (ord(Source^)<=127) then
     repeat
       Dest^ := AnsiChar(ord(Source^));
       dec(SourceChars);
@@ -20164,36 +20137,36 @@ end;
 // naive code gives the best performance - bts [Bits] has an overhead
 function GetBit(const Bits; aIndex: PtrInt): boolean;
 begin
-  result := TIntegerArray(Bits)[aIndex shr 5] and (1 shl (aIndex and 31)) <> 0;
+  result := PByteArray(@Bits)[aIndex shr 3] and (1 shl (aIndex and 7)) <> 0;
 end;
 
 procedure SetBit(var Bits; aIndex: PtrInt);
 begin
-  TIntegerArray(Bits)[aIndex shr 5] := TIntegerArray(Bits)[aIndex shr 5]
-    or (1 shl (aIndex and 31));
+  TByteArray(Bits)[aIndex shr 3] := TByteArray(Bits)[aIndex shr 3]
+    or (1 shl (aIndex and 7));
 end;
 
 procedure UnSetBit(var Bits; aIndex: PtrInt);
 begin
-  PIntegerArray(@Bits)^[aIndex shr 5] := PIntegerArray(@Bits)^[aIndex shr 5]
-    and not (1 shl (aIndex and 31));
+  PByteArray(@Bits)[aIndex shr 3] := PByteArray(@Bits)[aIndex shr 3]
+    and not (1 shl (aIndex and 7));
 end;
 
 function GetBitPtr(Bits: pointer; aIndex: PtrInt): boolean;
 begin
-  result := PIntegerArray(Bits)[aIndex shr 5] and (1 shl (aIndex and 31)) <> 0;
+  result := PByteArray(Bits)[aIndex shr 3] and (1 shl (aIndex and 7)) <> 0;
 end;
 
 procedure SetBitPtr(Bits: pointer; aIndex: PtrInt);
 begin
-  PIntegerArray(Bits)[aIndex shr 5] := PIntegerArray(Bits)[aIndex shr 5]
-    or (1 shl (aIndex and 31));
+  PByteArray(Bits)[aIndex shr 3] := PByteArray(Bits)[aIndex shr 3]
+    or (1 shl (aIndex and 7));
 end;
 
 procedure UnSetBitPtr(Bits: pointer; aIndex: PtrInt);
 begin
-  PIntegerArray(Bits)^[aIndex shr 5] := PIntegerArray(Bits)^[aIndex shr 5]
-    and not (1 shl (aIndex and 31));
+  PByteArray(Bits)[aIndex shr 3] := PByteArray(Bits)[aIndex shr 3]
+    and not (1 shl (aIndex and 7));
 end;
 
 function GetBit64(const Bits: Int64; aIndex: PtrInt): boolean;
@@ -20923,12 +20896,6 @@ const
   TRUE_LOW  = ord('t')+ord('r')shl 8+ord('u')shl 16+ord('e')shl 24;
   NULL_UPP  = ord('N')+ord('U')shl 8+ord('L')shl 16+ord('L')shl 24;
 
-  EndOfJSONValueField = [#0,#9,#10,#13,' ',',','}',']'];
-  EndOfJSONField = [',',']','}',':'];
-  DigitChars = ['-','+','0'..'9'];
-  DigitFirstChars = ['-','1'..'9']; // 0/- excluded by JSON!
-  DigitFloatChars = ['-','+','0'..'9','.','E','e'];
-
   NULL_SHORTSTRING: string[1] = '';
 
 procedure GetEnumNames(aTypeInfo: pointer; aDest: PPShortString);
@@ -21318,7 +21285,7 @@ begin
         if P=nil then
           exit; // avoid GPF below if already reached the input end
       end;
-      while not (P^ in EndOfJSONField) do begin // mimics GetJSONField()
+      while not (jcEndOfJSONField in JSON_CHARS[P^]) do begin // mimics GetJSONField()
         if P^=#0 then begin
           P := nil;
           exit; // unexpected end
@@ -23542,6 +23509,7 @@ function ScanUTF8(P: PUTF8Char; PLen: PtrInt; const fmt: RawUTF8;
 var
   v,w: PtrInt;
   F,FEnd,PEnd: PUTF8Char;
+  tab: PTextCharSet;
 label next;
 begin
   result := 0;
@@ -23560,12 +23528,11 @@ begin
         if P=PEnd then
           exit;
       until (P^>' ') or (P^=#0);
-    if F^ in [#1..' '] then // ignore any whitespace char in fmt
-      repeat
-        inc(F);
-        if F=FEnd then
-          exit;
-      until not (F^ in [#1..' ']);
+    while (F^<=' ') and (F^<>#0) do begin // ignore any whitespace char in fmt
+      inc(F);
+      if F=FEnd then
+        exit;
+    end;
     if F^='%' then begin // format specifier
       inc(F);
       if F=FEnd then
@@ -23592,7 +23559,8 @@ begin
       end;
       'L': begin
         w := 0;
-        while not(P[w] in [#0,#10,#13]) and (P+w<=PEnd) do inc(w);
+        tab := @TEXT_CHARS;
+        while (tcNot01013 in tab[P[w]]) and (P+w<=PEnd) do inc(w);
         FastSetString(PRawUTF8(values[v])^,P,w);
         inc(P,w);
       end;
@@ -23600,9 +23568,10 @@ begin
       else raise ESynException.CreateUTF8('ScanUTF8: unknown ''%'' specifier [%]',[F^,fmt]);
       end;
       inc(result);
-      if (ord(F[1]) in IsIdentifier) or (ident<>nil) then begin
+      tab := @TEXT_CHARS;
+      if (tcIdentifier in tab[F[1]]) or (ident<>nil) then begin
         w := 0;
-        repeat inc(w) until not(ord(F[w]) in IsIdentifier) or (F+w=FEnd);
+        repeat inc(w) until not(tcIdentifier in tab[F[w]]) or (F+w=FEnd);
         if ident<>nil then
           FastSetString(ident^[v],F,w);
         inc(F,w);
@@ -26977,13 +26946,13 @@ begin
     c := GetNextUTF8Upper(U);
     if c=0 then
       exit;
-  until not(c in IsWord);
+  until (c>=127) or not(tcWord in TEXT_BYTES[c]);
   repeat
     V := U;
     c := GetNextUTF8Upper(U);
     if c=0 then
       exit;
-  until c in IsWord;
+  until (c<127) and (tcWord in TEXT_BYTES[c]);
   result := V;
 end;
 
@@ -27313,8 +27282,8 @@ begin
     repeat
       if A^=#0 then exit else
 {$ifdef USENORMTOUPPER}
-      if byte(NormToUpper[A^]) in IsWord then break else inc(A);  {$else}
-      if byte(NormToUpperAnsi7[A^]) in IsWord then break else inc(A);
+      if tcWord in TEXT_CHARS[NormToUpper[A^]] then break else inc(A);  {$else}
+      if tcWord in TEXT_CHARS[A^] then break else inc(A);
 {$endif}
     until false;
     // check if this word is the UpperValue
@@ -27336,22 +27305,24 @@ begin
     repeat
       if A^=#0 then exit else
 {$ifdef USENORMTOUPPER}
-        if not (NormToUpperByte[ord(A^)] in IsWord) then break else inc(A);
-{$else} if not (ord(A^) in IsWord) then break else inc(A); {$endif}
+        if not (tcWord in TEXT_CHARS[NormToUpper[A^]]) then break else inc(A);
+{$else} if not (tcWord in TEXT_CHARS[A^]) then break else inc(A); {$endif}
     until false;
   until false;
 end;
 
 function FindUnicode(PW, Upper: PWideChar; UpperLen: PtrInt): boolean;
 var Start: PWideChar;
+    w: PtrUInt;
 begin
   result := false;
   if (PW=nil) or (Upper=nil) then exit;
   repeat
     // go to beginning of next word
     repeat
-      if ord(PW^)=0 then exit else
-      if (ord(PW^)>126) or (ord(PW^) in IsWord) then
+      w := ord(PW^);
+      if w=0 then exit else
+      if (w>126) or (tcWord in TEXT_BYTES[w]) then
         Break;
       inc(PW);
     until false;
@@ -27359,8 +27330,9 @@ begin
     // search end of word matching UpperLen characters
     repeat
       inc(PW);
+      w := ord(PW^);
     until (PW-Start>=UpperLen) or
-      (ord(PW^)=0) or ((ord(PW^)<126) and (not(ord(PW^) in IsWord)));
+      (w=0) or ((w<126) and (not(tcWord in TEXT_BYTES[w])));
     if PW-Start>=UpperLen then
       if CompareStringW(LOCALE_USER_DEFAULT,NORM_IGNORECASE,Start,UpperLen,Upper,UpperLen)=2 then begin
         result := true; // match found
@@ -27368,8 +27340,9 @@ begin
       end;
     // not found: go to end of current word
     repeat
-      if PW^=#0 then exit else
-      if ((ord(PW^)<126) and (not(ord(PW^) in IsWord))) then Break;
+      w := ord(PW^);
+      if w=0 then exit else
+      if ((w<126) and (not(tcWord in TEXT_BYTES[w]))) then Break;
       inc(PW);
     until false;
   until false;
@@ -27398,7 +27371,7 @@ begin
       inc(U);
       if c=0 then exit else
       if c<=127 then begin
-        if c in IsWord then
+        if tcWord in TEXT_BYTES[c] then
           if PAnsiChar(@NormToUpper)[c]<>FirstChar then
             goto Next else
             break;
@@ -27408,7 +27381,7 @@ begin
         inc(U);
         if c<=255 then begin
           c := NormToUpperByte[c];
-          if c in IsWord then
+          if tcWord in TEXT_BYTES[c] then
             if AnsiChar(c)<>FirstChar then
               goto Next else
               break;
@@ -29111,6 +29084,7 @@ end;
 
 function FindSectionFirstLine(var source: PUTF8Char; search: PAnsiChar): boolean;
 {$ifdef PUREPASCAL}
+var tab: PTextCharSet;
 begin
   result := false;
   if source=nil then
@@ -29120,8 +29094,9 @@ begin
       inc(source);
       result := IdemPChar(source,search);
     end;
-    while source^ in ANSICHARNOT01310 do inc(source);
-    while source^ in [#10,#13] do inc(source);
+    tab := @TEXT_CHARS;
+    while tcNot01013 in tab[source^] do inc(source);
+    while tc1013 in tab[source^] do inc(source);
     if result then
       exit; // found
   until source^=#0;
@@ -33552,7 +33527,7 @@ var S: PUTF8Char;
 begin
   S := P;
   if S<>nil then begin
-    if S^ in [#1..' '] then repeat inc(S) until not(S^ in [#1..' ']);
+    while (S^<=' ') and (S^<>#0) do inc(S);
     P := S;
     if (S^<>#0) and (S^<>Sep) then
       repeat
@@ -34228,16 +34203,18 @@ begin
 end;
 
 function IsUrlValid(P: PUTF8Char): boolean;
+var tab: PTextCharSet;
 begin
   result := false;
-  if P<>nil then begin
-    repeat // cf. rfc3986 2.3. Unreserved Characters
-      if ord(P^) in IsURIUnreserved then
-        inc(P) else
-        exit;
-    until P^=#0;
-    result := true;
-  end;
+  if P=nil then
+    exit;
+  tab := @TEXT_CHARS;
+  repeat // cf. rfc3986 2.3. Unreserved Characters
+    if tcURIUnreserved in tab[P^] then
+      inc(P) else
+      exit;
+  until P^=#0;
+  result := true;
 end;
 
 function AreUrlValid(const Url: array of RawUTF8): boolean;
@@ -43086,8 +43063,8 @@ begin // code below must match TTextWriter.AddRecordJSON
     JSON := Reader(JSON,Rec,wasValid{$ifndef NOVARIANTS},CustomVariantOptions{$endif});
     if not wasValid then
       exit;
-    if (JSON<>nil) and (JSON^ in [#1..' ']) then
-      repeat inc(JSON) until not(JSON^ in [#1..' ']);
+    if JSON<>nil then
+      JSON := GotoNextNotSpace(JSON);
     if (JSON<>nil) and (JSON^<>#0) then
       if FirstChar='"' then // special case e.g. for TGUID string
         EndOfObj := FirstChar else begin
@@ -43768,7 +43745,7 @@ var EndOfObject: AnsiChar;
       exit;
     end;
     ptArray:
-    if (PInteger(P)^=NULL_LOW) and (P[4] in EndOfJSONValueField) then begin
+    if (PInteger(P)^=NULL_LOW) and (jcEndOfJSONValueField in JSON_CHARS[P[4]]) then begin
       P := GotoNextNotSpace(P+4);
       EndOfObject := P^;
       if P^<>#0 then //if P^=',' then
@@ -43907,7 +43884,7 @@ begin
   if P=nil then
     exit;
   P := GotoNextNotSpace(P);
-  if (PInteger(P)^=NULL_LOW) and (P[4] in EndOfJSONValueField) then begin
+  if (PInteger(P)^=NULL_LOW) and (jcEndOfJSONValueField in JSON_CHARS[P[4]]) then begin
     P := GotoNextNotSpace(P+4); // a record stored as null
     inc(Data,fDataSize);
     result := true;
@@ -45326,7 +45303,7 @@ begin
     AllowDouble := true; // for ProcessField() above
   if EndOfObject<>nil then
     EndOfObject^ := ' ';
-  if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
+  while (JSON^<=' ') and (JSON^<>#0) do inc(JSON);
   if (Options=nil) or (JSON^ in ['-','0'..'9']) or (PInteger(JSON)^=NULL_LOW) or
      (PInteger(JSON)^=TRUE_LOW) or (PInteger(JSON)^=FALSE_LOW) then begin
     ProcessField; // obvious simple type
@@ -45553,17 +45530,17 @@ end;
 function GetVariantFromNotStringJSON(JSON: PUTF8Char; var Value: TVarData;
   AllowDouble: boolean): boolean;
 begin
-  if (JSON<>nil) and (JSON^ in [#1..' ']) then
-    repeat inc(JSON) until not(JSON^ in [#1..' ']);
+  if JSON<>nil then
+    while (JSON^<=' ') and (JSON^<>#0) do inc(JSON);
   if (JSON=nil) or
-     ((PInteger(JSON)^=NULL_LOW) and (JSON[4] in EndOfJSONValueField)) then
+     ((PInteger(JSON)^=NULL_LOW) and (jcEndOfJSONValueField in JSON_CHARS[JSON[4]])) then
     Value.VType := varNull else
   if (PInteger(JSON)^=FALSE_LOW) and (JSON[4]='e') and
-     (JSON[5] in EndOfJSONValueField) then begin
+     (jcEndOfJSONValueField in JSON_CHARS[JSON[5]]) then begin
     Value.VType := varBoolean;
     Value.VBoolean := false;
   end else
-  if (PInteger(JSON)^=TRUE_LOW) and (JSON[4] in EndOfJSONValueField) then begin
+  if (PInteger(JSON)^=TRUE_LOW) and (jcEndOfJSONValueField in JSON_CHARS[JSON[4]]) then begin
     Value.VType := varBoolean;
     Value.VBoolean := true;
   end else
@@ -46157,10 +46134,10 @@ begin
   if dvoInternValues in VOptions then
     intvalues := DocVariantType.InternValues else
     intvalues := nil;
-  if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
+  while (JSON^<=' ') and (JSON^<>#0) do inc(JSON);
   case JSON^ of
   '[': begin
-    repeat inc(JSON) until not(JSON^ in [#1..' ']);
+    repeat inc(JSON); if JSON^=#0 then exit; until JSON^>' ';
     n := JSONArrayCount(JSON); // may be slow if JSON is huge (not very common)
     if n<0 then
       exit; // invalid content
@@ -46181,11 +46158,11 @@ begin
       until EndOfObject=']';
     end else
       if JSON^=']' then // n=0
-        repeat inc(JSON) until not(JSON^ in [#1..' ']) else
+        repeat inc(JSON) until (JSON^=#0) or (JSON^>' ') else
         exit;
   end;
   '{': begin
-    repeat inc(JSON) until not(JSON^ in [#1..' ']);
+    repeat inc(JSON); if JSON^=#0 then exit; until JSON^>' ';
     n := JSONObjectPropCount(JSON); // may be slow if JSON is huge (not very common)
     if n<0 then
       exit; // invalid content
@@ -46217,7 +46194,7 @@ begin
       until EndOfObject='}';
     end else
       if JSON^='}' then // n=0
-        repeat inc(JSON) until not(JSON^ in [#1..' ']) else
+        repeat inc(JSON) until (JSON^=#0) or (JSON^>' ') else
         exit;
   end;
   'n','N': begin
@@ -46229,11 +46206,11 @@ begin
   end;
   else exit;
   end;
-  if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
+  while (JSON^<=' ') and (JSON^<>#0) do inc(JSON);
   if aEndOfObject<>nil then
     aEndOfObject^ := JSON^;
   if JSON^<>#0 then
-    repeat inc(JSON) until not(JSON^ in [#1..' ']);
+    repeat inc(JSON) until (JSON^=#0) or (JSON^>' ');
   result := JSON; // indicates successfully parsed
 end;
 
@@ -49397,7 +49374,7 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
     exit;
   P := GotoNextNotSpace(P);
   if P^<>'[' then begin
-    if (PInteger(P)^=NULL_LOW) and (P[4] in EndOfJSONValueField) then begin
+    if (PInteger(P)^=NULL_LOW) and (jcEndOfJSONValueField in JSON_CHARS[P[4]]) then begin
       SetCount(0);
       result := P+4; // handle 'null' as void array
     end;
@@ -53823,10 +53800,10 @@ begin
   result := nil;
   if JSON=nil then
     exit;
-  if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
+  while (JSON^<=' ') and (JSON^<>#0) do inc(JSON);
   case JSON^ of
   '[': begin // array
-    repeat inc(JSON) until not(JSON^ in [#1..' ']);
+    repeat inc(JSON) until (JSON^=#0) or (JSON>' ');
     if JSON^=']' then begin
       Add('[');
       inc(JSON);
@@ -53852,13 +53829,13 @@ begin
     Add(']');
   end;
   '{': begin // object
-    repeat inc(JSON) until not(JSON^ in [#1..' ']);
+    repeat inc(JSON) until (JSON^=#0) or (JSON>' ');
     Add('{');
     inc(fHumanReadableLevel);
     if not (Format in [jsonCompact,jsonUnquotedPropNameCompact]) then
       AddCRAndIndent;
     if JSON^='}' then
-      repeat inc(JSON) until not(JSON^ in [#1..' ']) else
+      repeat inc(JSON) until (JSON^=#0) or (JSON>' ') else
     repeat
       Name := GetJSONPropName(JSON,@NameLen);
       if Name=nil then
@@ -53873,7 +53850,7 @@ begin
       if Format in [jsonCompact,jsonUnquotedPropNameCompact] then
         Add(':') else
         Add(':',' ');
-      if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
+      while (JSON^<=' ') and (JSON^<>#0) do inc(JSON);
       JSON := AddJSONReformat(JSON,Format,@objEnd);
       if objEnd='}' then
         break;
@@ -53905,11 +53882,11 @@ begin
   end;
   end;
   if JSON<>nil then begin
-    if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
+    while (JSON^<=' ') and (JSON^<>#0) do inc(JSON);
     if EndOfObject<>nil then
       EndOfObject^ := JSON^;
     if JSON^<>#0 then
-      repeat inc(JSON) until not(JSON^ in [#1..' ']);
+      repeat inc(JSON) until (JSON^=#0) or (JSON>' ');
   end;
   result := JSON;
 end;
@@ -53922,10 +53899,10 @@ begin
   result := nil;
   if JSON=nil then
     exit;
-  if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
+  while (JSON^<=' ') and (JSON^<>#0) do inc(JSON);
   case JSON^ of
   '[': begin
-    repeat inc(JSON) until not(JSON^ in [#1..' ']);
+    repeat inc(JSON) until (JSON^=#0) or (JSON>' ');
     if JSON^=']' then
       JSON := GotoNextNotSpace(JSON+1) else begin
       n := 0;
@@ -53948,14 +53925,14 @@ begin
     end;
   end;
   '{': begin
-    repeat inc(JSON) until not(JSON^ in [#1..' ']);
+    repeat inc(JSON) until (JSON^=#0) or (JSON>' ');
     if JSON^='}' then
-      repeat inc(JSON) until not(JSON^ in [#1..' ']) else
+      repeat inc(JSON) until (JSON^=#0) or (JSON>' ');
       repeat
         Name := GetJSONPropName(JSON);
         if Name=nil then
           exit;
-        if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
+        while (JSON^<=' ') and (JSON^<>#0) do inc(JSON);
         if JSON^='[' then // arrays are written as list of items, without root
           JSON := AddJSONToXML(JSON,Name,@objEnd) else begin
           Add('<');
@@ -53981,11 +53958,11 @@ begin
   end;
   end;
   if JSON<>nil then begin
-    if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
+    while (JSON^<=' ') and (JSON^<>#0) do inc(JSON);
     if EndOfObject<>nil then
       EndOfObject^ := JSON^;
     if JSON^<>#0 then
-      repeat inc(JSON) until not(JSON^ in [#1..' ']);
+      repeat inc(JSON) until (JSON^=#0) or (JSON>' ');
   end;
   result := JSON;
 end;
@@ -54645,10 +54622,10 @@ begin
         dec(Len,4);
       until Len<4;
     if (Len>0) and (P^<#128)  then
-    repeat
-      inc(P);
-      dec(Len);
-    until (Len=0) or (P^>=#127);
+      repeat
+        inc(P);
+        dec(Len);
+      until (Len=0) or (P^>=#127);
     if P<>pointer(B) then
       Add(B,P-B,Escape);
     if Len=0 then
@@ -54836,7 +54813,7 @@ begin
   if tab[PByteArray(P)[i]]=0 then begin
 noesc:start := i;
     if Len<0 then
-      repeat
+      repeat // fastest loop is for AddJSONEscape(P,nil)
         inc(i);
       until tab[PByteArray(P)[i]]<>0 else
       repeat
@@ -54886,7 +54863,7 @@ begin
     s := i;
     repeat
       c := PWordArray(P)[i];
-      if (c<128) and (JSON_ESCAPE[c]<>0) then
+      if (c<=127) and (JSON_ESCAPE[c]<>0) then
         break;
       inc(i);
     until i>=Len;
@@ -55935,14 +55912,18 @@ begin
   result := P; // return either ':' for name field, either '}',',' for value
 end;
 
-/// decode a JSON field into an UTF-8 encoded buffer, stored inplace of JSON data
+// decode a JSON field into an UTF-8 encoded buffer, stored inplace of input buffer
 function GetJSONField(P: PUTF8Char; out PDest: PUTF8Char;
   wasString: PBoolean; EndOfObject: PUTF8Char; Len: PInteger): PUTF8Char;
 var D: PUTF8Char;
-    b,c4,surrogate,j: integer;
-    tab: {$ifdef CPUX86NOTPIC}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
-label slash,num;
-begin
+    c4,surrogate,j: integer;
+    c: AnsiChar;
+    b: byte;
+    jsonset: PJsonCharSet;
+    {$ifdef CPUX86NOTPIC} tab: TNormTableByte absolute ConvertHexToBin;
+    {$else} tab: PNormTableByte; {$endif}
+label slash,num,lit;
+begin // see http://www.ietf.org/rfc/rfc4627.txt
   if wasString<>nil then
     wasString^ := false; // not a string by default
   PDest := nil; // PDest=nil indicates error or unexpected end (#0)
@@ -55950,154 +55931,118 @@ begin
   if P=nil then exit;
   if P^<=' ' then repeat inc(P); if P^=#0 then exit; until P^>' ';
   case P^ of
-  'n':
-    if (PInteger(P)^=NULL_LOW) and (P[4] in EndOfJSONValueField)  then begin
-      result := nil; // null -> returns nil and wasString=false
-      if Len<>nil then
-        Len^ := 0; // when result is converted to string
-      inc(P,4);
-    end else
-      exit; // PDest=nil to indicate error
-  'f':
-    if (PInteger(P+1)^=ord('a')+ord('l')shl 8+ord('s')shl 16+ord('e')shl 24) and
-       (P[5] in EndOfJSONValueField) then begin
-      result := P; // false -> returns 'false' and wasString=false
-      if Len<>nil then
-        Len^ := 5;
-      inc(P,5);
-    end else
-      exit; // PDest=nil to indicate error
-  't':
-    if (PInteger(P)^=TRUE_LOW) and (P[4] in EndOfJSONValueField) then begin
-      result := P; // true -> returns 'true' and wasString=false
-      if Len<>nil then
-        Len^ := 4;
-      inc(P,4);
-    end else
-      exit; // PDest=nil to indicate error
-  '"': begin
-    // '"string \"\\field"' -> 'string "\field'
+  '"': begin // " -> unescape P^ into D^
     if wasString<>nil then
       wasString^ := true;
     inc(P);
     result := P;
     D := P;
-    repeat // unescape P^ into U^ (cf. http://www.ietf.org/rfc/rfc4627.txt)
-      case P^ of
-      #0:  exit;  // leave PDest=nil for unexpected end
-      '"': break; // end of string
-      '\': goto slash;
-      else begin
-        D^ := P^; // 3 stages pipelined process of unescaped chars
-        inc(P);
+    repeat
+      c := P^;
+      if c=#0 then exit else
+      if c='"' then break else
+      if c='\' then goto slash;
+      inc(P);
+      D^ := c;
+      inc(D);
+      continue;
+slash:inc(P); // unescape JSON string
+      c := P^;
+      if (c='"') or (c='\') then begin
+lit:    inc(P);
+        D^ := c; // most common case
         inc(D);
-        case P^ of
-        #0:  exit;
-        '"': break;
-        '\': goto slash;
-        else begin
-          D^ := P^;
-          inc(P);
-          inc(D);
-          case P^ of
-          #0:  exit;
-          '"': break;
-          '\': goto slash;
-          else begin
-            D^ := P^;
-            inc(P);
-            inc(D);
-            continue;
-          end;
-          end;
-        end;
-        end;
-      end;
-      end;
-slash:inc(P);
-      case P^ of // unescape JSON string
-        #0: exit; // to avoid potential buffer overflow issue for \#0
-        'b': D^ := #08;
-        't': D^ := #09;
-        'n': D^ := #$0a;
-        'f': D^ := #$0c;
-        'r': D^ := #$0d;
-        'u': begin // inlined decoding of '\u0123' UTF-16 codepoint into UTF-8
-          {$ifndef CPUX86NOTPIC}tab := @ConvertHexToBin;{$endif} // faster on PIC and x86_64
-          c4 := tab[ord(P[1])];
-          if c4<=15 then begin
-            b := tab[ord(P[2])];
+        continue;
+      end else
+      if c=#0 then
+        exit else // to avoid potential buffer overflow issue on \#0
+      if c='b' then
+        c := #8 else
+      if c='t' then
+        c := #9 else
+      if c='n' then
+        c := #10 else
+      if c='f' then
+        c := #12 else
+      if c='r' then
+        c := #13 else
+      if c='u' then begin
+        // inlined decoding of '\u0123' UTF-16 codepoint(s) into UTF-8
+        {$ifndef CPUX86NOTPIC}tab := @ConvertHexToBin;{$endif}
+        c4 := tab[ord(P[1])];
+        if c4<=15 then begin
+          b := tab[ord(P[2])];
+          if b<=15 then begin
+            c4 := c4 shl 4;
+            c4 := c4 or b;
+            b := tab[ord(P[3])];
             if b<=15 then begin
-              c4 := c4 shl 4+b;
-              b := tab[ord(P[3])];
+              c4 := c4 shl 4;
+              c4 := c4 or b;
+              b := tab[ord(P[4])];
               if b<=15 then begin
-                c4 := c4 shl 4+b;
-                b := tab[ord(P[4])];
-                if b<=15 then begin
-                  c4 := c4 shl 4+b;
-                  case c4 of
-                  0: begin
-                    D^ := '?'; // \u0000 is an invalid value
-                    inc(D);
-                  end;
-                  1..$7f: begin
-                    D^ := AnsiChar(c4);
-                    inc(D);
-                  end;
-                  $80..$7ff: begin
-                    D[0] := AnsiChar($C0 or (c4 shr 6));
-                    D[1] := AnsiChar($80 or (c4 and $3F));
-                    inc(D,2);
-                  end;
-                  UTF16_HISURROGATE_MIN..UTF16_LOSURROGATE_MAX:
-                    if PWord(P+5)^=ord('\')+ord('u') shl 8 then begin
-                      inc(P,6);
-                      surrogate := (tab[ord(P[1])] shl 12)+
-                                   (tab[ord(P[2])] shl 8)+
-                                   (tab[ord(P[3])] shl 4)+
-                                    tab[ord(P[4])]; // optimistic approach
-                      case c4 of // inlined UTF16CharToUtf8()
-                      UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
-                        c4 := ((c4-$D7C0)shl 10)+(surrogate xor UTF16_LOSURROGATE_MIN);
-                      UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
-                        c4 := ((surrogate-$D7C0)shl 10)+(c4 xor UTF16_LOSURROGATE_MIN);
-                      end;
-                      case c4 of
-                      0..$7ff: b := 2;
-                      $800..$ffff: b := 3;
-                      $10000..$1FFFFF: b := 4;
-                      $200000..$3FFFFFF: b := 5;
-                      else b := 6;
-                      end;
-                      for j := b-1 downto 1 do begin
-                        D[j] := AnsiChar((c4 and $3f)+$80);
-                        c4 := c4 shr 6;
-                      end;
-                      D^ := AnsiChar(Byte(c4) or UTF8_FIRSTBYTE[b]);
-                      inc(D,b);
-                    end else begin
-                      D^ := '?'; // unexpected surrogate without its pair
-                      inc(D);
+                c4 := c4 shl 4;
+                c4 := c4 or b;
+                case c4 of
+                0: begin
+                  D^ := '?'; // \u0000 is an invalid value
+                  inc(D);
+                end;
+                1..$7f: begin
+                  D^ := AnsiChar(c4);
+                  inc(D);
+                end;
+                $80..$7ff: begin
+                  D[0] := AnsiChar($C0 or (c4 shr 6));
+                  D[1] := AnsiChar($80 or (c4 and $3F));
+                  inc(D,2);
+                end;
+                UTF16_HISURROGATE_MIN..UTF16_LOSURROGATE_MAX:
+                  if PWord(P+5)^=ord('\')+ord('u') shl 8 then begin
+                    inc(P,6); // optimistic conversion (no check)
+                    surrogate := (ConvertHexToBin[ord(P[1])] shl 12)+
+                                 (ConvertHexToBin[ord(P[2])] shl 8)+
+                                 (ConvertHexToBin[ord(P[3])] shl 4)+
+                                  ConvertHexToBin[ord(P[4])];
+                    case c4 of // inlined UTF16CharToUtf8()
+                    UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
+                      c4 := ((c4-$D7C0)shl 10)+(surrogate xor UTF16_LOSURROGATE_MIN);
+                    UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
+                      c4 := ((surrogate-$D7C0)shl 10)+(c4 xor UTF16_LOSURROGATE_MIN);
                     end;
-                  else begin
-                    D[0] := AnsiChar($E0 or (c4 shr 12));
-                    D[1] := AnsiChar($80 or ((c4 shr 6) and $3F));
-                    D[2] := AnsiChar($80 or (c4 and $3F));
-                    inc(D,3);
+                    case c4 of
+                    0..$7ff: b := 2;
+                    $800..$ffff: b := 3;
+                    $10000..$1FFFFF: b := 4;
+                    $200000..$3FFFFFF: b := 5;
+                    else b := 6;
+                    end;
+                    for j := b-1 downto 1 do begin
+                      D[j] := AnsiChar((c4 and $3f)+$80);
+                      c4 := c4 shr 6;
+                    end;
+                    D^ := AnsiChar(Byte(c4) or UTF8_FIRSTBYTE[b]);
+                    inc(D,b);
+                  end else begin
+                    D^ := '?'; // unexpected surrogate without its pair
+                    inc(D);
                   end;
-                  end;
-                  inc(P,5);
-                  continue;
+                else begin
+                  D[0] := AnsiChar($E0 or (c4 shr 12));
+                  D[1] := AnsiChar($80 or ((c4 shr 6) and $3F));
+                  D[2] := AnsiChar($80 or (c4 and $3F));
+                  inc(D,3);
+                end;
+                end;
+                inc(P,5);
+                continue;
                 end;
               end;
             end;
           end;
-          D^ := '?'; // bad formated hexa number -> '?0123'
+          c := '?'; // bad formated hexa number -> '?0123'
         end;
-        else D^ := P^; // litterals: '\"' -> '"'
-      end;
-      inc(P);
-      inc(D);
+      goto lit;
     until false;
     // here P^='"'
     D^ := #0; // make zero-terminated
@@ -56110,11 +56055,12 @@ slash:inc(P);
   '0':
     if P[1] in ['0'..'9'] then // 0123 excluded by JSON!
       exit else // leave PDest=nil for unexpected end
-      goto num; // may be 0.123
+      goto num;// may be 0.123
   '-','1'..'9': begin // numerical field: all chars before end of field
 num:result := P;
+    jsonset := @JSON_CHARS;
     repeat
-      if not (P^ in DigitFloatChars) then
+      if not (jcDigitFloatChars in jsonset[P^]) then
         break;
       inc(P);
     until false;
@@ -56127,9 +56073,36 @@ num:result := P;
       inc(P);
     end;
   end;
-  else exit; // PDest=nil to indicate error
+  'n':
+    if (PInteger(P)^=NULL_LOW) and (jcEndOfJSONValueField in JSON_CHARS[P[4]])  then begin
+      result := nil; // null -> returns nil and wasString=false
+      if Len<>nil then
+        Len^ := 0; // when result is converted to string
+      inc(P,4);
+    end else
+      exit;
+  'f':
+    if (PInteger(P+1)^=ord('a')+ord('l')shl 8+ord('s')shl 16+ord('e')shl 24) and
+       (jcEndOfJSONValueField in JSON_CHARS[P[5]]) then begin
+      result := P; // false -> returns 'false' and wasString=false
+      if Len<>nil then
+        Len^ := 5;
+      inc(P,5);
+    end else
+      exit;
+  't':
+    if (PInteger(P)^=TRUE_LOW) and (jcEndOfJSONValueField in JSON_CHARS[P[4]]) then begin
+      result := P; // true -> returns 'true' and wasString=false
+      if Len<>nil then
+        Len^ := 4;
+      inc(P,4);
+    end else
+      exit;
+  else
+    exit; // PDest=nil to indicate error
   end;
-  while not (P^ in EndOfJSONField) do begin
+  jsonset := @JSON_CHARS;
+  while not (jcEndOfJSONField in jsonset[P^]) do begin
     if P^=#0 then
       exit; // leave PDest=nil for unexpected end
     inc(P);
@@ -56145,31 +56118,21 @@ end;
 function GetJSONPropName(var P: PUTF8Char; Len: PInteger): PUTF8Char;
 var Name: PUTF8Char;
     wasString: boolean;
-    EndOfObject: AnsiChar;
+    c, EndOfObject: AnsiChar;
+    tab: PJsonCharSet;
 begin // should match GotoNextJSONObjectOrArray() and JsonPropNameValid()
   result := nil;
   if P=nil then
     exit;
   while (P^<=' ') and (P^<>#0) do inc(P);
   Name := P; // put here to please some versions of Delphi compiler
-  case P^ of
-  '_','A'..'Z','a'..'z','0'..'9','$': begin // e.g. '{age:{$gt:18}}'
-    repeat
-      inc(P);
-    until not (ord(P[0]) in IsJsonIdentifier);
-    if Len<>nil then
-      Len^ := P-Name;
-    if (P^<=' ') and (P^<>#0) then begin
-      P^ := #0;
-      inc(P);
-    end;
-    while (P^<=' ') and (P^<>#0) do inc(P);
-    if not (P^ in [':','=']) then // allow both age:18 and age=18 pairs
+  c := P^;
+  if c='"' then begin
+    Name := GetJSONField(P,P,@wasString,@EndOfObject,Len);
+    if (Name=nil) or not wasString or (EndOfObject<>':') then
       exit;
-    P^ := #0;
-    inc(P);
-  end;
-  '''': begin // single quotes won't handle nested quote character
+  end else
+  if c = '''' then begin // single quotes won't handle nested quote character
     inc(P);
     Name := P;
     while P^<>'''' do
@@ -56183,54 +56146,40 @@ begin // should match GotoNextJSONObjectOrArray() and JsonPropNameValid()
     if P^<>':' then
       exit;
     inc(P);
-  end;
-  '"': begin
-    Name := GetJSONField(P,P,@wasString,@EndOfObject,Len);
-    if (Name=nil) or not wasString or (EndOfObject<>':') then
+  end else begin // e.g. '{age:{$gt:18}}'
+    tab := @JSON_CHARS;
+    if not (jcJsonIdentifierFirstChar in tab[c]) then
       exit;
-  end else
-    exit;
+    repeat
+      inc(P);
+    until not (jcJsonIdentifier in tab[P^]);
+    if Len<>nil then
+      Len^ := P-Name;
+    if (P^<=' ') and (P^<>#0) then begin
+      P^ := #0;
+      inc(P);
+    end;
+    while (P^<=' ') and (P^<>#0) do inc(P);
+    if not (P^ in [':','=']) then // allow both age:18 and age=18 pairs
+      exit;
+    P^ := #0;
+    inc(P);
   end;
   result := Name;
 end;
 
 procedure GetJSONPropName(var P: PUTF8Char; out PropName: shortstring);
 var Name: PAnsiChar;
+    c: AnsiChar;
+    tab: PJsonCharSet;
 begin // match GotoNextJSONObjectOrArray() and overloaded GetJSONPropName()
   PropName[0] := #0;
   if P=nil then
     exit;
   while (P^<=' ') and (P^<>#0) do inc(P);
   Name := pointer(P);
-  case P^ of
-  '_','A'..'Z','a'..'z','0'..'9','$': begin // e.g. '{age:{$gt:18}}'
-    repeat
-      inc(P);
-    until not (ord(P^) in IsJsonIdentifier);
-    SetString(PropName,Name,P-Name);
-    while (P^<=' ') and (P^<>#0) do inc(P);
-    if not (P^ in [':','=']) then begin // allow both age:18 and age=18 pairs
-      PropName[0] := #0;
-      exit;
-    end;
-    inc(P);
-  end;
-  '''': begin // single quotes won't handle nested quote character
-    inc(P);
-    inc(Name);
-    while P^<>'''' do
-      if P^<' ' then
-        exit else
-        inc(P);
-    SetString(PropName,Name,P-Name);
-    repeat inc(P) until (P^>' ') or (P^=#0);
-    if P^<>':' then begin
-      PropName[0] := #0;
-      exit;
-    end;
-    inc(P);
-  end;
-  '"': begin
+  c := P^;
+  if c='"' then begin
     inc(Name);
     P := GotoEndOfJSONString(P);
     if P^<>'"' then
@@ -56243,37 +56192,48 @@ begin // match GotoNextJSONObjectOrArray() and overloaded GetJSONPropName()
     end;
     inc(P);
   end else
-    exit;
+  if c='''' then begin // single quotes won't handle nested quote character
+    inc(P);
+    inc(Name);
+    while P^<>'''' do
+      if P^<' ' then
+        exit else
+        inc(P);
+    SetString(PropName,Name,P-Name);
+    repeat inc(P) until (P^>' ') or (P^=#0);
+    if P^<>':' then begin
+      PropName[0] := #0;
+      exit;
+    end;
+    inc(P);
+  end else begin // e.g. '{age:{$gt:18}}'
+    tab := @JSON_CHARS;
+    if not (jcJsonIdentifierFirstChar in tab[c]) then
+      exit;
+    repeat
+      inc(P);
+    until not (jcJsonIdentifier in tab[P^]);
+    SetString(PropName,Name,P-Name);
+    while (P^<=' ') and (P^<>#0) do inc(P);
+    if not (P^ in [':','=']) then begin // allow both age:18 and age=18 pairs
+      PropName[0] := #0;
+      exit;
+    end;
+    inc(P);
   end;
 end;
 
 function GotoNextJSONPropName(P: PUTF8Char): PUTF8Char;
+var c: AnsiChar;
+    tab: PJsonCharSet;
 label s;
 begin  // should match GotoNextJSONObjectOrArray()
   while (P^<=' ') and (P^<>#0) do inc(P);
   result := nil;
   if P=nil then
     exit;
-  case P^ of
-  '_','A'..'Z','a'..'z','0'..'9','$': begin // e.g. '{age:{$gt:18}}'
-    repeat
-      inc(P);
-    until not (ord(P^) in IsJsonIdentifier);
-    if (P^<=' ') and (P^<>#0) then
-      inc(P);
-    while (P^<=' ') and (P^<>#0) do inc(P);
-    if not (P^ in [':','=']) then // allow both age:18 and age=18 pairs
-      exit;
-  end;
-  '''': begin // single quotes won't handle nested quote character
-    inc(P);
-    while P^<>'''' do
-      if P^<' ' then
-        exit else
-        inc(P);
-    goto s;
-  end;
-  '"': begin
+  c := P^;
+  if c='"' then begin
     P := GotoEndOfJSONString(P);
     if P^<>'"' then
       exit;
@@ -56281,7 +56241,25 @@ s:  repeat inc(P) until (P^>' ') or (P^=#0);
     if P^<>':' then
       exit;
   end else
-    exit;
+  if c='''' then begin // single quotes won't handle nested quote character
+    inc(P);
+    while P^<>'''' do
+      if P^<' ' then
+        exit else
+        inc(P);
+    goto s;
+  end else  begin // e.g. '{age:{$gt:18}}'
+    tab := @JSON_CHARS;
+    if not (jcJsonIdentifierFirstChar in tab[c]) then
+      exit;
+    repeat
+      inc(P);
+    until not (jcJsonIdentifier in tab[P^]);
+    if (P^<=' ') and (P^<>#0) then
+      inc(P);
+    while (P^<=' ') and (P^<>#0) do inc(P);
+    if not (P^ in [':','=']) then // allow both age:18 and age=18 pairs
+      exit;
   end;
   repeat inc(P) until (P^>' ') or (P^=#0);
   result := P;
@@ -56343,7 +56321,7 @@ begin
     repeat inc(P) until not (P^ in ['0'..'9']); // check digits
     if P^='.' then
       repeat inc(P) until not (P^ in ['0'..'9']); // check fractional digits
-    if (P^ in ['e','E']) and (P[1] in DigitChars) then begin
+    if (P^ in ['e','E']) and (P[1] in ['0'..'9','+','-']) then begin
       inc(P);
       if P^='+' then inc(P) else
       if P^='-' then inc(P);
@@ -56365,8 +56343,8 @@ begin
   end;
   while (P^<=' ') and (P^<>#0) do inc(P);
   c4 := PInteger(P)^;
-  if (((c4=NULL_LOW)or(c4=TRUE_LOW)) and (P[4] in EndOfJSONValueField)) or
-     ((c4=FALSE_LOW) and (P[4]='e') and (P[5] in EndOfJSONValueField)) then begin
+  if (((c4=NULL_LOW)or(c4=TRUE_LOW)) and (jcEndOfJSONValueField in JSON_CHARS[P[4]])) or
+     ((c4=FALSE_LOW) and (P[4]='e') and (jcEndOfJSONValueField in JSON_CHARS[P[5]])) then begin
     result := false; // constants are no string
     exit;
   end else
@@ -56377,7 +56355,7 @@ begin
     repeat inc(P) until not (P^ in ['0'..'9']); // check digits
     if P^='.' then
       repeat inc(P) until not (P^ in ['0'..'9']); // check fractional digits
-    if (P^ in ['e','E']) and (P[1] in DigitChars) then begin
+    if (P^ in ['e','E']) and (P[1] in ['0'..'9','+','-']) then begin
       inc(P);
       if P^='+' then inc(P) else
       if P^='-' then inc(P);
@@ -56439,6 +56417,7 @@ begin
 end;
 
 function GotoNextJSONObjectOrArrayInternal(P,PMax: PUTF8Char; EndChar: AnsiChar): PUTF8Char;
+var tab: PJsonCharSet;
 label Prop;
 begin // should match GetJSONPropName()
   result := nil;
@@ -56460,10 +56439,12 @@ begin // should match GetJSONPropName()
         exit;
       inc(P);
     end;
-    '-','+','0'..'9': // '0123' excluded by JSON, but not here
+    '-','+','0'..'9': begin // '0123' excluded by JSON, but not here
+      tab := @JSON_CHARS;
       repeat
         inc(P);
-      until not (P^ in DigitFloatChars);
+      until not (jcDigitFloatChars in tab[P^]);
+    end;
     't': if PInteger(P)^=TRUE_LOW then inc(P,4) else goto Prop;
     'f': if PInteger(P+1)^=FALSE_LOW2 then inc(P,5) else goto Prop;
     'n': if PInteger(P)^=NULL_LOW then inc(P,4) else goto Prop;
@@ -56481,11 +56462,12 @@ begin // should match GetJSONPropName()
       repeat inc(P) until (P^>' ') or (P^=#0);
     end;
     else begin
-Prop: if not (ord(P^) in IsJsonIdentifierFirstChar) then
-        exit; // expect e.g. '{age:{$gt:18}}'
+Prop: tab := @JSON_CHARS;
+      if not (jcJsonIdentifierFirstChar in tab[P^]) then
+        exit;
       repeat
         inc(P);
-      until not (ord(P^) in IsJsonIdentifier);
+      until not (jcJsonIdentifier in tab[P^]);
       while (P^<=' ') and (P^<>#0) do inc(P);
       if P^='(' then begin // handle e.g. "born":isodate("1969-12-31")
         inc(P);
@@ -56513,6 +56495,7 @@ Prop: if not (ord(P^) in IsJsonIdentifierFirstChar) then
 end;
 
 function GotoEndJSONItem(P: PUTF8Char; strict: boolean): PUTF8Char;
+var tab: PJsonCharSet;
 label pok,ok;
 begin
   result := nil; // to notify unexpected end
@@ -56549,14 +56532,17 @@ ok: while (P^<=' ') and (P^<>#0) do inc(P);
     'f': if PInteger(P+1)^=FALSE_LOW2 then begin inc(P,5); goto ok; end;
     'n': if PInteger(P)^=NULL_LOW then begin inc(P,4); goto ok; end;
     '-','+','0'..'9': begin
-      repeat inc(P) until not (P^ in DigitFloatChars);
+      tab := @JSON_CHARS;
+      repeat inc(P) until not (jcDigitFloatChars in tab[P^]);
       goto ok;
     end;
-    end else
-    repeat // numeric or true/false/null or MongoDB extended {age:{$gt:18}}
-      inc(P);
+    end else begin // not strict
+      tab := @JSON_CHARS;
+      repeat // numeric or true/false/null or MongoDB extended {age:{$gt:18}}
+        inc(P);
+      until jcEndOfJSONFieldOr0 in tab[P^];
       if P^=#0 then exit; // unexpected end
-    until P^ in [':',',',']','}'];
+    end;
   if P^=#0 then
     exit;
   result := P;
@@ -56564,7 +56550,8 @@ end;
 
 function GotoNextJSONItem(P: PUTF8Char; NumberOfItemsToJump: cardinal;
   EndOfObject: PAnsiChar): PUTF8Char;
-label pok,next;
+var tab: PJsonCharSet;
+label pok,n;
 begin
  result := nil; // to notify unexpected end
  while NumberOfItemsToJump>0 do begin
@@ -56588,15 +56575,14 @@ begin
 pok: if P=nil then
        exit;
      while (P^<=' ') and (P^<>#0) do inc(P);
-     goto next;
+     goto n;
    end;
    end;
+   tab := @JSON_CHARS;
    repeat // numeric or true/false/null or MongoDB extended {age:{$gt:18}}
      inc(P);
-     if P^=#0 then exit; // unexpected end
-   until P^ in [':',',',']','}'];
-next:
-   if P^=#0 then
+   until jcEndOfJSONFieldOr0 in tab[P^];
+n: if P^=#0 then
      exit;
    if EndOfObject<>nil then
      EndOfObject^ := P^;
@@ -60066,13 +60052,15 @@ end;
 {$endif}
 
 function PropNameValid(P: PUTF8Char): boolean;
+var tab: PTextCharSet;
 begin
   result := false;
-  if (P=nil) or not (P^ in ['a'..'z','A'..'Z','_']) then
+  tab := @TEXT_CHARS;
+  if (P=nil) or not (tcIdentifierFirstChar in tab[P^]) then
     exit; // first char must be alphabetical
   inc(P);
   while P^<>#0 do
-    if not (ord(P^) in IsIdentifier) then
+    if not (tcIdentifier in tab[P^]) then
       exit else // following chars can be alphanumerical
       inc(P);
   result := true;
@@ -60080,22 +60068,25 @@ end;
 
 function PropNamesValid(const Values: array of RawUTF8): boolean;
 var i,j: integer;
+    tab: PTextCharSet;
 begin
   result := false;
+  tab := @TEXT_CHARS;
   for i := 0 to high(Values) do
     for j := 1 to length(Values[i]) do
-      if not (ord(Values[i][j]) in IsIdentifier) then
+      if not (tcIdentifier in tab[Values[i][j]]) then
         exit;
   result := true;
 end;
 
 function JsonPropNameValid(P: PUTF8Char): boolean;
-{$ifdef HASINLINENOTX86}
+var tab: PJsonCharSet;
 begin
-  if (P<>nil) and (ord(P^) in IsJsonIdentifierFirstChar) then begin
+  tab := @JSON_CHARS;
+  if (P<>nil) and (jcJsonIdentifierFirstChar in tab[P^]) then begin
     repeat
       inc(P);
-    until not(ord(P^) in IsJsonIdentifier);
+    until not(jcJsonIdentifier in tab[P^]);
     if P^=#0 then begin
       result := true;
       exit;
@@ -60106,35 +60097,6 @@ begin
   end else
     result := false;
 end;
-{$else}
-asm
-        test    eax, eax
-        jz      @z
-        movzx   edx, byte ptr[eax]
-        bt      [offset @first], edx
-        mov     ecx, offset @chars
-        jb      @2
-@z:     xor     eax, eax
-        ret
-@first: dd      0, $03FF0010, $87FFFFFE, $07FFFFFE, 0, 0, 0, 0 // IsJsonIdentifierFirstChar
-@chars: dd      0, $03FF4000, $AFFFFFFE, $07FFFFFE, 0, 0, 0, 0 // IsJsonIdentifier
-@s:     mov     dl, [eax]
-        bt      [ecx], edx
-        jnb     @1
-@2:     mov     dl, [eax + 1]
-        bt      [ecx], edx
-        jnb     @1
-        mov     dl, [eax + 2]
-        bt      [ecx], edx
-        jnb     @1
-        mov     dl, [eax + 3]
-        add     eax, 4
-        bt      [ecx], edx
-        jb      @s
-@1:     test    dl, dl
-        setz    al
-end;
-{$endif HASINLINENOTX86}
 
 function StrCompL(P1,P2: PUTF8Char; L, Default: Integer): PtrInt;
 var i: PtrInt;
@@ -60213,10 +60175,12 @@ end;
 
 function GetNextFieldProp(var P: PUTF8Char; var Prop: RawUTF8): boolean;
 var B: PUTF8Char;
+    tab: PTextCharSet;
 begin
   while P^ in [#1..' ',';'] do inc(P);
   B := P;
-  while ord(P^) in IsIdentifier do inc(P); // go to end of field name
+  tab := @TEXT_CHARS;
+  while tcIdentifier in tab[P^] do inc(P); // go to end of field name
   FastSetString(Prop,B,P-B);
   while P^ in [#1..' ',';'] do inc(P);
   result := Prop<>'';
@@ -60224,12 +60188,14 @@ end;
 
 function GetNextFieldPropSameLine(var P: PUTF8Char; var Prop: ShortString): boolean;
 var B: PUTF8Char;
+    tab: PTextCharSet;
 begin
-  while P^ in [#1..#9,#11,#12,#14..' '] do inc(P);
+  tab := @TEXT_CHARS;
+  while tcCtrlNotLF in tab[P^] do inc(P);
   B := P;
-  while ord(P^) in IsIdentifier do inc(P); // go to end of field name
+  while tcIdentifier in tab[P^] do inc(P); // go to end of field name
   SetString(Prop,PAnsiChar(B),P-B);
-  while P^ in [#1..#9,#11,#12,#14..' '] do inc(P);
+  while tcCtrlNotLF in TEXT_CHARS[P^] do inc(P);
   result := Prop<>'';
 end;
 
@@ -61276,7 +61242,7 @@ end;
 function GetLineSizeSmallerThan(P,PEnd: PUTF8Char; aMinimalCount: integer): boolean;
 begin
   if P<>nil then
-    while (P<PEnd) and not(P^ in [#10,#13]) do
+    while (P<PEnd) and (P^<>#10) and (P^<>#13) do
       if aMinimalCount=0 then begin
         result := false;
         exit;
@@ -61491,10 +61457,10 @@ begin
   Init(aCaseSensitive);
   if JSON=nil then
     exit;
-  if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
+  while (JSON^<=' ') and (JSON^<>#0) do inc(JSON);
   if JSON^<>'{' then
     exit;
-  repeat inc(JSON) until not(JSON^ in [#1..' ']);
+  repeat inc(JSON) until (JSON^=#0) or (JSON^>' ');
   c := JSONObjectPropCount(JSON);
   if c<=0 then
     exit;
@@ -62162,6 +62128,7 @@ end;
 procedure InitSynCommonsConversionTables;
 var i,n: integer;
     v: byte;
+    c: AnsiChar;
     crc: cardinal;
     tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
@@ -62260,6 +62227,40 @@ begin
   JSON_ESCAPE[13] := ord('r');
   JSON_ESCAPE[ord('\')] := ord('\');
   JSON_ESCAPE[ord('"')] := ord('"');
+  include(JSON_CHARS[#0], jcEndOfJSONFieldOr0);
+  for c := low(c) to high(c) do begin
+    if not (c in [#0,#10,#13]) then
+      include(TEXT_CHARS[c], tcNot01013);
+    if c in [#10,#13] then
+      include(TEXT_CHARS[c], tc1013) else
+      include(TEXT_CHARS[c], tcNot1013);
+    if c in ['0'..'9','a'..'z','A'..'Z'] then
+      include(TEXT_CHARS[c], tcWord);
+    if c in ['_','a'..'z','A'..'Z'] then
+      include(TEXT_CHARS[c], tcIdentifierFirstChar);
+    if c in ['_','0'..'9','a'..'z','A'..'Z'] then
+      include(TEXT_CHARS[c], tcIdentifier);
+    if c in ['_','-','.','~','0'..'9','a'..'z','A'..'Z'] then
+      include(TEXT_CHARS[c], tcURIUnreserved);
+    if c in [#1..#9,#11,#12,#14..' '] then
+      include(TEXT_CHARS[c], tcCtrlNotLF);
+    if c in [',',']','}',':'] then begin
+      include(JSON_CHARS[c], jcEndOfJSONField);
+      include(JSON_CHARS[c], jcEndOfJSONFieldOr0);
+    end;
+    if c in [#0,#9,#10,#13,' ',',','}',']'] then
+      include(JSON_CHARS[c], jcEndOfJSONValueField);
+    if c in ['-','+','0'..'9'] then
+      include(JSON_CHARS[c], jcDigitChars);
+    if c in ['-','1'..'9'] then // 0/- excluded by JSON
+      include(JSON_CHARS[c], jcDigitFirstChars);
+    if c in ['-','+','0'..'9','.','E','e'] then
+      include(JSON_CHARS[c], jcDigitFloatChars);
+    if c in ['_','0'..'9','a'..'z','A'..'Z','$'] then
+      include(JSON_CHARS[c], jcJsonIdentifierFirstChar);
+    if c in ['_','0'..'9','a'..'z','A'..'Z','.','[',']'] then
+      include(JSON_CHARS[c], jcJsonIdentifier);
+  end;
   TSynAnsiConvert.Engine(0); // define CurrentAnsi/WinAnsi/UTF8AnsiConvert
   for i := 0 to 255 do begin
     crc := i;
@@ -62324,6 +62325,8 @@ initialization
   assert(SizeOf(TSynSystemTime)=SizeOf(THash128));
   Assert(SizeOf(TOperatingSystemVersion)=SizeOf(integer));
   Assert(SizeOf(TSynLocker)>=128,'cpucacheline');
+  Assert(SizeOf(TJsonChar)=1);
+  Assert(SizeOf(TTextChar)=1);
   {$ifdef MSWINDOWS}
   {$ifndef CPU64}
   Assert(SizeOf(TFileTime)=SizeOf(Int64)); // see e.g. FileTimeToInt64

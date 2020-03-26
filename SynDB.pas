@@ -3839,7 +3839,7 @@ begin
     new := new+tmp+'?';
     inc(P); // jump ':'
     B := P;
-    while ord(P^) in IsIdentifier do
+    while tcIdentifier in TEXT_CHARS[P^] do
       inc(P); // go to end of parameter name
     paramName := UTF8DecodeToString(B,P-B);
     i := fParam.FindHashed(paramName);

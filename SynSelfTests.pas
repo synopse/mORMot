@@ -1502,13 +1502,16 @@ begin
   NotifyTestSpeed('FPC',N,N shl POINTERSHR,@timer,{onlylog=}true);
   {$endif FPC}
   FillcharFast(Bits,sizeof(Bits),0);
-  for i := 0 to high(Bits)*8+7 do
+  for i := 0 to high(Bits)*8+7 do begin
     Check(not GetBit(Bits,i));
+    Check(not GetBitPtr(@Bits,i));
+  end;
   RandSeed := 10; // will reproduce the same Random() values
   for i := 1 to 100 do begin
     Si := Random(high(Bits));
     SetBit(Bits,Si);
     Check(GetBit(Bits,Si));
+    Check(GetBitPtr(@Bits,Si));
   end;
   RandSeed := 10;
   for i := 1 to 100 do
@@ -1518,6 +1521,7 @@ begin
     Si := Random(high(Bits));
     UnSetBit(Bits,Si);
     Check(not GetBit(Bits,Si));
+    Check(not GetBitPtr(@Bits,Si));
   end;
   for i := 0 to high(Bits)*8+7 do
     Check(not GetBit(Bits,i));
@@ -3327,7 +3331,7 @@ procedure TTestLowLevelCommon._IsMatch;
 var i,j: integer;
     V, cont: RawUTF8;
     match: TMatch;
-    reuse: boolean;
+    reuse,isword: boolean;
 
   procedure Contains;
   begin
@@ -3612,16 +3616,17 @@ begin
   for i := 32 to 127 do begin
     SetLength(V,1);
     V[1] := AnsiChar(i);
-    Check(IsMatch('[A-Za-z0-9]',V)=(i in IsWord));
-    Check(IsMatch('[01-456a-zA-Z789]',V)=(i in IsWord));
+    isword := (tcWord in TEXT_BYTES[i]);
+    Check(IsMatch('[A-Za-z0-9]',V)=isword);
+    Check(IsMatch('[01-456a-zA-Z789]',V)=isword);
     SetLength(V,3);
     V[1] := AnsiChar(i);
     V[2] := AnsiChar(i);
     V[3] := AnsiChar(i);
-    Check(IsMatch('[A-Za-z0-9]?[A-Za-z0-9]',V)=(i in IsWord));
-    Check(IsMatch('[A-Za-z0-9]*',V)=(i in IsWord));
-    Check(IsMatch('[a-z0-9]?[A-Z0-9]',V,true)=(i in IsWord));
-    Check(IsMatch('[A-Z0-9]*',V,true)=(i in IsWord));
+    Check(IsMatch('[A-Za-z0-9]?[A-Za-z0-9]',V)=isword);
+    Check(IsMatch('[A-Za-z0-9]*',V)=isword);
+    Check(IsMatch('[a-z0-9]?[A-Z0-9]',V,true)=isword);
+    Check(IsMatch('[A-Z0-9]*',V,true)=isword);
   end;
 end;
 
@@ -7711,6 +7716,7 @@ var J,U,U2: RawUTF8;
     DA: TDynArray;
     F: TFV;
     TLNow: TTimeLog;
+
   procedure TestMyColl(MyColl: TMyCollection);
   begin
     if CheckFailed(MyColl<>nil) then
@@ -8240,8 +8246,43 @@ var J,U,U2: RawUTF8;
     Check(Book.author.last_name='White');
     {$endif}
   end;
+  procedure TestGetJsonField(const s,v: RawUTF8; str,error: boolean; eof,next: AnsiChar);
+  var P,d: PUTF8Char;
+      ws: boolean;
+      e: AnsiChar;
+      l: integer;
+      s2: RawUTF8;
+  begin
+    s2 := s;
+    P := UniqueRawUTF8(s2);
+    P := GetJSONField(P,d,@ws,@e,@l);
+    check(error=(d=nil));
+    if d=nil then
+      exit;
+    check(str=ws);
+    check(eof=e);
+    check(d^=next);
+    check(l=length(v));
+    check(CompareMem(P,pointer(v),length(v)));
+  end;
 
 begin
+  TestGetJsonField('','',false,true,#0,#0);
+  TestGetJsonField('true,false','true',false,false,',','f');
+  TestGetJsonField('false,1','false',false,false,',','1');
+  TestGetJsonField('"true",false','true',true,false,',','f');
+  TestGetJsonField('"",false','',true,false,',','f');
+  TestGetJsonField('12,false','12',false,false,',','f');
+  TestGetJsonField('12]','12',false,true,']',#0);
+  TestGetJsonField('12],','12',false,false,']',',');
+  TestGetJsonField('1.2],','1.2',false,false,']',',');
+  TestGetJsonField('1.2  ],','1.2',false,false,']',',');
+  TestGetJsonField('"123"},false','123',true,false,'}',',');
+  TestGetJsonField('"1\\3"},false','1\3',true,false,'}',',');
+  TestGetJsonField('"1\r\n"},false','1'#13#10,true,false,'}',',');
+  TestGetJsonField('"\"3"},false','"3',true,false,'}',',');
+  TestGetJsonField('"\u00013"},false',#1'3',true,false,'}',',');
+  TestGetJsonField('"\u0020"},false',' ',true,false,'}',',');
   Check(GotoEndOfJSONString(PUTF8Char(PAnsiChar('"toto"')))='"');
   Check(GotoEndOfJSONString(PUTF8Char(PAnsiChar('"toto",')))='",');
   Check(GotoEndOfJSONString(PUTF8Char(PAnsiChar('"to'#0'to",')))^=#0);
@@ -8293,8 +8334,11 @@ begin
   Check(NeedsJsonEscape('123"567'));
   Check(NeedsJsonEscape('123"'));
   Check(NeedsJsonEscape('123\"'));
+  Check(NeedsJsonEscape('123'#1));
+  Check(NeedsJsonEscape(#10'123'));
   CheckEqual(QuotedStrJSON(''),'""');
   CheckEqual(QuotedStrJSON('a'),'"a"');
+  CheckEqual(QuotedStrJSON(#30),'"\u001E"');
   CheckEqual(QuotedStrJSON('ab'),'"ab"');
   CheckEqual(QuotedStrJSON(' a'),'" a"');
   CheckEqual(QuotedStrJSON('a"'),'"a\""');

@@ -4184,7 +4184,7 @@ var bsonvalue: TBSONVariantData absolute Value;
     Reg := P;
     inc(P,RegLen);
     if P^<>'/' then exit else inc(P);
-    OptLen := 0; while ord(P[OptLen]) in IsWord do inc(OptLen);
+    OptLen := 0; while tcWord in TEXT_CHARS[P[OptLen]] do inc(OptLen);
     if P[OptLen]=#0 then exit;
     Opt := P;
     ReturnRegEx(Opt+OptLen-1,#0);

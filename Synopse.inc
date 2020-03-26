@@ -103,11 +103,6 @@
 {.$define OLDTEXTWRITERFORMAT}
 // force TTextWriter.Add(Format) to handle the alternate deprecated $ % tags
 
-{.$define OPT4AMD}
-// you may define this to optimize for AMD CPUs - e.g. to use "set of byte"
-// which will use BT[mem] opcodes, which are slow on Intel, but fast on AMD
-// (with the Delphi x86 compiler, may not be the case for LLVM or FPC)
-
 {.$define FORCE_STRSSE42}
 // sse4.2 string instructions may read up to 16 bytes after the actual end buffer
 // -> define this if you want StrLen/StrComp/strspn/strcspn to use SSE4.2 opcodes
