@@ -23088,13 +23088,13 @@ var // standard FormatSettings (US)
 {$endif}
 
 function FloatStringNoExp(S: PAnsiChar; Precision: PtrInt): PtrInt;
-var i,prec: PtrInt;
+var i, prec: PtrInt;
     c: AnsiChar;
 begin
   result := ord(S[0]);
   prec := result; // if no decimal
   if S[1]='-' then
-    dec(prec);
+   dec(prec);
   for i := 2 to result do begin // test if scientific format -> return as this
     c := S[i];
     if c='E' then // should not appear
@@ -23136,17 +23136,22 @@ begin
       until prec=0;
     end; // note: this fixes http://stackoverflow.com/questions/2335162
   end;
-  while S[result]='0' do begin
-    dec(result); // trunc any trimming 0
-    if S[result]='.' then begin
-      dec(result);
-      if (result=2) and (S[1]='-') and (S[2]='0') then begin
-        result := 1;
-        S[1] := '0'; // '-0.000' -> '0'
-      end;
-      break; // if decimal are all '0' -> return only integer part
-    end;
-  end;
+  if S[result]='0' then
+    repeat
+      dec(result); // trunc any trimming 0
+      c := S[result];
+      if c<>'.' then
+        if c<>'0' then
+          break else
+          continue else begin
+          dec(result);
+          if (result=2) and (S[1]='-') and (S[2]='0') then begin
+            result := 1;
+            S[1] := '0'; // '-0.000' -> '0'
+          end;
+          break; // if decimal are all '0' -> return only integer part
+        end;
+    until false;
 end;
 
 function ExtendedToShortNoExp(var S: ShortString; Value: TSynExtended;

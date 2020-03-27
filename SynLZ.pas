@@ -175,6 +175,7 @@ end;
 
 type // some cross-platform and cross-compiler definitions
   {$ifndef FPC}
+  PtrInt = {$ifdef CPU64}NativeInt{$else}integer{$endif};
   PtrUInt = {$ifdef CPU64}NativeUInt{$else}cardinal{$endif};
   {$endif}
   {$ifdef DELPHI5OROLDER} // Delphi 5 doesn't have those base types defined :(
@@ -626,13 +627,16 @@ end;
 procedure movechars(s,d: PAnsiChar; t: PtrUInt); {$ifdef HASINLINE}inline;{$endif}
 // fast code for unaligned and overlapping (see {$define WT}) small blocks
 // this code is sometimes used rather than system.move()
+var c: AnsiChar; // better code generation on FPC
 begin
-  dec(PtrUInt(s), PtrUInt(d));
-  inc(t, PtrUInt(d));
+  inc(PtrUInt(s), t);
+  inc(PtrUInt(d), t);
+  PtrInt(t) := -PtrInt(t);
   repeat
-    d^ := s[PtrUInt(d)];
-    inc(d);
-  until PtrUInt(d)=t;
+    c := s[t];
+    d[t] := c;
+    inc(t);
+  until t=0;
 end;
 
 const
