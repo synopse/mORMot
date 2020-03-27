@@ -21484,7 +21484,7 @@ end;
 procedure TSQLPropInfoRTTIDouble.GetValueVar(Instance: TObject;
   ToSQL: boolean; var result: RawUTF8; wasSQLString: PBoolean);
 begin
-  ExtendedToStr(fPropInfo.GetDoubleProp(Instance),DOUBLE_PRECISION,result);
+  DoubleToStr(fPropInfo.GetDoubleProp(Instance),result);
   if wasSQLString<>nil then
     wasSQLString^ := (result='') or not (result[1] in ['0'..'9']);
 end;
@@ -21496,7 +21496,7 @@ begin
   VFloat := GetExtended(pointer(Value),err);
   if err<>0 then
     Value := '' else
-    ExtendedToStr(VFloat,DOUBLE_PRECISION,Value);
+    DoubleToStr(VFloat,Value);
 end;
 
 procedure TSQLPropInfoRTTIDouble.SetValue(Instance: TObject; Value: PUTF8Char;
@@ -50820,7 +50820,7 @@ var Added: boolean;
           D64 := P^.GetFloatProp(Value);
           if not ((woDontStore0 in Options) and (D64=0)) then begin
             HR(P);
-            Add(D64,DOUBLE_PRECISION);
+            AddDouble(D64);
           end;
         end;
       end;
@@ -59089,7 +59089,7 @@ begin
          Int64ToUtf8(PInt64(V)^,DestValue);
   end;
   smvDouble:
-    ExtendedToStr(unaligned(PDouble(V)^),DOUBLE_PRECISION,DestValue);
+    DoubleToStr(unaligned(PDouble(V)^),DestValue);
   smvCurrency:
     Curr64ToStr(PInt64(V)^,DestValue);
   smvRawJSON:

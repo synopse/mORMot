@@ -1955,36 +1955,33 @@ function TrimControlChars(const text: RawUTF8; const controls: TSynAnsicharSet=[
 
 var
   /// best possible precision when rendering a "single" kind of float
-  // - can be used as parameter for ExtendedToString/ExtendedToStr
+  // - can be used as parameter for ExtendedToShort/ExtendedToStr
   // - is defined as a var, so that you may be able to override the default
   // settings, for the whole process
   SINGLE_PRECISION: integer = 8;
   /// best possible precision when rendering a "double" kind of float
-  // - can be used as parameter for ExtendedToString/ExtendedToStr
+  // - can be used as parameter for ExtendedToShort/ExtendedToStr
   // - is defined as a var, so that you may be able to override the default
   // settings, for the whole process
   DOUBLE_PRECISION: integer = 15;
   /// best possible precision when rendering a "extended" kind of float
-  // - can be used as parameter for ExtendedToString/ExtendedToStr
+  // - can be used as parameter for ExtendedToShort/ExtendedToStr
   // - is defined as a var, so that you may be able to override the default
   // settings, for the whole process
   EXTENDED_PRECISION: integer = 18;
 
 type
-  {$ifdef CPUARM}
-  // ARM does not support 80bit extended -> 64bit double is enough for us
-  TSynExtended = double;
-  {$else}
-  {$ifdef CPU64}
-  TSynExtended = double;
-  {$else}
+  {$ifdef TSYNEXTENDED80}
   /// the floating-point type to be used for best precision and speed
   // - will allow to fallback to double e.g. on x64 and ARM CPUs
   TSynExtended = extended;
-  {$endif}
-  {$endif}
+  {$else}
+  /// ARM/Delphi 64-bit does not support 80bit extended -> double is enough
+  TSynExtended = double;
+  {$endif TSYNEXTENDED80}
+
   /// the non-number values potentially stored in an IEEE floating point
-  TSynExtendedNan = (seNumber, seNan, seInf, seNegInf);
+  TFloatNan = (fnNumber, fnNan, fnInf, fnNegInf);
   {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
   /// will actually change anything only on FPC ARM/Aarch64 plaforms
   unaligned = Double;
@@ -1993,10 +1990,10 @@ type
 
 const
   /// the JavaScript-like values of non-number IEEE constants
-  // - as recognized by ExtendedToStringNan, and used by TTextWriter.Add()
+  // - as recognized by FloatToShortNan, and used by TTextWriter.Add()
   // when serializing such single/double/extended floating-point values
-  JSON_NAN: array[TSynExtendedNan] of string[11] = (
-    '', '"NaN"', '"Infinity"', '"-Infinity"');
+  JSON_NAN: array[TFloatNan] of string[11] = (
+    '0', '"NaN"', '"Infinity"', '"-Infinity"');
 
 /// compare to floating point values, with IEEE 754 double precision
 // - use this function instead of raw = operator
@@ -2045,30 +2042,29 @@ procedure KahanSum(const Data: double; var Sum, Carry: double);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a floating-point value to its numerical text equivalency
-// - depending on the platform, it may either call ExtendedToStringNoExp or
-// use FloatToText() in ffGeneral mode (the shortest possible decimal string
-// using fixed or scientific format)
-// - returns the count of chars stored into S (S[0] is not set)
-function ExtendedToString(var S: ShortString; Value: TSynExtended; Precision: integer): integer;
-  {$ifdef FPC}inline;{$endif}
+// - depending on the platform, it may either call str() or use FloatToText()
+// in ffGeneral mode (the shortest possible decimal string using fixed or
+// scientific format)
+// - returns the count of chars stored into S, i.e. length(S)
+function ExtendedToShort(var S: ShortString; Value: TSynExtended; Precision: integer): integer;
 
 /// convert a floating-point value to its numerical text equivalency without
 // scientification notation
-// - returns the count of chars stored into S (S[0] is not set)
+// - returns the count of chars stored into S, i.e. length(S)
 // - call str(Value:0:Precision,S) to avoid any Exponent notation
-function ExtendedToStringNoExp(var S: ShortString; Value: TSynExtended;
+function ExtendedToShortNoExp(var S: ShortString; Value: TSynExtended;
   Precision: integer): integer;
 
 /// check if the supplied text is NAN/INF/+INF/-INF, i.e. not a number
-// - as returned by ExtendedToString() textual conversion
+// - as returned by ExtendedToShort() textual conversion
 // - such values do appear as IEEE floating points, but are not defined in JSON
-function ExtendedToStringNan(const s: shortstring): TSynExtendedNan;
+function FloatToShortNan(const s: shortstring): TFloatNan;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// check if the supplied text is NAN/INF/+INF/-INF, i.e. not a number
-// - as returned by ExtendedToString() textual conversion
+// - as returned by ExtendedToShort() textual conversion
 // - such values do appear as IEEE floating points, but are not defined in JSON
-function ExtendedToStrNan(const s: RawUTF8): TSynExtendedNan;
+function ExtendedToStrNan(const s: RawUTF8): TFloatNan;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a floating-point value to its numerical text equivalency
@@ -2077,9 +2073,52 @@ function ExtendedToStr(Value: TSynExtended; Precision: integer): RawUTF8; overlo
 /// convert a floating-point value to its numerical text equivalency
 procedure ExtendedToStr(Value: TSynExtended; Precision: integer; var result: RawUTF8); overload;
 
-/// convert a floating-point value to its numerical text equivalency
-function DoubleToStr(Value: Double): RawUTF8;
+/// recognize if the supplied text is NAN/INF/+INF/-INF, i.e. not a number
+// - returns the number as text, or "Infinity", "-Infinity", and "NaN" for
+// corresponding IEEE values, for direct export to JSON
+// - result is a PShortString either over tmp, or JSON_NAN[]
+function FloatToJSONNan(const s: ShortString): PShortString;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// convert a floating-point value to its JSON text equivalency
+// - depending on the platform, it may either call str() or use FloatToText()
+// in ffGeneral mode (the shortest possible decimal string using fixed or
+// scientific format)
+// - returns the number as text, or "Infinity", "-Infinity", and "NaN" for
+// corresponding IEEE values
+// - result is a PShortString either over tmp, or JSON_NAN[]
+function ExtendedToJSON(var tmp: ShortString; Value: TSynExtended;
+  Precision: integer; NoExp: boolean): PShortString;
+
+/// convert a 64-bit floating-point value to its numerical text equivalency
+// - on Delphi, calls FloatToText() in ffGeneral mode
+// - on FPC, will use a double-specific version Fabian Loitsch's Grisu  algorithm
+// - returns the count of chars stored into S, i.e. length(S)
+function DoubleToShort(var S: ShortString; const Value: double): integer;
+  {$ifdef FPC}inline;{$endif}
+
+/// convert a 64-bit floating-point value to its numerical text equivalency without
+// scientification notation
+// - returns the count of chars stored into S, i.e. length(S)
+// - under FPC, will use our 64-bit version Fabian Loitsch's Grisu algorithm
+// - call str(Value:0:Precision,S) to avoid any Exponent notation
+function DoubleToShortNoExp(var S: ShortString; const Value: double): integer;
+  {$ifdef FPC}inline;{$endif}
+
+/// convert a 64-bit floating-point value to its JSON text equivalency
+// - on Delphi, calls FloatToText() in ffGeneral mode
+// - on FPC, will use a double-specific version Fabian Loitsch's Grisu algorithm
+// - returns the number as text, or "Infinity", "-Infinity", and "NaN" for
+// corresponding IEEE values
+// - result is a PShortString either over tmp, or JSON_NAN[]
+function DoubleToJSON(var tmp: ShortString; Value: double; NoExp: boolean): PShortString;
+
+/// convert a 64-bit floating-point value to its numerical text equivalency
+function DoubleToStr(Value: Double): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert a 64-bit floating-point value to its numerical text equivalency
+procedure DoubleToStr(Value: Double; var result: RawUTF8); overload;
 
 /// fast retrieve the position of a given character
 function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
@@ -8538,17 +8577,17 @@ type
     procedure Add({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID); overload;
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
-    // - noexp=true will call ExtendedToStringNoExp() to avoid any scientific
+    // - noexp=true will call ExtendedToShortNoExp() to avoid any scientific
     // notation in the resulting text
     procedure AddDouble(Value: double; noexp: boolean=false); {$ifdef HASINLINE}inline;{$endif}
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
-    // - noexp=true will call ExtendedToStringNoExp() to avoid any scientific
+    // - noexp=true will call ExtendedToShortNoExp() to avoid any scientific
     // notation in the resulting text
     procedure AddSingle(Value: single; noexp: boolean=false); {$ifdef HASINLINE}inline;{$endif}
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
-    // - noexp=true will call ExtendedToStringNoExp() to avoid any scientific
+    // - noexp=true will call ExtendedToShortNoExp() to avoid any scientific
     // notation in the resulting text
     procedure Add(Value: Extended; precision: integer; noexp: boolean=false); overload;
     /// append a floating-point text buffer
@@ -16807,12 +16846,14 @@ end;
 {$endif HASINLINE}
 
 procedure MoveSmall(Source, Dest: Pointer; Count: PtrUInt);
+var c: AnsiChar; // better FPC inlining
 begin
   inc(PtrUInt(Source),Count);
   inc(PtrUInt(Dest),Count);
   PtrInt(Count) := -PtrInt(Count);
   repeat
-    PAnsiChar(Dest)[Count] := PAnsiChar(Source)[Count];
+    c := PAnsiChar(Source)[Count];
+    PAnsiChar(Dest)[Count] := c;
     inc(Count);
   until Count=0;
 end;
@@ -19353,7 +19394,7 @@ smlu32: Res.Text := pointer(SmallUInt32UTF8[result]);
       exit;
     end;
     vtExtended:
-      ExtendedToStr(V.VExtended^,DOUBLE_PRECISION,RawUTF8(Res.TempRawUTF8));
+      DoubleToStr(V.VExtended^,RawUTF8(Res.TempRawUTF8));
     vtPointer,vtInterface: begin
       Res.Text := @Res.Temp;
       Res.Len := SizeOf(pointer)*2;
@@ -19445,7 +19486,7 @@ begin
     vtCurrency:
       Curr64ToStr(VInt64^,result);
     vtExtended:
-      ExtendedToStr(VExtended^,DOUBLE_PRECISION,result);
+      DoubleToStr(VExtended^,result);
     vtPointer:
       PointerToHex(VPointer,result);
     vtClass:
@@ -21608,7 +21649,7 @@ begin
   varSingle:
     ExtendedToStr(VSingle,SINGLE_PRECISION,result);
   varDouble:
-    ExtendedToStr(VDouble,DOUBLE_PRECISION,result);
+    DoubleToStr(VDouble,result);
   varCurrency:
     Curr64ToStr(VInt64,result);
   varDate: begin
@@ -21814,8 +21855,7 @@ var tmp: ShortString;
 begin
   if Value=0 then
     result := '0' else
-    Ansi7ToString(PWinAnsiChar(@tmp[1]),
-      ExtendedToString(tmp,Value,DOUBLE_PRECISION),result);
+    Ansi7ToString(PWinAnsiChar(@tmp[1]),DoubleToShort(tmp,Value),result);
 end;
 
 function Curr64ToString(Value: Int64): string;
@@ -21871,7 +21911,7 @@ var tmp: ShortString;
 begin
   if Value=0 then
     result := '0' else
-    SetString(result,PAnsiChar(@tmp[1]),ExtendedToString(tmp,Value,DOUBLE_PRECISION));
+    SetString(result,PAnsiChar(@tmp[1]),DoubleToShort(tmp,Value));
 end;
 
 function Curr64ToString(Value: Int64): string;
@@ -23042,51 +23082,56 @@ begin
   UInt32ToUTF8(Value,result);
 end;
 
-{$ifndef EXTENDEDTOSTRING_USESTR}
+{$ifndef EXTENDEDTOSHORT_USESTR}
 var // standard FormatSettings (US)
   SettingsUS: TFormatSettings;
 {$endif}
 
-function ExtendedToStringNoExp(var S: ShortString; Value: TSynExtended;
-  Precision: integer): integer;
-var i,prec: integer;
+function FloatStringNoExp(S: PAnsiChar; Precision: PtrInt): PtrInt;
+var i,prec: PtrInt;
+    c: AnsiChar;
 begin
-  str(Value:0:Precision,S); // not str(Value:0,S) -> '  0.0E+0000'
-  // using str() here avoid FloatToStrF() usage -> LVCL is enough
-  result := length(S);
+  result := ord(S[0]);
   prec := result; // if no decimal
   if S[1]='-' then
     dec(prec);
-  for i := 2 to result do // test if scientific format -> return as this
-    case S[i] of
-    'E': exit;  // pos('E',S)>0; which Delphi 2009+ doesn't like
-    '.': if i>=precision then begin // return huge decimal number as is
-      result := i-1;
-      exit;
-    end else
+  for i := 2 to result do begin // test if scientific format -> return as this
+    c := S[i];
+    if c='E' then // should not appear
+      exit else
+    if c='.' then
+      if i>=precision then begin // return huge decimal number as is
+        result := i-1;
+        exit;
+      end else
       dec(prec);
-    end;
+  end;
   if (prec>=Precision) and (prec<>result) then begin
     dec(result,prec-Precision);
     if S[result+1]>'5' then begin // manual rounding
       prec := result;
       repeat
-        case S[prec] of
-        '.': ; // just ignore decimal separator
-        '0'..'8': begin
-          inc(S[prec]);
-          break;
-        end;
-        '9': begin
-          S[prec] := '0';
-          if ((prec=2) and (S[1]='-')) or (prec=1) then begin
-            MoveFast(S[prec],S[prec+1],result);
-            S[prec] := '1';
+        c := S[prec];
+        if c<>'.' then
+          if c='9' then begin
+            S[prec] := '0';
+            if ((prec=2) and (S[1]='-')) or (prec=1) then begin
+              i := result;
+              inc(S,prec);
+              repeat // inlined Move(S[prec],S[prec+1],result);
+                S[i] := S[i-1];
+                dec(i);
+              until i=0;
+              S^ := '1';
+              dec(S,prec);
+              break;
+            end;
+          end else
+          if (c>='0') and (c<='8') then begin
+            inc(S[prec]);
             break;
-          end;
-        end;
-        else break;
-        end;
+          end else
+          break;
         dec(prec);
       until prec=0;
     end; // note: this fixes http://stackoverflow.com/questions/2335162
@@ -23099,27 +23144,40 @@ begin
         result := 1;
         S[1] := '0'; // '-0.000' -> '0'
       end;
-      break; // decimal were all '0' -> return only integer part
+      break; // if decimal are all '0' -> return only integer part
     end;
   end;
 end;
 
-function ExtendedToString(var S: ShortString; Value: TSynExtended;
+function ExtendedToShortNoExp(var S: ShortString; Value: TSynExtended;
   Precision: integer): integer;
-{$ifdef EXTENDEDTOSTRING_USESTR}
-var scientificneeded: boolean;
-    valueabs: TSynExtended;
+begin
+  str(Value:0:Precision,S); // not str(Value:0,S) -> '  0.0E+0000'
+  result := FloatStringNoExp(@S,Precision);
+  S[0] := AnsiChar(result);
+end;
+
 const SINGLE_HI: TSynExtended = 1E9; // for proper Delphi 5 compilation
       SINGLE_LO: TSynExtended = 1E-9;
       DOUBLE_HI: TSynExtended = 1E14;
       DOUBLE_LO: TSynExtended = 1E-14;
-      {$ifndef CPU64}
       EXT_HI: TSynExtended = 1E17;
       EXT_LO: TSynExtended = 1E-17;
-      {$endif}
+
+function ExtendedToShort(var S: ShortString; Value: TSynExtended;
+  Precision: integer): integer;
+{$ifdef EXTENDEDTOSHORT_USESTR}
+var scientificneeded: boolean;
+    valueabs: TSynExtended;
 begin
+  {$ifndef TSYNEXTENDED80}
+  if Precision=DOUBLE_PRECISION then begin
+    result := DoubleToShort(S,Value);
+    exit;
+  end;
+  {$endif TSYNEXTENDED80}
   if Value=0 then begin
-    s[1] := '0';
+    PWord(@s)^ := 1 + ord('0') shl 8;
     result := 1;
     exit;
   end;
@@ -23129,21 +23187,26 @@ begin
     if (valueabs>SINGLE_HI) or (valueabs<SINGLE_LO) then
       scientificneeded := true;
   end else
-  {$ifndef CPU64}
+  {$ifdef TSYNEXTENDED80}
   if Precision>DOUBLE_PRECISION then begin
     if (valueabs>EXT_HI) or (valueabs<EXT_LO) then
       scientificneeded := true;
   end else
-  {$endif}
+  {$endif TSYNEXTENDED80}
     if (valueabs>DOUBLE_HI) or (valueabs<DOUBLE_LO) then
       scientificneeded := true;
   if scientificneeded then begin
     str(Value,S);
-    if S[1]=' ' then
-      delete(S,1,1);
+    if S[1]=' ' then begin
+      dec(s[0]);
+      MoveSmall(@S[2],@S[1],ord(s[0]));
+    end;
     result := ord(S[0]);
-  end else
-    result := ExtendedToStringNoExp(S,Value,Precision);
+  end else begin
+    str(Value:0:Precision,S); // not str(Value:0,S) -> '  0.0E+0000'
+    result := FloatStringNoExp(@S,Precision);
+    S[0] := AnsiChar(result);
+  end;
 end;
 {$else}
 {$ifdef UNICODE}
@@ -23158,37 +23221,37 @@ begin
     PByteArray(@S)[i] := PWordArray(PtrInt(@S)-1)[i];
   {$endif}
 end;
-{$endif EXTENDEDTOSTRING_USESTR}
+{$endif EXTENDEDTOSHORT_USESTR}
 
-function ExtendedToStringNan(const s: shortstring): TSynExtendedNan;
+function FloatToShortNan(const s: shortstring): TFloatNan;
 begin
   case PInteger(@s)^ and $ffdfdfdf of
     3+ord('N')shl 8+ord('A')shl 16+ord('N')shl 24:
-      result := seNan;
+      result := fnNan;
     3+ord('I')shl 8+ord('N')shl 16+ord('F')shl 24,
     4+ord('+')shl 8+ord('I')shl 16+ord('N')shl 24:
-      result := seInf;
+      result := fnInf;
     4+ord('-')shl 8+ord('I')shl 16+ord('N')shl 24:
-      result := seNegInf;
+      result := fnNegInf;
     else
-      result := seNumber;
+      result := fnNumber;
   end;
 end;
 
-function ExtendedToStrNan(const s: RawUTF8): TSynExtendedNan;
+function ExtendedToStrNan(const s: RawUTF8): TFloatNan;
 begin
   case length(s) of
   3: case PInteger(s)^ and $dfdfdf of
-     ord('N')+ord('A')shl 8+ord('N')shl 16: result := seNan;
-     ord('I')+ord('N')shl 8+ord('F')shl 16: result := seInf;
-     else result := seNumber;
+     ord('N')+ord('A')shl 8+ord('N')shl 16: result := fnNan;
+     ord('I')+ord('N')shl 8+ord('F')shl 16: result := fnInf;
+     else result := fnNumber;
      end;
   4: case PInteger(s)^ and $dfdfdfdf of
-     ord('+')+ord('I')shl 8+ord('N')shl 16+ord('F')shl 24: result := seInf;
-     ord('-')+ord('I')shl 8+ord('N')shl 16+ord('F')shl 24: result := seNegInf;
-     else result := seNumber;
+     ord('+')+ord('I')shl 8+ord('N')shl 16+ord('F')shl 24: result := fnInf;
+     ord('-')+ord('I')shl 8+ord('N')shl 16+ord('F')shl 24: result := fnNegInf;
+     else result := fnNumber;
      end;
-  else result := seNumber;
+  else result := fnNumber;
   end;
 end;
 
@@ -23205,12 +23268,97 @@ begin
   i64 := Trunc(Value);
   if Value=i64 then
     Int64ToUtf8(i64,result) else
-    FastSetString(result,@tmp[1],ExtendedToString(tmp,Value,Precision));
+    FastSetString(result,@tmp[1],ExtendedToShort(tmp,Value,Precision));
+end;
+
+function FloatToJSONNan(const s: ShortString): PShortString;
+begin
+  case PInteger(@s)^ and $ffdfdfdf of
+    3+ord('N')shl 8+ord('A')shl 16+ord('N')shl 24:
+      result := @JSON_NAN[fnNan];
+    3+ord('I')shl 8+ord('N')shl 16+ord('F')shl 24,
+    4+ord('+')shl 8+ord('I')shl 16+ord('N')shl 24:
+      result := @JSON_NAN[fnInf];
+    4+ord('-')shl 8+ord('I')shl 16+ord('N')shl 24:
+      result := @JSON_NAN[fnNegInf];
+    else
+      result := @s;
+  end;
+end;
+
+function ExtendedToJSON(var tmp: ShortString; Value: TSynExtended;
+  Precision: integer; NoExp: boolean): PShortString;
+begin
+  if Value=0 then
+    result := @JSON_NAN[fnNumber] else begin
+    if noexp then
+      tmp[0] := AnsiChar(ExtendedToShortNoExp(tmp,Value,precision)) else
+      tmp[0] := AnsiChar(ExtendedToShort(tmp,Value,precision));
+    result := FloatToJSONNan(tmp);
+  end;
+end;
+
+{$ifdef DOUBLETOSHORT_USEGRISU}
+
+// includes Fabian Loitsch's Grisu algorithm especially compiled for double
+{$I .\SynDoubleToText.inc} // declares d2a()
+
+function DoubleToShort(var S: ShortString; const Value: double): integer;
+var valueabs: double;
+begin
+  valueabs := abs(Value);
+  if (valueabs>DOUBLE_HI) or (valueabs<DOUBLE_LO) then begin
+    d2a(C_NO_MIN_WIDTH,-1,Value,@S); // = str(Value,S) for scientific notation
+    result := ord(S[0]);
+  end else
+    result := DoubleToShortNoExp(S,Value);
+end;
+
+function DoubleToShortNoExp(var S: ShortString; const Value: double): integer;
+begin
+  d2a(0,DOUBLE_PRECISION,Value,@S); // = str(Value:0:DOUBLE_PRECISION,S)
+  result := FloatStringNoExp(@S,DOUBLE_PRECISION);
+  S[0] := AnsiChar(result);
+end;
+
+{$else} // use regular Extended version
+
+function DoubleToShort(var S: ShortString; const Value: double): integer;
+begin
+  result := ExtendedToShort(S,Value,DOUBLE_PRECISION);
+end;
+
+function DoubleToShortNoExp(var S: ShortString; const Value: double): integer;
+begin
+  result := ExtendedToShortNoExp(S,Value,DOUBLE_PRECISION);
+end;
+
+{$endif DOUBLETOSHORT_USEGRISU}
+
+function DoubleToJSON(var tmp: ShortString; Value: double; NoExp: boolean): PShortString;
+begin
+  if Value=0 then
+    result := @JSON_NAN[fnNumber] else begin
+    if noexp then
+      tmp[0] := AnsiChar(DoubleToShortNoExp(tmp,Value)) else
+      tmp[0] := AnsiChar(DoubleToShort(tmp,Value));
+    result := FloatToJSONNan(tmp);
+  end;
 end;
 
 function DoubleToStr(Value: Double): RawUTF8;
 begin
-  ExtendedToStr(Value,DOUBLE_PRECISION,result);
+  DoubleToStr(Value,result);
+end;
+
+procedure DoubleToStr(Value: Double; var result: RawUTF8);
+var tmp: ShortString;
+    i64: Int64;
+begin
+  i64 := Trunc(Value);
+  if Value=i64 then
+    Int64ToUtf8(i64,result) else
+    FastSetString(result,@tmp[1],DoubleToShort(tmp,Value));
 end;
 
 function FormatUTF8(const Format: RawUTF8; const Args: array of const): RawUTF8;
@@ -34776,6 +34924,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=Data edx/esi=Len
         shr     esi, 4
         {$endif}
         jz      @by4
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @by16:  add     eax, dword ptr[Data]
         add     r9d, eax
         add     eax, dword ptr[Data+4]
@@ -53106,39 +53255,21 @@ begin
 end;
 
 procedure TTextWriter.Add(Value: Extended; precision: integer; noexp: boolean);
-var S: ShortString;
+var tmp: ShortString;
 begin
-  if Value=0 then
-    Add('0') else begin
-    if noexp then
-      S[0] := AnsiChar(ExtendedToStringNoExp(S,Value,precision)) else
-      S[0] := AnsiChar(ExtendedToString(S,Value,precision));
-    case PInteger(@S)^ and $ffdfdfdf of // inlined ExtendedToStringNan()
-      3+ord('N')shl 8+ord('A')shl 16+ord('N')shl 24:
-        AddShort(JSON_NAN[seNan]);
-      3+ord('I')shl 8+ord('N')shl 16+ord('F')shl 24,
-      4+ord('+')shl 8+ord('I')shl 16+ord('N')shl 24:
-        AddShort(JSON_NAN[seInf]);
-      4+ord('-')shl 8+ord('I')shl 16+ord('N')shl 24:
-        AddShort(JSON_NAN[seNegInf]);
-    else
-      AddNoJSONEscape(@S[1],ord(S[0]));
-    end;
-  end;
+  AddShort(ExtendedToJSON(tmp,Value,precision,noexp)^);
 end;
 
 procedure TTextWriter.AddDouble(Value: double; noexp: boolean);
+var tmp: ShortString;
 begin
-  if Value=0 then
-    Add('0') else
-    Add(Value,DOUBLE_PRECISION,noexp);
+  AddShort(DoubleToJSON(tmp,Value,noexp)^);
 end;
 
 procedure TTextWriter.AddSingle(Value: single; noexp: boolean);
+var tmp: ShortString;
 begin
-  if Value=0 then
-    Add('0') else
-    Add(Value,SINGLE_PRECISION,noexp);
+  AddShort(ExtendedToJSON(tmp,Value,SINGLE_PRECISION,noexp)^);
 end;
 
 procedure TTextWriter.Add(Value: boolean);
@@ -54919,7 +55050,7 @@ begin
     {$ifdef FPC}
     vtQWord:    AddQ(V.VQWord^);
     {$endif}
-    vtExtended: Add(VExtended^,DOUBLE_PRECISION);
+    vtExtended: AddDouble(VExtended^);
     vtCurrency: AddCurr64(VInt64^);
     vtObject:   WriteObject(VObject);
     {$ifndef NOVARIANTS}
@@ -54943,7 +55074,7 @@ begin
   vtInteger:      Add(VInteger);
   vtBoolean:      if VBoolean then Add('1') else Add('0'); // normalize
   vtChar:         Add(@VChar,1,Escape);
-  vtExtended:     Add(VExtended^,DOUBLE_PRECISION);
+  vtExtended:     AddDouble(VExtended^);
   vtCurrency:     AddCurr64(VInt64^);
   vtInt64:        Add(VInt64^);
   {$ifdef FPC}
@@ -62167,7 +62298,7 @@ begin
   // linux default configuration, unicode decode will fail in SysUtils.CheckLocale
   setlocale(LC_CTYPE,'en_US'); // force locale for a UTF-8 server
   {$endif}
-{$ifndef EXTENDEDTOSTRING_USESTR}
+{$ifndef EXTENDEDTOSHORT_USESTR}
   {$ifdef ISDELPHIXE}
   SettingsUS := TFormatSettings.Create($0409);
   {$else}

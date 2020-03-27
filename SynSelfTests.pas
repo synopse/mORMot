@@ -4270,7 +4270,7 @@ var i, j, b, err: integer;
     c: currency;
     ident: TRawUTF8DynArray;
     {$endif}
-    a: shortstring;
+    a,a2: shortstring;
     u: string;
     varint: array[0..255] of byte;
     st: TFastReader;
@@ -4410,27 +4410,51 @@ begin
   e := 40640.5028819444;
   CheckSame(d,e,1e-11);
   d := 22.99999999999997;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
+  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
   Check(a='23');
   d := 0.9999999999999997;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
+  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
   Check(a='1');
   d := -0.9999999999999997;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
+  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
   Check(a='-1');
   d := 9.999999999999997;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
+  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
   Check(a='10');
   d := -9.999999999999997;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
+  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
   Check(a='-10');
   d := 999.9999999999997;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
+  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
   Check(a='1000');
   d := 999.9999999999933;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
+  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
   Check(a='999.999999999993');
-  {$ifdef EXTENDEDTOSTRING_USESTR}
+  d := 22.99999999999997;
+  a[0] := AnsiChar(DoubleToShort(a,d));
+  Check(a='23');
+  d := 3.14159;
+  a[0] := AnsiChar(DoubleToShort(a,d));
+  Check(a='3.14159');
+  d := 0.9999999999999997;
+  a[0] := AnsiChar(DoubleToShort(a,d));
+  Check(a='1');
+  d := -0.9999999999999997;
+  a[0] := AnsiChar(DoubleToShort(a,d));
+  Check(a='-1');
+  d := 9.999999999999997;
+  a[0] := AnsiChar(DoubleToShort(a,d));
+  Check(a='10');
+  d := -9.999999999999997;
+  a[0] := AnsiChar(DoubleToShort(a,d));
+  Check(a='-10');
+  d := 999.9999999999997;
+  a[0] := AnsiChar(DoubleToShort(a,d));
+  Check(a='1000');
+  d := 999.9999999999933;
+  a[0] := AnsiChar(DoubleToShort(a,d));
+  Check(a='999.999999999993');
+  {$ifdef EXTENDEDTOSHORT_USESTR}
   Check(DoubleToString(-3.3495117168e-10)='-0.00000000033495');
   Check(DoubleToString(-3.3495617168e-10)='-0.00000000033496');
   Check(DoubleToString(-3.9999617168e-14)='-0.00000000000004');
@@ -4616,6 +4640,12 @@ begin
     s := RawUTF8(a);
     e := GetExtended(Pointer(s),err);
     Check(SameValue(e,d)); // test str()
+    a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
+    a2[0] := AnsiChar(DoubleToShort(a2,d));
+    Check(a=a2);
+    a[0] := AnsiChar(ExtendedToShortNoExp(a,d,DOUBLE_PRECISION));
+    a2[0] := AnsiChar(DoubleToShortNoExp(a2,d));
+    Check(a=a2);
     s := ExtendedToStr(d,DOUBLE_PRECISION);
     CheckEqual(TestAddFloatStr(s),s);
     e := GetExtended(Pointer(s),err);
@@ -9524,7 +9554,7 @@ begin
   o := _JSON('{"double_params":[-12.12345678,-9.9E-15,-9.88E-15,-9E-15]}',
      [dvoReturnNullForUnknownProperty, dvoAllowDoubleValue]);
   json := TDocVariantData(o).ToJSON;
-  {$ifndef EXTENDEDTOSTRING_USESTR}
+  {$ifndef EXTENDEDTOSHORT_USESTR}
   check(json='{"double_params":[-12.12345678,-9.9E-15,-9.88E-15,-9E-15]}');
   {$endif}
   CheckSame(double(TDocVariantData(o).A['double_params'].Value[1]),-9.9E-15);
