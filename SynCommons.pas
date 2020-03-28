@@ -53941,7 +53941,7 @@ begin
   while (JSON^<=' ') and (JSON^<>#0) do inc(JSON);
   case JSON^ of
   '[': begin // array
-    repeat inc(JSON) until (JSON^=#0) or (JSON>' ');
+    repeat inc(JSON) until (JSON^=#0) or (JSON^>' ');
     if JSON^=']' then begin
       Add('[');
       inc(JSON);
@@ -53967,13 +53967,13 @@ begin
     Add(']');
   end;
   '{': begin // object
-    repeat inc(JSON) until (JSON^=#0) or (JSON>' ');
+    repeat inc(JSON) until (JSON^=#0) or (JSON^>' ');
     Add('{');
     inc(fHumanReadableLevel);
     if not (Format in [jsonCompact,jsonUnquotedPropNameCompact]) then
       AddCRAndIndent;
     if JSON^='}' then
-      repeat inc(JSON) until (JSON^=#0) or (JSON>' ') else
+      repeat inc(JSON) until (JSON^=#0) or (JSON^>' ') else
     repeat
       Name := GetJSONPropName(JSON,@NameLen);
       if Name=nil then
@@ -54024,7 +54024,7 @@ begin
     if EndOfObject<>nil then
       EndOfObject^ := JSON^;
     if JSON^<>#0 then
-      repeat inc(JSON) until (JSON^=#0) or (JSON>' ');
+      repeat inc(JSON) until (JSON^=#0) or (JSON^>' ');
   end;
   result := JSON;
 end;
@@ -54040,7 +54040,7 @@ begin
   while (JSON^<=' ') and (JSON^<>#0) do inc(JSON);
   case JSON^ of
   '[': begin
-    repeat inc(JSON) until (JSON^=#0) or (JSON>' ');
+    repeat inc(JSON) until (JSON^=#0) or (JSON^>' ');
     if JSON^=']' then
       JSON := GotoNextNotSpace(JSON+1) else begin
       n := 0;
@@ -54063,9 +54063,9 @@ begin
     end;
   end;
   '{': begin
-    repeat inc(JSON) until (JSON^=#0) or (JSON>' ');
+    repeat inc(JSON) until (JSON^=#0) or (JSON^>' ');
     if JSON^='}' then
-      repeat inc(JSON) until (JSON^=#0) or (JSON>' ');
+      repeat inc(JSON) until (JSON^=#0) or (JSON^>' ');
       repeat
         Name := GetJSONPropName(JSON);
         if Name=nil then
@@ -54100,7 +54100,7 @@ begin
     if EndOfObject<>nil then
       EndOfObject^ := JSON^;
     if JSON^<>#0 then
-      repeat inc(JSON) until (JSON^=#0) or (JSON>' ');
+      repeat inc(JSON) until (JSON^=#0) or (JSON^>' ');
   end;
   result := JSON;
 end;
