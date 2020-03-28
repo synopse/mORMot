@@ -4635,11 +4635,17 @@ begin
     Check(SysUtils.IntToStr(j)=string(a));
     Check(format('%d',[j])=string(a));
     Check(format('%.8x',[j])=IntToHex(j,8));
-    d := Random*1E-17-Random*1E-19;
+    case i of
+      9990: d := 1E110;
+      9991: d := 1E-110;
+      9992: d := 1E210;
+      9993: d := 1E-210;
+      else d := Random*1E-17-Random*1E-19;
+    end;
     str(d,a);
     s := RawUTF8(a);
     e := GetExtended(Pointer(s),err);
-    Check(SameValue(e,d)); // test str()
+    Check(SameValue(e,d,0)); // validate str()
     a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
     a2[0] := AnsiChar(DoubleToShort(a2,d));
     Check(a=a2);
@@ -4647,29 +4653,33 @@ begin
     a2[0] := AnsiChar(DoubleToShortNoExp(a2,d));
     Check(a=a2);
     s := ExtendedToStr(d,DOUBLE_PRECISION);
-    CheckEqual(TestAddFloatStr(s),s);
     e := GetExtended(Pointer(s),err);
-    Check(SameValue(e,d));
-    Check(not SameValue(e+1,d));
+    Check(SameValue(e,d,0));
     u := DoubleToString(d);
     Check(Ansi7ToString(s)=u,u);
-    sd := d;
     e := d;
-    Check(d=e);
-    Check(SortDynArrayDouble(d,d)=0);
-    Check(SortDynArrayDouble(d,e)=0);
-    se := sd;
-    Check(SortDynArraySingle(sd,sd)=0);
-    Check(SortDynArraySingle(sd,se)=0);
+    if (i < 9000) or (i > 9999) then begin
+      CheckEqual(TestAddFloatStr(s),s);
+      Check(not SameValue(e+1,d));
+      sd := d;
+      Check(d=e);
+      Check(SortDynArrayDouble(d,d)=0);
+      Check(SortDynArrayDouble(d,e)=0);
+      se := sd;
+      Check(SortDynArraySingle(sd,sd)=0);
+      Check(SortDynArraySingle(sd,se)=0);
+    end;
     if d<0 then
       e := e*0.9 else
       e := e*1.1;
     check(d<e);
     Check(SortDynArrayDouble(d,e)=-1);
     Check(SortDynArrayDouble(e,d)=1);
-    se := e;
-    Check(SortDynArraySingle(sd,se)=-1);
-    Check(SortDynArraySingle(se,sd)=1);
+    if (i < 9000) or (i > 9999) then begin
+      se := e;
+      Check(SortDynArraySingle(sd,se)=-1);
+      Check(SortDynArraySingle(se,sd)=1);
+    end;
     PC := ToVarUInt32(juint,@varint);
     Check(PC<>nil);
     Check(PtrInt(PC)-PtrInt(@varint)=integer(ToVarUInt32Length(juint)));
@@ -20353,7 +20363,6 @@ begin
     proxy.Free;
   end;
 end;
-
 
 initialization
   _uE0 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[0],1);

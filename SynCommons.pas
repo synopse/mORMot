@@ -23225,6 +23225,7 @@ begin
   for i := 1 to result do
     PByteArray(@S)[i] := PWordArray(PtrInt(@S)-1)[i];
   {$endif}
+  S[0] := AnsiChar(result);
 end;
 {$endif EXTENDEDTOSHORT_USESTR}
 
@@ -23268,11 +23269,9 @@ end;
 procedure ExtendedToStr(Value: TSynExtended; Precision: integer;
   var result: RawUTF8);
 var tmp: ShortString;
-    i64: Int64;
 begin
-  i64 := Trunc(Value);
-  if Value=i64 then
-    Int64ToUtf8(i64,result) else
+  if Value=0 then
+    result := SmallUInt32UTF8[0] else
     FastSetString(result,@tmp[1],ExtendedToShort(tmp,Value,Precision));
 end;
 
@@ -23358,11 +23357,9 @@ end;
 
 procedure DoubleToStr(Value: Double; var result: RawUTF8);
 var tmp: ShortString;
-    i64: Int64;
 begin
-  i64 := Trunc(Value);
-  if Value=i64 then
-    Int64ToUtf8(i64,result) else
+  if Value=0 then
+    result := SmallUInt32UTF8[0] else
     FastSetString(result,@tmp[1],DoubleToShort(tmp,Value));
 end;
 
