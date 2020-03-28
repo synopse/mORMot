@@ -312,7 +312,6 @@
       {$endif BSD}
       {$define FPC_X64}   // supports AVX/AVX2/AVX512 - which Delphi doesn't
       {$ASMMODE INTEL}    // to share asm code with Delphi
-      {$define DOUBLETOSHORT_USEGRISU} // fast double to text conversion
     {$endif CPUX64}
     {$ifdef CPUAARCH64}
       {$define CPUARM3264}
@@ -630,6 +629,9 @@
       {$endif}
     {$endif}
   {$endif}
+  {$ifdef CPUX64}
+    {$define DOUBLETOSHORT_USEGRISU} // fast double to text on x86_64 only
+  {$endif}
   {$ifdef DISABLE_SSE42}
     {$undef FORCE_STRSSE42}
   {$endif DISABLE_SSE42}
@@ -689,4 +691,5 @@
   {.$define LIBCURLMULTI}
   // enable https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
 {$endif USELIBCURL}
+
 

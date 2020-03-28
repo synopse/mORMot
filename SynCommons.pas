@@ -2042,9 +2042,8 @@ procedure KahanSum(const Data: double; var Sum, Carry: double);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a floating-point value to its numerical text equivalency
-// - depending on the platform, it may either call str() or use FloatToText()
-// in ffGeneral mode (the shortest possible decimal string using fixed or
-// scientific format)
+// - on Delphi Win32, calls FloatToText() in ffGeneral mode; on FPC uses str()
+// - on x86_64, DOUBLE_PRECISION uses faster Fabian Loitsch's Grisu algorithm
 // - returns the count of chars stored into S, i.e. length(S)
 function ExtendedToShort(var S: ShortString; Value: TSynExtended; Precision: integer): integer;
 
@@ -2081,7 +2080,7 @@ function FloatToJSONNan(const s: ShortString): PShortString;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a floating-point value to its JSON text equivalency
-// - depending on the platform, it may either call str() or use FloatToText()
+// - depending on the platform, it may either call str() or FloatToText()
 // in ffGeneral mode (the shortest possible decimal string using fixed or
 // scientific format)
 // - returns the number as text, or "Infinity", "-Infinity", and "NaN" for
@@ -2091,8 +2090,9 @@ function ExtendedToJSON(var tmp: ShortString; Value: TSynExtended;
   Precision: integer; NoExp: boolean): PShortString;
 
 /// convert a 64-bit floating-point value to its numerical text equivalency
-// - on Delphi, calls FloatToText() in ffGeneral mode
-// - on FPC x86_64, will use double-focused Fabian Loitsch's Grisu algorithm
+// - on Delphi Win32, calls FloatToText() in ffGeneral mode; on FPC uses str()
+// - on x86_64, will use our own faster Fabian Loitsch's Grisu algorithm;
+// it is 6 times faster than FloatToText() on FPC Linux x86_64
 // - returns the count of chars stored into S, i.e. length(S)
 function DoubleToShort(var S: ShortString; const Value: double): integer;
   {$ifdef FPC}inline;{$endif}
@@ -2100,10 +2100,31 @@ function DoubleToShort(var S: ShortString; const Value: double): integer;
 /// convert a 64-bit floating-point value to its numerical text equivalency without
 // scientification notation
 // - returns the count of chars stored into S, i.e. length(S)
-// - on FPC x86_64, will use double-focused Fabian Loitsch's Grisu algorithm
+// - on Delphi Win32, calls FloatToText() in ffGeneral mode; on FPC uses str()
+// - on x86_64, will use our own faster Fabian Loitsch's Grisu algorithm
 // - call str(Value:0:Precision,S) to avoid any Exponent notation
 function DoubleToShortNoExp(var S: ShortString; const Value: double): integer;
   {$ifdef FPC}inline;{$endif}
+
+{$ifdef DOUBLETOSHORT_USEGRISU}
+const
+  // special text returned if the double is not a number
+  C_STR_INF: string[3] = 'Inf';
+  C_STR_QNAN: string[3] = 'Nan';
+
+  // min_width parameter special value, as used internally by FPC for str(d,s)
+  // - DoubleToAscii() only accept C_NO_MIN_WIDTH or 0 for min_width: space
+  // trailing has been removed in this cut-down version
+  C_NO_MIN_WIDTH = -32767;
+
+/// raw function to convert a 64-bit double into a shortstring, stored in str
+// - implements Fabian Loitsch's Grisu algorithm dedicated to double values
+// - currently, SynCommnons only set min_width=0 (for DoubleToShortNoExp to avoid
+// any scientific notation ) or min_width=C_NO_MIN_WIDTH (for DoubleToShort to
+// force the scientific notation when the double cannot be represented as
+// a simple fractinal number)
+procedure DoubleToAscii(min_width, frac_digits: integer; const v: double; str: PAnsiChar);
+{$endif DOUBLETOSHORT_USEGRISU}
 
 /// convert a 64-bit floating-point value to its JSON text equivalency
 // - on Delphi, calls FloatToText() in ffGeneral mode
@@ -23175,12 +23196,14 @@ function ExtendedToShort(var S: ShortString; Value: TSynExtended;
 var scientificneeded: boolean;
     valueabs: TSynExtended;
 begin
+  {$ifdef DOUBLETOSHORT_USEGRISU}
   {$ifndef TSYNEXTENDED80}
   if Precision=DOUBLE_PRECISION then begin
     result := DoubleToShort(S,Value);
     exit;
   end;
   {$endif TSYNEXTENDED80}
+  {$endif DOUBLETOSHORT_USEGRISU}
   if Value=0 then begin
     PWord(@s)^ := 1 + ord('0') shl 8;
     result := 1;
@@ -23305,14 +23328,14 @@ end;
 {$ifdef DOUBLETOSHORT_USEGRISU}
 
 // includes Fabian Loitsch's Grisu algorithm especially compiled for double
-{$I .\SynDoubleToText.inc} // declares d2a()
+{$I .\SynDoubleToText.inc} // implements DoubleToAscii()
 
 function DoubleToShort(var S: ShortString; const Value: double): integer;
 var valueabs: double;
 begin
   valueabs := abs(Value);
   if (valueabs>DOUBLE_HI) or (valueabs<DOUBLE_LO) then begin
-    d2a(C_NO_MIN_WIDTH,-1,Value,@S); // = str(Value,S) for scientific notation
+    DoubleToAscii(C_NO_MIN_WIDTH,-1,Value,@S); // = str(Value,S) for scientific notation
     result := ord(S[0]);
   end else
     result := DoubleToShortNoExp(S,Value);
@@ -23320,7 +23343,7 @@ end;
 
 function DoubleToShortNoExp(var S: ShortString; const Value: double): integer;
 begin
-  d2a(0,DOUBLE_PRECISION,Value,@S); // = str(Value:0:DOUBLE_PRECISION,S)
+  DoubleToAscii(0,DOUBLE_PRECISION,Value,@S); // = str(Value:0:DOUBLE_PRECISION,S)
   result := FloatStringNoExp(@S,DOUBLE_PRECISION);
   S[0] := AnsiChar(result);
 end;
