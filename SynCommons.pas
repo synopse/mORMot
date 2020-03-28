@@ -2092,7 +2092,7 @@ function ExtendedToJSON(var tmp: ShortString; Value: TSynExtended;
 
 /// convert a 64-bit floating-point value to its numerical text equivalency
 // - on Delphi, calls FloatToText() in ffGeneral mode
-// - on FPC, will use a double-specific version Fabian Loitsch's Grisu  algorithm
+// - on FPC x86_64, will use double-focused Fabian Loitsch's Grisu algorithm
 // - returns the count of chars stored into S, i.e. length(S)
 function DoubleToShort(var S: ShortString; const Value: double): integer;
   {$ifdef FPC}inline;{$endif}
@@ -2100,14 +2100,14 @@ function DoubleToShort(var S: ShortString; const Value: double): integer;
 /// convert a 64-bit floating-point value to its numerical text equivalency without
 // scientification notation
 // - returns the count of chars stored into S, i.e. length(S)
-// - under FPC, will use our 64-bit version Fabian Loitsch's Grisu algorithm
+// - on FPC x86_64, will use double-focused Fabian Loitsch's Grisu algorithm
 // - call str(Value:0:Precision,S) to avoid any Exponent notation
 function DoubleToShortNoExp(var S: ShortString; const Value: double): integer;
   {$ifdef FPC}inline;{$endif}
 
 /// convert a 64-bit floating-point value to its JSON text equivalency
 // - on Delphi, calls FloatToText() in ffGeneral mode
-// - on FPC, will use a double-specific version Fabian Loitsch's Grisu algorithm
+// - on FPC x86_64, will use double-focused Fabian Loitsch's Grisu algorithm
 // - returns the number as text, or "Infinity", "-Infinity", and "NaN" for
 // corresponding IEEE values
 // - result is a PShortString either over tmp, or JSON_NAN[]
@@ -23215,7 +23215,7 @@ begin
 end;
 {$else}
 {$ifdef UNICODE}
-var i: integer;
+var i: PtrInt;
 {$endif}
 begin
   // use ffGeneral: see https://synopse.info/forum/viewtopic.php?pid=442#p442
@@ -23297,8 +23297,8 @@ begin
   if Value=0 then
     result := @JSON_NAN[fnNumber] else begin
     if noexp then
-      tmp[0] := AnsiChar(ExtendedToShortNoExp(tmp,Value,precision)) else
-      tmp[0] := AnsiChar(ExtendedToShort(tmp,Value,precision));
+      ExtendedToShortNoExp(tmp,Value,precision) else
+      ExtendedToShort(tmp,Value,precision);
     result := FloatToJSONNan(tmp);
   end;
 end;
@@ -23345,8 +23345,8 @@ begin
   if Value=0 then
     result := @JSON_NAN[fnNumber] else begin
     if noexp then
-      tmp[0] := AnsiChar(DoubleToShortNoExp(tmp,Value)) else
-      tmp[0] := AnsiChar(DoubleToShort(tmp,Value));
+      DoubleToShortNoExp(tmp,Value) else
+      DoubleToShort(tmp,Value);
     result := FloatToJSONNan(tmp);
   end;
 end;

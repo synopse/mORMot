@@ -17,12 +17,12 @@
 
     We extracted a double-to-ascii only cut-down version of those files,
     and made a huge refactoring to reach the best performance, especially tuning
-    the x86_64 and i386 targets with some dedicated asm.
+    the x86_64 target with some dedicated asm.
 
     Warning: this unit is not fully debuggged on Delphi - it gives incorrect
     answers - at least for the regression tests. Also note that UInt64/QWord
     support was broken on oldest versions of the Delphi compiler.
-    Therefore, SynCommons currently use this faster d2a() only on FPC.
+    Therefore, SynCommons currently use this faster d2a() only on FPC x86_64.
 
 }
 
@@ -122,24 +122,23 @@ procedure d2a(min_width, frac_digits: integer; const v: double; str: PAnsiChar);
       c: TDIY_FP;
       e10: integer;
     end;
+    PDIY_FP_Power_of_10 = ^TDIY_FP_Power_of_10;
 
   const
     ROUNDER = $80000000;
 
-  {$ifdef CPUINTEL}
+  {$ifdef CPUINTEL} // our faster version using 128-bit x86_64 multiplication
 
   procedure diy_fp_multiply(var x, y: TDIY_FP; normalize: boolean;
     out result: TDIY_FP); {$ifdef HASINLINE} inline; {$endif}
   var
     p: THash128Rec;
-    e: integer;
   begin
     mul64x64(x.f, y.f, p); // fast x86_64 / i386 asm
     if (p.c1 and ROUNDER) <>  0 then
       inc(p.h);
     result.f := p.h;
-    e := x.e + y.e + 64;
-    result.e := e;
+    result.e := x.e + y.e + 64;
     if normalize then
       if (PQWordRec(@result.f)^.h and ROUNDER) = 0 then
       begin
@@ -148,7 +147,7 @@ procedure d2a(min_width, frac_digits: integer; const v: double; str: PAnsiChar);
       end;
   end;
 
-  {$else}
+  {$else} // regular Grisu method - optimized for 32-bit CPUs
 
   procedure diy_fp_multiply(var x, y: TDIY_FP; normalize: boolean; out result: TDIY_FP);
   var
@@ -219,26 +218,27 @@ procedure d2a(min_width, frac_digits: integer; const v: double; str: PAnsiChar);
          -1,  0,  0, -1,  0,  0,  0,  0,  0, -1,
           0,  0,  0,  0,  1,  0,  0,  0, -1,  0
       ));
+    CACHED_POWER10_MIN10 = -90 -360;
+    // = ref.base[low(ref.base)].e10 + ref.factor_minus[high(ref.factor_minus)].e10
 
   // return normalized correctly rounded approximation of the power of 10
   // scaling factor, intended to shift a binary exponent of the original number
   // into selected [ alpha .. gamma ] range
   procedure diy_fp_cached_power10(exp10: integer; out factor: TDIY_FP_Power_of_10);
   var
-    i, xmul, min10: integer;
-    A: ^TDIY_FP_Power_of_10;
-    cx: shortint;
+    i, xmul: integer;
+    A, B: PDIY_FP_Power_of_10;
+    cx: PtrInt;
     ref: ^TDIY_FP_Cached_Power10;
   begin
     ref := @CACHED_POWER10; // much better code generation on PIC/x86_64
     // find non-sparse index
-    min10 := ref.base[low(ref.base)].e10 + ref.factor_minus[high(ref.factor_minus)].e10;
-    if exp10 <= min10 then
+    if exp10 <= CACHED_POWER10_MIN10 then
       i := 0
     else
     begin
-      i := (exp10 - min10) div C_PWR10_DELTA;
-      if i * C_PWR10_DELTA + min10 <> exp10 then
+      i := (exp10 - CACHED_POWER10_MIN10) div C_PWR10_DELTA;
+      if i * C_PWR10_DELTA + CACHED_POWER10_MIN10 <> exp10 then
         inc(i); // round-up
       if i > C_PWR10_COUNT - 1 then
         i := C_PWR10_COUNT - 1;
@@ -254,35 +254,22 @@ procedure d2a(min_width, frac_digits: integer; const v: double; str: PAnsiChar);
     end;
     // surrogate
     if xmul > 0 then
-    begin
-      dec(xmul);
-      factor.e10 := A.e10 + ref.factor_plus[xmul].e10;
-      if A.e10 <> 0 then
-        diy_fp_multiply(A.c, ref.factor_plus[xmul].c, true, factor.c)
-      else
-      begin
-        // exact
-        factor.c := ref.factor_plus[xmul].c;
-        exit;
-      end;
-    end
+      dec(xmul)
+    else
+      xmul := -(xmul + 1);
+    B := @ref.factor_plus[xmul];
+    factor.e10 := A.e10 + B.e10;
+    if A.e10 = 0 then
+      // exact
+      factor.c := B.c
     else
     begin
-      xmul := -(xmul + 1);
-      factor.e10 := A.e10 + ref.factor_minus[xmul].e10;
-      if A.e10 <> 0 then
-        diy_fp_multiply(A.c, ref.factor_minus[xmul].c, true, factor.c)
-      else
-      begin
-        // exact
-        factor.c := ref.factor_minus[xmul].c;
-        exit;
-      end;
+      diy_fp_multiply(A.c, B.c, true, factor.c);
+      // adjust mantissa
+      cx := ref.corrector[i];
+      if cx <> 0 then
+        inc(PInt64(@factor.c.f)^, cx);
     end;
-    // adjust mantissa
-    cx := ref.corrector[i];
-    if cx <> 0 then
-      inc(factor.c.f, int64(cx));
   end;
 
 
