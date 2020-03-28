@@ -176,6 +176,7 @@
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSHORT_USESTR} // FloatToText uses str() in FPC
+  {$define DOUBLETOSHORT_USEGRISU} // fast double to text
   {$define DELPHI5ORFPC}
   {$define FPC_OR_PUREPASCAL}
   {$define FPC_OR_KYLIX}
@@ -312,7 +313,6 @@
       {$endif BSD}
       {$define FPC_X64}   // supports AVX/AVX2/AVX512 - which Delphi doesn't
       {$ASMMODE INTEL}    // to share asm code with Delphi
-      {$define DOUBLETOSHORT_USEGRISU} // fast double to text conversion
     {$endif CPUX64}
     {$ifdef CPUAARCH64}
       {$define CPUARM3264}
@@ -427,6 +427,7 @@
     {$undef CPU32}
     {$define PUREPASCAL}   // no x86 32 bit asm to be used
     {$define EXTENDEDTOSHORT_USESTR} // FloatToText() much slower in x64 mode
+    {$define DOUBLETOSHORT_USEGRISU} // fast double to text
   {$else CPUX64}
     {$define CPU32} // Delphi compiler for 32 bit CPU
     {$define CPU32DELPHI}

@@ -2640,6 +2640,8 @@ begin
   end;
   W.CancelAll;
   W.AddDynArrayJSON(AFP);
+  // note: error? ensure TTestLowLevelCommon run after TTestLowLevelTypes
+  // -> otherwise custom serialization is still active with no Build* fields
   U := W.Text;
   {$ifdef ISDELPHI2010} // thanks to enhanced RTTI
   Check(IdemPChar(pointer(U),'[{"MAJOR":0,"MINOR":1,"RELEASE":2,"BUILD":3,'+
@@ -4265,6 +4267,7 @@ var i, j, b, err: integer;
     q: QWord;
     s,s2: RawUTF8;
     d,e: double;
+    f: extended;
     sd,se: single;
     {$ifndef DELPHI5OROLDER}
     c: currency;
@@ -4279,6 +4282,52 @@ var i, j, b, err: integer;
     crc, u32, n: cardinal;
     Timer: TPrecisionTimer;
 begin
+  n := 100000;
+  Timer.Start;
+  crc := 0;
+  d := 3.141592653 / 1.0573623912;
+  for i := 1 to n do begin
+    f  := d;
+    j := FloatToText(PChar(@varint),f,{$ifndef FPC}fvExtended,{$endif}
+      ffGeneral,DOUBLE_PRECISION,0);
+    PChar(@varint)[j] := #0;
+    inc(crc,j);
+    d := d * 1.0038265263;
+  end;
+  NotifyTestSpeed('FloatToText ', [Pchar(@varint)], n, crc, @timer);
+  Timer.Start;
+  crc := 0;
+  d := 3.141592653 / 1.0573623912;
+  for i := 1 to n do begin
+    Str(d,a);
+    inc(crc,ord(a[0]));
+    d := d * 1.0038265263;
+  end;
+  NotifyTestSpeed('str ', [a], n, crc, @timer);
+  //  a[ord(a[0])+1] := #0; Check(SameValue(GetExtended(pointer(@a[1])),d,0));
+  Timer.Start;
+  crc := 0;
+  d := 3.141592653 / 1.0573623912;
+  for i := 1 to n do begin
+    DoubleToShort(a,d);
+    inc(crc,ord(a[0]));
+    d := d * 1.0038265263;
+  end;
+  NotifyTestSpeed('DoubleToShort ', [a], n, crc, @timer);
+  a[ord(a[0])+1] := #0;
+  //  a[ord(a[0])+1] := #0; Check(SameValue(GetExtended(pointer(@a[1])),d,0));
+  {$ifdef DOUBLETOSHORT_USEGRISU}
+  Timer.Start;
+  crc := 0;
+  d := 3.141592653 / 1.0573623912;
+  for i := 1 to n do begin
+    DoubleToAscii(C_NO_MIN_WIDTH,-1,d,@a);
+    inc(crc,ord(a[0]));
+    d := d * 1.0038265263;
+  end;
+  NotifyTestSpeed('DoubleToAscii ', [a], n, crc, @timer);
+  //  a[ord(a[0])+1] := #0; Check(SameValue(GetExtended(pointer(@a[1])),d,0));
+  {$endif DOUBLETOSHORT_USEGRISU}
   CheckEqual(TestAddFloatStr(''),'0');
   CheckEqual(TestAddFloatStr(' 123'),'123');
   CheckEqual(TestAddFloatStr(' 1a23'),'1');
@@ -4646,19 +4695,17 @@ begin
     s := RawUTF8(a);
     e := GetExtended(Pointer(s),err);
     Check(SameValue(e,d,0)); // validate str()
-    a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
-    a2[0] := AnsiChar(DoubleToShort(a2,d));
-    Check(a=a2);
-    a[0] := AnsiChar(ExtendedToShortNoExp(a,d,DOUBLE_PRECISION));
-    a2[0] := AnsiChar(DoubleToShortNoExp(a2,d));
-    Check(a=a2);
     s := ExtendedToStr(d,DOUBLE_PRECISION);
     e := GetExtended(Pointer(s),err);
     Check(SameValue(e,d,0));
-    u := DoubleToString(d);
-    Check(Ansi7ToString(s)=u,u);
     e := d;
     if (i < 9000) or (i > 9999) then begin
+      a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
+      a2[0] := AnsiChar(DoubleToShort(a2,d));
+      Check(a=a2);
+      a[0] := AnsiChar(ExtendedToShortNoExp(a,d,DOUBLE_PRECISION));
+      a2[0] := AnsiChar(DoubleToShortNoExp(a2,d));
+      Check(a=a2);
       CheckEqual(TestAddFloatStr(s),s);
       Check(not SameValue(e+1,d));
       sd := d;
@@ -10185,24 +10232,24 @@ begin
   {$endif}
   Check((j<>'')and(j[1]=#$E2)and(j[2]=#$80)and(j[3]=#$9D));
   v1 := _Arr([]);
-  vs := 1.23456;
+  vs := 1.5;
   v1.Add(vs);
-  Check(VariantSaveJSON(v1)='[1.23456]');
-  vd := 1.234567;
+  CheckEqual(VariantSaveJSON(v1),'[1.5]','VariantSaveJSON');
+  vd := 1.7;
   v1.Add(vd);
-  Check(VariantSaveJSON(v1)='[1.23456,1.234567]');
+  CheckEqual(VariantSaveJSON(v1),'[1.5,1.7]');
   v2 := _obj(['id',1]);
   Check(VariantSaveJSON(v2)='{"id":1}');
   {$ifdef FPC}_Safe(v1)^.AddItem(v2); // FPC does not accept v1.Add(v2)
   {$else}v1.Add(v2);{$endif}
-  Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1}]');
+  Check(VariantSaveJSON(v1)='[1.5,1.7,{"id":1}]');
   s := 'abc';
   {$ifdef FPC}_Safe(v1)^.AddItem(s); // FPC does not accept v1.Add(s)
   {$else}v1.Add(s);{$endif}
-  Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1},"abc"]');
+  Check(VariantSaveJSON(v1)='[1.5,1.7,{"id":1},"abc"]');
   RawUTF8ToVariant('def',v2);
   {$ifdef FPC}_Safe(v1)^.AddItem{$else}v1.Add{$endif}(v2);
-  Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1},"abc","def"]');
+  Check(VariantSaveJSON(v1)='[1.5,1.7,{"id":1},"abc","def"]');
   Doc.Clear;
   Doc.InitObjectFromPath('name','toto');
   check(Doc.ToJSON='{"name":"toto"}');
@@ -20363,6 +20410,7 @@ begin
     proxy.Free;
   end;
 end;
+
 
 initialization
   _uE0 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[0],1);
