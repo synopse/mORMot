@@ -54493,8 +54493,8 @@ var // warning: exact local variables order should match TFakeCallStack
   sd0, sd1, sd2, sd3, sd4, sd5, sd6, sd7: double;
   smetndx:pointer;
 asm
-  // get method index
-  str  x9,smetndx
+  // get method index from IP0 [r16]
+  str  r16,smetndx
   // store registers
   str d0,sd0
   str d1,sd1
@@ -54761,9 +54761,9 @@ begin
           P^ := $e320f000; inc(P);
           {$endif CPUARM}
           {$ifdef CPUAARCH64}
-          // store method index in register x9
-          // $09 = r9 ... loop to $1F -> number shifted * $20
-          P^ := ($d280 shl 16)+(i shl 5)+$09; inc(P);  // mov x9 ,{MethodIndex}
+          // store method index in register r16 [IP0]
+          // $10 = r16 ... loop to $1F -> number shifted * $20
+          P^ := ($d280 shl 16)+(i shl 5)+$10; inc(P);  // mov r16 ,{MethodIndex}
           // we are using a register branch here
           // fill register x10 with address
           stub := PtrUInt(@TInterfacedObjectFake.AArch64FakeStub);
