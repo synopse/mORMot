@@ -243,9 +243,10 @@ procedure d2a(min_width, frac_digits: integer; const v: double; str: PAnsiChar);
       if i > C_PWR10_COUNT - 1 then
         i := C_PWR10_COUNT - 1;
     end;
-      // generate result
+    // generate result
     A := @ref.base[i mod length(ref.base)];
     xmul := (i div length(ref.base)) - length(ref.factor_minus);
+    writeln('xmul=',xmul);
     if xmul = 0 then
     begin
       // base
@@ -254,22 +255,27 @@ procedure d2a(min_width, frac_digits: integer; const v: double; str: PAnsiChar);
     end;
     // surrogate
     if xmul > 0 then
-      dec(xmul)
+    begin
+      dec(xmul);
+      B := @ref.factor_plus[xmul];
+    end
     else
+    begin
       xmul := -(xmul + 1);
-    B := @ref.factor_plus[xmul];
+      B := @ref.factor_minus[xmul];
+    end;
     factor.e10 := A.e10 + B.e10;
-    if A.e10 = 0 then
-      // exact
-      factor.c := B.c
-    else
+    if A.e10 <> 0 then
     begin
       diy_fp_multiply(A.c, B.c, true, factor.c);
       // adjust mantissa
       cx := ref.corrector[i];
       if cx <> 0 then
-        inc(PInt64(@factor.c.f)^, cx);
-    end;
+        inc(int64(factor.c.f), int64(cx));
+    end
+    else
+      // exact
+      factor.c := B^.c;
   end;
 
 
