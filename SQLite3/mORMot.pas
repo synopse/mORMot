@@ -54422,6 +54422,7 @@ end;
   - all ARM, AARCH64 and Linux64 code below was provided by ALF! Thanks! :)  }
 {$ifdef FPC}
 {$ifdef CPUARM}
+{$ifdef ASMORIG}
 procedure TInterfacedObjectFake.ArmFakeStub;
 var // warning: exact local variables order should match TFakeCallStack
   smetndx: pointer;
@@ -54451,6 +54452,39 @@ asm
   // FakeCall should set Int64 result in method result, and float in aCall.FPRegs["sd0"]
   vstr d0,sd0
 end;
+{$else}
+procedure TInterfacedObjectFake.ArmFakeStub;nostackframe;assembler;
+asm
+    // get method index
+    str   r12,[r13, #-52]
+    // create stack space
+    mov   r12,r13
+    stmfd r13!,{r11,r12,r14,r15}
+    sub   r11,r12,#4
+    sub   r13,r13,#128
+    // store registers
+    vstr  d0,[r11, #-112]
+    vstr  d1,[r11, #-104]
+    vstr  d2,[r11, #-96]
+    vstr  d3,[r11, #-88]
+    vstr  d4,[r11, #-80]
+    vstr  d5,[r11, #-72]
+    vstr  d6,[r11, #-64]
+    vstr  d7,[r11, #-56]
+    str   r0,[r11, #-128]
+    str   r1,[r11, #-124]
+    str   r2,[r11, #-120]
+    str   r3,[r11, #-116]
+    // set stack address
+    add   r1,r13, #12
+    // branch to the FakeCall function
+    bl    FakeCall
+    // store result
+    vstr  d0,[r11, #-112]
+    ldmea r11,{r11,r13,r15}
+end;
+{$endif ASMORIG}
+
 {$endif}
 {$ifdef CPUAARCH64}
 procedure TInterfacedObjectFake.AArch64FakeStub;
@@ -54459,8 +54493,8 @@ var // warning: exact local variables order should match TFakeCallStack
   sd0, sd1, sd2, sd3, sd4, sd5, sd6, sd7: double;
   smetndx:pointer;
 asm
-  // get method index
-  str  x9,smetndx
+  // get method index from IP0 [x16/r16]
+  str x16,smetndx
   // store registers
   str d0,sd0
   str d1,sd1
@@ -54716,16 +54750,20 @@ begin
           PByte(P)^ := $c3; inc(PByte(P)); // ret
           {$endif CPUX64}
           {$ifdef CPUARM}
+          {$ifdef ASMORIG}
           P^ := ($e3a040 shl 8)+i;  inc(P); // mov r4 (v1),{MethodIndex} : store method index in register
+          {$else}
+          P^ := ($e3a0c0 shl 8)+i;  inc(P); // mov r12 (ip),{MethodIndex} : store method index in register
+          {$endif}
           tmp := ((PtrUInt(@TInterfacedObjectFake.ArmFakeStub)-PtrUInt(P)) shr 2)-2;
           P^ := ($ea shl 24) + (tmp and $00ffffff); // branch ArmFakeStub (24bit relative, word aligned)
           inc(P);
           P^ := $e320f000; inc(P);
           {$endif CPUARM}
           {$ifdef CPUAARCH64}
-          // store method index in register x9
-          // $09 = r9 ... loop to $1F -> number shifted * $20
-          P^ := ($d280 shl 16)+(i shl 5)+$09; inc(P);  // mov x9 ,{MethodIndex}
+          // store method index in register r16 [IP0]
+          // $10 = r16 ... loop to $1F -> number shifted * $20
+          P^ := ($d280 shl 16)+(i shl 5)+$10; inc(P);  // mov r16 ,{MethodIndex}
           // we are using a register branch here
           // fill register x10 with address
           stub := PtrUInt(@TInterfacedObjectFake.AArch64FakeStub);
