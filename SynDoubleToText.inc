@@ -17,26 +17,44 @@
 
     We extracted a double-to-ascii only cut-down version of those files,
     and made a huge refactoring to reach the best performance, especially
-    tuning the x86_64 target with some dedicated asm and code rewrite.
+    tuning the Intel target with some dedicated asm and code rewrite.
 
-    Warning: This unit is properly debuggged/tested only on x86_64.
+  With Delphi 10.3 on Win32: (no benefit)
+   100000 FloatToText    in 38.11ms i.e. 2,623,570/s, aver. 0us, 47.5 MB/s
+   100000 str            in 43.19ms i.e. 2,315,082/s, aver. 0us, 50.7 MB/s
+   100000 DoubleToShort  in 45.50ms i.e. 2,197,367/s, aver. 0us, 43.8 MB/s
+   100000 DoubleToAscii  in 42.44ms i.e. 2,356,045/s, aver. 0us, 47.8 MB/s
 
-  With Delphi XE8 on Win64:
-   100000 FloatToText    in 66.69ms i.e. 1,499,430/s, aver. 0us, 27.1 MB/s
-   100000 str            in 50.48ms i.e. 1,980,668/s, aver. 0us, 43.4 MB/s
-   100000 DoubleToShort  in 24.85ms i.e. 4,023,659/s, aver. 0us, 80.2 MB/s
-   100000 DoubleToAscii  in 24.12ms i.e. 4,144,562/s, aver. 0us, 84.1 MB/s
+  With Delphi 10.3 on Win64:
+   100000 FloatToText    in 61.83ms i.e. 1,617,233/s, aver. 0us, 29.3 MB/s
+   100000 str            in 53.20ms i.e. 1,879,663/s, aver. 0us, 41.2 MB/s
+   100000 DoubleToShort  in 18.45ms i.e. 5,417,998/s, aver. 0us, 108 MB/s
+   100000 DoubleToAscii  in 18.19ms i.e. 5,496,921/s, aver. 0us, 111.5 MB/s
+
+  With FPC on Win32:
+   100000 FloatToText    in 115.62ms i.e.  864,842/s, aver. 1us, 15.6 MB/s
+   100000 str            in 57.30ms i.e. 1,745,109/s, aver. 0us, 39.9 MB/s
+   100000 DoubleToShort  in 23.88ms i.e. 4,187,078/s, aver. 0us, 83.5 MB/s
+   100000 DoubleToAscii  in 23.34ms i.e. 4,284,490/s, aver. 0us, 86.9 MB/s
+
+  With FPC on Win64:
+   100000 FloatToText    in 76.92ms i.e. 1,300,052/s, aver. 0us, 23.5 MB/s
+   100000 str            in 27.70ms i.e. 3,609,456/s, aver. 0us, 82.6 MB/s
+   100000 DoubleToShort  in 14.73ms i.e. 6,787,944/s, aver. 0us, 135.4 MB/s
+   100000 DoubleToAscii  in 13.78ms i.e. 7,253,735/s, aver. 0us, 147.2 MB/s
 
   With FPC on Linux x86_64:
-   100000 FloatToText    in 84.28ms i.e. 1,186,422/s, aver. 0us, 21.5 MB/s
-   100000 str            in 39.28ms i.e. 2,545,824/s, aver. 0us, 58.2 MB/s
-   100000 DoubleToShort  in 16.20ms i.e. 6,170,554/s, aver. 0us, 123 MB/s
-   100000 DoubleToAscii  in 15.41ms i.e. 6,486,346/s, aver. 0us, 131.6 MB/s
+   100000 FloatToText    in 98.47ms i.e. 1,015,465/s, aver. 0us, 18.4 MB/s
+   100000 str            in 38.14ms i.e. 2,621,369/s, aver. 0us, 60 MB/s
+   100000 DoubleToShort  in 14.77ms i.e. 6,766,357/s, aver. 0us, 134.9 MB/s
+   100000 DoubleToAscii  in 13.79ms i.e. 7,248,477/s, aver. 0us, 147.1 MB/s
 
-  - Our rewrite is therefore twice faster than flt_conv.inc from FPC RTL (str)
-  - Delphi Win64 has very slow FloatToText (Win32 has good optimized i87 asm)
-  - FPC is more efficient than Delphi when compiling integer arithmetic - for
-   instance, it generates fast division using the multiplication by reciprocal
+  - Our rewrite is twice faster than original flt_conv.inc from FPC RTL (str)
+  - Delphi Win32 has trouble making 64-bit computation - no benefit since it
+    has good optimized i87 asm (but slower than our code with FPC/Win32)
+  - FPC is more efficient when compiling integer arithmetic; we avoided slow
+    division by calling our Div100(), but Delphi Win64 is still far behind
+  - Delphi Win64 has very slow FloatToText and str()
 
 }
 
@@ -240,8 +258,9 @@ begin
       i := C_PWR10_COUNT - 1;
   end;
   // generate result
-  A := @ref.base[i mod length(ref.base)];
-  xmul := (i div length(ref.base)) - length(ref.factor_minus);
+  xmul := i div length(ref.base);
+  A := @ref.base[i - (xmul * length(ref.base))]; // fast mod
+  dec(xmul, length(ref.factor_minus));
   if xmul = 0 then
   begin
     // base
@@ -323,12 +342,19 @@ type
 
 function d2a_gen_digits_32(buf: PAsciiDigits; x: dword;
   pad_9zero: boolean = false): PtrInt;
+var
+  tab: PWordArray;
 const
   digits: array[0..9] of cardinal = (
     0, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000);
 var
   n: PtrInt;
-  m, z: cardinal;
+  m: cardinal;
+  {$ifdef FPC}
+  z: cardinal;
+  {$else}
+  d100: TDiv100Rec;
+  {$endif FPC}
 begin
   // Calculate amount of digits
   if x = 0 then
@@ -346,25 +372,37 @@ begin
     exit;
   // Emit digits
   dec(PByte(buf));
+  tab := @TwoDigitByteLookupW;
   m := x;
+  while (n >= 2) and (m <> 0) do
+  begin
+    dec(n);
+    {$ifdef FPC} // FPC will use fast mul reciprocal
+    z := m div 100; // compute two 0..9 digits
+    PWord(@buf[n])^ := tab^[m - z * 100];
+    m := z;
+    {$else}
+    Div100(m, d100); // our asm is faster than Delphi div operation
+    PWord(@buf[n])^ := tab^[d100.M];
+    m := d100.D;
+    {$endif FPC}
+    dec(n);
+  end;
+  if n = 0 then
+    exit;
+  if m <> 0 then
+  begin
+    if m > 9 then
+      m := m mod 10; // compute last 0..9 digit
+    buf[n] := m; 
+    dec(n);
+    if n = 0 then
+      exit;
+  end;
   repeat
-    if m <> 0 then
-    begin
-      z := m div 10;
-      buf[n] := m - z * 10; // compute 0..9 digit
-      m := z;
-      dec(n);
-      if n = 0 then
-        exit;
-      continue;
-    end
-    else
-    repeat
-      buf[n] := 0; // padding with 0
-      dec(n);
-    until n = 0;
-    break;
-  until false;
+    buf[n] := 0; // padding with 0
+    dec(n);
+  until n = 0;
 end;
 
 function d2a_gen_digits_64(buf: PAsciiDigits; const x: qword;

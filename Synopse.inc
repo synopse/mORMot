@@ -176,6 +176,7 @@
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSHORT_USESTR} // FloatToText uses str() in FPC
+  {$define DOUBLETOSHORT_USEGRISU} // fast double to text
   {$define DELPHI5ORFPC}
   {$define FPC_OR_PUREPASCAL}
   {$define FPC_OR_KYLIX}
@@ -426,6 +427,7 @@
     {$undef CPU32}
     {$define PUREPASCAL}   // no x86 32 bit asm to be used
     {$define EXTENDEDTOSHORT_USESTR} // FloatToText() much slower in x64 mode
+    {$define DOUBLETOSHORT_USEGRISU} // fast double to text
   {$else CPUX64}
     {$define CPU32} // Delphi compiler for 32 bit CPU
     {$define CPU32DELPHI}
@@ -629,9 +631,6 @@
       {$endif}
     {$endif}
   {$endif}
-  {$ifdef CPUX64}
-    {$define DOUBLETOSHORT_USEGRISU} // fast double to text on x86_64 only
-  {$endif}
   {$ifdef DISABLE_SSE42}
     {$undef FORCE_STRSSE42}
   {$endif DISABLE_SSE42}
@@ -691,5 +690,4 @@
   {.$define LIBCURLMULTI}
   // enable https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
 {$endif USELIBCURL}
-
 

@@ -2640,6 +2640,8 @@ begin
   end;
   W.CancelAll;
   W.AddDynArrayJSON(AFP);
+  // note: error? ensure TTestLowLevelCommon run after TTestLowLevelTypes
+  // -> otherwise custom serialization is still active with no Build* fields
   U := W.Text;
   {$ifdef ISDELPHI2010} // thanks to enhanced RTTI
   Check(IdemPChar(pointer(U),'[{"MAJOR":0,"MINOR":1,"RELEASE":2,"BUILD":3,'+
@@ -10230,24 +10232,24 @@ begin
   {$endif}
   Check((j<>'')and(j[1]=#$E2)and(j[2]=#$80)and(j[3]=#$9D));
   v1 := _Arr([]);
-  vs := 1.23456;
+  vs := 1.5;
   v1.Add(vs);
-  Check(VariantSaveJSON(v1)='[1.23456]');
-  vd := 1.234567;
+  CheckEqual(VariantSaveJSON(v1),'[1.5]','VariantSaveJSON');
+  vd := 1.7;
   v1.Add(vd);
-  Check(VariantSaveJSON(v1)='[1.23456,1.234567]');
+  CheckEqual(VariantSaveJSON(v1),'[1.5,1.7]');
   v2 := _obj(['id',1]);
   Check(VariantSaveJSON(v2)='{"id":1}');
   {$ifdef FPC}_Safe(v1)^.AddItem(v2); // FPC does not accept v1.Add(v2)
   {$else}v1.Add(v2);{$endif}
-  Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1}]');
+  Check(VariantSaveJSON(v1)='[1.5,1.7,{"id":1}]');
   s := 'abc';
   {$ifdef FPC}_Safe(v1)^.AddItem(s); // FPC does not accept v1.Add(s)
   {$else}v1.Add(s);{$endif}
-  Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1},"abc"]');
+  Check(VariantSaveJSON(v1)='[1.5,1.7,{"id":1},"abc"]');
   RawUTF8ToVariant('def',v2);
   {$ifdef FPC}_Safe(v1)^.AddItem{$else}v1.Add{$endif}(v2);
-  Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1},"abc","def"]');
+  Check(VariantSaveJSON(v1)='[1.5,1.7,{"id":1},"abc","def"]');
   Doc.Clear;
   Doc.InitObjectFromPath('name','toto');
   check(Doc.ToJSON='{"name":"toto"}');
@@ -20408,6 +20410,7 @@ begin
     proxy.Free;
   end;
 end;
+
 
 initialization
   _uE0 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[0],1);

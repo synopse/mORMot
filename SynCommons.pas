@@ -13046,8 +13046,11 @@ const
 
 var
   /// fast lookup table for converting any decimal number from
-  // 0 to 99 into their ASCII equivalence
+  // 0 to 99 into their ASCII ('0'..'9') equivalence
   TwoDigitLookupW: packed array[0..99] of word absolute TwoDigitLookup;
+  /// fast lookup table for converting any decimal number from
+  // 0 to 99 into their byte digits (0..9) equivalence
+  TwoDigitByteLookupW: packed array[0..99] of word;
 
 type
   /// char categories for text line/word/identifiers/uri parsing
@@ -23106,7 +23109,7 @@ end;
 {$ifndef EXTENDEDTOSHORT_USESTR}
 var // standard FormatSettings (US)
   SettingsUS: TFormatSettings;
-{$endif}
+{$endif EXTENDEDTOSHORT_USESTR}
 
 function FloatStringNoExp(S: PAnsiChar; Precision: PtrInt): PtrInt;
 var i, prec: PtrInt;
@@ -23197,12 +23200,10 @@ var scientificneeded: boolean;
     valueabs: TSynExtended;
 begin
   {$ifdef DOUBLETOSHORT_USEGRISU}
-  {$ifndef TSYNEXTENDED80}
   if Precision=DOUBLE_PRECISION then begin
     result := DoubleToShort(S,Value);
     exit;
   end;
-  {$endif TSYNEXTENDED80}
   {$endif DOUBLETOSHORT_USEGRISU}
   if Value=0 then begin
     PWord(@s)^ := 1 + ord('0') shl 8;
@@ -23324,6 +23325,48 @@ begin
     result := FloatToJSONNan(tmp);
   end;
 end;
+
+type TDiv100Rec = packed record D, M: cardinal; end;
+
+procedure Div100(Y: cardinal; var res: TDiv100Rec);
+{$ifdef FPC} inline;
+begin
+  res.M := Y;
+  res.D := Y div 100;   // FPC will use fast reciprocal
+  dec(res.M,res.D*100); // avoid div twice
+end;
+{$else}
+{$ifdef CPUX64}
+asm
+        .noframe
+        mov     r8, res
+        mov     ecx, Y
+        mov     edx, ecx
+        mov     eax, 1374389535
+        mul     edx
+        shr     edx, 5
+        mov     dword ptr [r8].TDiv100Rec.D, edx
+        mov     eax, edx
+        imul    edx, eax, 100
+        mov     eax, ecx
+        sub     eax, edx
+        mov     dword ptr [r8].TDiv100Rec.M, eax
+end;
+{$else}
+asm
+      mov     ecx, edx
+      mov     edx, eax
+      mov     dword ptr [ecx].TDiv100Rec.M, edx
+      mov     eax, 1374389535
+      mul     edx
+      shr     edx, 5
+      mov     dword ptr [ecx].TDiv100Rec.D, edx
+      mov     eax, edx
+      imul    eax, eax, 100
+      sub     dword ptr [ecx].TDiv100Rec.M, eax
+end;
+{$endif CPUX64}
+{$endif FPC}
 
 {$ifdef DOUBLETOSHORT_USEGRISU}
 
@@ -28971,32 +29014,6 @@ begin
   Int64ToHexShort(aInt64,temp);
   Ansi7ToString(@temp[1],ord(temp[0]),result);
 end;
-
-type TDiv100Rec = packed record D, M: cardinal; end;
-
-procedure Div100(Y: cardinal; var result: TDiv100Rec);
-{$ifdef HASINLINENOTX86} inline;
-begin
-  result.D := Y div 100; // FPC will use fast reciprocal
-  result.M := Y-(result.D*100); // avoid div twice
-end;
-{$else}
-asm
-      push    ebx
-      mov     ecx, eax // ecx=Y
-      mov     ebx, edx // ebx=result
-      mov     edx, eax
-      mov     eax, 1374389535
-      mul     edx
-      shr     edx, 5   // edx=Y div 100
-      mov     dword ptr [ebx].TDiv100Rec.D, edx
-      mov     eax, 100
-      mul     edx
-      sub     ecx, eax // ecx=Y-(edx*100)
-      mov     dword ptr [ebx].TDiv100Rec.M, ecx
-      pop     ebx
-end;
-{$endif HASINLINENOTX86}
 
 function UInt3DigitsToUTF8(Value: Cardinal): RawUTF8;
 begin
@@ -62365,6 +62382,9 @@ begin
     TwoDigitsHexLower[i][1] := HexCharsLower[i shr 4];
     TwoDigitsHexLower[i][2] := HexCharsLower[i and $f];
   end;
+  MoveFast(TwoDigitLookup[0], TwoDigitByteLookupW[0], SizeOf(TwoDigitLookup));
+  for i := 0 to 199 do
+    dec(PByteArray(@TwoDigitByteLookupW)[i],ord('0')); // '0'..'9' -> 0..9
   FillcharFast(ConvertBase64ToBin,256,255); // invalid value set to -1
   for i := 0 to high(b64enc) do
     ConvertBase64ToBin[b64enc[i]] := i;
