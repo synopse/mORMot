@@ -169,7 +169,7 @@ type
     /// fills with a native floating-point value
     // - note that it doesn't make much sense to use this method: you should
     // rather use the native betFloat BSON format, with native double precision
-    // - this method is just a wrapper around ExtendedToString and ToText,
+    // - this method is just a wrapper around ExtendedToShort and ToText,
     // so you should provide the expected precision, from the actual storage
     // variable (you may specify e.g. SINGLE_PRECISION or EXTENDED_PRECISION if
     // you don't use a double kind of value)
@@ -2769,7 +2769,7 @@ end;
 begin
   case Kind of
   betFloat:
-    ExtendedToStr(unaligned(PDouble(Element)^),DOUBLE_PRECISION,result);
+    DoubleToStr(unaligned(PDouble(Element)^),result);
   betString:
     FastSetString(result,Data.Text,Data.TextLen);
   betInt32:
@@ -6555,14 +6555,14 @@ end;
 function TDecimal128.FromFloat(const value: TSynExtended; precision: integer): boolean;
 var tmp: shortstring;
 begin
-  if precision<=0 then
-    precision := DOUBLE_PRECISION;
-  tmp[0] := AnsiChar(ExtendedToString(tmp,value,precision));
+  if (precision<=0) or (precision=DOUBLE_PRECISION) then
+    tmp[0] := AnsiChar(DoubleToShort(tmp,value)) else
+    tmp[0] := AnsiChar(ExtendedToShort(tmp,value,precision));
   result := true;
-  case ExtendedToStringNan(tmp) of
-  seNan:    SetSpecial(dsvNan);
-  seInf:    SetSpecial(dsvPosInf);
-  seNegInf: SetSpecial(dsvNegInf);
+  case FloatToShortNan(tmp) of
+  fnNan:    SetSpecial(dsvNan);
+  fnInf:    SetSpecial(dsvPosInf);
+  fnNegInf: SetSpecial(dsvNegInf);
   else result := FromText(@tmp[1],ord(tmp[0]))<>dsvError;
   end;
 end;

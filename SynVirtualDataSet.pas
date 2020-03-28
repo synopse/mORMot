@@ -814,7 +814,7 @@ begin
         ftLongWord:
           W.AddU(TLongWordField(Data.Fields[f]).Value);
         ftExtended:
-          W.Add(AsFloat,DOUBLE_PRECISION);
+          W.AddDouble(AsFloat);
         ftSingle:
           W.Add(AsFloat,SINGLE_PRECISION);
         {$endif}

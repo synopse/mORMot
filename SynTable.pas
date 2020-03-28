@@ -6294,7 +6294,7 @@ begin
   tftCurrency:
     Curr64ToStr(PInt64(FieldBuffer)^,result);
   tftDouble:
-    ExtendedToStr(unaligned(PDouble(FieldBuffer)^),DOUBLE_PRECISION,result);
+    DoubleToStr(unaligned(PDouble(FieldBuffer)^),result);
   // some variable-size field value
   tftVarUInt32:
     UInt32ToUtf8(FromVarUInt32(PB),result);

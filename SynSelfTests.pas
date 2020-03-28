@@ -4270,7 +4270,7 @@ var i, j, b, err: integer;
     c: currency;
     ident: TRawUTF8DynArray;
     {$endif}
-    a: shortstring;
+    a,a2: shortstring;
     u: string;
     varint: array[0..255] of byte;
     st: TFastReader;
@@ -4410,27 +4410,51 @@ begin
   e := 40640.5028819444;
   CheckSame(d,e,1e-11);
   d := 22.99999999999997;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
+  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
   Check(a='23');
   d := 0.9999999999999997;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
+  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
   Check(a='1');
   d := -0.9999999999999997;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
+  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
   Check(a='-1');
   d := 9.999999999999997;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
+  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
   Check(a='10');
   d := -9.999999999999997;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
+  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
   Check(a='-10');
   d := 999.9999999999997;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
+  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
   Check(a='1000');
   d := 999.9999999999933;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
+  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
   Check(a='999.999999999993');
-  {$ifdef EXTENDEDTOSTRING_USESTR}
+  d := 22.99999999999997;
+  a[0] := AnsiChar(DoubleToShort(a,d));
+  Check(a='23');
+  d := 3.14159;
+  a[0] := AnsiChar(DoubleToShort(a,d));
+  Check(a='3.14159');
+  d := 0.9999999999999997;
+  a[0] := AnsiChar(DoubleToShort(a,d));
+  Check(a='1');
+  d := -0.9999999999999997;
+  a[0] := AnsiChar(DoubleToShort(a,d));
+  Check(a='-1');
+  d := 9.999999999999997;
+  a[0] := AnsiChar(DoubleToShort(a,d));
+  Check(a='10');
+  d := -9.999999999999997;
+  a[0] := AnsiChar(DoubleToShort(a,d));
+  Check(a='-10');
+  d := 999.9999999999997;
+  a[0] := AnsiChar(DoubleToShort(a,d));
+  Check(a='1000');
+  d := 999.9999999999933;
+  a[0] := AnsiChar(DoubleToShort(a,d));
+  Check(a='999.999999999993');
+  {$ifdef EXTENDEDTOSHORT_USESTR}
   Check(DoubleToString(-3.3495117168e-10)='-0.00000000033495');
   Check(DoubleToString(-3.3495617168e-10)='-0.00000000033496');
   Check(DoubleToString(-3.9999617168e-14)='-0.00000000000004');
@@ -4611,35 +4635,51 @@ begin
     Check(SysUtils.IntToStr(j)=string(a));
     Check(format('%d',[j])=string(a));
     Check(format('%.8x',[j])=IntToHex(j,8));
-    d := Random*1E-17-Random*1E-19;
+    case i of
+      9990: d := 1E110;
+      9991: d := 1E-110;
+      9992: d := 1E210;
+      9993: d := 1E-210;
+      else d := Random*1E-17-Random*1E-19;
+    end;
     str(d,a);
     s := RawUTF8(a);
     e := GetExtended(Pointer(s),err);
-    Check(SameValue(e,d)); // test str()
+    Check(SameValue(e,d,0)); // validate str()
+    a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
+    a2[0] := AnsiChar(DoubleToShort(a2,d));
+    Check(a=a2);
+    a[0] := AnsiChar(ExtendedToShortNoExp(a,d,DOUBLE_PRECISION));
+    a2[0] := AnsiChar(DoubleToShortNoExp(a2,d));
+    Check(a=a2);
     s := ExtendedToStr(d,DOUBLE_PRECISION);
-    CheckEqual(TestAddFloatStr(s),s);
     e := GetExtended(Pointer(s),err);
-    Check(SameValue(e,d));
-    Check(not SameValue(e+1,d));
+    Check(SameValue(e,d,0));
     u := DoubleToString(d);
     Check(Ansi7ToString(s)=u,u);
-    sd := d;
     e := d;
-    Check(d=e);
-    Check(SortDynArrayDouble(d,d)=0);
-    Check(SortDynArrayDouble(d,e)=0);
-    se := sd;
-    Check(SortDynArraySingle(sd,sd)=0);
-    Check(SortDynArraySingle(sd,se)=0);
+    if (i < 9000) or (i > 9999) then begin
+      CheckEqual(TestAddFloatStr(s),s);
+      Check(not SameValue(e+1,d));
+      sd := d;
+      Check(d=e);
+      Check(SortDynArrayDouble(d,d)=0);
+      Check(SortDynArrayDouble(d,e)=0);
+      se := sd;
+      Check(SortDynArraySingle(sd,sd)=0);
+      Check(SortDynArraySingle(sd,se)=0);
+    end;
     if d<0 then
       e := e*0.9 else
       e := e*1.1;
     check(d<e);
     Check(SortDynArrayDouble(d,e)=-1);
     Check(SortDynArrayDouble(e,d)=1);
-    se := e;
-    Check(SortDynArraySingle(sd,se)=-1);
-    Check(SortDynArraySingle(se,sd)=1);
+    if (i < 9000) or (i > 9999) then begin
+      se := e;
+      Check(SortDynArraySingle(sd,se)=-1);
+      Check(SortDynArraySingle(se,sd)=1);
+    end;
     PC := ToVarUInt32(juint,@varint);
     Check(PC<>nil);
     Check(PtrInt(PC)-PtrInt(@varint)=integer(ToVarUInt32Length(juint)));
@@ -9524,7 +9564,7 @@ begin
   o := _JSON('{"double_params":[-12.12345678,-9.9E-15,-9.88E-15,-9E-15]}',
      [dvoReturnNullForUnknownProperty, dvoAllowDoubleValue]);
   json := TDocVariantData(o).ToJSON;
-  {$ifndef EXTENDEDTOSTRING_USESTR}
+  {$ifndef EXTENDEDTOSHORT_USESTR}
   check(json='{"double_params":[-12.12345678,-9.9E-15,-9.88E-15,-9E-15]}');
   {$endif}
   CheckSame(double(TDocVariantData(o).A['double_params'].Value[1]),-9.9E-15);
@@ -20323,7 +20363,6 @@ begin
     proxy.Free;
   end;
 end;
-
 
 initialization
   _uE0 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[0],1);
