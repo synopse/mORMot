@@ -23219,7 +23219,7 @@ var i: PtrInt;
 {$endif}
 begin
   // use ffGeneral: see https://synopse.info/forum/viewtopic.php?pid=442#p442
-  result := FloatToText(PChar(@S[1]), Value, fvExtended, ffGeneral,
+  result := FloatToText(PChar(@S[1]), Value, {$ifndef FPC}fvExtended,{$endif FPC} ffGeneral,
     Precision, 0, SettingsUS);
   {$ifdef UNICODE} // FloatToText(PWideChar) is faster than FloatToText(PAnsiChar)
   for i := 1 to result do
@@ -62304,7 +62304,13 @@ begin
   {$ifdef ISDELPHIXE}
   SettingsUS := TFormatSettings.Create($0409);
   {$else}
+  {$ifdef MSWINDOWS}
   GetLocaleFormatSettings($0409,SettingsUS);
+  {$else}
+  {$ifdef FPC}
+  SettingsUS:=DefaultFormatSettings;
+  {$endif FPC}
+  {$endif MSWINDOWS}
   {$endif}
   SettingsUS.DecimalSeparator := '.'; // value may have been overriden :(
 {$endif}
