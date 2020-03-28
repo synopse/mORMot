@@ -54493,8 +54493,8 @@ var // warning: exact local variables order should match TFakeCallStack
   sd0, sd1, sd2, sd3, sd4, sd5, sd6, sd7: double;
   smetndx:pointer;
 asm
-  // get method index from IP0 [r16]
-  str  r16,smetndx
+  // get method index from IP0 [x16/r16]
+  str x16,smetndx
   // store registers
   str d0,sd0
   str d1,sd1
