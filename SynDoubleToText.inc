@@ -246,7 +246,6 @@ procedure d2a(min_width, frac_digits: integer; const v: double; str: PAnsiChar);
     // generate result
     A := @ref.base[i mod length(ref.base)];
     xmul := (i div length(ref.base)) - length(ref.factor_minus);
-    writeln('xmul=',xmul);
     if xmul = 0 then
     begin
       // base
