@@ -232,7 +232,7 @@ begin
     if (argc < 1) or not in_argv[0].isString then
       raise ESMException.Create(USAGE);
     filePath := in_argv[0].asJSString.ToString(cx);
-    val.asBoolean := DirectoryExists(filePath);
+    val.asBoolean := DirectoryExists(filePath{$ifdef MSWINDOWS},false{$endif}); // FPC3_2 won't recognize junctions w/o false
     vp.rval := val;
     Result := True;
   except
@@ -441,8 +441,8 @@ begin
     else
       includeFolders := false;
 
-    dir := in_argv[0].asJSString.ToString(cx);
-    if not DirectoryExists(Dir) then
+    dir := in_argv^[0].asJSString.ToString(cx);
+    if not DirectoryExists(Dir{$ifdef MSWINDOWS},false{$endif}) then // FPC3_2 won't recognize junctions w/o false
     begin
       vp.rval := JSVAL_NULL;
       Result := true;
