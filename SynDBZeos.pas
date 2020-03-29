@@ -1267,9 +1267,11 @@ var col: integer;
     Len: NativeUInt; // required by Zeos for GetPAnsiChar out param (not PtrUInt)
 procedure WriteIZBlob;
 var blob: IZBlob;
+    raw: RawByteString;
 begin
   blob := fResultSet.GetBlob(col+FirstDbcIndex);
-  WR.WrBase64(blob.GetBuffer,blob.Length,true); // withMagic=true
+  raw := blob.GetString;
+  WR.WrBase64(pointer(raw),length(raw),{withmagic=}true); // withMagic=true
 end;
 {$ifend}
 begin // take care of the layout of internal ZDBC buffers for each provider
