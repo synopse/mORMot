@@ -327,7 +327,7 @@
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
       {$define FPC_X86}
-      {$define TSYNEXTENDED80}
+      {$define TSYNEXTENDED80} // only 32-bit has a true x87 extended type
       {$ASMMODE INTEL}   // as Delphi expects
       {$define HASAESNI} // should be commented to test project with valgrind
       {$ifndef FPC_PIC}
@@ -434,7 +434,7 @@
     {$undef CPU64}
     {$define CPUX86} // for compatibility with older versions of Delphi
     {$define CPUX86NOTPIC} // use "absolute" instead of local register
-    {$define TSYNEXTENDED80}
+    {$define TSYNEXTENDED80} // only 32-bit has a true x87 extended type
   {$endif CPUX64}
 
   {$IFDEF CONDITIONALEXPRESSIONS}  // Delphi 6 or newer

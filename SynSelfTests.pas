@@ -4327,6 +4327,11 @@ begin
   end;
   NotifyTestSpeed('DoubleToAscii ', [a], n, crc, @timer);
   //  a[ord(a[0])+1] := #0; Check(SameValue(GetExtended(pointer(@a[1])),d,0));
+  d := 0;
+  DoubleToAscii(C_NO_MIN_WIDTH,-1,d,@a);
+  Check(a='0');
+  DoubleToAscii(0,DOUBLE_PRECISION,d,@a);
+  Check(a='0');
   {$endif DOUBLETOSHORT_USEGRISU}
   CheckEqual(TestAddFloatStr(''),'0');
   CheckEqual(TestAddFloatStr(' 123'),'123');
@@ -4479,6 +4484,9 @@ begin
   d := 999.9999999999933;
   a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
   Check(a='999.999999999993');
+  d := 0;
+  a[0] := AnsiChar(DoubleToShort(a,d));
+  Check(a='0');
   d := 22.99999999999997;
   a[0] := AnsiChar(DoubleToShort(a,d));
   Check(a='23');

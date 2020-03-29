@@ -2043,27 +2043,29 @@ procedure KahanSum(const Data: double; var Sum, Carry: double);
 
 /// convert a floating-point value to its numerical text equivalency
 // - on Delphi Win32, calls FloatToText() in ffGeneral mode; on FPC uses str()
-// - on x86_64, DOUBLE_PRECISION uses faster Fabian Loitsch's Grisu algorithm
+// - DOUBLE_PRECISION will redirect to DoubleToShort() and its faster Fabian
+// Loitsch's Grisu algorithm if available
 // - returns the count of chars stored into S, i.e. length(S)
 function ExtendedToShort(var S: ShortString; Value: TSynExtended; Precision: integer): integer;
 
 /// convert a floating-point value to its numerical text equivalency without
 // scientification notation
+// - DOUBLE_PRECISION will redirect to DoubleToShortNoExp() and its faster Fabian
+// Loitsch's Grisu algorithm if available - or calls str(Value:0:precision,S)
 // - returns the count of chars stored into S, i.e. length(S)
-// - call str(Value:0:Precision,S) to avoid any Exponent notation
 function ExtendedToShortNoExp(var S: ShortString; Value: TSynExtended;
   Precision: integer): integer;
 
 /// check if the supplied text is NAN/INF/+INF/-INF, i.e. not a number
-// - as returned by ExtendedToShort() textual conversion
+// - as returned by ExtendedToShort/DoubleToShort textual conversion
 // - such values do appear as IEEE floating points, but are not defined in JSON
 function FloatToShortNan(const s: shortstring): TFloatNan;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// check if the supplied text is NAN/INF/+INF/-INF, i.e. not a number
-// - as returned by ExtendedToShort() textual conversion
+// - as returned e.g. by ExtendedToStr/DoubleToStr textual conversion
 // - such values do appear as IEEE floating points, but are not defined in JSON
-function ExtendedToStrNan(const s: RawUTF8): TFloatNan;
+function FloatToStrNan(const s: RawUTF8): TFloatNan;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a floating-point value to its numerical text equivalency
@@ -2073,8 +2075,8 @@ function ExtendedToStr(Value: TSynExtended; Precision: integer): RawUTF8; overlo
 procedure ExtendedToStr(Value: TSynExtended; Precision: integer; var result: RawUTF8); overload;
 
 /// recognize if the supplied text is NAN/INF/+INF/-INF, i.e. not a number
-// - returns the number as text, or "Infinity", "-Infinity", and "NaN" for
-// corresponding IEEE values, for direct export to JSON
+// - returns the number as text (stored into tmp variable), or "Infinity",
+// "-Infinity", and "NaN" for corresponding IEEE special values
 // - result is a PShortString either over tmp, or JSON_NAN[]
 function FloatToJSONNan(const s: ShortString): PShortString;
   {$ifdef HASINLINE}inline;{$endif}
@@ -2083,26 +2085,26 @@ function FloatToJSONNan(const s: ShortString): PShortString;
 // - depending on the platform, it may either call str() or FloatToText()
 // in ffGeneral mode (the shortest possible decimal string using fixed or
 // scientific format)
-// - returns the number as text, or "Infinity", "-Infinity", and "NaN" for
-// corresponding IEEE values
+// - returns the number as text (stored into tmp variable), or "Infinity",
+// "-Infinity", and "NaN" for corresponding IEEE special values
 // - result is a PShortString either over tmp, or JSON_NAN[]
 function ExtendedToJSON(var tmp: ShortString; Value: TSynExtended;
   Precision: integer; NoExp: boolean): PShortString;
 
 /// convert a 64-bit floating-point value to its numerical text equivalency
-// - on Delphi Win32, calls FloatToText() in ffGeneral mode; on FPC uses str()
-// - on x86_64, will use our own faster Fabian Loitsch's Grisu algorithm;
-// it is 6 times faster than FloatToText() on FPC Linux x86_64
+// - on Delphi Win32, calls FloatToText() in ffGeneral mode
+// - on other platforms, i.e. Delphi Win64 and all FPC targets, will use our own
+// faster Fabian Loitsch's Grisu algorithm implementation
 // - returns the count of chars stored into S, i.e. length(S)
 function DoubleToShort(var S: ShortString; const Value: double): integer;
   {$ifdef FPC}inline;{$endif}
 
-/// convert a 64-bit floating-point value to its numerical text equivalency without
-// scientification notation
+/// convert a 64-bit floating-point value to its numerical text equivalency
+// without scientific notation
+// - on Delphi Win32, calls FloatToText() in ffGeneral mode
+// - on other platforms, i.e. Delphi Win64 and all FPC targets, will use our own
+// faster Fabian Loitsch's Grisu algorithm implementation
 // - returns the count of chars stored into S, i.e. length(S)
-// - on Delphi Win32, calls FloatToText() in ffGeneral mode; on FPC uses str()
-// - on x86_64, will use our own faster Fabian Loitsch's Grisu algorithm
-// - call str(Value:0:Precision,S) to avoid any Exponent notation
 function DoubleToShortNoExp(var S: ShortString; const Value: double): integer;
   {$ifdef FPC}inline;{$endif}
 
@@ -2127,10 +2129,11 @@ procedure DoubleToAscii(min_width, frac_digits: integer; const v: double; str: P
 {$endif DOUBLETOSHORT_USEGRISU}
 
 /// convert a 64-bit floating-point value to its JSON text equivalency
-// - on Delphi, calls FloatToText() in ffGeneral mode
-// - on FPC x86_64, will use double-focused Fabian Loitsch's Grisu algorithm
-// - returns the number as text, or "Infinity", "-Infinity", and "NaN" for
-// corresponding IEEE values
+// - on Delphi Win32, calls FloatToText() in ffGeneral mode
+// - on other platforms, i.e. Delphi Win64 and all FPC targets, will use our own
+// faster Fabian Loitsch's Grisu algorithm
+// - returns the number as text (stored into tmp variable), or "Infinity",
+// "-Infinity", and "NaN" for corresponding IEEE special values
 // - result is a PShortString either over tmp, or JSON_NAN[]
 function DoubleToJSON(var tmp: ShortString; Value: double; NoExp: boolean): PShortString;
 
@@ -13050,6 +13053,7 @@ var
   TwoDigitLookupW: packed array[0..99] of word absolute TwoDigitLookup;
   /// fast lookup table for converting any decimal number from
   // 0 to 99 into their byte digits (0..9) equivalence
+  // - used e.g. by DoubleToAscii() implementing Grisu algorithm
   TwoDigitByteLookupW: packed array[0..99] of word;
 
 type
@@ -23181,7 +23185,11 @@ end;
 function ExtendedToShortNoExp(var S: ShortString; Value: TSynExtended;
   Precision: integer): integer;
 begin
-  str(Value:0:Precision,S); // not str(Value:0,S) -> '  0.0E+0000'
+  {$ifdef DOUBLETOSHORT_USEGRISU}
+  if Precision=DOUBLE_PRECISION then
+    DoubleToAscii(0,Precision,Value,@S) else
+  {$endif DOUBLETOSHORT_USEGRISU}
+    str(Value:0:Precision,S); // not str(Value:0,S) -> '  0.0E+0000'
   result := FloatStringNoExp(@S,Precision);
   S[0] := AnsiChar(result);
 end;
@@ -23268,7 +23276,7 @@ begin
   end;
 end;
 
-function ExtendedToStrNan(const s: RawUTF8): TFloatNan;
+function FloatToStrNan(const s: RawUTF8): TFloatNan;
 begin
   case length(s) of
   3: case PInteger(s)^ and $dfdfdf of
@@ -23340,29 +23348,25 @@ end;
 asm
         .noframe
         mov     r8, res
-        mov     ecx, Y
-        mov     edx, ecx
+        mov     edx, Y
+        mov     dword ptr [r8].TDiv100Rec.M,edx
         mov     eax, 1374389535
         mul     edx
         shr     edx, 5
         mov     dword ptr [r8].TDiv100Rec.D, edx
-        mov     eax, edx
-        imul    edx, eax, 100
-        mov     eax, ecx
-        sub     eax, edx
-        mov     dword ptr [r8].TDiv100Rec.M, eax
+        imul    eax, edx, 100
+        sub     dword ptr [r8].TDiv100Rec.M, eax
 end;
 {$else}
 asm
+      mov     dword ptr [edx].TDiv100Rec.M, eax
       mov     ecx, edx
       mov     edx, eax
-      mov     dword ptr [ecx].TDiv100Rec.M, edx
       mov     eax, 1374389535
       mul     edx
       shr     edx, 5
       mov     dword ptr [ecx].TDiv100Rec.D, edx
-      mov     eax, edx
-      imul    eax, eax, 100
+      imul    eax, edx, 100
       sub     dword ptr [ecx].TDiv100Rec.M, eax
 end;
 {$endif CPUX64}

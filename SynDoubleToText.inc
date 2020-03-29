@@ -87,6 +87,10 @@
 // but the FPC RTL is not ready for this right now..
 {$define GRISU1_F2A_NO_SNAN}
 
+/// If Value=0 would just store '0', whatever frac_digits is supplied.
+{$define GRISU1_F2A_ZERONOFRACT}
+
+
 {$ifndef FPC}
 
 // those functions are intrinsics with FPC :)
@@ -98,7 +102,7 @@ asm
     mov eax, c
     {$endif}
     bsr eax, eax
-end;
+end; // in our code below, we are sure that c<>0
 
 function BSRqword(const q: qword): cardinal;
 asm
@@ -108,14 +112,12 @@ asm
     add eax, 32
     ret
 @1: bsr eax, [esp + 4]
-    jnz @2
-    mov eax, 255
 @2: {$else}
     .noframe
     mov rax, q
     bsr rax, rax
     {$endif}
-end;
+end; // in our code below, we are sure that q<>0
 
 
 {$endif FPC}
@@ -152,7 +154,7 @@ begin
   if (p.c1 and ROUNDER) <>  0 then
     inc(p.h);
   result.f := p.h;
-  result.e := x.e + y.e + 64;
+  result.e := PtrInt(x.e) + PtrInt(y.e) + 64;
   if normalize then
     if (PQWordRec(@result.f)^.h and ROUNDER) = 0 then
     begin
@@ -759,10 +761,14 @@ begin
   // Handle Zero
   if (w.e = 0) and (w.f = 0) then
   begin
+    {$ifdef GRISU1_F2A_ZERONOFRACT}
+    PWord(str)^ := 1 + ord('0') shl 8; // just return '0'
+    {$else}
     if frac_digits >= 0 then
       d2a_return_fixed(str, minus, buf, 0, 1, frac_digits)
     else
       d2a_return_exponential(str, minus, @buf, 0, n_digits_sci, 0);
+    {$endif GRISU1_F2A_ZERONOFRACT}
     exit;
   end;
   // Handle specials
@@ -795,8 +801,8 @@ begin
   end
   else
   begin
-    // denormal
-    n := 63 - BSRqword(w.f);
+    // denormal (w.e=0)
+    n := 63 - BSRqword(w.f); // we are sure that w.f<>0 - see Handle Zero above
     inc(w.e);
   end;
   // Final normalization
