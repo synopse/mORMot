@@ -23111,7 +23111,7 @@ begin
 end;
 
 {$ifndef EXTENDEDTOSHORT_USESTR}
-var // standard FormatSettings (US)
+var // standard FormatSettings: force US decimal display (with '.' for floats)
   SettingsUS: TFormatSettings;
 {$endif EXTENDEDTOSHORT_USESTR}
 
@@ -55050,7 +55050,8 @@ begin
         break;
       inc(i);
     until i>=Len;
-    AddNoJSONEscapeW(@PWordArray(P)[s],i-s);
+    if i<>s then
+      AddNoJSONEscapeW(@PWordArray(P)[s],i-s);
     if i>=Len then
       exit;
     c := PWordArray(P)[i];
