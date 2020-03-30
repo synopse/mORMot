@@ -23194,12 +23194,13 @@ begin
   S[0] := AnsiChar(result);
 end;
 
-const SINGLE_HI: TSynExtended = 1E9; // for proper Delphi 5 compilation
-      SINGLE_LO: TSynExtended = 1E-9;
-      DOUBLE_HI: TSynExtended = 1E14;
-      DOUBLE_LO: TSynExtended = 1E-14;
-      EXT_HI: TSynExtended = 1E17;
-      EXT_LO: TSynExtended = 1E-17;
+const // range when to switch into scientific notation - minimal 6 digits
+  SINGLE_HI: TSynExtended = 1E3; // for proper Delphi 5 compilation
+  SINGLE_LO: TSynExtended = 1E-3;
+  DOUBLE_HI: TSynExtended = 1E9;
+  DOUBLE_LO: TSynExtended = 1E-9;
+  EXT_HI: TSynExtended = 1E12;
+  EXT_LO: TSynExtended = 1E-12;
 
 function ExtendedToShort(var S: ShortString; Value: TSynExtended;
   Precision: integer): integer;

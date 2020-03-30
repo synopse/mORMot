@@ -4261,6 +4261,27 @@ begin
 end;
 
 procedure TTestLowLevelCommon.NumericalConversions;
+
+  procedure CheckDoubleToShort(v: double; const expected: ShortString);
+  var a: ShortString;
+  begin
+    ExtendedToShort(a,v,DOUBLE_PRECISION);
+    CheckEqual(a,expected,'ExtendedToShort');
+    DoubleToShort(a,v);
+    CheckEqual(a,expected,'DoubleToShort');
+  end;
+
+  procedure CheckDoubleToShortSame(v: double);
+  var s: string;
+      err: integer;
+      d: double;
+  begin
+    s := DoubleToString(v);
+    val(s,d,err);
+    Check(err=0);
+    CheckSame(d,v);
+  end;
+
 var i, j, b, err: integer;
     juint: cardinal absolute j;
     k,l: Int64;
@@ -4272,6 +4293,9 @@ var i, j, b, err: integer;
     {$ifndef DELPHI5OROLDER}
     c: currency;
     ident: TRawUTF8DynArray;
+    {$endif}
+    {$ifndef NOVARIANTS}
+    vj, vs: variant;
     {$endif}
     a,a2: shortstring;
     u: string;
@@ -4463,75 +4487,30 @@ begin
   Check(u='40640.5028819444',u);
   e := 40640.5028819444;
   CheckSame(d,e,1e-11);
-  d := 22.99999999999997;
-  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
-  Check(a='23');
-  d := 0.9999999999999997;
-  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
-  Check(a='1');
-  d := -0.9999999999999997;
-  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
-  Check(a='-1');
-  d := 9.999999999999997;
-  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
-  Check(a='10');
-  d := -9.999999999999997;
-  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
-  Check(a='-10');
-  d := 999.9999999999997;
-  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
-  Check(a='1000');
-  d := 999.9999999999933;
-  a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
-  Check(a='999.999999999993');
-  d := 0;
-  a[0] := AnsiChar(DoubleToShort(a,d));
-  Check(a='0');
-  d := 22.99999999999997;
-  a[0] := AnsiChar(DoubleToShort(a,d));
-  Check(a='23');
-  d := 3.14159;
-  a[0] := AnsiChar(DoubleToShort(a,d));
-  Check(a='3.14159');
-  d := 0.9999999999999997;
-  a[0] := AnsiChar(DoubleToShort(a,d));
-  Check(a='1');
-  d := -0.9999999999999997;
-  a[0] := AnsiChar(DoubleToShort(a,d));
-  Check(a='-1');
-  d := 9.999999999999997;
-  a[0] := AnsiChar(DoubleToShort(a,d));
-  Check(a='10');
-  d := -9.999999999999997;
-  a[0] := AnsiChar(DoubleToShort(a,d));
-  Check(a='-10');
-  d := 999.9999999999997;
-  a[0] := AnsiChar(DoubleToShort(a,d));
-  Check(a='1000');
-  d := 999.9999999999933;
-  a[0] := AnsiChar(DoubleToShort(a,d));
-  Check(a='999.999999999993');
-  {$ifdef EXTENDEDTOSHORT_USESTR}
-  Check(DoubleToString(-3.3495117168e-10)='-0.00000000033495');
-  Check(DoubleToString(-3.3495617168e-10)='-0.00000000033496');
-  Check(DoubleToString(-3.9999617168e-14)='-0.00000000000004');
-  Check(DoubleToString(3.9999617168e-14)='0.00000000000004');
-  u := DoubleToString(-3.9999617168e-15);
-  val(u,d,err);
-  Check(err=0);
-  CheckSame(d,-3.9999617168e-15);
-  u := DoubleToString(3.9999617168e-15);
-  val(u,d,err);
-  Check(err=0);
-  CheckSame(d,3.9999617168e-15);
-  {$else}
-  Check(DoubleToString(-3.3495117168e-10)='-3.3495117168E-10');
-  Check(DoubleToString(-3.3495617168e-10)='-3.3495617168E-10');
-  Check(DoubleToString(-3.9999617168e-14)='-3.9999617168E-14');
-  Check(DoubleToString(3.9999617168e-14)='3.9999617168E-14');
-  Check(DoubleToString(-3.9999617168e-15)='-3.9999617168E-15');
-  Check(DoubleToString(3.9999617168e-15)='3.9999617168E-15');
-  {$endif}
+  CheckDoubleToShort(0,'0');
+  CheckDoubleToShort(1,'1');
+  CheckDoubleToShort(0.9999999999999997,'1');
+  CheckDoubleToShort(-0.9999999999999997,'-1');
+  CheckDoubleToShort(9.999999999999997,'10');
+  CheckDoubleToShort(-9.999999999999997,'-10');
+  CheckDoubleToShort(999.9999999999997,'1000');
+  CheckDoubleToShort(-999.9999999999997,'-1000');
+  CheckDoubleToShort(22.99999999999997,'23');
+  CheckDoubleToShort(-22.99999999999997,'-23');
+  CheckDoubleToShort(999.9999999999933,'999.999999999993');
+  CheckDoubleToShort(-999.9999999999933,'-999.999999999993');
+  CheckDoubleToShortSame(3.3495117168);
+  CheckDoubleToShortSame(-3.3495117168);
+  CheckDoubleToShortSame(-3.3495117168e-1);
+  CheckDoubleToShortSame(3.3495117168e-1);
+  CheckDoubleToShortSame(-3.3495117168e-5);
+  CheckDoubleToShortSame(3.3495117168e-5);
+  CheckDoubleToShortSame(-3.3495117168e-10);
+  CheckDoubleToShortSame(3.3495117168e-10);
+  CheckDoubleToShortSame(-3.9999617168e-14);
+  CheckDoubleToShortSame(3.9999617168e-14);
+  CheckDoubleToShortSame(-3.9999617168e-15);
+  CheckDoubleToShortSame(3.9999617168e-15);
   Check(Int32ToUtf8(1599638299)='1599638299');
   Check(UInt32ToUtf8(1599638299)='1599638299');
   Check(Int32ToUtf8(-1599638299)='-1599638299');
@@ -4637,16 +4616,18 @@ begin
     CheckEqual(FormatUTF8(' ?? ',[],[s],true),' "'+s+'" ');
     CheckEqual(FormatUTF8('? %',[s],[s],true),'"'+s+'" '+s);
 {$ifndef NOVARIANTS}
-    CheckEqual(FormatUTF8(' ?? ',[],[variant(j)],true),' '+s+' ');
-    CheckEqual(FormatUTF8(' ?? ',[],[variant(j)]),' :('''+s+'''): ');
-    CheckEqual(FormatUTF8('% ?',[variant(j)],[variant(j)]),s+' :('''+s+'''):');
-    CheckEqual(FormatUTF8(' ?? ',[],[variant(s)]),' :('''+s+'''): ');
-    CheckEqual(FormatUTF8('% ?',[variant(j)],[variant(j)]),s+' :('''+s+'''):');
-    CheckEqual(FormatUTF8('? %',[variant(j)],[variant(j)],true),s+' '+s);
-    CheckEqual(FormatUTF8(' ?? ',[],[variant(s)],true),' "'+s+'" ');
-    CheckEqual(FormatUTF8('? %',[variant(s)],[variant(j)],true),s+' '+s);
+    vj := variant(j);
+    RawUTF8ToVariant(s,vs);
+    CheckEqual(FormatUTF8(' ?? ',[],[vj],true),' '+s+' ');
+    CheckEqual(FormatUTF8(' ?? ',[],[vj]),' :('''+s+'''): ');
+    CheckEqual(FormatUTF8('% ?',[vj],[vj]),s+' :('''+s+'''):');
+    CheckEqual(FormatUTF8(' ?? ',[],[vs]),' :('''+s+'''): ');
+    CheckEqual(FormatUTF8('% ?',[vj],[vj]),s+' :('''+s+'''):');
+    CheckEqual(FormatUTF8('? %',[vj],[vj],true),s+' '+s);
+    CheckEqual(FormatUTF8(' ?? ',[],[vs],true),' "'+s+'" ');
+    CheckEqual(FormatUTF8('? %',[vs],[vj],true),s+' '+s);
 {$endif}
-{$endif}
+{$endif DELPHI5OROLDER}
     k := Int64(j)*Random(MaxInt);
     b := Random(64);
     s := GetBitCSV(k,b);

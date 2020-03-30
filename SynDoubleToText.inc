@@ -44,10 +44,10 @@
    100000 DoubleToAscii  in 13.78ms i.e. 7,253,735/s, aver. 0us, 147.2 MB/s
 
   With FPC on Linux x86_64:
-   100000 FloatToText    in 98.47ms i.e. 1,015,465/s, aver. 0us, 18.4 MB/s
-   100000 str            in 38.14ms i.e. 2,621,369/s, aver. 0us, 60 MB/s
-   100000 DoubleToShort  in 14.77ms i.e. 6,766,357/s, aver. 0us, 134.9 MB/s
-   100000 DoubleToAscii  in 13.79ms i.e. 7,248,477/s, aver. 0us, 147.1 MB/s
+   100000 FloatToText    in 81.48ms i.e. 1,227,249/s, aver. 0us, 22.2 MB/s
+   100000 str            in 36.98ms i.e. 2,703,871/s, aver. 0us, 61.8 MB/s
+   100000 DoubleToShort  in 13.11ms i.e. 7,626,601/s, aver. 0us, 152.1 MB/s
+   100000 DoubleToAscii  in 12.59ms i.e. 7,942,180/s, aver. 0us, 161.2 MB/s
 
   - Our rewrite is twice faster than original flt_conv.inc from FPC RTL (str)
   - Delphi Win32 has trouble making 64-bit computation - no benefit since it
@@ -337,15 +337,52 @@ const
   C_MANT2_INTEGER = qword(1) shl C_FRAC2_BITS;
 
 type
-  TAsciiDigits = array[0..39] of byte;
+  TAsciiDigits = array[0..47] of byte;
   PAsciiDigits = ^TAsciiDigits;
 
 // convert unsigned integers into decimal digits
 
-function d2a_gen_digits_32(buf: PAsciiDigits; x: dword;
-  pad_9zero: boolean = false): PtrInt;
+{$ifdef FPC_64} // leverage efficient FPC 64-bit division as mul reciprocal
+
+function d2a_gen_digits_64(buf: PAsciiDigits; x: qword): PtrInt;
 var
   tab: PWordArray;
+  P: PAnsiChar;
+  c100: qword;
+begin
+  tab := @TwoDigitByteLookupW; // 0..99 value -> two byte digits (0..9)
+  P := PAnsiChar(@buf[24]); // append backwards
+  repeat
+    if x >= 100 then
+    begin
+      dec(P, 2);
+      c100 := x div 100;
+      dec(x, c100 * 100);
+      PWord(P)^ := tab[x];
+      if c100 = 0 then
+        break;
+      x := c100;
+      continue;
+    end;
+    if x < 10 then
+    begin
+      dec(P);
+      P^ := AnsiChar(x);
+      break;
+    end;
+    dec(P, 2);
+    PWord(P)^ := tab[x];
+    break;
+  until false;
+  PQWordArray(buf)[0] := PQWordArray(P)[0]; // faster than MoveSmall(P,buf,result)
+  PQWordArray(buf)[1] := PQWordArray(P)[1];
+  PQWordArray(buf)[2] := PQWordArray(P)[2];
+  result := PAnsiChar(@buf[24]) - P;
+end;
+
+{$else not FPC_64} // use three 32-bit groups of digit
+
+function d2a_gen_digits_32(buf: PAsciiDigits; x: dword; pad_9zero: boolean): PtrInt;
 const
   digits: array[0..9] of cardinal = (
     0, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000);
@@ -357,6 +394,7 @@ var
   {$else}
   d100: TDiv100Rec;
   {$endif FPC}
+  tab: PWordArray;
 begin
   // Calculate amount of digits
   if x = 0 then
@@ -407,16 +445,14 @@ begin
   until n = 0;
 end;
 
-function d2a_gen_digits_64(buf: PAsciiDigits; const x: qword;
-  pad_19zero: boolean = false): PtrInt;
+function d2a_gen_digits_64(buf: PAsciiDigits; const x: qword): PtrInt;
 var
   n_digits: PtrInt;
   temp: qword;
   splitl, splitm, splith: cardinal;
 begin
   // Split X into 3 unsigned 32-bit integers; lower two should be < 10 digits long
-  splith := 0;
-  splitm := 0;
+  n_digits := 0;
   if x < 1000000000 then
     splitl := x
   else
@@ -429,20 +465,16 @@ begin
     begin
       splith := temp div 1000000000;
       splitm := cardinal(temp) - splith * 1000000000;
+      n_digits := d2a_gen_digits_32(buf, splith, false); // Generate hi digits
     end;
+    inc(n_digits, d2a_gen_digits_32(@buf[n_digits], splitm, n_digits <> 0));
   end;
   // Generate digits
-  n_digits := d2a_gen_digits_32(buf, splith, false);
-  if pad_19zero and (n_digits = 0) then
-  begin
-    // at most 18 digits expected from splitm and splitl, so add one more
-    buf[0] := 0;
-    n_digits := 1;
-  end;
-  inc(n_digits, d2a_gen_digits_32(@buf[n_digits], splitm, n_digits <> 0));
   inc(n_digits, d2a_gen_digits_32(@buf[n_digits], splitl, n_digits <> 0));
   result := n_digits;
 end;
+
+{$endif FPC_64}
 
 // Performs digit sequence rounding, returns decimal point correction
 function d2a_round_digits(var buf: TAsciiDigits; var n_current: integer;
@@ -644,12 +676,18 @@ begin
   if n_digits_req < n_digits_have then
     n_digits_have := n_digits_req;
   if n_digits_have > 0 then
+  begin
     repeat
       inc(digits);
       p^ := AnsiChar(digits^ + ord('0'));
       inc(p);
       dec(n_digits_have);
     until n_digits_have = 0;
+    while p[-1] = '0' do
+      dec(p); // trim #.###00000 -> #.###
+    if p[-1] = '.' then
+      dec(p); // #.0 -> #
+  end;
   // Exponent designator
   p^ := 'E';
   inc(p);
@@ -908,6 +946,5 @@ begin
       {$ifdef GRISU1_F2A_HALF_ROUNDUP}, false {$endif} ));
   d2a_return_exponential(str, minus, @buf, n_digits_have, n_digits_sci,
     dot_pos - c_mk.e10 - 1);
-
 end;
 
