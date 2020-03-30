@@ -4264,20 +4264,31 @@ procedure TTestLowLevelCommon.NumericalConversions;
 
   procedure CheckDoubleToShort(v: double; const expected: ShortString);
   var a: ShortString;
+      d: double;
+      err: integer;
   begin
     ExtendedToShort(a,v,DOUBLE_PRECISION);
     CheckEqual(a,expected,'ExtendedToShort');
     DoubleToShort(a,v);
     CheckEqual(a,expected,'DoubleToShort');
+    a[ord(a[0])+1] := #0;
+    d := GetExtended(@a[1],err);
+    CheckEqual(err,0);
+    CheckSame(v,d);
   end;
 
   procedure CheckDoubleToShortSame(v: double);
   var s: string;
+      u: RawUTF8;
       err: integer;
       d: double;
   begin
     s := DoubleToString(v);
     val(s,d,err);
+    Check(err=0);
+    CheckSame(d,v);
+    StringToUTF8(s,u);
+    d := GetExtended(pointer(u),err);
     Check(err=0);
     CheckSame(d,v);
   end;
@@ -4472,9 +4483,22 @@ begin
   s := '1234.1';
   d := GetExtended(pointer(s));
   CheckSame(d,1234.1);
+  s := '12345678901234567890';
+  d := GetExtended(pointer(s));
+  CheckSame(d,12345678901234567890.0,0);
   s := '1234.1234567890123456789';
   d := GetExtended(pointer(s));
   CheckSame(d,1234.1234567890123456789);
+  s := '.1234';
+  d := GetExtended(pointer(s));
+  CheckSame(d,0.1234);
+  s := '.1234e';
+  d := GetExtended(pointer(s),err);
+  Check(err<>0);
+  s := '.1234e4';
+  d := GetExtended(pointer(s),err);
+  Check(err=0);
+  CheckSame(d,1234);
   u := DoubleToString(40640.5028819444);
   Check(u='40640.5028819444',u);
   s := '40640.5028a819444';
@@ -4489,6 +4513,7 @@ begin
   CheckSame(d,e,1e-11);
   CheckDoubleToShort(0,'0');
   CheckDoubleToShort(1,'1');
+  CheckDoubleToShort(-1,'-1');
   CheckDoubleToShort(0.9999999999999997,'1');
   CheckDoubleToShort(-0.9999999999999997,'-1');
   CheckDoubleToShort(9.999999999999997,'10');
@@ -4511,10 +4536,17 @@ begin
   CheckDoubleToShortSame(3.9999617168e-14);
   CheckDoubleToShortSame(-3.9999617168e-15);
   CheckDoubleToShortSame(3.9999617168e-15);
+  CheckDoubleToShortSame(12.345678901234);
+  CheckDoubleToShortSame(123.45678901234);
+  CheckDoubleToShortSame(1234.5678901234);
   Check(Int32ToUtf8(1599638299)='1599638299');
   Check(UInt32ToUtf8(1599638299)='1599638299');
   Check(Int32ToUtf8(-1599638299)='-1599638299');
   Check(Int64ToUTF8(-1271083787498396012)='-1271083787498396012');
+  {$ifdef FPC} // Delphi doesn't handle correctly such huge constants
+  CheckDoubleToShort(1234567890123456789,'1.2345678901234568E28');
+  CheckDoubleToShortSame(1234567890123456789);
+  {$endif}
   s := Int64ToUTF8(242161819595454762);
   Check(s='242161819595454762');
   {$ifndef DELPHI5OROLDER}
@@ -18003,8 +18035,8 @@ begin
     cu := i1*0.01;
     I.ToText(cu,s);
     Check(s=Curr64ToStr(PInt64(@cu)^));
-    r := DoubleToString(n1);
-    Check(I.ToTextFunc(n1)=r);
+    r := I.ToTextFunc(n1);
+    CheckSame(StrToFloat(r),n1);
     o := [tfoIndex,tfoCaseInsensitive];
     i3 := i1;
     c := cardinal(i2);

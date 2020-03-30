@@ -856,6 +856,9 @@ var
   // - this instance is global and instantied during the whole program life time
   UTF8AnsiConvert: TSynAnsiUTF8;
 
+/// check if a codepage should be handled by a TSynAnsiFixedWidth page
+function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 const
   /// HTTP header name for the content type, as defined in the corresponding RFC
@@ -2699,7 +2702,7 @@ type
   /// kind of character used from JSON_CHARS[] for efficient JSON parsing
   TJsonChar = set of (jcJsonIdentifierFirstChar, jcJsonIdentifier,
     jcEndOfJSONField, jcEndOfJSONFieldOr0, jcEndOfJSONValueField,
-    jcDigitChars, jcDigitFirstChars, jcDigitFloatChars);
+    jcDigitChar, jcDigitFirstChar, jcDigitFloatChar);
   /// defines a branch-less table used for JSON parsing
   TJsonCharSet = array[AnsiChar] of TJsonChar;
   PJsonCharSet = ^TJsonCharSet;
@@ -8473,7 +8476,7 @@ type
     procedure SetStream(aStream: TStream);
     procedure SetBuffer(aBuf: pointer; aBufSize: integer);
     procedure InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: Cardinal;
-      const AnsiToWide: TWordDynArray; Escape: TTextWriterKind);
+      AnsiToWide: PWordArray; Escape: TTextWriterKind);
   public
     /// the data will be written to the specified Stream
     // - aStream may be nil: in this case, it MUST be set before using any
@@ -17478,7 +17481,8 @@ end;
 procedure TSynAnsiFixedWidth.InternalAppendUTF8(Source: PAnsiChar; SourceChars: Cardinal;
   DestTextWriter: TObject; Escape: TTextWriterKind);
 begin
-  TTextWriter(DestTextWriter).InternalAddFixedAnsi(Source,SourceChars,fAnsiToWide,Escape);
+  TTextWriter(DestTextWriter).InternalAddFixedAnsi(
+    Source,SourceChars,pointer(fAnsiToWide),Escape);
 end;
 
 function TSynAnsiFixedWidth.AnsiToRawUnicode(Source: PAnsiChar; SourceChars: Cardinal): RawUnicode;
@@ -20965,7 +20969,6 @@ const
   FALSE_LOW = ord('f')+ord('a')shl 8+ord('l')shl 16+ord('s')shl 24;
   FALSE_LOW2 = ord('a')+ord('l')shl 8+ord('s')shl 16+ord('e')shl 24;
   TRUE_LOW  = ord('t')+ord('r')shl 8+ord('u')shl 16+ord('e')shl 24;
-  NULL_UPP  = ord('N')+ord('U')shl 8+ord('L')shl 16+ord('L')shl 24;
 
   NULL_SHORTSTRING: string[1] = '';
 
@@ -32698,129 +32701,126 @@ begin
     result := 0;
 end;
 
+const POW10: array[-31..32] of TSynExtended = (
+  1E-31,1E-30,1E-29,1E-28,1E-27,1E-26,1E-25,1E-24,1E-23,1E-22,1E-21,1E-20,
+  1E-19,1E-18,1E-17,1E-16,1E-15,1E-14,1E-13,1E-12,1E-11,1E-10,1E-9,1E-8,1E-7,
+  1E-6,1E-5,1E-4,1E-3,1E-2,1E-1,1E0,1E1,1E2,1E3,1E4,1E5,1E6,1E7,1E8,1E9,1E10,
+  1E11,1E12,1E13,1E14,1E15,1E16,1E17,1E18,1E19,1E20,1E21,1E22,1E23,1E24,1E25,
+  1E26,1E27,1E28,1E29,1E30,1E31,0);
+
 function HugePower10(exponent: integer): TSynExtended; {$ifdef HASINLINE}inline;{$endif}
-var pow10: TSynExtended;
+var e: TSynExtended;
 begin
-  result := 1.0;
+  result := POW10[0];
   if exponent<0 then begin
-    pow10 := 0.1;
+    e := POW10[-1];
     exponent := -exponent;
   end else
-    pow10 := 10;
+    e := POW10[1];
   repeat
     while exponent and 1=0 do begin
       exponent := exponent shr 1;
-      pow10 := sqr(pow10);
+      e := sqr(e);
     end;
-    result := result*pow10;
+    result := result*e;
     dec(exponent);
   until exponent=0;
 end;
 
 function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
-{$ifndef CPU32DELPHI} // inspired by ValExt_JOH_PAS_8_a by John O'Harrow
-const POW10: array[-31..31] of TSynExtended = (
-  1E-31,1E-30,1E-29,1E-28,1E-27,1E-26,1E-25,1E-24,1E-23,1E-22,1E-21,1E-20,
-  1E-19,1E-18,1E-17,1E-16,1E-15,1E-14,1E-13,1E-12,1E-11,1E-10,1E-9,1E-8,1E-7,
-  1E-6,1E-5,1E-4,1E-3,1E-2,1E-1,1E0,1E1,1E2,1E3,1E4,1E5,1E6,1E7,1E8,1E9,1E10,
-  1E11,1E12,1E13,1E14,1E15,1E16,1E17,1E18,1E19,1E20,1E21,1E22,1E23,1E24,1E25,
-  1E26,1E27,1E28,1E29,1E30,1E31);
-var digits, exp: PtrInt;
-    ch: byte;
+{$ifndef CPU32DELPHI}
+var digit, frac, exp: PtrInt;
+    c: AnsiChar;
     flags: set of (fNeg, fNegExp, fValid);
-    U: PByte; // Delphi Win64 doesn't like if P^ is used directly
-{$ifndef CPUX86}ten: TSynExtended;{$endif} // stored in (e.g. xmm2) register
+    v: Int64; // allows 64-bit resolution for the digits
+label e;
 begin
-  {$ifndef CPUX86} ten := 10.0; {$endif}
-  result := 0;
-  if P=nil then begin
-    err := 1;
-    exit;
-  end;
+  if P=nil then
+    goto e;
   byte(flags) := 0;
-  U := pointer(P);
-  ch := U^;
-  if ch=ord(' ') then
+  c := P^;
+  if c=' ' then
     repeat
-      inc(U);
-      ch := U^;
-    until ch<>ord(' '); // trailing spaces
-  if ch=ord('+') then begin
-    inc(U);
-    ch := U^;
+      inc(P);
+      c := P^;
+    until c<>' '; // trailing spaces
+  if c='+' then begin
+    inc(P);
+    c := P^;
   end else
-  if ch=ord('-') then begin
-    inc(U);
-    ch := U^;
+  if c='-' then begin
+    inc(P);
+    c := P^;
     include(flags,fNeg);
   end;
+  v := 0;
+  frac := 0;
+  digit := 18; // max Int64 resolution
   repeat
-    inc(U);
-    if (ch<ord('0')) or (ch>ord('9')) then
+    inc(P);
+    if (c>='0') and (c<='9') then begin
+      if digit <> 0 then begin
+        dec(c,ord('0'));
+        {$ifdef CPU64}
+        v := v*10;
+        {$else}
+        v := v shl 3+v+v;
+        {$endif}
+        inc(v,byte(c));
+        dec(digit); // over-required digits are just ignored
+        include(flags,fValid);
+        if frac<>0 then
+          dec(frac);
+      end else
+      if frac>=0 then
+        inc(frac); // handle #############00000
+      c := P^;
+      continue;
+    end;
+    if c<>'.' then
       break;
-    dec(ch,ord('0'));
-    {$ifdef CPUX86}
-    result := (result*10.0)+ch;
-    {$else}
-    result := result*ten; // better SSE code generation in two steps
-    result := result+ch;
-    {$endif}
-    include(flags,fValid);
-    ch := U^;
+    if frac>0 then
+      goto e;
+    dec(frac);
+    c := P^;
   until false;
-  digits := 0;
-  if ch=ord('.') then
-    repeat
-      ch := U^;
-      inc(U);
-      if (ch<ord('0')) or (ch>ord('9')) then begin
-        if not(fValid in flags) then // starts with '.'
-          if ch=0 then
-            dec(U); // U^='.'
-        break;
-      end;
-      dec(ch,ord('0'));
-      {$ifdef CPUX86}
-      result := (result*10.0)+ch;
-      {$else}
-      result := result*ten;
-      result := result+ch;
-      {$endif}
-      dec(digits);
-      include(flags,fValid);
-    until false;
-  if (ch=ord('E')) or (ch=ord('e')) then begin
+  if frac<0 then
+    inc(frac);
+  if (c='E') or (c='e') then begin
     exp := 0;
     exclude(flags,fValid);
-    ch := U^;
-    if ch=ord('+') then
-      inc(U) else
-    if ch=ord('-') then begin
-      inc(U);
+    c := P^;
+    if c='+' then
+      inc(P) else
+    if c='-' then begin
+      inc(P);
       include(flags,fNegExp);
     end;
     repeat
-      ch := U^;
-      inc(U);
-      if (ch<ord('0')) or (ch>ord('9')) then
+      c := P^;
+      inc(P);
+      if (c<'0') or (c>'9') then
         break;
-      dec(ch,ord('0'));
-      exp := (exp*10)+PtrInt(ch);
+      dec(c,ord('0'));
+      exp := (exp*10)+byte(c);
       include(flags,fValid);
     until false;
     if fNegExp in flags then
-      dec(digits,exp) else
-      inc(digits,exp);
+      dec(frac,exp) else
+      inc(frac,exp);
   end;
-  if digits<>0 then
-    if (digits>=low(POW10)) and (digits<=high(POW10)) then
-      result := result*POW10[digits] else
-      result := result*HugePower10(digits);
+  if (frac>=low(POW10)) and (frac<high(POW10)) then
+    result := POW10[frac] else
+    result := HugePower10(frac);
   if fNeg in flags then
     result := -result;
-  if (fValid in flags) and (ch=0) then
-    err := 0 else
-    err := PUTF8Char(U)-P+1;
+  if (fValid in flags) and (c=#0) then begin
+    err := 0;
+    result := result*v;
+  end else begin
+e:  err := 1;
+    result := POW10[32]; // return some value to make the compile happy
+  end;
 end;
 {$else}
 const Ten: double = 10.0;
@@ -54867,7 +54867,7 @@ begin
 end;
 
 procedure TTextWriter.InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: Cardinal;
-  const AnsiToWide: TWordDynArray; Escape: TTextWriterKind);
+  AnsiToWide: PWordArray; Escape: TTextWriterKind);
 var c: cardinal;
     esc: byte;
 begin
@@ -54891,7 +54891,7 @@ begin
         end else
         if esc=1 then // #0
           exit else
-        if esc=2 then begin // characters below ' ', #7 e.g. -> \u0007
+        if esc=2 then begin // #7 e.g. -> \u0007
           AddShort('\u00');
           AddByteToHex(c);
         end else
@@ -56245,7 +56245,7 @@ lit:    inc(P);
 num:result := P;
     jsonset := @JSON_CHARS;
     repeat
-      if not (jcDigitFloatChars in jsonset[P^]) then
+      if not (jcDigitFloatChar in jsonset[P^]) then
         break;
       inc(P);
     until false;
@@ -56267,8 +56267,7 @@ num:result := P;
     end else
       exit;
   'f':
-    if (PInteger(P+1)^=ord('a')+ord('l')shl 8+ord('s')shl 16+ord('e')shl 24) and
-       (jcEndOfJSONValueField in JSON_CHARS[P[5]]) then begin
+    if (PInteger(P+1)^=FALSE_LOW2) and (jcEndOfJSONValueField in JSON_CHARS[P[5]]) then begin
       result := P; // false -> returns 'false' and wasString=false
       if Len<>nil then
         Len^ := 5;
@@ -56506,11 +56505,11 @@ begin
     repeat inc(P) until not (P^ in ['0'..'9']); // check digits
     if P^='.' then
       repeat inc(P) until not (P^ in ['0'..'9']); // check fractional digits
-    if (P^ in ['e','E']) and (P[1] in ['0'..'9','+','-']) then begin
+    if ((P^='e') or (P^='E')) and (P[1] in ['0'..'9','+','-']) then begin
       inc(P);
       if P^='+' then inc(P) else
       if P^='-' then inc(P);
-      while P^ in ['0'..'9'] do inc(P);
+      while (P^>='0') and (P^<='9') do inc(P);
     end;
     while (P^<=' ') and (P^<>#0) do inc(P);
     result := (P^<>#0);
@@ -56521,30 +56520,36 @@ end;
 
 function IsStringJSON(P: PUTF8Char): boolean;  // test if P^ is a "string" value
 var c4: integer;
+    c: AnsiChar;
+    tab: PJsonCharSet;
 begin
   if P=nil then begin
     result := false;
     exit;
   end;
   while (P^<=' ') and (P^<>#0) do inc(P);
+  tab := @JSON_CHARS;
   c4 := PInteger(P)^;
-  if (((c4=NULL_LOW)or(c4=TRUE_LOW)) and (jcEndOfJSONValueField in JSON_CHARS[P[4]])) or
-     ((c4=FALSE_LOW) and (P[4]='e') and (jcEndOfJSONValueField in JSON_CHARS[P[5]])) then begin
+  if (((c4=NULL_LOW)or(c4=TRUE_LOW)) and (jcEndOfJSONValueField in tab[P[4]])) or
+     ((c4=FALSE_LOW) and (P[4]='e') and (jcEndOfJSONValueField in tab[P[5]])) then begin
     result := false; // constants are no string
     exit;
-  end else
-  if (P[0] in ['1'..'9']) or // is first char numeric?
-     ((P[0]='0') and not (P[1] in ['0'..'9'])) or // '012' excluded by JSON
-     ((P[0]='-') and (P[1] in ['0'..'9'])) then begin
-    // check if P^ is a true numerical value
-    repeat inc(P) until not (P^ in ['0'..'9']); // check digits
+  end;
+  c := P^;
+  if (jcDigitFirstChar in tab[c]) and
+     (((c>='1') and (c<='9')) or // is first char numeric?
+     ((c='0') and ((P[1]<'0') or (P[1]>'9'))) or // '012' excluded by JSON
+     ((c='-') and (P[1]>='0') and (P[1]<='9'))) then begin
+    // check if c is a true numerical value
+    repeat inc(P) until (P^<'0') or (P^>'9'); // check digits
     if P^='.' then
-      repeat inc(P) until not (P^ in ['0'..'9']); // check fractional digits
-    if (P^ in ['e','E']) and (P[1] in ['0'..'9','+','-']) then begin
+      repeat inc(P) until (P^<'0') or (P^>'9'); // check fractional digits
+    if ((P^='e') or (P^='E')) and (jcDigitChar in tab[P[1]]) then begin
       inc(P);
-      if P^='+' then inc(P) else
-      if P^='-' then inc(P);
-      while P^ in ['0'..'9'] do inc(P);
+      c := P^;
+      if c='+' then inc(P) else
+      if c='-' then inc(P);
+      while (P^>='0') and (P^<='9') do inc(P);
     end;
     while (P^<=' ') and (P^<>#0) do inc(P);
     result := (P^<>#0);
@@ -56628,7 +56633,7 @@ begin // should match GetJSONPropName()
       tab := @JSON_CHARS;
       repeat
         inc(P);
-      until not (jcDigitFloatChars in tab[P^]);
+      until not (jcDigitFloatChar in tab[P^]);
     end;
     't': if PInteger(P)^=TRUE_LOW then inc(P,4) else goto Prop;
     'f': if PInteger(P+1)^=FALSE_LOW2 then inc(P,5) else goto Prop;
@@ -56718,7 +56723,7 @@ ok: while (P^<=' ') and (P^<>#0) do inc(P);
     'n': if PInteger(P)^=NULL_LOW then begin inc(P,4); goto ok; end;
     '-','+','0'..'9': begin
       tab := @JSON_CHARS;
-      repeat inc(P) until not (jcDigitFloatChars in tab[P^]);
+      repeat inc(P) until not (jcDigitFloatChar in tab[P^]);
       goto ok;
     end;
     end else begin // not strict
@@ -62436,12 +62441,12 @@ begin
     end;
     if c in [#0,#9,#10,#13,' ',',','}',']'] then
       include(JSON_CHARS[c], jcEndOfJSONValueField);
+    if c in ['-','0'..'9'] then
+      include(JSON_CHARS[c], jcDigitFirstChar);
     if c in ['-','+','0'..'9'] then
-      include(JSON_CHARS[c], jcDigitChars);
-    if c in ['-','1'..'9'] then // 0/- excluded by JSON
-      include(JSON_CHARS[c], jcDigitFirstChars);
+      include(JSON_CHARS[c], jcDigitChar);
     if c in ['-','+','0'..'9','.','E','e'] then
-      include(JSON_CHARS[c], jcDigitFloatChars);
+      include(JSON_CHARS[c], jcDigitFloatChar);
     if c in ['_','0'..'9','a'..'z','A'..'Z','$'] then
       include(JSON_CHARS[c], jcJsonIdentifierFirstChar);
     if c in ['_','0'..'9','a'..'z','A'..'Z','.','[',']'] then
