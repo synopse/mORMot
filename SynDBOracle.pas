@@ -1831,7 +1831,10 @@ var log: ISynLog;
     Props: TSQLDBOracleConnectionProperties;
     mode: ub4;
     msg: RawUTF8;
-    fake_stack_var_to_prevent_av_in_EnvNlsCreate: array[0..1024] of byte;
+    // 988*8 is a MAGIC to prevent AV in -O2 optimization level
+    // <988 or > 1000 - depending on how we enter here raise AV in EnvNlsCreate
+    // 988 works in -O1 optimization but do not works in -O2
+    fake_stack_var_to_prevent_av_in_EnvNlsCreate: array[0..988*8] of byte;
     r: integer;
 const
     type_owner_name: RawUTF8 = 'SYS';
@@ -1842,7 +1845,7 @@ begin
   log := SynDBLog.Enter(self,'Connect');
   Disconnect; // force fTrans=fError=fServer=fContext=nil
   Props := Properties as TSQLDBOracleConnectionProperties;
-  fake_stack_var_to_prevent_av_in_EnvNlsCreate[0] := 0; // prevent compiler to remove unused var (it can?)
+  FillChar(fake_stack_var_to_prevent_av_in_EnvNlsCreate[0], length(fake_stack_var_to_prevent_av_in_EnvNlsCreate), 0);
   with OCI do
   try
     if fEnv=nil then begin
