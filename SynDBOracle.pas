@@ -1831,6 +1831,7 @@ var log: ISynLog;
     Props: TSQLDBOracleConnectionProperties;
     mode: ub4;
     msg: RawUTF8;
+    fake_stack_var_to_prevent_av_in_EnvNlsCreate: array[0..1024] of byte;
 const
     type_owner_name: RawUTF8 = 'SYS';
     type_NymberListName: RawUTF8 = 'ODCINUMBERLIST';
@@ -1840,6 +1841,7 @@ begin
   log := SynDBLog.Enter(self,'Connect');
   Disconnect; // force fTrans=fError=fServer=fContext=nil
   Props := Properties as TSQLDBOracleConnectionProperties;
+  fake_stack_var_to_prevent_av_in_EnvNlsCreate[0] := 0; // prevent compiler to remove unused var (it can?)
   with OCI do
   try
     if fEnv=nil then
