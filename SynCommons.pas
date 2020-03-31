@@ -5249,8 +5249,9 @@ type
   // - is defined as an object or as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
-  {$ifdef UNDIRECTDYNARRAY}TDynArray = record private
-  {$else}TDynArray = object protected{$endif}
+  {$ifdef UNDIRECTDYNARRAY}TDynArray = record
+  {$else}TDynArray = object {$endif}
+  private
     fValue: PPointer;
     fTypeInfo: pointer;
     fElemType{$ifdef DYNARRAYELEMTYPE2}, fElemType2{$endif}: pointer;
@@ -5867,8 +5868,9 @@ type
   // maintain a hash table over an existing dynamic array: several TDynArrayHasher
   // could be applied to a single TDynArray wrapper
   // - TDynArrayHashed will use a TDynArrayHasher for its own store
-  {$ifdef USERECORDWITHMETHODS}TDynArrayHasher = record private
-  {$else}TDynArrayHasher = object protected{$endif}
+  {$ifdef USERECORDWITHMETHODS}TDynArrayHasher = record
+  {$else}TDynArrayHasher = object {$endif}
+  private
     DynArray: PDynArray;
     HashElement: TDynArrayHashOne;
     EventHash: TEventDynArrayHashOne;
@@ -6741,8 +6743,9 @@ type
   // - is defined as an object, not as a class: you can use this in any
   // class, without the need to destroy the content
   // - Delphi "object" is buggy on stack -> also defined as record with methods
-  {$ifdef USERECORDWITHMETHODS}TSynNameValue = record private
-  {$else}TSynNameValue = object protected{$endif}
+  {$ifdef USERECORDWITHMETHODS}TSynNameValue = record
+  {$else}TSynNameValue = object {$endif}
+  private
     fOnAdd: TOnSynNameValueNotify;
     function GetBlobData: RawByteString;
     procedure SetBlobData(const aValue: RawByteString);
@@ -14442,8 +14445,9 @@ type
   // former will handle internal variant redirection (varByRef), e.g. from late
   // binding or assigned another TDocVariant
   // - Delphi "object" is buggy on stack -> also defined as record with methods
-  {$ifdef USERECORDWITHMETHODS}TDocVariantData = record private
-  {$else}TDocVariantData = object protected{$endif}
+  {$ifdef USERECORDWITHMETHODS}TDocVariantData = record
+  {$else}TDocVariantData = object {$endif}
+  private
     VType: TVarType;
     VOptions: TDocVariantOptions;
     (* this structure uses all TVarData available space: no filler needed!
@@ -20690,7 +20694,7 @@ begin
   {$ifdef FPC}Finalize(s){$else}s := ''{$endif};
   pointer(s) := r;
 end;
-{$else}
+{$else not HASCODEPAGE}
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
 begin
   SetString(RawByteString(s),PAnsiChar(p),len);

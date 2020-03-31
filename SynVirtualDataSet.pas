@@ -840,7 +840,7 @@ end;
 constructor TDocVariantArrayDataSet.Create(Owner: TComponent;
   const Data: TVariantDynArray; const ColumnNames: array of RawUTF8;
   const ColumnTypes: array of TSQLDBFieldType);
-var n,ndx,j: integer;
+var n,ndx,j: PtrInt;
     first: PDocVariantData;
 begin
   fValues := Data;

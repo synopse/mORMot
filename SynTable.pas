@@ -918,7 +918,7 @@ procedure VariantToSQLVar(const Input: variant; var temp: RawByteString;
   var Output: TSQLVar);
 
 /// guess the correct TSQLDBFieldType from a variant type
-function VariantVTypeToSQLDBFieldType(VType: word): TSQLDBFieldType;
+function VariantVTypeToSQLDBFieldType(VType: cardinal): TSQLDBFieldType;
 
 /// guess the correct TSQLDBFieldType from a variant value
 function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
@@ -3500,8 +3500,9 @@ type
   TSystemUseDataDynArray = array of TSystemUseData;
 
   /// low-level structure used to compute process memory and CPU usage
-  {$ifdef USERECORDWITHMETHODS}TProcessInfo = record private
-    {$else}TProcessInfo = object protected{$endif}
+  {$ifdef USERECORDWITHMETHODS}TProcessInfo = record
+    {$else}TProcessInfo = object {$endif}
+  private
     {$ifdef MSWINDOWS}
     fSysPrevIdle, fSysPrevKernel, fSysPrevUser,
     fDiffIdle, fDiffKernel, fDiffUser, fDiffTotal: Int64;
@@ -4726,18 +4727,18 @@ type
   // - is defined either as an object either as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
-  {$ifdef USERECORDWITHMETHODS}TSynTableData = record private
-    {$else}TSynTableData = object protected{$endif UNICODE}
-    VType: TVarType;
-    Filler: array[1..SizeOf(TVarData)-SizeOf(TVarType)-SizeOf(pointer)*2-4] of byte;
+  {$ifdef USERECORDWITHMETHODS}TSynTableData = record
+    {$else}TSynTableData = object {$endif UNICODE}
+  private
+    VType: cardinal; // defined as cardinal not as word for proper aligment
     VID: integer;
     VTable: TSynTable;
     VValue: TSBFString;
     {$ifndef NOVARIANTS}
-    function GetFieldValue(const FieldName: RawUTF8): Variant; overload;
     function GetFieldVarData(FieldName: PUTF8Char; FieldNameLen: PtrInt; var Value: TVarData): boolean;
     procedure GetFieldVariant(const FieldName: RawUTF8; var result: Variant);
-    procedure SetFieldValue(const FieldName: RawUTF8; const Value: Variant); overload;
+    function GetField(const FieldName: RawUTF8): Variant;
+    procedure SetField(const FieldName: RawUTF8; const Value: Variant);
     {$endif}
     /// raise an exception if VTable=nil
     procedure CheckVTableInitialized;
@@ -4758,13 +4759,13 @@ type
     property SBF: TSBFString read VValue;
     {$ifndef NOVARIANTS}
     /// set or retrieve a field value from a variant data
-    property Field[const FieldName: RawUTF8]: Variant read GetFieldValue write SetFieldValue;
+    property Field[const FieldName: RawUTF8]: Variant read GetField write SetField;
     /// get a field value for a specified field
     // - this method is faster than Field[], because it won't look for the field name
-    function GetFieldValue(aField: TSynTableFieldProperties): Variant; overload;
+    function GetFieldValue(aField: TSynTableFieldProperties): Variant;
     /// set a field value for a specified field
     // - this method is faster than Field[], because it won't look for the field name
-    procedure SetFieldValue(aField: TSynTableFieldProperties; const Value: Variant); overload;
+    procedure SetFieldValue(aField: TSynTableFieldProperties; const Value: Variant);
       {$ifdef HASINLINE}inline;{$endif}
     {$endif}
     /// set a field value for a specified field, from SBF-encoded data
@@ -5059,6 +5060,10 @@ type
     procedure Copy(var Dest: TVarData; const Source: TVarData;
       const Indirect: Boolean); override;
   end;
+
+/// initialize TSynTableVariantType if needed, and return the correspongind VType
+function SynTableVariantVarType: cardinal;
+
 {$endif NOVARIANTS}
 
 const
@@ -5134,6 +5139,13 @@ uses
 var
   SynTableVariantType: TCustomVariantType = nil;
 
+function SynTableVariantVarType: cardinal;
+begin
+  if SynTableVariantType=nil then
+    SynTableVariantType := SynRegisterCustomVariantType(TSynTableVariantType);
+  result := SynTableVariantType.VarType;
+end;
+
 procedure TSynTableVariantType.Clear(var V: TVarData);
 begin
   //Assert(V.VType=SynTableVariantType.VarType);
@@ -5164,7 +5176,7 @@ function TSynTableVariantType.IntSet(const Instance, Value: TVarData;
 var aName: RawUTF8;
 begin
   FastSetString(aName,Name,NameLen);
-  TSynTableData(Instance).SetFieldValue(aName,Variant(Value));
+  TSynTableData(Instance).SetField(aName,Variant(Value));
   result := true;
 end;
 
@@ -5967,10 +5979,8 @@ end;
 function TSynTable.Data(aID: integer; RecordBuffer: pointer; RecordBufferLen: Integer): Variant;
 var data: TSynTableData absolute result;
 begin
-  if SynTableVariantType=nil then
-    SynTableVariantType := SynRegisterCustomVariantType(TSynTableVariantType);
   VarClear(result);
-  data.VType := SynTableVariantType.VarType;
+  data.VType := SynTableVariantVarType;
   data.VID := aID;
   data.VTable := self;
   pointer(data.VValue) := nil; // avoid GPF
@@ -7721,7 +7731,7 @@ end;
 
 {$ifndef NOVARIANTS}
 
-function TSynTableData.GetFieldValue(const FieldName: RawUTF8): Variant;
+function TSynTableData.GetField(const FieldName: RawUTF8): Variant;
 begin
   GetFieldVariant(FieldName,result);
 end;
@@ -7781,15 +7791,16 @@ end;
 
 procedure TSynTableData.Init(aTable: TSynTable; aID: Integer);
 begin
-  VTable := aTable;
+  VType := SynTableVariantVarType;
   VID := aID;
+  VTable := aTable;
   VValue := VTable.DefaultRecordData;
-  {$ifdef UNICODE}FillcharFast(Filler,SizeOf(Filler),0);{$endif}
 end;
 
 procedure TSynTableData.Init(aTable: TSynTable; aID: Integer;
   RecordBuffer: pointer; RecordBufferLen: integer);
 begin
+  VType := SynTableVariantVarType;
   VTable := aTable;
   if (RecordBufferLen=0) or (RecordBuffer=nil) then begin
     VID := 0;
@@ -7801,7 +7812,7 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
-procedure TSynTableData.SetFieldValue(const FieldName: RawUTF8;
+procedure TSynTableData.SetField(const FieldName: RawUTF8;
   const Value: Variant);
 var F: TSynTableFieldProperties;
 begin
@@ -14261,7 +14272,7 @@ begin
   end;
 end;
 
-function VariantVTypeToSQLDBFieldType(VType: word): TSQLDBFieldType;
+function VariantVTypeToSQLDBFieldType(VType: cardinal): TSQLDBFieldType;
 begin
   case VType of
   varNull:

@@ -469,8 +469,9 @@ type
   // - see http://bsonspec.org/#/specification
   // - this structure has been optimized to map the BSON binary content,
   // without any temporary memory allocation (the SAX way)
-  {$ifdef USERECORDWITHMETHODS}TBSONElement = record private
-    {$else}TBSONElement = object protected{$endif}
+  {$ifdef USERECORDWITHMETHODS}TBSONElement = record
+    {$else}TBSONElement = object {$endif}
+  private
     /// used internally to set the TBSONElement content, once Kind has been set
     procedure FromBSON(bson: PByte);
   public
@@ -638,8 +639,9 @@ type
 
   /// data structure used for iterating over a BSON binary buffer
   // - is just a wrapper around a PByte value, to be used with a TBSONDocument
-  {$ifdef USERECORDWITHMETHODS}TBSONIterator = record private
-    {$else}TBSONIterator = object protected{$endif}
+  {$ifdef USERECORDWITHMETHODS}TBSONIterator = record
+    {$else}TBSONIterator = object {$endif}
+  private
     fBson: PByte;
   public
     /// map the current item, after the Next method did return TRUE
@@ -1506,8 +1508,9 @@ type
   // response, and navigate within all nested documents
   // - several TMongoReplyCursor instances may map the same TMongoReply content
   // - you can safely copy one TMongoReplyCursor instance to another
-  {$ifdef USERECORDWITHMETHODS}TMongoReplyCursor = record private
-    {$else}TMongoReplyCursor = object protected{$endif}
+  {$ifdef USERECORDWITHMETHODS}TMongoReplyCursor = record
+    {$else}TMongoReplyCursor = object {$endif}
+  private
     fReply: TMongoReply;
     fRequestID: integer;
     fResponseTo: integer;
