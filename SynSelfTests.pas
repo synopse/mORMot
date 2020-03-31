@@ -4544,7 +4544,7 @@ begin
   Check(Int32ToUtf8(-1599638299)='-1599638299');
   Check(Int64ToUTF8(-1271083787498396012)='-1271083787498396012');
   {$ifdef FPC} // Delphi doesn't handle correctly such huge constants
-  CheckDoubleToShort(1234567890123456789,'1.2345678901234568E28');
+  CheckDoubleToShort(1234567890123456789,'1.2345678901234568E18');
   CheckDoubleToShortSame(1234567890123456789);
   {$endif}
   s := Int64ToUTF8(242161819595454762);
@@ -8467,6 +8467,7 @@ begin
   Check(UTF8ContentType('-123')=sftInteger);
   Check(UTF8ContentType('123.1')=sftCurrency);
   Check(UTF8ContentType('123.12')=sftCurrency);
+  Check(UTF8ContentType('123.1234')=sftCurrency);
   Check(UTF8ContentType('123.12345678')=sftFloat);
   Check(UTF8ContentType('1.13e+12')=sftFloat);
   Check(UTF8ContentType('1.13e12')=sftFloat);
@@ -8474,6 +8475,10 @@ begin
   Check(UTF8ContentType('1.13e+120')=sftFloat);
   Check(UTF8ContentType('1.13E120')=sftFloat);
   Check(UTF8ContentType('1.13E-120')=sftFloat);
+  Check(UTF8ContentType('1.13E307')=sftFloat);
+  Check(UTF8ContentType('1.13E-323')=sftFloat);
+  Check(UTF8ContentType('1.13e+a3')=sftUTF8Text);
+  Check(UTF8ContentType('1.13e+3a')=sftUTF8Text);
   Check(UTF8ContentType('1.13e+330')=sftUTF8Text);
   Check(UTF8ContentType('1.13e330')=sftUTF8Text);
   Check(UTF8ContentType('1.13e-330')=sftUTF8Text);

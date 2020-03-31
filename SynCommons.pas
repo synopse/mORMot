@@ -14079,7 +14079,7 @@ function GetVariantFromNotStringJSON(JSON: PUTF8Char; var Value: TVarData;
 // - any non valid number is returned as varString
 // - is used e.g. by GetVariantFromJSON() to guess the destination variant type
 // - warning: supplied JSON is expected to be not nil
-function TextToVariantNumberType(JSON: PUTF8Char): word;
+function TextToVariantNumberType(JSON: PUTF8Char): cardinal;
 
 /// identify either varInt64 or varCurrency types following JSON format
 // - this version won't return varDouble, i.e. won't handle more than 4 exact
@@ -14089,7 +14089,7 @@ function TextToVariantNumberType(JSON: PUTF8Char): word;
 // - any non valid number is returned as varString
 // - is used e.g. by GetVariantFromJSON() to guess the destination variant type
 // - warning: supplied JSON is expected to be not nil
-function TextToVariantNumberTypeNoDouble(JSON: PUTF8Char): word;
+function TextToVariantNumberTypeNoDouble(JSON: PUTF8Char): cardinal;
 
 /// low-level function to set a numerical variant from an unescaped JSON number
 // - returns TRUE if TextToVariantNumberType/TextToVariantNumberTypeNoDouble(JSON)
@@ -22689,13 +22689,24 @@ begin
 end;
 
 function Append999ToBuffer(Buffer: PUTF8Char; Value: PtrUInt): PUTF8Char;
+var L: PtrInt;
+    P: PAnsiChar;
+    c: cardinal;
 begin
-  PCardinal(Buffer)^ := PCardinal(SmallUInt32UTF8[Value])^;
-  if Value<10 then
-    result := Buffer+1 else
-  if Value<100 then
-    result := Buffer+2 else
-    result := Buffer+3;
+  P := pointer(SmallUInt32UTF8[Value]);
+  L := PStrLen(P-_STRLEN)^;
+  c := PCardinal(P)^;
+  Buffer[0] := AnsiChar(c); // PCardinal() write = FastMM4 FullDebugMode errors
+  inc(Buffer);
+  if L>1 then begin
+    Buffer^ := AnsiChar(c shr 8);
+    inc(Buffer);
+    if L>2 then begin
+      Buffer^ := AnsiChar(c shr 16);
+      inc(Buffer);
+    end;
+  end;
+  result := pointer(Buffer);
 end;
 
 function QuotedStr(const S: RawUTF8; Quote: AnsiChar): RawUTF8;
@@ -42809,7 +42820,7 @@ type
       Reader: TDynArrayJSONCustomReader;
       Writer: TDynArrayJSONCustomWriter;
     end;
-    function VariantSearch(aClass: TCustomVariantType): integer;
+    function VariantSearch(aClass: TCustomVariantType): PtrInt;
     procedure VariantWrite(aClass: TCustomVariantType;
       aWriter: TTextWriter; const aValue: variant; Escape: TTextWriterKind);
     {$endif}
@@ -43073,7 +43084,7 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
-function TJSONCustomParsers.VariantSearch(aClass: TCustomVariantType): integer;
+function TJSONCustomParsers.VariantSearch(aClass: TCustomVariantType): PtrInt;
 begin
   if self<>nil then
     for result := 0 to length(fVariants)-1 do
@@ -43084,7 +43095,7 @@ end;
 
 procedure TJSONCustomParsers.VariantWrite(aClass: TCustomVariantType;
   aWriter: TTextWriter; const aValue: variant; Escape: TTextWriterKind);
-var ndx: integer;
+var ndx: PtrInt;
     temp: string;
 begin
   ndx := VariantSearch(aClass);
@@ -43105,7 +43116,7 @@ end;
 
 procedure TJSONCustomParsers.RegisterCallbacksVariant(aClass: TCustomVariantType;
   aReader: TDynArrayJSONCustomReader; aWriter: TDynArrayJSONCustomWriter);
-var ndx: integer;
+var ndx: PtrInt;
 begin
   if self=nil then
     self := TJSONCustomParsers.Create;
@@ -45550,107 +45561,108 @@ begin
       ProcessField;
 end;
 
-function TextToVariantNumberTypeNoDouble(json: PUTF8Char): word;
+function TextToVariantNumberTypeNoDouble(json: PUTF8Char): cardinal;
 var start: PUTF8Char;
     c: AnsiChar;
 begin
-  start := json;
-  c := json[0];
-  if (c in ['1'..'9']) or // is first char numeric?
-     ((c='0') and not (json[1] in ['0'..'9'])) or // '012' is invalid JSON
-     ((c='-') and (json[1] in ['0'..'9'])) then begin
-    inc(json);
-    repeat
-      case json^ of
-      '0'..'9':
-        inc(json);
-      '.':
-        if (json[1] in ['0'..'9']) and (json[2] in [#0,'e','E','0'..'9']) then
-          if (json[2]=#0) or (json[3]=#0) or
-             ((json[3] in ['0'..'9']) and (json[4]=#0) or
-              ((json[4] in ['0'..'9']) and (json[5]=#0))) then begin
-            result := varCurrency; // currency ###.1234 number
-            exit;
-          end else
-            break else // we expect exact digit representation
-          break;
-      #0:
-        if json-start<=19 then begin // signed Int64 precision
-          result := varInt64;
-          exit;
-        end else
-          break;
-      else break;
-      end;
-    until false;
-  end;
   result := varString;
+  c := json[0];
+  if (jcDigitFirstChar in JSON_CHARS[c]) and
+     (((c>='1') and (c<='9')) or // is first char numeric?
+     ((c='0') and ((json[1]<'0') or (json[1]>'9'))) or // '012' excluded by JSON
+     ((c='-') and (json[1]>='0') and (json[1]<='9'))) then begin
+    start := json;
+    repeat inc(json) until (json^<'0') or (json^>'9'); // check digits
+    case json^ of
+    '.':
+      if (json[1]>='0') and (json[1]<='9') and (json[2] in [#0,'0'..'9']) then
+        if (json[2]=#0) or (json[3]=#0) or
+           ((json[3]>='0') and (json[3]<='9') and (json[4]=#0) or
+            ((json[4]>='0') and (json[4]<='9') and (json[5]=#0))) then
+          result := varCurrency; // currency ###.1234 number
+    #0:
+      if json-start<=19 then // signed Int64 precision
+        result := varInt64;
+    end;
+  end;
 end;
 
-function TextToVariantNumberType(json: PUTF8Char): word;
+function TextToVariantNumberType(json: PUTF8Char): cardinal;
 var start: PUTF8Char;
-    exp,err: integer;
+    exp: PtrInt;
     c: AnsiChar;
 label exponent;
 begin
-  start := json;
+  result := varString;
   c := json[0];
-  if (c in ['1'..'9']) or // is first char numeric?
-     ((c='0') and not (json[1] in ['0'..'9'])) or // '012' is invalid JSON
-     ((c='-') and (json[1] in ['0'..'9'])) then begin
-    inc(json);
-    repeat
-      case json^ of
-      '0'..'9':
-        inc(json);
-      '.':
-        if (json[1] in ['0'..'9']) and (json[2] in [#0,'e','E','0'..'9']) then
-          if (json[2]=#0) or (json[3]=#0) or
-             ((json[3] in ['0'..'9']) and (json[4]=#0) or
-              ((json[4] in ['0'..'9']) and (json[5]=#0))) then begin
-            result := varCurrency; // currency ###.1234 number
-            exit;
-          end else begin
-            repeat // more than 4 decimals
-              inc(json)
-            until not (json^ in ['0'..'9']);
-            case json^ of
-            #0: begin
-              result := varDouble;
-              exit;
+  if (jcDigitFirstChar in JSON_CHARS[c]) and
+     (((c>='1') and (c<='9')) or // is first char numeric?
+     ((c='0') and ((json[1]<'0') or (json[1]>'9'))) or // '012' excluded by JSON
+     ((c='-') and (json[1]>='0') and (json[1]<='9'))) then begin
+    start := json;
+    repeat inc(json) until (json^<'0') or (json^>'9'); // check digits
+    case json^ of
+    '.':
+      if (json[1]>='0') and (json[1]<='9') and (json[2] in [#0,'e','E','0'..'9']) then
+        if (json[2]=#0) or (json[3]=#0) or
+           ((json[3]>='0') and (json[3]<='9') and (json[4]=#0) or
+            ((json[4]>='0') and (json[4]<='9') and (json[5]=#0))) then
+          result := varCurrency // currency ###.1234 number
+        else begin
+          repeat // more than 4 decimals
+            inc(json)
+          until (json^<'0') or (json^>'9');
+          case json^ of
+          #0:
+            result := varDouble;
+          'e','E': begin
+exponent:   inc(json); // inlined custom GetInteger()
+            start := json;
+            c := json^;
+            if (c='-') or (c='+') then begin
+              inc(json);
+              c := json^;
             end;
-            'e','E': begin
-exponent:     exp := GetInteger(json+1,err);
-              if (err=0) and (exp>-324) and (exp<308) then begin
-                result := varDouble; // 5.0 x 10^-324 .. 1.7 x 10^308
-                exit;
+            inc(json);
+            dec(c,48);
+            if c>#9 then
+              exit;
+            exp := ord(c);
+            c := json^;
+            dec(c,48);
+            if c<=#9 then begin
+              inc(json);
+              exp := exp*10+ord(c);
+              c := json^;
+              dec(c,48);
+              if c<=#9 then begin
+                inc(json);
+                exp := exp*10+ord(c);
               end;
             end;
-            end;
-            break;
-          end else
-          break;
-      'e','E':
-        goto exponent;
-      #0:
-        if json-start<=19 then begin // signed Int64 precision
-          result := varInt64;
-          exit;
-        end else begin
-          result := varDouble; // we may lost precision, but it is a number
-          exit;
+            if json^<>#0 then
+              exit;
+            if start^='-' then
+              exp := -exp;
+            if (exp>-324) and (exp<308) then
+              result := varDouble; // 5.0 x 10^-324 .. 1.7 x 10^308
+          end;
+          end;
         end;
-      else break;
-      end;
-    until false;
+    'e','E':
+      goto exponent;
+    #0:
+      if json-start<=19 then // signed Int64 precision
+        result := varInt64 else
+        result := varDouble; // we may lost precision, but still a number
+    end;
   end;
-  result := varString;
 end;
 
 function GetNumericVariantFromJSON(JSON: PUTF8Char; var Value: TVarData;
   AllowVarDouble: boolean): boolean;
 var err: integer;
-    typ: word;
+    typ: cardinal;
 label dbl;
 begin
   if JSON<>nil then begin
