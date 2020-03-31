@@ -1832,6 +1832,7 @@ var log: ISynLog;
     mode: ub4;
     msg: RawUTF8;
     fake_stack_var_to_prevent_av_in_EnvNlsCreate: array[0..1024] of byte;
+    r: integer;
 const
     type_owner_name: RawUTF8 = 'SYS';
     type_NymberListName: RawUTF8 = 'ODCINUMBERLIST';
@@ -1844,11 +1845,14 @@ begin
   fake_stack_var_to_prevent_av_in_EnvNlsCreate[0] := 0; // prevent compiler to remove unused var (it can?)
   with OCI do
   try
-    if fEnv=nil then
+    if fEnv=nil then begin
       // will use UTF-8 encoding by default, in a multi-threaded context
       // OCI_EVENTS is needed to support Oracle RAC Connection Load Balancing
-      EnvNlsCreate(fEnv,Props.EnvironmentInitializationMode,
+      r :=EnvNlsCreate(fEnv,Props.EnvironmentInitializationMode,
         nil,nil,nil,nil,0,nil,OCI_UTF8,OCI_UTF8);
+      if r <> OCI_SUCCESS then
+        raise ESQLDBOracle.CreateUTF8('OCIEnvNlsCreate fails with error %', [r]);
+    end;
     HandleAlloc(fEnv,fError,OCI_HTYPE_ERROR);
     HandleAlloc(fEnv,fServer,OCI_HTYPE_SERVER);
     HandleAlloc(fEnv,fContext,OCI_HTYPE_SVCCTX);
