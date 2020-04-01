@@ -537,7 +537,7 @@ type
   dvoid   = Pointer;
   text    = PAnsiChar;
   OraText = PAnsiChar;
-  size_T  = Integer;
+  size_T  = PtrUInt;
 
   pub1 = ^ub1;
   psb1 = ^sb1;
