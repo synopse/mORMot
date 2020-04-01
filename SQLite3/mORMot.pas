@@ -18751,22 +18751,25 @@ type
   // - a typical usage is to validate a value to be unique in the table
   // (implemented in the TSynValidateUniqueField class)
   // - the optional associated parameters are to be supplied JSON-encoded
-  // - ProcessRest and ProcessRec properties will be filled before Process
+  // - ProcessRest and ProcessRec properties will be filled before Validate
   // method call by TSQLRecord.Validate()
   TSynValidateRest = class(TSynValidate)
   protected
     fProcessRest: TSQLRest;
     fProcessRec: TSQLRecord;
+    function DoValidate(aFieldIndex: integer; const Value: RawUTF8; var ErrorMsg: string; aProcessRest: TSQLRest; aProcessRec: TSQLRecord): boolean; virtual; abstract;
   public
+    function Process(aFieldIndex: integer; const Value: RawUTF8; var ErrorMsg: string): boolean; override;
+    function Validate(aFieldIndex: integer; const Value: RawUTF8; var ErrorMsg: string; aProcessRest: TSQLRest; aProcessRec: TSQLRecord): boolean;
     /// the associated TSQLRest instance
-    // - this value is updated by TSQLRecord.Validate with the current
+    // - this value is updated by Validate with the current
     // TSQLRest used for the validation
-    // - it can be used in the overridden Process method
+    // - it can be used in the overridden DoValidate method
     property ProcessRest: TSQLRest read fProcessRest;
     /// the associated TSQLRecord instance
-    // - this value is updated by TSQLRecord.Validate with the current
+    // - this value is updated by Validate with the current
     // TSQLRecord instance to be validated
-    // - it can be used in the overridden Process method
+    // - it can be used in the overridden DoValidate method
     property ProcessRec: TSQLRecord read fProcessRec;
   end;
 
@@ -18775,11 +18778,9 @@ type
   // - it will check that the field value is not void
   // - it will check that the field value is not a duplicate
   TSynValidateUniqueField = class(TSynValidateRest)
-  public
+  protected
     /// perform the unique field validation action to the specified value
-    // - duplication value check will use ProcessRest and ProcessRec properties,
-    // as set by TSQLRecord.Validate
-    function Process(aFieldIndex: integer; const Value: RawUTF8; var ErrorMsg: string): boolean; override;
+    function DoValidate(aFieldIndex: integer; const Value: RawUTF8; var ErrorMsg: string; aProcessRest: TSQLRest; aProcessRec: TSQLRecord): boolean; override;
   end;
 
   /// will define an unicity validation for a set of TSQLRecord text fields
@@ -18793,11 +18794,9 @@ type
   protected
     fFieldNames: TRawUTF8DynArray;
     procedure SetParameters(const Value: RawUTF8); override;
-  public
     /// perform the unique fields validation action to the specified value
-    // - duplication value check will use ProcessRest and ProcessRec properties,
-    // as set by TSQLRecord.Validate
-    function Process(aFieldIndex: integer; const Value: RawUTF8; var ErrorMsg: string): boolean; override;
+    function DoValidate(aFieldIndex: integer; const Value: RawUTF8; var ErrorMsg: string; aProcessRest: TSQLRest; aProcessRec: TSQLRecord): boolean; override;
+  public
     /// the validated field names
     property FieldNames: TRawUTF8DynArray read fFieldNames;
   end;
@@ -32179,7 +32178,7 @@ var f, i: integer;
     Value: RawUTF8;
     Validate: TSynValidate;
     ValidateRest: TSynValidateRest absolute Validate;
-    wasTSynValidateRest: boolean;
+    valid: boolean;
 begin
   result := '';
   if (self=nil) or IsZero(aFields) then
@@ -32194,29 +32193,21 @@ begin
       if Validate.InheritsFrom(TSynValidate) then begin
         if Value='' then
           Fields.List[f].GetValueVar(self,false,Value,nil);
-        wasTSynValidateRest := Validate.InheritsFrom(TSynValidateRest);
-        if wasTSynValidateRest then begin // set additional parameters
-          ValidateRest.fProcessRec := self;
-          ValidateRest.fProcessRest := aRest;
-        end;
-        try
-          if not Validate.Process(f,Value,result) then begin
-            // TSynValidate process failed -> notify caller
-            if aInvalidFieldIndex<>nil then
-              aInvalidFieldIndex^ := f;
-            if aValidator<>nil then
-              aValidator^ := Validate;
-            if result='' then
-              // no custom message -> show a default message
-              result := format(sValidationFailed,[
-                GetCaptionFromClass(Validate.ClassType)]);
-            exit;
-          end;
-        finally
-          if wasTSynValidateRest then begin // reset additional parameters
-            ValidateRest.fProcessRec := nil;
-            ValidateRest.fProcessRest := nil;
-          end;
+        if Validate.InheritsFrom(TSynValidateRest) then
+          valid := TSynValidateRest(Validate).Validate(f,Value,result, aRest, self)
+        else
+          valid := Validate.Process(f,Value,result);
+        if not valid then begin
+          // TSynValidate process failed -> notify caller
+          if aInvalidFieldIndex<>nil then
+            aInvalidFieldIndex^ := f;
+          if aValidator<>nil then
+            aValidator^ := Validate;
+          if result='' then
+            // no custom message -> show a default message
+            result := format(sValidationFailed,[
+              GetCaptionFromClass(Validate.ClassType)]);
+          exit;
         end;
       end;
     end;
@@ -50564,29 +50555,46 @@ begin
     aPropertyPointer,aAttributes,aFieldWidth));
 end;
 
+{ TSynValidateRest }
+
+function TSynValidateRest.Process(aFieldIndex: integer; const Value: RawUTF8; var ErrorMsg: string): boolean;
+begin
+  Result := DoValidate(aFieldIndex, Value, ErrorMsg, fProcessRest, fProcessRec);
+end;
+
+function TSynValidateRest.Validate(aFieldIndex: integer; const Value: RawUTF8; var ErrorMsg: string; aProcessRest: TSQLRest; aProcessRec: TSQLRecord): boolean;
+begin
+  try
+    fProcessRest := aProcessRest;
+    fProcessRec := aProcessRec;
+    result := DoValidate(aFieldIndex,Value,ErrorMsg,aProcessRest,aProcessRec);
+  finally
+    fProcessRest := nil;
+    fProcessRec := nil;
+  end;
+end;
 
 { TSynValidateUniqueField }
 
-function TSynValidateUniqueField.Process(aFieldIndex: integer; const Value: RawUTF8;
-  var ErrorMsg: string): boolean;
+function TSynValidateUniqueField.DoValidate(aFieldIndex: integer; const Value: RawUTF8;
+  var ErrorMsg: string; aProcessRest: TSQLRest; aProcessRec: TSQLRecord): boolean;
 var aID: TID;
 begin
   result := false;
   if Value='' then
     ErrorMsg := sValidationFieldVoid else
-  if (fProcessRest=nil) or (fProcessRec=nil) then
+  if (aProcessRest=nil) or (aProcessRec=nil) then
     result := true else
-  with fProcessRec.RecordProps do
+  with aProcessRec.RecordProps do
     if cardinal(aFieldIndex)>=cardinal(Fields.Count) then
       result := true else begin
-      SetID(fProcessRest.OneFieldValue(Table,'RowID',
+      SetID(aProcessRest.OneFieldValue(Table,'RowID',
         Fields.List[aFieldIndex].Name+'=:('+QuotedStr(Value,'''')+'):'),aID);
-      if (aID>0) and (aID<>fProcessRec.fID) then
+      if (aID>0) and (aID<>aProcessRec.fID) then
         ErrorMsg := sValidationFieldDuplicate else
         result := true;
     end;
 end;
-
 
 { TSynValidateUniqueFields }
 
@@ -50603,22 +50611,22 @@ begin
   end;
 end;
 
-function TSynValidateUniqueFields.Process(aFieldIndex: integer;
-  const Value: RawUTF8; var ErrorMsg: string): boolean;
+function TSynValidateUniqueFields.DoValidate(aFieldIndex: integer;
+  const Value: RawUTF8; var ErrorMsg: string; aProcessRest: TSQLRest; aProcessRec: TSQLRecord): boolean;
 var where: RawUTF8;
     i: integer;
     aID: TID;
 begin
-  if (fProcessRest=nil) or (fProcessRec=nil) or (fFieldNames=nil) then
+  if (aProcessRest=nil) or (aProcessRec=nil) or (fFieldNames=nil) then
     result := true else begin
     for i := 0 to high(fFieldNames) do begin
       if where<>'' then
         where := where+' AND ';
       where := where+fFieldNames[i]+'=:('+
-        QuotedStr(fProcessRec.GetFieldValue(fFieldNames[i]),'''')+'):';
+        QuotedStr(aProcessRec.GetFieldValue(fFieldNames[i]),'''')+'):';
     end;
-    SetID(fProcessRest.OneFieldValue(fProcessRec.RecordClass,'ID',where),aID);
-    if (aID>0) and (aID<>fProcessRec.fID) then begin
+    SetID(aProcessRest.OneFieldValue(aProcessRec.RecordClass,'ID',where),aID);
+    if (aID>0) and (aID<>aProcessRec.fID) then begin
       ErrorMsg := sValidationFieldDuplicate;
       result := false;
     end else
