@@ -380,7 +380,7 @@ begin
       toList := 'To: ';
       for i := 0 to high(aRecipient) do begin
         rcpt := aRecipient[i];
-        if PosEx('<',rcpt)=0 then
+        if PosExChar('<',rcpt)=0 then
           rcpt := '<'+rcpt+'>';
         Exec('RCPT TO:'+rcpt,'25');
         toList := toList+rcpt+', ';

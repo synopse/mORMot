@@ -103,11 +103,6 @@
 {.$define OLDTEXTWRITERFORMAT}
 // force TTextWriter.Add(Format) to handle the alternate deprecated $ % tags
 
-{.$define OPT4AMD}
-// you may define this to optimize for AMD CPUs - e.g. to use "set of byte"
-// which will use BT[mem] opcodes, which are slow on Intel, but fast on AMD
-// (with the Delphi x86 compiler, may not be the case for LLVM or FPC)
-
 {.$define FORCE_STRSSE42}
 // sse4.2 string instructions may read up to 16 bytes after the actual end buffer
 // -> define this if you want StrLen/StrComp/strspn/strcspn to use SSE4.2 opcodes
@@ -180,7 +175,8 @@
   {$define NODELPHIASM}   // ignore low-level System.@LStrFromPCharLen calls
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
-  {$define EXTENDEDTOSTRING_USESTR} // FloatToText uses str() in FPC
+  {$define EXTENDEDTOSHORT_USESTR} // FloatToText uses str() in FPC
+  {$define DOUBLETOSHORT_USEGRISU} // fast double to text
   {$define DELPHI5ORFPC}
   {$define FPC_OR_PUREPASCAL}
   {$define FPC_OR_KYLIX}
@@ -331,6 +327,7 @@
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
       {$define FPC_X86}
+      {$define TSYNEXTENDED80} // only 32-bit has a true x87 extended type
       {$ASMMODE INTEL}   // as Delphi expects
       {$define HASAESNI} // should be commented to test project with valgrind
       {$ifndef FPC_PIC}
@@ -406,7 +403,7 @@
   {$ifdef LVCL}
     {$define OWNNORMTOUPPER} // NormToUpper[] exists only in our enhanced RTL
     {$define NOVARIANTS} // LVCL does not support variants
-    {$define EXTENDEDTOSTRING_USESTR} // no FloatToText implemented in LVCL
+    {$define EXTENDEDTOSHORT_USESTR} // no FloatToText implemented in LVCL
   {$endif}
 
   {$ifdef UNICODE}
@@ -429,13 +426,15 @@
     {$define CPU64DELPHI}
     {$undef CPU32}
     {$define PUREPASCAL}   // no x86 32 bit asm to be used
-    {$define EXTENDEDTOSTRING_USESTR} // FloatToText() much slower in x64 mode
+    {$define EXTENDEDTOSHORT_USESTR} // FloatToText() much slower in x64 mode
+    {$define DOUBLETOSHORT_USEGRISU} // fast double to text
   {$else CPUX64}
     {$define CPU32} // Delphi compiler for 32 bit CPU
     {$define CPU32DELPHI}
     {$undef CPU64}
     {$define CPUX86} // for compatibility with older versions of Delphi
     {$define CPUX86NOTPIC} // use "absolute" instead of local register
+    {$define TSYNEXTENDED80} // only 32-bit has a true x87 extended type
   {$endif CPUX64}
 
   {$IFDEF CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
@@ -446,7 +445,7 @@
         {$define FPC_OR_KYLIX}
         // Kylix 3 will be handled just like Delphi 7
         {$undef ENHANCEDRTL}   // Enhanced Runtime library not fully tested yet
-        {$define EXTENDEDTOSTRING_USESTR}
+        {$define EXTENDEDTOSHORT_USESTR}
         {$define DOPATCHTRTL}  // nice speed up for server apps
         {$define NOVARCOPYPROC}
         {$define NOSQLITE3STATIC} // Kylix will use external sqlite3.so
@@ -460,7 +459,7 @@
         {$define DELPHI6OROLDER}
         {$define NOVARCOPYPROC}
         {$undef ENHANCEDRTL} // Delphi 6 doesn't have our Enhanced Runtime library
-        {$define EXTENDEDTOSTRING_USESTR} // no TFormatSettings before Delphi 7
+        {$define EXTENDEDTOSHORT_USESTR} // no TFormatSettings before Delphi 7
       {$else}
         {$define ISDELPHI7ANDUP} // Delphi 7 or newer
         {$define WITHUXTHEME}   // VCL handle UI theming
@@ -584,7 +583,7 @@
     {$define NOVARIANTS}
     {$define NOVARCOPYPROC}
     {$undef ENHANCEDRTL} // Delphi 5 doesn't have our Enhanced Runtime library
-    {$define EXTENDEDTOSTRING_USESTR} // no TFormatSettings before Delphi 7
+    {$define EXTENDEDTOSHORT_USESTR} // no TFormatSettings before Delphi 7
     {$undef DOPATCHTRTL}
   {$ENDIF CONDITIONALEXPRESSIONS}
 

@@ -4719,12 +4719,13 @@ begin
       result := -1; // on socket error -> raise ioresult error
 end;
 
-function WSAIsFatalError: boolean;
+function WSAIsFatalError(anothernonfatal: integer=NO_ERROR): boolean;
 var err: integer;
 begin
   err := WSAGetLastError;
-  result := (err<>NO_ERROR) and (err<>WSATRY_AGAIN) and (err<>WSAEINTR) and (err<>WSAEADDRNOTAVAIL)
-    {$ifdef MSWINDOWS}and (err<>WSAETIMEDOUT) and (err<>WSAEWOULDBLOCK){$endif};
+  result := (err<>NO_ERROR) and (err<>WSATRY_AGAIN) and (err<>WSAEINTR) and
+    {$ifdef MSWINDOWS}(err<>WSAETIMEDOUT) and (err<>WSAEWOULDBLOCK) and{$endif}
+    (err<>anothernonfatal); // allow WSAEADDRNOTAVAIL from OpenBind()
 end;
 
 function WSAErrorAtShutdown(sock: TSocket): integer;
@@ -4910,7 +4911,7 @@ begin
       retry := {$ifdef BSD}10{$else}2{$endif}; 
     repeat
       fSock := CallServer(aServer,Port,doBind,aLayer,Timeout); // OPEN or BIND
-      if (fSock>0) or WSAIsFatalError then
+      if (fSock>0) or WSAIsFatalError(WSAEADDRNOTAVAIL) then
         break;
       dec(retry);
       if retry<=0 then

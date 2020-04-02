@@ -642,7 +642,8 @@ type
     /// set to TRUE if parameters are to be :(...): inlined
     InlinedParams: TJSONObjectDecoderParams;
     /// internal pointer over field names to be used after Decode() call
-    // - either FieldNames, either Fields[] array as defined in Decode()
+    // - either FieldNames, either Fields[] array as defined in Decode(), or
+    // external names as set by TSQLRestStorageExternal.JSONDecodedPrepareToSQL
     DecodedFieldNames: PRawUTF8Array;
     /// the ID=.. value as sent within the JSON object supplied to Decode()
     DecodedRowID: TID;
@@ -650,6 +651,8 @@ type
     // - to create 'INSERT INTO ... SELECT UNNEST(...)' or 'UPDATE ... FROM
     // SELECT UNNEST(...)' statements for very efficient bulk writes in a
     // PostgreSQL database
+    // - as set by TSQLRestStorageExternal.JSONDecodedPrepareToSQL when
+    // cPostgreBulkArray flag is detected (for SynDBPostgres)
     DecodedFieldTypesToUnnest: PSQLDBFieldTypeArray;
     /// decode the JSON object fields into FieldNames[] and FieldValues[]
     // - if Fields=nil, P should be a true JSON object, i.e. defined
@@ -21481,7 +21484,7 @@ end;
 procedure TSQLPropInfoRTTIDouble.GetValueVar(Instance: TObject;
   ToSQL: boolean; var result: RawUTF8; wasSQLString: PBoolean);
 begin
-  ExtendedToStr(fPropInfo.GetDoubleProp(Instance),DOUBLE_PRECISION,result);
+  DoubleToStr(fPropInfo.GetDoubleProp(Instance),result);
   if wasSQLString<>nil then
     wasSQLString^ := (result='') or not (result[1] in ['0'..'9']);
 end;
@@ -21493,7 +21496,7 @@ begin
   VFloat := GetExtended(pointer(Value),err);
   if err<>0 then
     Value := '' else
-    ExtendedToStr(VFloat,DOUBLE_PRECISION,Value);
+    DoubleToStr(VFloat,Value);
 end;
 
 procedure TSQLPropInfoRTTIDouble.SetValue(Instance: TObject; Value: PUTF8Char;
@@ -25289,8 +25292,9 @@ end;
 procedure TSQLTable.GetJSONValues(JSON: TStream; Expand: boolean;
   RowFirst, RowLast, IDBinarySize: integer);
 var W: TJSONWriter;
+    tmp: TTextWriterStackBuffer;
 begin
-  W := TJSONWriter.Create(JSON,Expand,false);
+  W := TJSONWriter.Create(JSON,Expand,false,nil,0,@tmp);
   try
     GetJSONValues(W,RowFirst,RowLast,IDBinarySize);
     W.FlushFinal;
@@ -27373,8 +27377,8 @@ begin
   try
     case Occasion of
     soUpdate: begin
-      if FieldCount<2 then
-        raise EORMException.CreateUTF8('Invalid EncodeAsSQLPrepared(%)',[FieldCount]);
+      if FieldCount=0 then
+        raise EORMException.Create('Invalid EncodeAsSQLPrepared(0)');
       W.AddShort('update ');
       W.AddString(TableName);
       if DecodedFieldTypesToUnnest<>nil then begin
@@ -31633,7 +31637,7 @@ var aSQLFields, aSQLFrom, aSQLWhere, aSQLJoin: RawUTF8;
     begin
       result := true;
       B := F;
-      while ord(F^) in IsIdentifier do inc(F); // go to end of sub-field name
+      while tcIdentifier in TEXT_CHARS[F^] do inc(F); // go to end of sub-field name
       if B=F then begin
         result := false;
         exit;
@@ -31645,7 +31649,7 @@ var aSQLFields, aSQLFrom, aSQLWhere, aSQLJoin: RawUTF8;
     end;
   begin
     B := P;
-    while ord(P^) in IsIdentifier do inc(P); // go to end of field name
+    while tcIdentifier in TEXT_CHARS[P^] do inc(P); // go to end of field name
     FastSetString(result,B,P-B);
     if (result='') or IdemPropNameU(result,'AND') or IdemPropNameU(result,'OR') or
        IdemPropNameU(result,'LIKE') or IdemPropNameU(result,'NOT') or
@@ -31769,7 +31773,7 @@ begin
     JBeg := pointer(aSQLJoin);
     repeat
       J := JBeg;
-      while not (ord(J^) in IsIdentifier) do begin
+      while not (tcIdentifier in TEXT_CHARS[J^]) do begin
         case J^ of
         '"':  repeat inc(J) until J^ in [#0,'"'];
         '''': repeat inc(J) until J^ in [#0,''''];
@@ -33014,7 +33018,7 @@ begin
     inc(i,6);
     while SQL[i] in [#1..' '] do inc(i);
     j := 0;
-    while ord(SQL[i+j]) in IsIdentifier do inc(j);
+    while tcIdentifier in TEXT_CHARS[SQL[i+j]] do inc(j);
     if cardinal(j-1)<64 then begin
       k := i+j;
       while SQL[k] in [#1..' '] do inc(k);
@@ -33038,7 +33042,7 @@ begin
     repeat
       while SQL[i] in [#1..' '] do inc(i);
       j := 0;
-      while ord(SQL[i+j]) in IsIdentifier do inc(j);
+      while tcIdentifier in TEXT_CHARS[SQL[i+j]] do inc(j);
       if cardinal(j-1)>64 then begin
         result := nil;
         exit; // seems too big
@@ -40282,7 +40286,7 @@ begin
       TableID := TableEngine.EngineAdd(TableIndex,Call.InBody);
       if TableID<>0 then begin
         Call.OutStatus := HTTP_CREATED; // 201 Created
-        Call.OutHead := 'Location: '+URI+'/'+Int64ToUtf8(TableID);
+        FormatUTF8('Location: %/%',[URI,TableID],Call.OutHead);
         if rsoAddUpdateReturnsContent in Server.Options then begin
           Server.fCache.NotifyDeletion(TableIndex,TableID);
           Call.OutBody := TableEngine.EngineRetrieve(TableIndex,TableID);
@@ -50816,7 +50820,7 @@ var Added: boolean;
           D64 := P^.GetFloatProp(Value);
           if not ((woDontStore0 in Options) and (D64=0)) then begin
             HR(P);
-            Add(D64,DOUBLE_PRECISION);
+            AddDouble(D64);
           end;
         end;
       end;
@@ -54418,6 +54422,7 @@ end;
   - all ARM, AARCH64 and Linux64 code below was provided by ALF! Thanks! :)  }
 {$ifdef FPC}
 {$ifdef CPUARM}
+{$ifdef ASMORIG}
 procedure TInterfacedObjectFake.ArmFakeStub;
 var // warning: exact local variables order should match TFakeCallStack
   smetndx: pointer;
@@ -54447,6 +54452,39 @@ asm
   // FakeCall should set Int64 result in method result, and float in aCall.FPRegs["sd0"]
   vstr d0,sd0
 end;
+{$else}
+procedure TInterfacedObjectFake.ArmFakeStub;nostackframe;assembler;
+asm
+    // get method index
+    str   r12,[r13, #-52]
+    // create stack space
+    mov   r12,r13
+    stmfd r13!,{r11,r12,r14,r15}
+    sub   r11,r12,#4
+    sub   r13,r13,#128
+    // store registers
+    vstr  d0,[r11, #-112]
+    vstr  d1,[r11, #-104]
+    vstr  d2,[r11, #-96]
+    vstr  d3,[r11, #-88]
+    vstr  d4,[r11, #-80]
+    vstr  d5,[r11, #-72]
+    vstr  d6,[r11, #-64]
+    vstr  d7,[r11, #-56]
+    str   r0,[r11, #-128]
+    str   r1,[r11, #-124]
+    str   r2,[r11, #-120]
+    str   r3,[r11, #-116]
+    // set stack address
+    add   r1,r13, #12
+    // branch to the FakeCall function
+    bl    FakeCall
+    // store result
+    vstr  d0,[r11, #-112]
+    ldmea r11,{r11,r13,r15}
+end;
+{$endif ASMORIG}
+
 {$endif}
 {$ifdef CPUAARCH64}
 procedure TInterfacedObjectFake.AArch64FakeStub;
@@ -54455,8 +54493,8 @@ var // warning: exact local variables order should match TFakeCallStack
   sd0, sd1, sd2, sd3, sd4, sd5, sd6, sd7: double;
   smetndx:pointer;
 asm
-  // get method index
-  str  x9,smetndx
+  // get method index from IP0 [x16/r16]
+  str x16,smetndx
   // store registers
   str d0,sd0
   str d1,sd1
@@ -54712,16 +54750,20 @@ begin
           PByte(P)^ := $c3; inc(PByte(P)); // ret
           {$endif CPUX64}
           {$ifdef CPUARM}
+          {$ifdef ASMORIG}
           P^ := ($e3a040 shl 8)+i;  inc(P); // mov r4 (v1),{MethodIndex} : store method index in register
+          {$else}
+          P^ := ($e3a0c0 shl 8)+i;  inc(P); // mov r12 (ip),{MethodIndex} : store method index in register
+          {$endif}
           tmp := ((PtrUInt(@TInterfacedObjectFake.ArmFakeStub)-PtrUInt(P)) shr 2)-2;
           P^ := ($ea shl 24) + (tmp and $00ffffff); // branch ArmFakeStub (24bit relative, word aligned)
           inc(P);
           P^ := $e320f000; inc(P);
           {$endif CPUARM}
           {$ifdef CPUAARCH64}
-          // store method index in register x9
-          // $09 = r9 ... loop to $1F -> number shifted * $20
-          P^ := ($d280 shl 16)+(i shl 5)+$09; inc(P);  // mov x9 ,{MethodIndex}
+          // store method index in register r16 [IP0]
+          // $10 = r16 ... loop to $1F -> number shifted * $20
+          P^ := ($d280 shl 16)+(i shl 5)+$10; inc(P);  // mov r16 ,{MethodIndex}
           // we are using a register branch here
           // fill register x10 with address
           stub := PtrUInt(@TInterfacedObjectFake.AArch64FakeStub);
@@ -59085,7 +59127,7 @@ begin
          Int64ToUtf8(PInt64(V)^,DestValue);
   end;
   smvDouble:
-    ExtendedToStr(unaligned(PDouble(V)^),DOUBLE_PRECISION,DestValue);
+    DoubleToStr(unaligned(PDouble(V)^),DestValue);
   smvCurrency:
     Curr64ToStr(PInt64(V)^,DestValue);
   smvRawJSON:

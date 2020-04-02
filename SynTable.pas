@@ -824,7 +824,8 @@ type
     // - if no Stream is supplied, a temporary memory stream will be created
     // (it's faster to supply one, e.g. any TSQLRest.TempMemoryStream)
     constructor Create(aStream: TStream; Expand, withID: boolean;
-      const Fields: TSQLFieldIndexDynArray=nil; aBufSize: integer=8192); overload;
+      const Fields: TSQLFieldIndexDynArray=nil; aBufSize: integer=8192;
+      aStackBuffer: PTextWriterStackBuffer=nil); overload;
     /// rewind the Stream position and write void JSON object
     procedure CancelAllVoid;
     /// write or init field names for appropriate JSON Expand later use
@@ -917,7 +918,7 @@ procedure VariantToSQLVar(const Input: variant; var temp: RawByteString;
   var Output: TSQLVar);
 
 /// guess the correct TSQLDBFieldType from a variant type
-function VariantVTypeToSQLDBFieldType(VType: word): TSQLDBFieldType;
+function VariantVTypeToSQLDBFieldType(VType: cardinal): TSQLDBFieldType;
 
 /// guess the correct TSQLDBFieldType from a variant value
 function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
@@ -3499,8 +3500,9 @@ type
   TSystemUseDataDynArray = array of TSystemUseData;
 
   /// low-level structure used to compute process memory and CPU usage
-  {$ifdef USERECORDWITHMETHODS}TProcessInfo = record private
-    {$else}TProcessInfo = object protected{$endif}
+  {$ifdef USERECORDWITHMETHODS}TProcessInfo = record
+    {$else}TProcessInfo = object {$endif}
+  private
     {$ifdef MSWINDOWS}
     fSysPrevIdle, fSysPrevKernel, fSysPrevUser,
     fDiffIdle, fDiffKernel, fDiffUser, fDiffTotal: Int64;
@@ -4725,18 +4727,18 @@ type
   // - is defined either as an object either as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
-  {$ifdef USERECORDWITHMETHODS}TSynTableData = record private
-    {$else}TSynTableData = object protected{$endif UNICODE}
-    VType: TVarType;
-    Filler: array[1..SizeOf(TVarData)-SizeOf(TVarType)-SizeOf(pointer)*2-4] of byte;
+  {$ifdef USERECORDWITHMETHODS}TSynTableData = record
+    {$else}TSynTableData = object {$endif UNICODE}
+  private
+    VType: cardinal; // defined as cardinal not as word for proper aligment
     VID: integer;
     VTable: TSynTable;
     VValue: TSBFString;
     {$ifndef NOVARIANTS}
-    function GetFieldValue(const FieldName: RawUTF8): Variant; overload;
     function GetFieldVarData(FieldName: PUTF8Char; FieldNameLen: PtrInt; var Value: TVarData): boolean;
     procedure GetFieldVariant(const FieldName: RawUTF8; var result: Variant);
-    procedure SetFieldValue(const FieldName: RawUTF8; const Value: Variant); overload;
+    function GetField(const FieldName: RawUTF8): Variant;
+    procedure SetField(const FieldName: RawUTF8; const Value: Variant);
     {$endif}
     /// raise an exception if VTable=nil
     procedure CheckVTableInitialized;
@@ -4757,13 +4759,13 @@ type
     property SBF: TSBFString read VValue;
     {$ifndef NOVARIANTS}
     /// set or retrieve a field value from a variant data
-    property Field[const FieldName: RawUTF8]: Variant read GetFieldValue write SetFieldValue;
+    property Field[const FieldName: RawUTF8]: Variant read GetField write SetField;
     /// get a field value for a specified field
     // - this method is faster than Field[], because it won't look for the field name
-    function GetFieldValue(aField: TSynTableFieldProperties): Variant; overload;
+    function GetFieldValue(aField: TSynTableFieldProperties): Variant;
     /// set a field value for a specified field
     // - this method is faster than Field[], because it won't look for the field name
-    procedure SetFieldValue(aField: TSynTableFieldProperties; const Value: Variant); overload;
+    procedure SetFieldValue(aField: TSynTableFieldProperties; const Value: Variant);
       {$ifdef HASINLINE}inline;{$endif}
     {$endif}
     /// set a field value for a specified field, from SBF-encoded data
@@ -5058,6 +5060,10 @@ type
     procedure Copy(var Dest: TVarData; const Source: TVarData;
       const Indirect: Boolean); override;
   end;
+
+/// initialize TSynTableVariantType if needed, and return the correspongind VType
+function SynTableVariantVarType: cardinal;
+
 {$endif NOVARIANTS}
 
 const
@@ -5133,6 +5139,13 @@ uses
 var
   SynTableVariantType: TCustomVariantType = nil;
 
+function SynTableVariantVarType: cardinal;
+begin
+  if SynTableVariantType=nil then
+    SynTableVariantType := SynRegisterCustomVariantType(TSynTableVariantType);
+  result := SynTableVariantType.VarType;
+end;
+
 procedure TSynTableVariantType.Clear(var V: TVarData);
 begin
   //Assert(V.VType=SynTableVariantType.VarType);
@@ -5163,7 +5176,7 @@ function TSynTableVariantType.IntSet(const Instance, Value: TVarData;
 var aName: RawUTF8;
 begin
   FastSetString(aName,Name,NameLen);
-  TSynTableData(Instance).SetFieldValue(aName,Variant(Value));
+  TSynTableData(Instance).SetField(aName,Variant(Value));
   result := true;
 end;
 
@@ -5966,10 +5979,8 @@ end;
 function TSynTable.Data(aID: integer; RecordBuffer: pointer; RecordBufferLen: Integer): Variant;
 var data: TSynTableData absolute result;
 begin
-  if SynTableVariantType=nil then
-    SynTableVariantType := SynRegisterCustomVariantType(TSynTableVariantType);
   VarClear(result);
-  data.VType := SynTableVariantType.VarType;
+  data.VType := SynTableVariantVarType;
   data.VID := aID;
   data.VTable := self;
   pointer(data.VValue) := nil; // avoid GPF
@@ -6293,7 +6304,7 @@ begin
   tftCurrency:
     Curr64ToStr(PInt64(FieldBuffer)^,result);
   tftDouble:
-    ExtendedToStr(unaligned(PDouble(FieldBuffer)^),DOUBLE_PRECISION,result);
+    DoubleToStr(unaligned(PDouble(FieldBuffer)^),result);
   // some variable-size field value
   tftVarUInt32:
     UInt32ToUtf8(FromVarUInt32(PB),result);
@@ -7171,7 +7182,7 @@ begin
       soContains: begin
         dec(L,ValueLen);
         while L>=0 do begin
-          while (L>=0) and not(byte(SBF^) in IsWord) do begin
+          while (L>=0) and not(tcWord in TEXT_CHARS[SBF^]) do begin
             dec(L);
             inc(SBF);
           end; // begin of next word reached
@@ -7183,7 +7194,7 @@ begin
           end else
             if StrCompIL(SBF,Value,ValueLen,0)=0 then
               exit;
-          while (L>=0) and (byte(SBF^) in IsWord) do begin
+          while (L>=0) and (tcWord in TEXT_CHARS[SBF^]) do begin
             dec(L);
             inc(SBF);
           end; // end of word reached
@@ -7311,7 +7322,7 @@ begin
       B := P;
       repeat
         inc(P);
-      until not(ord(P^) in IsJsonIdentifier);
+      until not (jcJsonIdentifier in JSON_CHARS[P^]);
       FastSetString(select.SubField,B,P-B);
       fHasSelectSubFields := true;
     end;
@@ -7441,7 +7452,7 @@ begin
     B := P;
     repeat
       inc(P);
-    until not(ord(P^) in IsJsonIdentifier);
+    until not (jcJsonIdentifier in JSON_CHARS[P^]);
     FastSetString(Where.SubField,B,P-B);
     fWhereHasSubFields := true;
     P := GotoNextNotSpace(P);
@@ -7720,7 +7731,7 @@ end;
 
 {$ifndef NOVARIANTS}
 
-function TSynTableData.GetFieldValue(const FieldName: RawUTF8): Variant;
+function TSynTableData.GetField(const FieldName: RawUTF8): Variant;
 begin
   GetFieldVariant(FieldName,result);
 end;
@@ -7780,15 +7791,16 @@ end;
 
 procedure TSynTableData.Init(aTable: TSynTable; aID: Integer);
 begin
-  VTable := aTable;
+  VType := SynTableVariantVarType;
   VID := aID;
+  VTable := aTable;
   VValue := VTable.DefaultRecordData;
-  {$ifdef UNICODE}FillcharFast(Filler,SizeOf(Filler),0);{$endif}
 end;
 
 procedure TSynTableData.Init(aTable: TSynTable; aID: Integer;
   RecordBuffer: pointer; RecordBufferLen: integer);
 begin
+  VType := SynTableVariantVarType;
   VTable := aTable;
   if (RecordBufferLen=0) or (RecordBuffer=nil) then begin
     VID := 0;
@@ -7800,7 +7812,7 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
-procedure TSynTableData.SetFieldValue(const FieldName: RawUTF8;
+procedure TSynTableData.SetField(const FieldName: RawUTF8;
   const Value: Variant);
 var F: TSynTableFieldProperties;
 begin
@@ -8863,7 +8875,7 @@ begin
     {$else}
     v := NormToUpperAnsi7Byte[ord(p^)]; // 7 bit char uppercase
     {$endif}
-    if not (v in IsWord) then break;
+    if not (tcWord in TEXT_BYTES[v]) then break;
     inc(p);
     dec(v,ord('B'));
     if v>high(TSoundExValues) then continue;
@@ -8906,7 +8918,7 @@ begin
   if Values<>nil then
   repeat
     v := GetNextUTF8Upper(U);
-    if not (v in IsWord) then break;
+    if not (tcWord in TEXT_BYTES[v]) then break;
     dec(v,ord('B'));
     if v>high(TSoundExValues) then continue;
     v := Values[v]; // get soundex value
@@ -8984,15 +8996,15 @@ begin
     repeat
       if A^=#0 then exit else
 {$ifdef USENORMTOUPPER}
-        if not(NormToUpperByte[ord(A^)] in IsWord) then break else inc(A);
-{$else} if not(ord(A^) in IsWord) then break else inc(A); {$endif}
+        if not(tcWord in TEXT_CHARS[NormToUpper[A^]]) then break else inc(A);
+{$else} if not(tcWord in TEXT_CHARS[A^]) then break else inc(A); {$endif}
     until false;
     // find beginning of next word
     repeat
       if A^=#0 then exit else
 {$ifdef USENORMTOUPPER}
-        if NormToUpperByte[ord(A^)] in IsWord then break else inc(A);
-{$else} if ord(A^) in IsWord then break else inc(A); {$endif}
+        if tcWord in TEXT_CHARS[NormToUpper[A^]] then break else inc(A);
+{$else} if tcWord in TEXT_CHARS[A^] then break else inc(A); {$endif}
     until false;
   until false;
 end;
@@ -9020,7 +9032,7 @@ begin
       c := GetNextUTF8Upper(U);
       if c=0 then
         exit;
-    until not(c in IsWord);
+    until not(tcWord in TEXT_BYTES[c]);
     // find beginning of next word
     repeat
       if U=nil then exit;
@@ -9028,7 +9040,7 @@ begin
       c := GetNextUTF8Upper(U);
       if c=0 then
         exit;
-    until c in IsWord;
+    until tcWord in TEXT_BYTES[c];
     U := V;
   until U=nil;
 end;
@@ -9059,9 +9071,9 @@ begin
   end;
   if next<>nil then begin
     {$ifdef USENORMTOUPPER}
-    while NormToUpperByte[ord(A^)] in IsWord do inc(A); // go to end of word
+    while tcWord in TEXT_CHARS[NormToUpper[A^]] do inc(A); // go to end of word
     {$else}
-    while ord(A^) in IsWord do inc(A); // go to end of word
+    while tcWord in TEXT_CHARS[A^] do inc(A); // go to end of word
     {$endif}
     next^ := A;
   end;
@@ -14260,7 +14272,7 @@ begin
   end;
 end;
 
-function VariantVTypeToSQLDBFieldType(VType: word): TSQLDBFieldType;
+function VariantVTypeToSQLDBFieldType(VType: cardinal): TSQLDBFieldType;
 begin
   case VType of
   varNull:
@@ -14485,11 +14497,16 @@ begin
 end;
 
 constructor TJSONWriter.Create(aStream: TStream; Expand, withID: boolean;
-  const Fields: TSQLFieldIndexDynArray; aBufSize: integer);
+  const Fields: TSQLFieldIndexDynArray; aBufSize: integer;
+  aStackBuffer: PTextWriterStackBuffer);
 begin
   if aStream=nil then
-    CreateOwnedStream else
-    inherited Create(aStream,aBufSize);
+    if aStackBuffer<>nil then
+      CreateOwnedStream(aStackBuffer^) else
+      CreateOwnedStream(aBufSize) else
+    if aStackBuffer<>nil then
+      inherited Create(aStream,aStackBuffer,SizeOf(aStackBuffer^)) else
+      inherited Create(aStream,aBufSize);
   fExpand := Expand;
   fWithID := withID;
   fFields := Fields;

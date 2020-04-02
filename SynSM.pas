@@ -1945,8 +1945,9 @@ end;
 
 function TSMValue.ToJSON(cx: PJSContext): RawUTF8;
 var W: TJSONWriter;
+    tmp: TTextWriterStackBuffer;
 begin
-  W := TJSONWriter.CreateOwnedStream;
+  W := TJSONWriter.CreateOwnedStream(tmp);
   try
     AddJSON(cx,W);
     W.SetText(result);

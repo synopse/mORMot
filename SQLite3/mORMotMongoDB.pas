@@ -311,18 +311,20 @@ begin
   {$ifdef WITHLOG}
   if aMongoDatabase.Client.Log=nil then
     aMongoDatabase.Client.SetLog(aServer.LogClass);
-  aServer.LogClass.Enter;
-  {$endif}
-  Props := aServer.Model.Props[aClass];
-  if Props=nil then
-    exit; // if aClass is not part of the model
-  if aMongoCollectionName='' then
-    aMongoCollectionName := Props.Props.SQLTableName;
-  Props.ExternalDB.Init(aClass,aMongoCollectionName,
-    aMongoDatabase.CollectionOrCreate[aMongoCollectionName],true,[]);
-  Props.ExternalDB.MapField('ID','_id');
-  result := TSQLRestStorageMongoDB.Create(aClass,aServer);
-  aServer.StaticDataAdd(result);
+  with aServer.LogClass.Enter do
+  {$endif WITHLOG}
+  begin
+    Props := aServer.Model.Props[aClass];
+    if Props=nil then
+      exit; // if aClass is not part of the model
+    if aMongoCollectionName='' then
+      aMongoCollectionName := Props.Props.SQLTableName;
+    Props.ExternalDB.Init(aClass,aMongoCollectionName,
+      aMongoDatabase.CollectionOrCreate[aMongoCollectionName],true,[]);
+    Props.ExternalDB.MapField('ID','_id');
+    result := TSQLRestStorageMongoDB.Create(aClass,aServer);
+    aServer.StaticDataAdd(result);
+  end;
 end;
 
 function StaticMongoDBRegisterAll(aServer: TSQLRestServer;
@@ -399,9 +401,7 @@ begin
   inherited Create(aClass,aServer);
   // ConnectionProperties should have been set in StaticMongoDBRegister()
   fCollection := fStoredClassMapping^.ConnectionProperties as TMongoCollection;
-  {$ifdef WITHLOG}
-  fOwner.LogFamily.SynLog.Log(sllInfo,'will store % using %',[aClass,Collection],self);
-  {$endif}
+  InternalLog('will store % using %',[aClass,Collection],sllInfo);
   BSONProjectionSet(fBSONProjectionSimpleFields,true,
     fStoredClassRecordProps.SimpleFieldsBits[soSelect],nil,nil);
   BSONProjectionSet(fBSONProjectionBlobFields,false,
@@ -489,11 +489,7 @@ begin
   inherited;
   FreeAndNil(fBatchWriter);
   fEngineGenerator.Free;
-  {$ifdef WITHLOG}
-  if fOwner<>nil then
-    fOwner.LogFamily.SynLog.Log(sllInfo,
-      'Destroy for % using %',[fStoredClass,Collection],self);
-  {$endif}
+  InternalLog('Destroy for % using %',[fStoredClass,Collection],sllInfo);
 end;
 
 function TSQLRestStorageMongoDB.TableHasRows(
@@ -541,10 +537,8 @@ function TSQLRestStorageMongoDB.EngineNextID: TID;
       raise EORMMongoDBException.CreateUTF8('Unexpected %.EngineNextID with %',
         [self,ToText(fEngineAddCompute)^]);
     end;
-    {$ifdef WITHLOG}
-    fOwner.LogFamily.SynLog.Log(sllInfo,'ComputeMax_ID=% in % using %',
-      [fEngineLastID,timer.Stop,ToText(fEngineAddCompute)^],self);
-    {$endif}
+    InternalLog('ComputeMax_ID=% in % using %',
+      [fEngineLastID,timer.Stop,ToText(fEngineAddCompute)^],sllInfo);
   end;
 
 begin

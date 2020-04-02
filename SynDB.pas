@@ -316,8 +316,11 @@ type
   TSQLDBColumnCreateDynArray = array of TSQLDBColumnCreate;
 
   /// identify a CRUD mode of a statement
+  // - in addition to CRUD states, cPostgreBulkArray would identify if the ORM
+  // should generate unnested/any bound array statements - currently only
+  // supported by SynDBPostgres for bulk insert/update/delete
   TSQLDBStatementCRUD = (
-    cCreate, cRead, cUpdate, cDelete);
+    cCreate, cRead, cUpdate, cDelete, cPostgreBulkArray);
 
   /// identify the CRUD modes of a statement
   // - used e.g. for batch send abilities of a DB engine
@@ -1458,6 +1461,8 @@ type
     // $  ['ALTER SESSION SET NLS_COMP=LINGUISTIC', 'ALTER SESSION SET NLS_SORT=BINARY_CI']
     //  - Postgres: disable notices and warnings
     // $  ['SET client_min_messages to ERROR']
+    // - SQLite3: turn foreign keys ON
+    // $  ['PRAGMA foreign_keys = ON']
     property ExecuteWhenConnected: TRawUTF8DynArray read fExecuteWhenConnected
       write fExecuteWhenConnected;
   end;
@@ -3834,7 +3839,7 @@ begin
     new := new+tmp+'?';
     inc(P); // jump ':'
     B := P;
-    while ord(P^) in IsIdentifier do
+    while tcIdentifier in TEXT_CHARS[P^] do
       inc(P); // go to end of parameter name
     paramName := UTF8DecodeToString(B,P-B);
     i := fParam.FindHashed(paramName);
@@ -6866,9 +6871,10 @@ end;
 function TSQLDBStatement.FetchAllToJSON(JSON: TStream; Expanded: boolean): PtrInt;
 var W: TJSONWriter;
     col: integer;
+    tmp: TTextWriterStackBuffer;
 begin
   result := 0;
-  W := TJSONWriter.Create(JSON,Expanded,false);
+  W := TJSONWriter.Create(JSON,Expanded,false,nil,0,@tmp);
   try
     Connection.InternalProcess(speActive);
     // get col names and types

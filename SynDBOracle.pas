@@ -537,7 +537,7 @@ type
   dvoid   = Pointer;
   text    = PAnsiChar;
   OraText = PAnsiChar;
-  size_T  = Integer;
+  size_T  = PtrUInt;
 
   pub1 = ^ub1;
   psb1 = ^sb1;
@@ -1831,11 +1831,7 @@ var log: ISynLog;
     Props: TSQLDBOracleConnectionProperties;
     mode: ub4;
     msg: RawUTF8;
-    // 988*8 is a MAGIC to prevent AV in -O2 optimization level
-    // <988 or > 1000 - depending on how we enter here raise AV in EnvNlsCreate
-    // 988 works in -O1 optimization but do not works in -O2
-    fake_stack_var_to_prevent_av_in_EnvNlsCreate: array[0..988*8] of byte;
-    r: integer;
+    dummyusermem: pointer;
 const
     type_owner_name: RawUTF8 = 'SYS';
     type_NymberListName: RawUTF8 = 'ODCINUMBERLIST';
@@ -1845,16 +1841,14 @@ begin
   log := SynDBLog.Enter(self,'Connect');
   Disconnect; // force fTrans=fError=fServer=fContext=nil
   Props := Properties as TSQLDBOracleConnectionProperties;
-  FillChar(fake_stack_var_to_prevent_av_in_EnvNlsCreate[0], length(fake_stack_var_to_prevent_av_in_EnvNlsCreate), 0);
   with OCI do
   try
     if fEnv=nil then begin
+      dummyusermem := nil; // try to circumvent random A/V in newest OCI
       // will use UTF-8 encoding by default, in a multi-threaded context
       // OCI_EVENTS is needed to support Oracle RAC Connection Load Balancing
-      r :=EnvNlsCreate(fEnv,Props.EnvironmentInitializationMode,
-        nil,nil,nil,nil,0,nil,OCI_UTF8,OCI_UTF8);
-      if r <> OCI_SUCCESS then
-        raise ESQLDBOracle.CreateUTF8('OCIEnvNlsCreate fails with error %', [r]);
+      EnvNlsCreate(fEnv,Props.EnvironmentInitializationMode,
+        nil,nil,nil,nil,0,@dummyusermem,OCI_UTF8,OCI_UTF8);
     end;
     HandleAlloc(fEnv,fError,OCI_HTYPE_ERROR);
     HandleAlloc(fEnv,fServer,OCI_HTYPE_SERVER);

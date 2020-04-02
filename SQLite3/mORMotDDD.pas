@@ -2604,7 +2604,7 @@ begin
     1: if fInternalSettings<>nil then begin
         if SQL[10]=' ' then begin
           name := copy(SQL,11,maxInt);
-          if PosEx('=',name)>0 then begin
+          if PosExChar('=',name)>0 then begin
             Split(name,'=',name,value);
             if (name<>'') and (value<>'') then begin
               VariantLoadJSON(status,pointer(value));

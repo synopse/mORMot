@@ -154,7 +154,11 @@ type
       aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode=tmMainConnection); override;
   end;
 
-  {$ifndef ONLYUSEHTTPSOCKET}
+  {$ifdef ONLYUSEHTTPSOCKET}
+
+  TSQLDBServerRemote = TSQLDBServerSockets;
+
+  {$else}
 
   /// implements a SynDB HTTP server using fast http.sys kernel-mode server
   // - under Windows, this class is faster and more stable than TSQLDBServerSockets
@@ -173,6 +177,9 @@ type
       aProtocol: TSQLDBProxyConnectionProtocolClass=nil;
       aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode=tmMainConnection); override;
   end;
+
+  /// the default SynDB HTTP server class on each platform
+  TSQLDBServerRemote = TSQLDBServerHttpApi;
 
   {$endif ONLYUSEHTTPSOCKET}
 

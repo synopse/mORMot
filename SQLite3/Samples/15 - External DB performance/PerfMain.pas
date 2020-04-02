@@ -487,6 +487,7 @@ var aUseBatch, aUseTransactions, aUseDirect: boolean;
     assert(err='',string(Stat.fEngine+' read failure: '+err));
     Value.ClearProperties;
   end;
+
 begin
   U := 'Namee ';
   UniqueRawUTF8(U); // FPC does not call it

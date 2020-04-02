@@ -1502,13 +1502,16 @@ begin
   NotifyTestSpeed('FPC',N,N shl POINTERSHR,@timer,{onlylog=}true);
   {$endif FPC}
   FillcharFast(Bits,sizeof(Bits),0);
-  for i := 0 to high(Bits)*8+7 do
+  for i := 0 to high(Bits)*8+7 do begin
     Check(not GetBit(Bits,i));
+    Check(not GetBitPtr(@Bits,i));
+  end;
   RandSeed := 10; // will reproduce the same Random() values
   for i := 1 to 100 do begin
     Si := Random(high(Bits));
     SetBit(Bits,Si);
     Check(GetBit(Bits,Si));
+    Check(GetBitPtr(@Bits,Si));
   end;
   RandSeed := 10;
   for i := 1 to 100 do
@@ -1518,6 +1521,7 @@ begin
     Si := Random(high(Bits));
     UnSetBit(Bits,Si);
     Check(not GetBit(Bits,Si));
+    Check(not GetBitPtr(@Bits,Si));
   end;
   for i := 0 to high(Bits)*8+7 do
     Check(not GetBit(Bits,i));
@@ -2636,6 +2640,8 @@ begin
   end;
   W.CancelAll;
   W.AddDynArrayJSON(AFP);
+  // note: error? ensure TTestLowLevelCommon run after TTestLowLevelTypes
+  // -> otherwise custom serialization is still active with no Build* fields
   U := W.Text;
   {$ifdef ISDELPHI2010} // thanks to enhanced RTTI
   Check(IdemPChar(pointer(U),'[{"MAJOR":0,"MINOR":1,"RELEASE":2,"BUILD":3,'+
@@ -3327,7 +3333,7 @@ procedure TTestLowLevelCommon._IsMatch;
 var i,j: integer;
     V, cont: RawUTF8;
     match: TMatch;
-    reuse: boolean;
+    reuse,isword: boolean;
 
   procedure Contains;
   begin
@@ -3612,16 +3618,17 @@ begin
   for i := 32 to 127 do begin
     SetLength(V,1);
     V[1] := AnsiChar(i);
-    Check(IsMatch('[A-Za-z0-9]',V)=(i in IsWord));
-    Check(IsMatch('[01-456a-zA-Z789]',V)=(i in IsWord));
+    isword := (tcWord in TEXT_BYTES[i]);
+    Check(IsMatch('[A-Za-z0-9]',V)=isword);
+    Check(IsMatch('[01-456a-zA-Z789]',V)=isword);
     SetLength(V,3);
     V[1] := AnsiChar(i);
     V[2] := AnsiChar(i);
     V[3] := AnsiChar(i);
-    Check(IsMatch('[A-Za-z0-9]?[A-Za-z0-9]',V)=(i in IsWord));
-    Check(IsMatch('[A-Za-z0-9]*',V)=(i in IsWord));
-    Check(IsMatch('[a-z0-9]?[A-Z0-9]',V,true)=(i in IsWord));
-    Check(IsMatch('[A-Z0-9]*',V,true)=(i in IsWord));
+    Check(IsMatch('[A-Za-z0-9]?[A-Za-z0-9]',V)=isword);
+    Check(IsMatch('[A-Za-z0-9]*',V)=isword);
+    Check(IsMatch('[a-z0-9]?[A-Z0-9]',V,true)=isword);
+    Check(IsMatch('[A-Z0-9]*',V,true)=isword);
   end;
 end;
 
@@ -4254,18 +4261,54 @@ begin
 end;
 
 procedure TTestLowLevelCommon.NumericalConversions;
+
+  procedure CheckDoubleToShort(v: double; const expected: ShortString);
+  var a: ShortString;
+      d: double;
+      err: integer;
+  begin
+    ExtendedToShort(a,v,DOUBLE_PRECISION);
+    CheckEqual(a,expected,'ExtendedToShort');
+    DoubleToShort(a,v);
+    CheckEqual(a,expected,'DoubleToShort');
+    a[ord(a[0])+1] := #0;
+    d := GetExtended(@a[1],err);
+    CheckEqual(err,0);
+    CheckSame(v,d);
+  end;
+
+  procedure CheckDoubleToShortSame(v: double);
+  var s: string;
+      u: RawUTF8;
+      err: integer;
+      d: double;
+  begin
+    s := DoubleToString(v);
+    val(s,d,err);
+    Check(err=0);
+    CheckSame(d,v);
+    StringToUTF8(s,u);
+    d := GetExtended(pointer(u),err);
+    Check(err=0);
+    CheckSame(d,v);
+  end;
+
 var i, j, b, err: integer;
     juint: cardinal absolute j;
     k,l: Int64;
     q: QWord;
     s,s2: RawUTF8;
     d,e: double;
+    f: extended;
     sd,se: single;
     {$ifndef DELPHI5OROLDER}
     c: currency;
     ident: TRawUTF8DynArray;
     {$endif}
-    a: shortstring;
+    {$ifndef NOVARIANTS}
+    vj, vs: variant;
+    {$endif}
+    a,a2: shortstring;
     u: string;
     varint: array[0..255] of byte;
     st: TFastReader;
@@ -4274,6 +4317,57 @@ var i, j, b, err: integer;
     crc, u32, n: cardinal;
     Timer: TPrecisionTimer;
 begin
+  n := 100000;
+  Timer.Start;
+  crc := 0;
+  d := 3.141592653 / 1.0573623912;
+  for i := 1 to n do begin
+    f  := d;
+    j := FloatToText(PChar(@varint),f,{$ifndef FPC}fvExtended,{$endif}
+      ffGeneral,DOUBLE_PRECISION,0);
+    PChar(@varint)[j] := #0;
+    inc(crc,j);
+    d := d * 1.0038265263;
+  end;
+  NotifyTestSpeed('FloatToText ', [Pchar(@varint)], n, crc, @timer);
+  Timer.Start;
+  crc := 0;
+  d := 3.141592653 / 1.0573623912;
+  for i := 1 to n do begin
+    Str(d,a);
+    inc(crc,ord(a[0]));
+    d := d * 1.0038265263;
+  end;
+  NotifyTestSpeed('str ', [a], n, crc, @timer);
+  //  a[ord(a[0])+1] := #0; Check(SameValue(GetExtended(pointer(@a[1])),d,0));
+  Timer.Start;
+  crc := 0;
+  d := 3.141592653 / 1.0573623912;
+  for i := 1 to n do begin
+    DoubleToShort(a,d);
+    inc(crc,ord(a[0]));
+    d := d * 1.0038265263;
+  end;
+  NotifyTestSpeed('DoubleToShort ', [a], n, crc, @timer);
+  a[ord(a[0])+1] := #0;
+  //  a[ord(a[0])+1] := #0; Check(SameValue(GetExtended(pointer(@a[1])),d,0));
+  {$ifdef DOUBLETOSHORT_USEGRISU}
+  Timer.Start;
+  crc := 0;
+  d := 3.141592653 / 1.0573623912;
+  for i := 1 to n do begin
+    DoubleToAscii(C_NO_MIN_WIDTH,-1,d,@a);
+    inc(crc,ord(a[0]));
+    d := d * 1.0038265263;
+  end;
+  NotifyTestSpeed('DoubleToAscii ', [a], n, crc, @timer);
+  //  a[ord(a[0])+1] := #0; Check(SameValue(GetExtended(pointer(@a[1])),d,0));
+  d := 0;
+  DoubleToAscii(C_NO_MIN_WIDTH,-1,d,@a);
+  Check(a='0');
+  DoubleToAscii(0,DOUBLE_PRECISION,d,@a);
+  Check(a='0');
+  {$endif DOUBLETOSHORT_USEGRISU}
   CheckEqual(TestAddFloatStr(''),'0');
   CheckEqual(TestAddFloatStr(' 123'),'123');
   CheckEqual(TestAddFloatStr(' 1a23'),'1');
@@ -4389,9 +4483,22 @@ begin
   s := '1234.1';
   d := GetExtended(pointer(s));
   CheckSame(d,1234.1);
+  s := '12345678901234567890';
+  d := GetExtended(pointer(s));
+  CheckSame(d,12345678901234567890.0,0);
   s := '1234.1234567890123456789';
   d := GetExtended(pointer(s));
   CheckSame(d,1234.1234567890123456789);
+  s := '.1234';
+  d := GetExtended(pointer(s));
+  CheckSame(d,0.1234);
+  s := '.1234e';
+  d := GetExtended(pointer(s),err);
+  Check(err<>0);
+  s := '.1234e4';
+  d := GetExtended(pointer(s),err);
+  Check(err=0);
+  CheckSame(d,1234);
   u := DoubleToString(40640.5028819444);
   Check(u='40640.5028819444',u);
   s := '40640.5028a819444';
@@ -4404,52 +4511,42 @@ begin
   Check(u='40640.5028819444',u);
   e := 40640.5028819444;
   CheckSame(d,e,1e-11);
-  d := 22.99999999999997;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
-  Check(a='23');
-  d := 0.9999999999999997;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
-  Check(a='1');
-  d := -0.9999999999999997;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
-  Check(a='-1');
-  d := 9.999999999999997;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
-  Check(a='10');
-  d := -9.999999999999997;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
-  Check(a='-10');
-  d := 999.9999999999997;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
-  Check(a='1000');
-  d := 999.9999999999933;
-  a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
-  Check(a='999.999999999993');
-  {$ifdef EXTENDEDTOSTRING_USESTR}
-  Check(DoubleToString(-3.3495117168e-10)='-0.00000000033495');
-  Check(DoubleToString(-3.3495617168e-10)='-0.00000000033496');
-  Check(DoubleToString(-3.9999617168e-14)='-0.00000000000004');
-  Check(DoubleToString(3.9999617168e-14)='0.00000000000004');
-  u := DoubleToString(-3.9999617168e-15);
-  val(u,d,err);
-  Check(err=0);
-  CheckSame(d,-3.9999617168e-15);
-  u := DoubleToString(3.9999617168e-15);
-  val(u,d,err);
-  Check(err=0);
-  CheckSame(d,3.9999617168e-15);
-  {$else}
-  Check(DoubleToString(-3.3495117168e-10)='-3.3495117168E-10');
-  Check(DoubleToString(-3.3495617168e-10)='-3.3495617168E-10');
-  Check(DoubleToString(-3.9999617168e-14)='-3.9999617168E-14');
-  Check(DoubleToString(3.9999617168e-14)='3.9999617168E-14');
-  Check(DoubleToString(-3.9999617168e-15)='-3.9999617168E-15');
-  Check(DoubleToString(3.9999617168e-15)='3.9999617168E-15');
-  {$endif}
+  CheckDoubleToShort(0,'0');
+  CheckDoubleToShort(1,'1');
+  CheckDoubleToShort(-1,'-1');
+  CheckDoubleToShort(0.9999999999999997,'1');
+  CheckDoubleToShort(-0.9999999999999997,'-1');
+  CheckDoubleToShort(9.999999999999997,'10');
+  CheckDoubleToShort(-9.999999999999997,'-10');
+  CheckDoubleToShort(999.9999999999997,'1000');
+  CheckDoubleToShort(-999.9999999999997,'-1000');
+  CheckDoubleToShort(22.99999999999997,'23');
+  CheckDoubleToShort(-22.99999999999997,'-23');
+  CheckDoubleToShort(999.9999999999933,'999.999999999993');
+  CheckDoubleToShort(-999.9999999999933,'-999.999999999993');
+  CheckDoubleToShortSame(3.3495117168);
+  CheckDoubleToShortSame(-3.3495117168);
+  CheckDoubleToShortSame(-3.3495117168e-1);
+  CheckDoubleToShortSame(3.3495117168e-1);
+  CheckDoubleToShortSame(-3.3495117168e-5);
+  CheckDoubleToShortSame(3.3495117168e-5);
+  CheckDoubleToShortSame(-3.3495117168e-10);
+  CheckDoubleToShortSame(3.3495117168e-10);
+  CheckDoubleToShortSame(-3.9999617168e-14);
+  CheckDoubleToShortSame(3.9999617168e-14);
+  CheckDoubleToShortSame(-3.9999617168e-15);
+  CheckDoubleToShortSame(3.9999617168e-15);
+  CheckDoubleToShortSame(12.345678901234);
+  CheckDoubleToShortSame(123.45678901234);
+  CheckDoubleToShortSame(1234.5678901234);
   Check(Int32ToUtf8(1599638299)='1599638299');
   Check(UInt32ToUtf8(1599638299)='1599638299');
   Check(Int32ToUtf8(-1599638299)='-1599638299');
   Check(Int64ToUTF8(-1271083787498396012)='-1271083787498396012');
+  {$ifdef FPC} // Delphi doesn't handle correctly such huge constants
+  CheckDoubleToShort(1234567890123456789,'1.2345678901234568E18');
+  CheckDoubleToShortSame(1234567890123456789);
+  {$endif}
   s := Int64ToUTF8(242161819595454762);
   Check(s='242161819595454762');
   {$ifndef DELPHI5OROLDER}
@@ -4551,16 +4648,18 @@ begin
     CheckEqual(FormatUTF8(' ?? ',[],[s],true),' "'+s+'" ');
     CheckEqual(FormatUTF8('? %',[s],[s],true),'"'+s+'" '+s);
 {$ifndef NOVARIANTS}
-    CheckEqual(FormatUTF8(' ?? ',[],[variant(j)],true),' '+s+' ');
-    CheckEqual(FormatUTF8(' ?? ',[],[variant(j)]),' :('''+s+'''): ');
-    CheckEqual(FormatUTF8('% ?',[variant(j)],[variant(j)]),s+' :('''+s+'''):');
-    CheckEqual(FormatUTF8(' ?? ',[],[variant(s)]),' :('''+s+'''): ');
-    CheckEqual(FormatUTF8('% ?',[variant(j)],[variant(j)]),s+' :('''+s+'''):');
-    CheckEqual(FormatUTF8('? %',[variant(j)],[variant(j)],true),s+' '+s);
-    CheckEqual(FormatUTF8(' ?? ',[],[variant(s)],true),' "'+s+'" ');
-    CheckEqual(FormatUTF8('? %',[variant(s)],[variant(j)],true),s+' '+s);
+    vj := variant(j);
+    RawUTF8ToVariant(s,vs);
+    CheckEqual(FormatUTF8(' ?? ',[],[vj],true),' '+s+' ');
+    CheckEqual(FormatUTF8(' ?? ',[],[vj]),' :('''+s+'''): ');
+    CheckEqual(FormatUTF8('% ?',[vj],[vj]),s+' :('''+s+'''):');
+    CheckEqual(FormatUTF8(' ?? ',[],[vs]),' :('''+s+'''): ');
+    CheckEqual(FormatUTF8('% ?',[vj],[vj]),s+' :('''+s+'''):');
+    CheckEqual(FormatUTF8('? %',[vj],[vj],true),s+' '+s);
+    CheckEqual(FormatUTF8(' ?? ',[],[vs],true),' "'+s+'" ');
+    CheckEqual(FormatUTF8('? %',[vs],[vj],true),s+' '+s);
 {$endif}
-{$endif}
+{$endif DELPHI5OROLDER}
     k := Int64(j)*Random(MaxInt);
     b := Random(64);
     s := GetBitCSV(k,b);
@@ -4606,35 +4705,49 @@ begin
     Check(SysUtils.IntToStr(j)=string(a));
     Check(format('%d',[j])=string(a));
     Check(format('%.8x',[j])=IntToHex(j,8));
-    d := Random*1E-17-Random*1E-19;
+    case i of
+      9990: d := 1E110;
+      9991: d := 1E-110;
+      9992: d := 1E210;
+      9993: d := 1E-210;
+      else d := Random*1E-17-Random*1E-19;
+    end;
     str(d,a);
     s := RawUTF8(a);
     e := GetExtended(Pointer(s),err);
-    Check(SameValue(e,d)); // test str()
+    Check(SameValue(e,d,0)); // validate str()
     s := ExtendedToStr(d,DOUBLE_PRECISION);
-    CheckEqual(TestAddFloatStr(s),s);
     e := GetExtended(Pointer(s),err);
-    Check(SameValue(e,d));
-    Check(not SameValue(e+1,d));
-    u := DoubleToString(d);
-    Check(Ansi7ToString(s)=u,u);
-    sd := d;
+    Check(SameValue(e,d,0));
     e := d;
-    Check(d=e);
-    Check(SortDynArrayDouble(d,d)=0);
-    Check(SortDynArrayDouble(d,e)=0);
-    se := sd;
-    Check(SortDynArraySingle(sd,sd)=0);
-    Check(SortDynArraySingle(sd,se)=0);
+    if (i < 9000) or (i > 9999) then begin
+      a[0] := AnsiChar(ExtendedToShort(a,d,DOUBLE_PRECISION));
+      a2[0] := AnsiChar(DoubleToShort(a2,d));
+      Check(a=a2);
+      a[0] := AnsiChar(ExtendedToShortNoExp(a,d,DOUBLE_PRECISION));
+      a2[0] := AnsiChar(DoubleToShortNoExp(a2,d));
+      Check(a=a2);
+      CheckEqual(TestAddFloatStr(s),s);
+      Check(not SameValue(e+1,d));
+      sd := d;
+      Check(d=e);
+      Check(SortDynArrayDouble(d,d)=0);
+      Check(SortDynArrayDouble(d,e)=0);
+      se := sd;
+      Check(SortDynArraySingle(sd,sd)=0);
+      Check(SortDynArraySingle(sd,se)=0);
+    end;
     if d<0 then
       e := e*0.9 else
       e := e*1.1;
     check(d<e);
     Check(SortDynArrayDouble(d,e)=-1);
     Check(SortDynArrayDouble(e,d)=1);
-    se := e;
-    Check(SortDynArraySingle(sd,se)=-1);
-    Check(SortDynArraySingle(se,sd)=1);
+    if (i < 9000) or (i > 9999) then begin
+      se := e;
+      Check(SortDynArraySingle(sd,se)=-1);
+      Check(SortDynArraySingle(se,sd)=1);
+    end;
     PC := ToVarUInt32(juint,@varint);
     Check(PC<>nil);
     Check(PtrInt(PC)-PtrInt(@varint)=integer(ToVarUInt32Length(juint)));
@@ -5001,10 +5114,14 @@ begin
     U := WinAnsiToUtf8(W);
     if len>0 then begin
       check(PosEx(U[1],U)=1);
+      check(PosExChar(U[1],U)=1);
       if (len>1) and (U[1]<>U[2]) then begin
         check(PosEx(U[2],U)=2);
-        if (len>2) and (U[1]<>U[2]) and (U[2]<>U[3]) and (U[1]<>U[3]) then
+        check(PosExChar(U[2],U)=2);
+        if (len>2) and (U[1]<>U[2]) and (U[2]<>U[3]) and (U[1]<>U[3]) then begin
           check(PosEx(U[3],U)=3);
+          check(PosExChar(U[3],U)=3);
+        end;
       end;
     end;
     for j := 1 to lenup100 do begin // validates with offset parameter
@@ -5014,6 +5131,7 @@ begin
         check(PosEx(U[j],U,j-1)=j);
       k := PosEx(U[j],U);
       check((k>0) and (U[k]=U[j]));
+      check(PosExChar(U[j],U)=k);
     end;
     Unic := Utf8DecodeToRawUnicode(U);
     {$ifndef FPC_HAS_CPSTRING} // buggy FPC
@@ -7706,536 +7824,573 @@ var J,U,U2: RawUTF8;
     DA: TDynArray;
     F: TFV;
     TLNow: TTimeLog;
-procedure TestMyColl(MyColl: TMyCollection);
-begin
-  if CheckFailed(MyColl<>nil) then
-    exit;
-  MyItem := MyColl.Add as TCollTest;
-  Check(MyItem.ClassType=TCollTest);
-  MyItem.Length := 10;
-  MyItem.Color := 20;
-  MyItem.Name := 'ABC';
-  U := ObjectToJSON(MyColl);
-  CheckEqual(U,'[{"Color":20,"Length":10,"Name":"ABC"}]');
-  MyColl.Free;
-end;
-procedure TCollTstDynArrayTest;
-var CA: TCollTstDynArray;
-    i: integer;
-    tmp: RawByteString;
-    pu: PUTF8Char;
-begin
-  CA := TCollTstDynArray.Create;
-  try
-    CA.Str := TStringList.Create;
-    tmp := J;
-    Check(JSONToObject(CA,UniqueRawUTF8(RawUTF8(tmp)),Valid)=nil);
-    Check(Valid);
-    Check(CA.One.Color=2);
-    Check(CA.One.Name='test2');
-    if not CheckFailed(CA.Coll.Count=1) then
-      Check(CA.Coll[0].Name='test');
-    Check(CA.One.Length=10);
-    Check(CA.Str.Count=10000);
-    for i := 1 to CA.Str.Count do
-      Check(CA.Str[i-1]=IntToStr(i));
-    SetLength(CA.fInts,20000);
-    for i := 0 to high(CA.Ints) do
-      CA.Ints[i] := i;
-    U := ObjectToJSON(CA);
-    check(IsValidJSON(U));
-  finally
-    CA.Free;
+
+  procedure TestMyColl(MyColl: TMyCollection);
+  begin
+    if CheckFailed(MyColl<>nil) then
+      exit;
+    MyItem := MyColl.Add as TCollTest;
+    Check(MyItem.ClassType=TCollTest);
+    MyItem.Length := 10;
+    MyItem.Color := 20;
+    MyItem.Name := 'ABC';
+    U := ObjectToJSON(MyColl);
+    CheckEqual(U,'[{"Color":20,"Length":10,"Name":"ABC"}]');
+    MyColl.Free;
   end;
-  CA := TCollTstDynArray.Create;
-  try
-    CA.Str := TStringList.Create;
-    Check(JSONToObject(CA,pointer(U),Valid)=nil);
-    Check(Valid);
-    Check(CA.Str.Count=10000);
-    for i := 1 to CA.Str.Count do
-      Check(CA.Str[i-1]=IntToStr(i));
-    Check(length(CA.Ints)=20000);
-    for i := 0 to high(CA.Ints) do
-      CA.Ints[i] := i;
-    SetLength(CA.fTimeLog,CA.Str.Count);
-    TLNow := TimeLogNow and (not 63);
-    for i := 0 to high(CA.TimeLog) do
-      CA.TimeLog[i] := TLNow+i and 31; // and 31 to avoid min:sec rounding
-    U := ObjectToJSON(CA);
-    SetLength(CA.fInts,2);
-    SetLength(CA.fTimeLog,2);
-    Check(JSONToObject(CA,pointer(U),Valid)=nil);
-    Check(Valid);
-    Check(Length(CA.Ints)=20000);
-    Check(Length(CA.TimeLog)=CA.Str.Count);
-    for i := 0 to high(CA.Ints) do
-      Check(CA.Ints[i]=i);
-    for i := 0 to high(CA.TimeLog) do
-      Check(CA.TimeLog[i]=TLNow+i and 31);
-    DA.Init(TypeInfo(TFVs),CA.fFileVersions);
-    for i := 1 to 1000 do begin
-      F.Major := i;
-      F.Minor := i+2000;
-      F.Release := i+3000;
-      F.Build := i+4000;
-      str(i,F.Main);
-      str(i+1000,F.Detailed);
-      DA.Add(F);
+  procedure TCollTstDynArrayTest;
+  var CA: TCollTstDynArray;
+      i: integer;
+      tmp: RawByteString;
+      pu: PUTF8Char;
+  begin
+    CA := TCollTstDynArray.Create;
+    try
+      CA.Str := TStringList.Create;
+      tmp := J;
+      Check(JSONToObject(CA,UniqueRawUTF8(RawUTF8(tmp)),Valid)=nil);
+      Check(Valid);
+      Check(CA.One.Color=2);
+      Check(CA.One.Name='test2');
+      if not CheckFailed(CA.Coll.Count=1) then
+        Check(CA.Coll[0].Name='test');
+      Check(CA.One.Length=10);
+      Check(CA.Str.Count=10000);
+      for i := 1 to CA.Str.Count do
+        Check(CA.Str[i-1]=IntToStr(i));
+      SetLength(CA.fInts,20000);
+      for i := 0 to high(CA.Ints) do
+        CA.Ints[i] := i;
+      U := ObjectToJSON(CA);
+      check(IsValidJSON(U));
+    finally
+      CA.Free;
     end;
-    U := ObjectToJSON(CA);
-    check(IsValidJSON(U));
-    DA.Clear;
-    Check(Length(CA.FileVersion)=0);
-    pu := JSONToObject(CA,pointer(U),Valid);
-    Check(pu=nil);
-    Check(Valid);
-    Check(Length(CA.Ints)=20000);
-    Check(Length(CA.TimeLog)=CA.Str.Count);
-    Check(Length(CA.FileVersion)=1000);
-    for i := 1 to 1000 do
-    with CA.FileVersion[i-1] do begin
-      Check(Major=i);
-      Check(Minor=i+2000);
-      Check(Release=i+3000);
-      Check(Build=i+4000);
-      Check(Main=IntToStr(i));
-      Check(Detailed=IntToStr(i+1000));
-    end;
-  finally
-    CA.Free;
-  end;
-end;
-procedure TFileVersionTest(Full: boolean);
-var V,F: TFileVersion;
-    J: RawUTF8;
-    i: integer;
-    Valid: boolean;
-begin
-  V := TFileVersion.Create('',0,0,0,0);
-  F := TFileVersion.Create('',0,0,0,0);
-  try
-    for i := 1 to 1000 do begin
-      if Full then begin
-        V.Major := i;
-        V.Minor := i+2000;
-        V.Release := i+3000;
-        V.Build := i+4000;
-        str(i,V.Main);
+    CA := TCollTstDynArray.Create;
+    try
+      CA.Str := TStringList.Create;
+      Check(JSONToObject(CA,pointer(U),Valid)=nil);
+      Check(Valid);
+      Check(CA.Str.Count=10000);
+      for i := 1 to CA.Str.Count do
+        Check(CA.Str[i-1]=IntToStr(i));
+      Check(length(CA.Ints)=20000);
+      for i := 0 to high(CA.Ints) do
+        CA.Ints[i] := i;
+      SetLength(CA.fTimeLog,CA.Str.Count);
+      TLNow := TimeLogNow and (not 63);
+      for i := 0 to high(CA.TimeLog) do
+        CA.TimeLog[i] := TLNow+i and 31; // and 31 to avoid min:sec rounding
+      U := ObjectToJSON(CA);
+      SetLength(CA.fInts,2);
+      SetLength(CA.fTimeLog,2);
+      Check(JSONToObject(CA,pointer(U),Valid)=nil);
+      Check(Valid);
+      Check(Length(CA.Ints)=20000);
+      Check(Length(CA.TimeLog)=CA.Str.Count);
+      for i := 0 to high(CA.Ints) do
+        Check(CA.Ints[i]=i);
+      for i := 0 to high(CA.TimeLog) do
+        Check(CA.TimeLog[i]=TLNow+i and 31);
+      DA.Init(TypeInfo(TFVs),CA.fFileVersions);
+      for i := 1 to 1000 do begin
+        F.Major := i;
+        F.Minor := i+2000;
+        F.Release := i+3000;
+        F.Build := i+4000;
+        str(i,F.Main);
+        str(i+1000,F.Detailed);
+        DA.Add(F);
       end;
-      V.BuildDateTime := 4090.0+i;
-      J := ObjectToJSON(V);
-      check(IsValidJSON(J));
-      JSONToObject(F,pointer(J),Valid);
-      if CheckFailed(Valid) then
-        continue;
-      if Full then begin
-        Check(F.Major=i);
-        Check(F.Minor=V.Minor);
-        Check(F.Release=V.Release);
-        Check(F.Build=V.Build);
-        Check(F.Main=V.Main);
+      U := ObjectToJSON(CA);
+      check(IsValidJSON(U));
+      DA.Clear;
+      Check(Length(CA.FileVersion)=0);
+      pu := JSONToObject(CA,pointer(U),Valid);
+      Check(pu=nil);
+      Check(Valid);
+      Check(Length(CA.Ints)=20000);
+      Check(Length(CA.TimeLog)=CA.Str.Count);
+      Check(Length(CA.FileVersion)=1000);
+      for i := 1 to 1000 do
+      with CA.FileVersion[i-1] do begin
+        Check(Major=i);
+        Check(Minor=i+2000);
+        Check(Release=i+3000);
+        Check(Build=i+4000);
+        Check(Main=IntToStr(i));
+        Check(Detailed=IntToStr(i+1000));
       end;
-      CheckSame(V.BuildDateTime,F.BuildDateTime);
-    end;
-  finally
-    F.Free;
-    V.Free;
-  end;
-end;
-{$endif}
-{$endif}
-procedure ABCD;
-begin
-  Check(Parser.Root.NestedProperty[0].PropertyName='A');
-  Check(Parser.Root.NestedProperty[0].PropertyType=ptInteger);
-  Check(Parser.Root.NestedProperty[1].PropertyName='B');
-  Check(Parser.Root.NestedProperty[1].PropertyType=ptInteger);
-  Check(Parser.Root.NestedProperty[2].PropertyName='C');
-  Check(Parser.Root.NestedProperty[2].PropertyType=ptInteger);
-  Check(Parser.Root.NestedProperty[3].PropertyName='D');
-  Check(Parser.Root.NestedProperty[3].PropertyType=ptRawUTF8);
-end;
-procedure ABCDE(Typ: TJSONCustomParserRTTIType);
-begin
-  ABCD;
-  with Parser.Root.NestedProperty[4] do begin
-    Check(PropertyName='E');
-    Check(PropertyType=Typ);
-    Check(length(NestedProperty)=2);
-    Check(NestedProperty[0].PropertyName='E1');
-    Check(NestedProperty[0].PropertyType=ptDouble);
-    Check(NestedProperty[1].PropertyName='E2');
-    Check(NestedProperty[1].PropertyType=ptDouble);
-  end;
-end;
-procedure TestGit(Options: TJSONCustomParserSerializationOptions);
-var i: Integer;
-    U: RawUTF8;
-    s: RawJSON;
-    git,git2: TTestCustomJSONGitHubs;
-    item,value: PUTF8Char;
-begin
-  if zendframeworkJson='' then
-    exit; // avoid GPF e.g. on Windows XP where https is broken
-  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONGitHub),
-    __TTestCustomJSONGitHub).Options := Options;
-  FillCharFast(git,sizeof(git),0);
-  FillCharFast(git2,sizeof(git2),0);
-  U := zendframeworkJson; // need unique string for procedure re-entrance
-  check(IsValidJSON(U));
-  Check(DynArrayLoadJSON(git,UniqueRawUTF8(U),TypeInfo(TTestCustomJSONGitHubs))<>nil);
-  U := DynArraySaveJSON(git,TypeInfo(TTestCustomJSONGitHubs));
-  check(IsValidJSON(U));
-  if soWriteHumanReadable in Options then
-    FileFromString(U,'zendframeworkSaved.json');
-  Check(length(git)>=30);
-  Check(length(U)>3000);
-  if git[0].id=8079771 then begin
-    Check(git[0].name='Component_ZendAuthentication');
-    Check(git[0].description='Authentication component from Zend Framework 2');
-    Check(git[0].owner.login='zendframework');
-    Check(git[0].owner.id=296074);
-  end;
-  for i := 0 to high(git) do
-  with git[i] do begin
-    item := JSONArrayItem(Pointer(U),i);
-    Check(item<>nil);
-    value := JsonObjectItem(item,'name');
-    check(value<>nil);
-    GetJSONItemAsRawJSON(value,s);
-    check(IsValidJSON(s));
-    check(trim(s)='"'+name+'"');
-    check(GetInteger(JsonObjectByPath(item,'owner.id'))=owner.id);
-    check(GetInteger(JsonObjectByPath(item,'owner.i*'))=owner.id);
-    check(JsonObjectByPath(item,'owner.name')='');
-    check(JsonObjectsByPath(item,'toto')='');
-    check(JsonObjectsByPath(item,'toto,titi')='');
-    check(JsonObjectsByPath(item,'toto,name')='{"name":"'+name+'"}');
-    check(JsonObjectsByPath(item,'toto,n*')='{"name":"'+name+'"}');
-    check(JsonObjectsByPath(item,'fork,toto,owner.id,name')=
-      FormatUTF8('{"fork":%,"owner.id":%,"name":"%"}',
-      [BOOL_STR[fork],owner.id,name]));
-    check(JsonObjectsByPath(item,'owner.i*')=FormatUTF8('{"owner.id":%}',[owner.id]));
-    check(JsonObjectsByPath(item,'owner.*')=FormatUTF8(
-      '{"owner.login":"%","owner.id":%}',[owner.login,owner.id]));
-    value := JsonObjectByPath(item,'owner');
-    GetJSONItemAsRawJSON(value,s);
-    check(IsValidJSON(s));
-    check(JSONReformat(s,jsonCompact)=FormatUTF8(
-      '{"login":"%","id":%}',[owner.login,owner.id]));
-  end;
-  Check(DynArrayLoadJSON(git2,pointer(U),TypeInfo(TTestCustomJSONGitHubs))<>nil);
-  if not CheckFailed(length(git)=Length(git2)) then
-    for i := 0 to high(git) do begin
-      Check(git[i].name=git2[i].name);
-      Check(git[i].id=git2[i].id);
-      Check(git[i].description=git2[i].description);
-      Check(git[i].fork=git2[i].fork);
-      Check(git[i].owner.login=git2[i].owner.login);
-      Check(git[i].owner.id=git2[i].owner.id);
-    end;
-  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONGitHub),'');
-end;
-{$ifndef DELPHI5OROLDER}
-function uct(const s: RawUTF8): TSQLFieldType;
-begin
-  result := UTF8ContentNumberType(pointer(s));
-end;
-var O,O2: TPersistentToJSON;
-    E: TSynBackgroundThreadProcessStep;
-    EndOfObject: AnsiChar;
-{$endif}
-{$ifndef NOVARIANTS}
-var Va, Vb: Variant;
-    c: currency;
-{$endif}
-procedure TestJSONSerialization;
-var ab0,ab1: TSubAB;
-    cd0,cd1,cd2: TSubCD;
-    agg,agg2: TAggregate;
-    X: RawUTF8;
-    AA,AB: TRawUTF8DynArrayDynArray;
-    i,a{$ifndef NOVARIANTS},v{$endif}: Integer;
-{$ifdef ISDELPHI2010}
-    nav,nav2: TConsultaNav;
-    nrtti,nrtti2: TNewRTTI;
-    book: TBookRecord;
-{$endif}
-begin
-  Finalize(JR);
-  Finalize(JR2);
-  Finalize(JA);
-  Finalize(JA2);
-  FillCharFast(JR,sizeof(JR),0);
-  FillCharFast(JR2,sizeof(JR2),0);
-  FillCharFast(JA,sizeof(JA),0);
-  FillCharFast(JA2,sizeof(JA2),0);
-  U := RecordSaveJSON(JR,TypeInfo(TTestCustomJSONRecord));
-  CheckEqual(U,'{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
-  check(IsValidJSON(U));
-  X := JSONToXML(U,'');
-  Check(X='<A>0</A><B>0</B><C>0</C><D></D><E><E1>0</E1><E2>0</E2></E><F></F>');
-  J := JSONToXML(U,'',XMLUTF8_NAMESPACE);
-  CheckEqual(J,XMLUTF8_NAMESPACE+X+'</contents>');
-  J := RecordSaveJSON(JA,TypeInfo(TTestCustomJSONArray));
-  CheckEqual(J,'{"A":0,"B":0,"C":0,"D":null,"E":[],"F":""}');
-  check(IsValidJSON(J));
-  X := JSONToXML(J,'');
-  Check(X='<A>0</A><B>0</B><C>0</C><D>null</D><F></F>');
-  JR2.A := 10;
-  JR2.D := '**';
-  JR2.F := 1;
-  JR := JR2;
-  RecordLoadJSON(JR2,pointer(U),TypeInfo(TTestCustomJSONRecord));
-  Check(JR2.A=0);
-  Check(JR2.D='');
-  Check(JR2.F=0);
-  U := RecordSaveJSON(JR2,TypeInfo(TTestCustomJSONRecord));
-  CheckEqual(U,'{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
-  check(IsValidJSON(U));
-  U := RecordSaveJSON(JR,TypeInfo(TTestCustomJSONRecord));
-  CheckEqual(U,'{"A":10,"B":0,"C":0,"D":"**","E":{"E1":0,"E2":0},"F":"1899-12-31"}');
-  check(IsValidJSON(U));
-  JA2.A := 10;
-  JA2.D := '**';
-  SetLength(JA2.E,2);
-  JA2.F := 1;
-  RecordLoadJSON(JA2,pointer(J),TypeInfo(TTestCustomJSONArray));
-  Check(JA2.A=0);
-  Check(JA2.D='');
-  check(Length(JA2.E)=0);
-  Check(JA2.F=0);
-  J := RecordSaveJSON(JA2,TypeInfo(TTestCustomJSONArray));
-  CheckEqual(J,'{"A":0,"B":0,"C":0,"D":null,"E":[],"F":""}');
-  check(IsValidJSON(J));
-  JA2.A := 100;
-  JA2.F := 1;
-  J := RecordSaveJSON(JA2,TypeInfo(TTestCustomJSONArray));
-  CheckEqual(J,'{"A":100,"B":0,"C":0,"D":null,"E":[],"F":"1899-12-31"}');
-  check(IsValidJSON(J));
-  SetLength(JA2.E,2);
-  JA2.E[0].E1 := 1;
-  JA2.E[0].E2 := '2';
-  JA2.E[1].E1 := 3;
-  JA2.E[1].E2 := '4';
-  J := RecordSaveJSON(JA2,TypeInfo(TTestCustomJSONArray));
-  CheckEqual(J,'{"A":100,"B":0,"C":0,"D":null,"E":[{"E1":1,"E2":"2"},{"E1":3,"E2":"4"}],"F":"1899-12-31"}');
-  check(IsValidJSON(J));
-  X := JSONToXML(J,'');
-  Check(X='<A>100</A><B>0</B><C>0</C><D>null</D><E><E1>1</E1><E2>2</E2></E><E><E1>3</E1><E2>4</E2></E><F>1899-12-31</F>');
-  RecordLoadJSON(JA,pointer(J),TypeInfo(TTestCustomJSONArray));
-  Check(RecordSave(JA,TypeInfo(TTestCustomJSONArray))=RecordSave(JA2,TypeInfo(TTestCustomJSONArray)));
-  J := '{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}';
-  check(IsValidJSON(J));
-  RecordLoadJSON(JA,UniqueRawUTF8(J),TypeInfo(TTestCustomJSONArray));
-  U := RecordSaveJSON(JA,TypeInfo(TTestCustomJSONArray));
-  Check(length(JA.E)=1);
-  CheckEqual(U,'{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}');
-  check(IsValidJSON(U));
-  X := JSONToXML(U,'');
-  Check(X='<A>0</A><B>0</B><C>0</C><D>null</D><E><E1>2</E1><E2>3</E2></E><F></F>');
-  X := JSONToXML('[1,2,"three"]');
-  Check(X='<?xml version="1.0" encoding="UTF-8"?>'#$D#$A'<0>1</0><1>2</1><2>three</2>');
-
-  SetLength(AA,100);
-  for i := 0 to high(AA) do begin
-    SetLength(AA[i],random(100));
-    for a := 0 to high(AA[i]) do begin
-      UInt32ToUtf8(i+a,AA[i,a]);
-      check(IsValidJSON(AA[i,a]));
-      check(IsValidJSON('    '+AA[i,a]));
-      check(IsValidJSON(AA[i,a]+'  '));
+    finally
+      CA.Free;
     end;
   end;
-  binary := DynArraySave(AA,TypeInfo(TRawUTF8DynArrayDynArray));
-  Check(DynArrayLoad(AB,pointer(binary),TypeInfo(TRawUTF8DynArrayDynArray))<>nil);
-  Check(length(AA)=length(AB));
-  for i := 0 to high(AA) do begin
-    Check(length(AA[i])=length(AB[i]));
-    for a := 0 to high(AA[i]) do
-      Check(AA[i,a]=AB[i,a]);
-  end;
-  j := DynArraySaveJSON(AA,TypeInfo(TRawUTF8DynArrayDynArray));
-  check(IsValidJSON(j));
-  Finalize(AB);
-  Check(DynArrayLoadJSON(AB,pointer(j),TypeInfo(TRawUTF8DynArrayDynArray))<>nil);
-  Check(length(AA)=length(AB));
-  for i := 0 to high(AA) do begin
-    Check(length(AA[i])=length(AB[i]));
-    for a := 0 to high(AA[i]) do
-      Check(AA[i,a]=AB[i,a]);
-  end;
-
-  ab0.a := 'AB0';
-  ab0.b := 0;
-  ab1.a := 'AB1';
-  ab1.b := 1;
-  cd0.c := 0;
-  cd0.d := 'CD0';
-  cd1.c := 1;
-  cd1.d := 'CD1';
-  cd2.c := 2;
-  cd2.d := 'CD2';
-  SetLength(agg.abArr,2);
-  agg.abArr[0] := ab0;
-  agg.abArr[1] := ab1;
-  SetLength(agg.cdArr,3);
-  agg.cdArr[0] := cd0;
-  agg.cdArr[1] := cd1;
-  agg.cdArr[2] := cd2;
-  u := '{"abArr":[{"a":"AB0","b":0},{"a":"AB1","b":1}],"cdArr":[{"c":0,"d":"CD0"},'+
-    '{"c":1,"d":"CD1"},{"c":2,"d":"CD2"}]}';
-  Check(Hash32(u)=$E3AC9C44);
-  check(IsValidJSON(u));
-  Check(RecordSaveJSON(agg,TypeInfo(TAggregate))=u);
-  RecordLoadJSON(agg2,UniqueRawUTF8(u),TypeInfo(TAggregate));
-  j := RecordSaveJSON(agg2,TypeInfo(TAggregate));
-  Check(Hash32(j)=$E3AC9C44);
-  check(IsValidJSON(j));
-
-  Finalize(JAS);
-  FillCharFast(JAS,sizeof(JAS),0);
-  U := RecordSaveJSON(JAS,TypeInfo(TTestCustomJSONArraySimple));
-  CheckEqual(U,'{"A":0,"B":0,"C":[],"D":"","E":[],"H":""}');
-  check(IsValidJSON(U));
-  U := '{"a":1,"b":2,"c":["C9A646D3-9C61-4CB7-BFCD-EE2522C8F633",'+
-    '"3F2504E0-4F89-11D3-9A0C-0305E82C3301"],"d":"4","e":[{"f":"f","g":["g1","g2"]}],"h":"h"}';
-  J := U;
-  RecordLoadJSON(JAS,UniqueRawUTF8(U),TypeInfo(TTestCustomJSONArraySimple));
-  Check(JAS.A=1);
-  Check(JAS.B=2);
-  Check(length(JAS.C)=2);
-  Check(GUIDToRawUTF8(JAS.C[0])='{C9A646D3-9C61-4CB7-BFCD-EE2522C8F633}');
-  Check(GUIDToRawUTF8(JAS.C[1])='{3F2504E0-4F89-11D3-9A0C-0305E82C3301}');
-  Check(JAS.D='4');
-  Check(length(JAS.E)=1);
-  Check(JAS.E[0].F='f');
-  Check(Length(JAS.E[0].G)=2);
-  Check(JAS.E[0].G[0]='g1');
-  Check(JAS.E[0].G[1]='g2');
-  Check(JAS.H='h');
-  U := RecordSaveJSON(JAS,TypeInfo(TTestCustomJSONArraySimple));
-  Check(SameTextU(J,U));
-  check(IsValidJSON(U));
-
-{$ifndef NOVARIANTS}
-  Finalize(JAV);
-  FillCharFast(JAV,sizeof(JAV),0);
-  U := RecordSaveJSON(JAV,TypeInfo(TTestCustomJSONArrayVariant));
-  CheckEqual(U,'{"A":0,"B":0,"C":[],"D":""}');
-  check(IsValidJSON(U));
-  assert(DocVariantType<>nil);
-  U := '{"a":1,"b":2,"c":["one",2,2.5,{four:[1,2,3,4]}],"d":"4"}';
-  check(IsValidJSON(U));
-  RecordLoadJSON(JAV,UniqueRawUTF8(U),TypeInfo(TTestCustomJSONArrayVariant));
-  Check(JAV.A=1);
-  Check(JAV.B=2);
-  if not CheckFailed(length(JAV.C)=4) then begin
-    Check(JAV.C[0]='one');
-    Check(JAV.C[1]=2);
-    CheckSame(JAV.C[2],2.5);
-    Check(JAV.C[3]._Kind=ord(dvObject));
-    Check(JAV.C[3]._Count=1);
-    Check(JAV.C[3].Name(0)='four');
-    Check(VariantSaveJSON(JAV.C[3].four)='[1,2,3,4]');
-    with DocVariantData(JAV.C[3])^ do begin
-      Check(Kind=dvObject);
-      Check(Count=1);
-      Check(Names[0]='four');
-      Check(Values[0]._Kind=ord(dvArray));
-      Check(Values[0]._Count=4);
-      with DocVariantData(Values[0])^ do begin
-        Check(Kind=dvArray);
-        Check(Count=4);
-        for v := 0 to Count-1 do
-          Check(Values[v]=v+1);
+  procedure TFileVersionTest(Full: boolean);
+  var V,F: TFileVersion;
+      J: RawUTF8;
+      i: integer;
+      Valid: boolean;
+  begin
+    V := TFileVersion.Create('',0,0,0,0);
+    F := TFileVersion.Create('',0,0,0,0);
+    try
+      for i := 1 to 1000 do begin
+        if Full then begin
+          V.Major := i;
+          V.Minor := i+2000;
+          V.Release := i+3000;
+          V.Build := i+4000;
+          str(i,V.Main);
+        end;
+        V.BuildDateTime := 4090.0+i;
+        J := ObjectToJSON(V);
+        check(IsValidJSON(J));
+        JSONToObject(F,pointer(J),Valid);
+        if CheckFailed(Valid) then
+          continue;
+        if Full then begin
+          Check(F.Major=i);
+          Check(F.Minor=V.Minor);
+          Check(F.Release=V.Release);
+          Check(F.Build=V.Build);
+          Check(F.Main=V.Main);
+        end;
+        CheckSame(V.BuildDateTime,F.BuildDateTime);
       end;
+    finally
+      F.Free;
+      V.Free;
     end;
   end;
-  Check(JAV.D='4');
-{$endif}
-
-  Finalize(Cache);
-  FillCharFast(Cache,sizeof(Cache),0);
-  U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
-  CheckEqual(U,'{"ID":0,"Timestamp512":0,"Tag":0,"JSON":""}');
-  check(IsValidJSON(U));
-  Cache.ID := 10;
-  Cache.Timestamp512 := 200;
-  Cache.JSON := 'test';
-  Cache.Tag := 12;
-  U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
-  CheckEqual(U,'{"ID":10,"Timestamp512":200,"Tag":12,"JSON":"test"}');
-  check(IsValidJSON(U));
-  U := '{"ID":210,"Timestamp512":2200,"JSON":"test2"}';
-  check(IsValidJSON(U));
-  RecordLoadJSON(Cache,UniqueRawUTF8(U),TypeInfo(TSQLRestCacheEntryValue));
-  Check(Cache.ID=210);
-  Check(Cache.Timestamp512=2200);
-  Check(Cache.JSON='test2');
-  Check(Cache.Tag=12);
-  U := '{ID:220,JSON:"test3",Timestamp512:2300}';
-  check(IsValidJSON(U));
-  RecordLoadJSON(Cache,UniqueRawUTF8(U),TypeInfo(TSQLRestCacheEntryValue));
-  Check(Cache.ID=220);
-  Check(Cache.Timestamp512=2300);
-  Check(Cache.JSON='test3');
-  Check(Cache.Tag=12);
-
-  {$ifdef ISDELPHI2010}
-  FillCharFast(nav,sizeof(nav),0);
-  FillCharFast(nav2,sizeof(nav2),1);
-  Check(not CompareMem(@nav,@nav2,sizeof(nav)));
-  Check(nav2.MaxRows<>0);
-  check(nav2.EOF);
-  U := RecordSaveJSON(nav,TypeInfo(TConsultaNav));
-  J := RecordSaveJSON(nav2,TypeInfo(TConsultaNav));
-  Check(U<>J);
-  RecordLoadJSON(nav2,UniqueRawUTF8(U),TypeInfo(TConsultaNav));
-  Check(nav2.MaxRows=0);
-  check(not nav2.EOF);
-  J := RecordSaveJSON(nav2,TypeInfo(TConsultaNav));
-  CheckEqual(J,RecordSaveJSON(nav,TypeInfo(TConsultaNav)));
-  Check(CompareMem(@nav,@nav2,sizeof(nav)));
-  Finalize(nrtti);
-  FillCharFast(nrtti,sizeof(nrtti),0);
-  U := RecordSaveJSON(nrtti,TypeInfo(TNewRTTI));
-  CheckEqual(U,'{"Number":0,"StaticArray":[{"Name":"","Single":0,"Double":0},'+
-     '{"Name":"","Single":0,"Double":0}],"Int":[0,0,0,0,0]}');
-  Finalize(nrtti2);
-  FillCharFast(nrtti2,sizeof(nrtti2),0);
-  Check(RecordLoadJSON(nrtti2,pointer(U),TypeInfo(TNewRTTI))<>nil);
-  J := RecordSaveJSON(nrtti2,TypeInfo(TNewRTTI));
-  CheckEqual(J,RecordSaveJSON(nrtti,TypeInfo(TNewRTTI)));
-  nrtti.Number := 1;
-  nrtti.StaticArray[1].Name := 'one';
-  nrtti.StaticArray[1].Single := 1.5;
-  nrtti.StaticArray[1].Double := 1.7;
-  nrtti.StaticArray[2].Name := 'two';
-  nrtti.StaticArray[2].Single := 2.5;
-  nrtti.StaticArray[2].Double := 2.7;
-  nrtti.Int[1] := 1;
-  nrtti.Int[2] := 2;
-  nrtti.Int[3] := 3;
-  nrtti.Int[4] := 4;
-  nrtti.Int[5] := 5;
-  U := RecordSaveJSON(nrtti,TypeInfo(TNewRTTI));
-  CheckEqual(U,'{"Number":1,"StaticArray":[{"Name":"one","Single":1.5,"Double":1.7},'+
-    '{"Name":"two","Single":2.5,"Double":2.7}],"Int":[1,2,3,4,5]}');
-  Finalize(nrtti2);
-  FillCharFast(nrtti2,sizeof(nrtti2),0);
-  Check(RecordLoadJSON(nrtti2,pointer(U),TypeInfo(TNewRTTI))<>nil);
-  J := RecordSaveJSON(nrtti2,TypeInfo(TNewRTTI));
-  CheckEqual(J,RecordSaveJSON(nrtti,TypeInfo(TNewRTTI)));
-  U :='{ "name": "Book the First", "author": { "first_name": "Bob", "last_name": "White" } }';
-  RecordLoadJSON(Book,UniqueRawUTF8(U),TypeInfo(TBookRecord));
-  check(Book.name='Book the First');
-  check(Book.author.first_name='Bob');
-  Check(Book.author.last_name='White');
   {$endif}
-end;
+  {$endif}
+  procedure ABCD;
+  begin
+    Check(Parser.Root.NestedProperty[0].PropertyName='A');
+    Check(Parser.Root.NestedProperty[0].PropertyType=ptInteger);
+    Check(Parser.Root.NestedProperty[1].PropertyName='B');
+    Check(Parser.Root.NestedProperty[1].PropertyType=ptInteger);
+    Check(Parser.Root.NestedProperty[2].PropertyName='C');
+    Check(Parser.Root.NestedProperty[2].PropertyType=ptInteger);
+    Check(Parser.Root.NestedProperty[3].PropertyName='D');
+    Check(Parser.Root.NestedProperty[3].PropertyType=ptRawUTF8);
+  end;
+  procedure ABCDE(Typ: TJSONCustomParserRTTIType);
+  begin
+    ABCD;
+    with Parser.Root.NestedProperty[4] do begin
+      Check(PropertyName='E');
+      Check(PropertyType=Typ);
+      Check(length(NestedProperty)=2);
+      Check(NestedProperty[0].PropertyName='E1');
+      Check(NestedProperty[0].PropertyType=ptDouble);
+      Check(NestedProperty[1].PropertyName='E2');
+      Check(NestedProperty[1].PropertyType=ptDouble);
+    end;
+  end;
+  procedure TestGit(Options: TJSONCustomParserSerializationOptions);
+  var i: Integer;
+      U: RawUTF8;
+      s: RawJSON;
+      git,git2: TTestCustomJSONGitHubs;
+      item,value: PUTF8Char;
+  begin
+    if zendframeworkJson='' then
+      exit; // avoid GPF e.g. on Windows XP where https is broken
+    TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONGitHub),
+      __TTestCustomJSONGitHub).Options := Options;
+    FillCharFast(git,sizeof(git),0);
+    FillCharFast(git2,sizeof(git2),0);
+    U := zendframeworkJson; // need unique string for procedure re-entrance
+    check(IsValidJSON(U));
+    Check(DynArrayLoadJSON(git,UniqueRawUTF8(U),TypeInfo(TTestCustomJSONGitHubs))<>nil);
+    U := DynArraySaveJSON(git,TypeInfo(TTestCustomJSONGitHubs));
+    check(IsValidJSON(U));
+    if soWriteHumanReadable in Options then
+      FileFromString(U,'zendframeworkSaved.json');
+    Check(length(git)>=30);
+    Check(length(U)>3000);
+    if git[0].id=8079771 then begin
+      Check(git[0].name='Component_ZendAuthentication');
+      Check(git[0].description='Authentication component from Zend Framework 2');
+      Check(git[0].owner.login='zendframework');
+      Check(git[0].owner.id=296074);
+    end;
+    for i := 0 to high(git) do
+    with git[i] do begin
+      item := JSONArrayItem(Pointer(U),i);
+      Check(item<>nil);
+      value := JsonObjectItem(item,'name');
+      check(value<>nil);
+      GetJSONItemAsRawJSON(value,s);
+      check(IsValidJSON(s));
+      check(trim(s)='"'+name+'"');
+      check(GetInteger(JsonObjectByPath(item,'owner.id'))=owner.id);
+      check(GetInteger(JsonObjectByPath(item,'owner.i*'))=owner.id);
+      check(JsonObjectByPath(item,'owner.name')='');
+      check(JsonObjectsByPath(item,'toto')='');
+      check(JsonObjectsByPath(item,'toto,titi')='');
+      check(JsonObjectsByPath(item,'toto,name')='{"name":"'+name+'"}');
+      check(JsonObjectsByPath(item,'toto,n*')='{"name":"'+name+'"}');
+      check(JsonObjectsByPath(item,'fork,toto,owner.id,name')=
+        FormatUTF8('{"fork":%,"owner.id":%,"name":"%"}',
+        [BOOL_STR[fork],owner.id,name]));
+      check(JsonObjectsByPath(item,'owner.i*')=FormatUTF8('{"owner.id":%}',[owner.id]));
+      check(JsonObjectsByPath(item,'owner.*')=FormatUTF8(
+        '{"owner.login":"%","owner.id":%}',[owner.login,owner.id]));
+      value := JsonObjectByPath(item,'owner');
+      GetJSONItemAsRawJSON(value,s);
+      check(IsValidJSON(s));
+      check(JSONReformat(s,jsonCompact)=FormatUTF8(
+        '{"login":"%","id":%}',[owner.login,owner.id]));
+    end;
+    Check(DynArrayLoadJSON(git2,pointer(U),TypeInfo(TTestCustomJSONGitHubs))<>nil);
+    if not CheckFailed(length(git)=Length(git2)) then
+      for i := 0 to high(git) do begin
+        Check(git[i].name=git2[i].name);
+        Check(git[i].id=git2[i].id);
+        Check(git[i].description=git2[i].description);
+        Check(git[i].fork=git2[i].fork);
+        Check(git[i].owner.login=git2[i].owner.login);
+        Check(git[i].owner.id=git2[i].owner.id);
+      end;
+    TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONGitHub),'');
+  end;
+  {$ifndef DELPHI5OROLDER}
+  function uct(const s: RawUTF8): TSQLFieldType;
+  begin
+    result := UTF8ContentNumberType(pointer(s));
+  end;
+  var O,O2: TPersistentToJSON;
+      E: TSynBackgroundThreadProcessStep;
+      EndOfObject: AnsiChar;
+  {$endif}
+  {$ifndef NOVARIANTS}
+  var Va, Vb: Variant;
+      c: currency;
+  {$endif}
+  procedure TestJSONSerialization;
+  var ab0,ab1: TSubAB;
+      cd0,cd1,cd2: TSubCD;
+      agg,agg2: TAggregate;
+      X: RawUTF8;
+      AA,AB: TRawUTF8DynArrayDynArray;
+      i,a{$ifndef NOVARIANTS},v{$endif}: Integer;
+  {$ifdef ISDELPHI2010}
+      nav,nav2: TConsultaNav;
+      nrtti,nrtti2: TNewRTTI;
+      book: TBookRecord;
+  {$endif}
+  begin
+    Finalize(JR);
+    Finalize(JR2);
+    Finalize(JA);
+    Finalize(JA2);
+    FillCharFast(JR,sizeof(JR),0);
+    FillCharFast(JR2,sizeof(JR2),0);
+    FillCharFast(JA,sizeof(JA),0);
+    FillCharFast(JA2,sizeof(JA2),0);
+    U := RecordSaveJSON(JR,TypeInfo(TTestCustomJSONRecord));
+    CheckEqual(U,'{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
+    check(IsValidJSON(U));
+    X := JSONToXML(U,'');
+    Check(X='<A>0</A><B>0</B><C>0</C><D></D><E><E1>0</E1><E2>0</E2></E><F></F>');
+    J := JSONToXML(U,'',XMLUTF8_NAMESPACE);
+    CheckEqual(J,XMLUTF8_NAMESPACE+X+'</contents>');
+    J := RecordSaveJSON(JA,TypeInfo(TTestCustomJSONArray));
+    CheckEqual(J,'{"A":0,"B":0,"C":0,"D":null,"E":[],"F":""}');
+    check(IsValidJSON(J));
+    X := JSONToXML(J,'');
+    Check(X='<A>0</A><B>0</B><C>0</C><D>null</D><F></F>');
+    JR2.A := 10;
+    JR2.D := '**';
+    JR2.F := 1;
+    JR := JR2;
+    RecordLoadJSON(JR2,pointer(U),TypeInfo(TTestCustomJSONRecord));
+    Check(JR2.A=0);
+    Check(JR2.D='');
+    Check(JR2.F=0);
+    U := RecordSaveJSON(JR2,TypeInfo(TTestCustomJSONRecord));
+    CheckEqual(U,'{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
+    check(IsValidJSON(U));
+    U := RecordSaveJSON(JR,TypeInfo(TTestCustomJSONRecord));
+    CheckEqual(U,'{"A":10,"B":0,"C":0,"D":"**","E":{"E1":0,"E2":0},"F":"1899-12-31"}');
+    check(IsValidJSON(U));
+    JA2.A := 10;
+    JA2.D := '**';
+    SetLength(JA2.E,2);
+    JA2.F := 1;
+    RecordLoadJSON(JA2,pointer(J),TypeInfo(TTestCustomJSONArray));
+    Check(JA2.A=0);
+    Check(JA2.D='');
+    check(Length(JA2.E)=0);
+    Check(JA2.F=0);
+    J := RecordSaveJSON(JA2,TypeInfo(TTestCustomJSONArray));
+    CheckEqual(J,'{"A":0,"B":0,"C":0,"D":null,"E":[],"F":""}');
+    check(IsValidJSON(J));
+    JA2.A := 100;
+    JA2.F := 1;
+    J := RecordSaveJSON(JA2,TypeInfo(TTestCustomJSONArray));
+    CheckEqual(J,'{"A":100,"B":0,"C":0,"D":null,"E":[],"F":"1899-12-31"}');
+    check(IsValidJSON(J));
+    SetLength(JA2.E,2);
+    JA2.E[0].E1 := 1;
+    JA2.E[0].E2 := '2';
+    JA2.E[1].E1 := 3;
+    JA2.E[1].E2 := '4';
+    J := RecordSaveJSON(JA2,TypeInfo(TTestCustomJSONArray));
+    CheckEqual(J,'{"A":100,"B":0,"C":0,"D":null,"E":[{"E1":1,"E2":"2"},{"E1":3,"E2":"4"}],"F":"1899-12-31"}');
+    check(IsValidJSON(J));
+    X := JSONToXML(J,'');
+    Check(X='<A>100</A><B>0</B><C>0</C><D>null</D><E><E1>1</E1><E2>2</E2></E><E><E1>3</E1><E2>4</E2></E><F>1899-12-31</F>');
+    RecordLoadJSON(JA,pointer(J),TypeInfo(TTestCustomJSONArray));
+    Check(RecordSave(JA,TypeInfo(TTestCustomJSONArray))=RecordSave(JA2,TypeInfo(TTestCustomJSONArray)));
+    J := '{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}';
+    check(IsValidJSON(J));
+    RecordLoadJSON(JA,UniqueRawUTF8(J),TypeInfo(TTestCustomJSONArray));
+    U := RecordSaveJSON(JA,TypeInfo(TTestCustomJSONArray));
+    Check(length(JA.E)=1);
+    CheckEqual(U,'{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}');
+    check(IsValidJSON(U));
+    X := JSONToXML(U,'');
+    Check(X='<A>0</A><B>0</B><C>0</C><D>null</D><E><E1>2</E1><E2>3</E2></E><F></F>');
+    X := JSONToXML('[1,2,"three"]');
+    Check(X='<?xml version="1.0" encoding="UTF-8"?>'#$D#$A'<0>1</0><1>2</1><2>three</2>');
+
+    SetLength(AA,100);
+    for i := 0 to high(AA) do begin
+      SetLength(AA[i],random(100));
+      for a := 0 to high(AA[i]) do begin
+        UInt32ToUtf8(i+a,AA[i,a]);
+        check(IsValidJSON(AA[i,a]));
+        check(IsValidJSON('    '+AA[i,a]));
+        check(IsValidJSON(AA[i,a]+'  '));
+      end;
+    end;
+    binary := DynArraySave(AA,TypeInfo(TRawUTF8DynArrayDynArray));
+    Check(DynArrayLoad(AB,pointer(binary),TypeInfo(TRawUTF8DynArrayDynArray))<>nil);
+    Check(length(AA)=length(AB));
+    for i := 0 to high(AA) do begin
+      Check(length(AA[i])=length(AB[i]));
+      for a := 0 to high(AA[i]) do
+        Check(AA[i,a]=AB[i,a]);
+    end;
+    j := DynArraySaveJSON(AA,TypeInfo(TRawUTF8DynArrayDynArray));
+    check(IsValidJSON(j));
+    Finalize(AB);
+    Check(DynArrayLoadJSON(AB,pointer(j),TypeInfo(TRawUTF8DynArrayDynArray))<>nil);
+    Check(length(AA)=length(AB));
+    for i := 0 to high(AA) do begin
+      Check(length(AA[i])=length(AB[i]));
+      for a := 0 to high(AA[i]) do
+        Check(AA[i,a]=AB[i,a]);
+    end;
+
+    ab0.a := 'AB0';
+    ab0.b := 0;
+    ab1.a := 'AB1';
+    ab1.b := 1;
+    cd0.c := 0;
+    cd0.d := 'CD0';
+    cd1.c := 1;
+    cd1.d := 'CD1';
+    cd2.c := 2;
+    cd2.d := 'CD2';
+    SetLength(agg.abArr,2);
+    agg.abArr[0] := ab0;
+    agg.abArr[1] := ab1;
+    SetLength(agg.cdArr,3);
+    agg.cdArr[0] := cd0;
+    agg.cdArr[1] := cd1;
+    agg.cdArr[2] := cd2;
+    u := '{"abArr":[{"a":"AB0","b":0},{"a":"AB1","b":1}],"cdArr":[{"c":0,"d":"CD0"},'+
+      '{"c":1,"d":"CD1"},{"c":2,"d":"CD2"}]}';
+    Check(Hash32(u)=$E3AC9C44);
+    check(IsValidJSON(u));
+    Check(RecordSaveJSON(agg,TypeInfo(TAggregate))=u);
+    RecordLoadJSON(agg2,UniqueRawUTF8(u),TypeInfo(TAggregate));
+    j := RecordSaveJSON(agg2,TypeInfo(TAggregate));
+    Check(Hash32(j)=$E3AC9C44);
+    check(IsValidJSON(j));
+
+    Finalize(JAS);
+    FillCharFast(JAS,sizeof(JAS),0);
+    U := RecordSaveJSON(JAS,TypeInfo(TTestCustomJSONArraySimple));
+    CheckEqual(U,'{"A":0,"B":0,"C":[],"D":"","E":[],"H":""}');
+    check(IsValidJSON(U));
+    U := '{"a":1,"b":2,"c":["C9A646D3-9C61-4CB7-BFCD-EE2522C8F633",'+
+      '"3F2504E0-4F89-11D3-9A0C-0305E82C3301"],"d":"4","e":[{"f":"f","g":["g1","g2"]}],"h":"h"}';
+    J := U;
+    RecordLoadJSON(JAS,UniqueRawUTF8(U),TypeInfo(TTestCustomJSONArraySimple));
+    Check(JAS.A=1);
+    Check(JAS.B=2);
+    Check(length(JAS.C)=2);
+    Check(GUIDToRawUTF8(JAS.C[0])='{C9A646D3-9C61-4CB7-BFCD-EE2522C8F633}');
+    Check(GUIDToRawUTF8(JAS.C[1])='{3F2504E0-4F89-11D3-9A0C-0305E82C3301}');
+    Check(JAS.D='4');
+    Check(length(JAS.E)=1);
+    Check(JAS.E[0].F='f');
+    Check(Length(JAS.E[0].G)=2);
+    Check(JAS.E[0].G[0]='g1');
+    Check(JAS.E[0].G[1]='g2');
+    Check(JAS.H='h');
+    U := RecordSaveJSON(JAS,TypeInfo(TTestCustomJSONArraySimple));
+    Check(SameTextU(J,U));
+    check(IsValidJSON(U));
+
+  {$ifndef NOVARIANTS}
+    Finalize(JAV);
+    FillCharFast(JAV,sizeof(JAV),0);
+    U := RecordSaveJSON(JAV,TypeInfo(TTestCustomJSONArrayVariant));
+    CheckEqual(U,'{"A":0,"B":0,"C":[],"D":""}');
+    check(IsValidJSON(U));
+    assert(DocVariantType<>nil);
+    U := '{"a":1,"b":2,"c":["one",2,2.5,{four:[1,2,3,4]}],"d":"4"}';
+    check(IsValidJSON(U));
+    RecordLoadJSON(JAV,UniqueRawUTF8(U),TypeInfo(TTestCustomJSONArrayVariant));
+    Check(JAV.A=1);
+    Check(JAV.B=2);
+    if not CheckFailed(length(JAV.C)=4) then begin
+      Check(JAV.C[0]='one');
+      Check(JAV.C[1]=2);
+      CheckSame(JAV.C[2],2.5);
+      Check(JAV.C[3]._Kind=ord(dvObject));
+      Check(JAV.C[3]._Count=1);
+      Check(JAV.C[3].Name(0)='four');
+      Check(VariantSaveJSON(JAV.C[3].four)='[1,2,3,4]');
+      with DocVariantData(JAV.C[3])^ do begin
+        Check(Kind=dvObject);
+        Check(Count=1);
+        Check(Names[0]='four');
+        Check(Values[0]._Kind=ord(dvArray));
+        Check(Values[0]._Count=4);
+        with DocVariantData(Values[0])^ do begin
+          Check(Kind=dvArray);
+          Check(Count=4);
+          for v := 0 to Count-1 do
+            Check(Values[v]=v+1);
+        end;
+      end;
+    end;
+    Check(JAV.D='4');
+  {$endif}
+
+    Finalize(Cache);
+    FillCharFast(Cache,sizeof(Cache),0);
+    U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
+    CheckEqual(U,'{"ID":0,"Timestamp512":0,"Tag":0,"JSON":""}');
+    check(IsValidJSON(U));
+    Cache.ID := 10;
+    Cache.Timestamp512 := 200;
+    Cache.JSON := 'test';
+    Cache.Tag := 12;
+    U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
+    CheckEqual(U,'{"ID":10,"Timestamp512":200,"Tag":12,"JSON":"test"}');
+    check(IsValidJSON(U));
+    U := '{"ID":210,"Timestamp512":2200,"JSON":"test2"}';
+    check(IsValidJSON(U));
+    RecordLoadJSON(Cache,UniqueRawUTF8(U),TypeInfo(TSQLRestCacheEntryValue));
+    Check(Cache.ID=210);
+    Check(Cache.Timestamp512=2200);
+    Check(Cache.JSON='test2');
+    Check(Cache.Tag=12);
+    U := '{ID:220,JSON:"test3",Timestamp512:2300}';
+    check(IsValidJSON(U));
+    RecordLoadJSON(Cache,UniqueRawUTF8(U),TypeInfo(TSQLRestCacheEntryValue));
+    Check(Cache.ID=220);
+    Check(Cache.Timestamp512=2300);
+    Check(Cache.JSON='test3');
+    Check(Cache.Tag=12);
+
+    {$ifdef ISDELPHI2010}
+    FillCharFast(nav,sizeof(nav),0);
+    FillCharFast(nav2,sizeof(nav2),1);
+    Check(not CompareMem(@nav,@nav2,sizeof(nav)));
+    Check(nav2.MaxRows<>0);
+    check(nav2.EOF);
+    U := RecordSaveJSON(nav,TypeInfo(TConsultaNav));
+    J := RecordSaveJSON(nav2,TypeInfo(TConsultaNav));
+    Check(U<>J);
+    RecordLoadJSON(nav2,UniqueRawUTF8(U),TypeInfo(TConsultaNav));
+    Check(nav2.MaxRows=0);
+    check(not nav2.EOF);
+    J := RecordSaveJSON(nav2,TypeInfo(TConsultaNav));
+    CheckEqual(J,RecordSaveJSON(nav,TypeInfo(TConsultaNav)));
+    Check(CompareMem(@nav,@nav2,sizeof(nav)));
+    Finalize(nrtti);
+    FillCharFast(nrtti,sizeof(nrtti),0);
+    U := RecordSaveJSON(nrtti,TypeInfo(TNewRTTI));
+    CheckEqual(U,'{"Number":0,"StaticArray":[{"Name":"","Single":0,"Double":0},'+
+       '{"Name":"","Single":0,"Double":0}],"Int":[0,0,0,0,0]}');
+    Finalize(nrtti2);
+    FillCharFast(nrtti2,sizeof(nrtti2),0);
+    Check(RecordLoadJSON(nrtti2,pointer(U),TypeInfo(TNewRTTI))<>nil);
+    J := RecordSaveJSON(nrtti2,TypeInfo(TNewRTTI));
+    CheckEqual(J,RecordSaveJSON(nrtti,TypeInfo(TNewRTTI)));
+    nrtti.Number := 1;
+    nrtti.StaticArray[1].Name := 'one';
+    nrtti.StaticArray[1].Single := 1.5;
+    nrtti.StaticArray[1].Double := 1.7;
+    nrtti.StaticArray[2].Name := 'two';
+    nrtti.StaticArray[2].Single := 2.5;
+    nrtti.StaticArray[2].Double := 2.7;
+    nrtti.Int[1] := 1;
+    nrtti.Int[2] := 2;
+    nrtti.Int[3] := 3;
+    nrtti.Int[4] := 4;
+    nrtti.Int[5] := 5;
+    U := RecordSaveJSON(nrtti,TypeInfo(TNewRTTI));
+    CheckEqual(U,'{"Number":1,"StaticArray":[{"Name":"one","Single":1.5,"Double":1.7},'+
+      '{"Name":"two","Single":2.5,"Double":2.7}],"Int":[1,2,3,4,5]}');
+    Finalize(nrtti2);
+    FillCharFast(nrtti2,sizeof(nrtti2),0);
+    Check(RecordLoadJSON(nrtti2,pointer(U),TypeInfo(TNewRTTI))<>nil);
+    J := RecordSaveJSON(nrtti2,TypeInfo(TNewRTTI));
+    CheckEqual(J,RecordSaveJSON(nrtti,TypeInfo(TNewRTTI)));
+    U :='{ "name": "Book the First", "author": { "first_name": "Bob", "last_name": "White" } }';
+    RecordLoadJSON(Book,UniqueRawUTF8(U),TypeInfo(TBookRecord));
+    check(Book.name='Book the First');
+    check(Book.author.first_name='Bob');
+    Check(Book.author.last_name='White');
+    {$endif}
+  end;
+  procedure TestGetJsonField(const s,v: RawUTF8; str,error: boolean; eof,next: AnsiChar);
+  var P,d: PUTF8Char;
+      ws: boolean;
+      e: AnsiChar;
+      l: integer;
+      s2: RawUTF8;
+  begin
+    s2 := s;
+    P := UniqueRawUTF8(s2);
+    P := GetJSONField(P,d,@ws,@e,@l);
+    check(error=(d=nil));
+    if d=nil then
+      exit;
+    check(str=ws);
+    check(eof=e);
+    check(d^=next);
+    check(l=length(v));
+    check(CompareMem(P,pointer(v),length(v)));
+  end;
+
 begin
+  TestGetJsonField('','',false,true,#0,#0);
+  TestGetJsonField('true,false','true',false,false,',','f');
+  TestGetJsonField('false,1','false',false,false,',','1');
+  TestGetJsonField('"true",false','true',true,false,',','f');
+  TestGetJsonField('"",false','',true,false,',','f');
+  TestGetJsonField('12,false','12',false,false,',','f');
+  TestGetJsonField('12]','12',false,true,']',#0);
+  TestGetJsonField('12],','12',false,false,']',',');
+  TestGetJsonField('1.2],','1.2',false,false,']',',');
+  TestGetJsonField('1.2  ],','1.2',false,false,']',',');
+  TestGetJsonField('"123"},false','123',true,false,'}',',');
+  TestGetJsonField('"1\\3"},false','1\3',true,false,'}',',');
+  TestGetJsonField('"1\r\n"},false','1'#13#10,true,false,'}',',');
+  TestGetJsonField('"\"3"},false','"3',true,false,'}',',');
+  TestGetJsonField('"\u00013"},false',#1'3',true,false,'}',',');
+  TestGetJsonField('"\u0020"},false',' ',true,false,'}',',');
   Check(GotoEndOfJSONString(PUTF8Char(PAnsiChar('"toto"')))='"');
   Check(GotoEndOfJSONString(PUTF8Char(PAnsiChar('"toto",')))='",');
   Check(GotoEndOfJSONString(PUTF8Char(PAnsiChar('"to'#0'to",')))^=#0);
@@ -8279,6 +8434,31 @@ begin
   Check(IsStringJSON('1.23E'));
   Check(IsStringJSON('+'));
   Check(IsStringJSON('-'));
+  Check(not NeedsJsonEscape(''));
+  Check(not NeedsJsonEscape('a'));
+  Check(not NeedsJsonEscape('ab cd'));
+  Check(not NeedsJsonEscape('13456 ds0'));
+  Check(NeedsJsonEscape('"123'));
+  Check(NeedsJsonEscape('123"567'));
+  Check(NeedsJsonEscape('123"'));
+  Check(NeedsJsonEscape('123\"'));
+  Check(NeedsJsonEscape('123'#1));
+  Check(NeedsJsonEscape(#10'123'));
+  CheckEqual(QuotedStrJSON(''),'""');
+  CheckEqual(QuotedStrJSON('a'),'"a"');
+  CheckEqual(QuotedStrJSON(#30),'"\u001E"');
+  CheckEqual(QuotedStrJSON('ab'),'"ab"');
+  CheckEqual(QuotedStrJSON(' a'),'" a"');
+  CheckEqual(QuotedStrJSON('a"'),'"a\""');
+  CheckEqual(QuotedStrJSON('a""'),'"a\"\""');
+  CheckEqual(QuotedStrJSON('""'),'"\"\""');
+  CheckEqual(QuotedStrJSON('a"b"c'),'"a\"b\"c"');
+  CheckEqual(QuotedStrJSON('a"b\c'),'"a\"b\\c"');
+  CheckEqual(QuotedStrJSON('a"b'#10'c'),'"a\"b\nc"');
+  CheckEqual(QuotedStrJSON('a'#13'b'#8'c'),'"a\rb\bc"');
+  CheckEqual(QuotedStrJSON('a'#13'b'#1'c'),'"a\rb\u0001c"');
+  CheckEqual(QuotedStrJSON('a'#13'b'#31'c'),'"a\rb\u001Fc"');
+  CheckEqual(QuotedStrJSON('a'#13'b'#31),'"a\rb\u001F"');
   {$ifndef DELPHI5OROLDER}
   Check(UTF8ContentType('null')=sftUnknown);
   Check(UTF8ContentType('0')=sftInteger);
@@ -8287,6 +8467,7 @@ begin
   Check(UTF8ContentType('-123')=sftInteger);
   Check(UTF8ContentType('123.1')=sftCurrency);
   Check(UTF8ContentType('123.12')=sftCurrency);
+  Check(UTF8ContentType('123.1234')=sftCurrency);
   Check(UTF8ContentType('123.12345678')=sftFloat);
   Check(UTF8ContentType('1.13e+12')=sftFloat);
   Check(UTF8ContentType('1.13e12')=sftFloat);
@@ -8294,6 +8475,10 @@ begin
   Check(UTF8ContentType('1.13e+120')=sftFloat);
   Check(UTF8ContentType('1.13E120')=sftFloat);
   Check(UTF8ContentType('1.13E-120')=sftFloat);
+  Check(UTF8ContentType('1.13E307')=sftFloat);
+  Check(UTF8ContentType('1.13E-323')=sftFloat);
+  Check(UTF8ContentType('1.13e+a3')=sftUTF8Text);
+  Check(UTF8ContentType('1.13e+3a')=sftUTF8Text);
   Check(UTF8ContentType('1.13e+330')=sftUTF8Text);
   Check(UTF8ContentType('1.13e330')=sftUTF8Text);
   Check(UTF8ContentType('1.13e-330')=sftUTF8Text);
@@ -9452,7 +9637,7 @@ begin
   o := _JSON('{"double_params":[-12.12345678,-9.9E-15,-9.88E-15,-9E-15]}',
      [dvoReturnNullForUnknownProperty, dvoAllowDoubleValue]);
   json := TDocVariantData(o).ToJSON;
-  {$ifndef EXTENDEDTOSTRING_USESTR}
+  {$ifndef EXTENDEDTOSHORT_USESTR}
   check(json='{"double_params":[-12.12345678,-9.9E-15,-9.88E-15,-9E-15]}');
   {$endif}
   CheckSame(double(TDocVariantData(o).A['double_params'].Value[1]),-9.9E-15);
@@ -10073,24 +10258,24 @@ begin
   {$endif}
   Check((j<>'')and(j[1]=#$E2)and(j[2]=#$80)and(j[3]=#$9D));
   v1 := _Arr([]);
-  vs := 1.23456;
+  vs := 1.5;
   v1.Add(vs);
-  Check(VariantSaveJSON(v1)='[1.23456]');
-  vd := 1.234567;
+  CheckEqual(VariantSaveJSON(v1),'[1.5]','VariantSaveJSON');
+  vd := 1.7;
   v1.Add(vd);
-  Check(VariantSaveJSON(v1)='[1.23456,1.234567]');
+  CheckEqual(VariantSaveJSON(v1),'[1.5,1.7]');
   v2 := _obj(['id',1]);
   Check(VariantSaveJSON(v2)='{"id":1}');
   {$ifdef FPC}_Safe(v1)^.AddItem(v2); // FPC does not accept v1.Add(v2)
   {$else}v1.Add(v2);{$endif}
-  Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1}]');
+  Check(VariantSaveJSON(v1)='[1.5,1.7,{"id":1}]');
   s := 'abc';
   {$ifdef FPC}_Safe(v1)^.AddItem(s); // FPC does not accept v1.Add(s)
   {$else}v1.Add(s);{$endif}
-  Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1},"abc"]');
+  Check(VariantSaveJSON(v1)='[1.5,1.7,{"id":1},"abc"]');
   RawUTF8ToVariant('def',v2);
   {$ifdef FPC}_Safe(v1)^.AddItem{$else}v1.Add{$endif}(v2);
-  Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1},"abc","def"]');
+  Check(VariantSaveJSON(v1)='[1.5,1.7,{"id":1},"abc","def"]');
   Doc.Clear;
   Doc.InitObjectFromPath('name','toto');
   check(Doc.ToJSON='{"name":"toto"}');
@@ -17855,8 +18040,8 @@ begin
     cu := i1*0.01;
     I.ToText(cu,s);
     Check(s=Curr64ToStr(PInt64(@cu)^));
-    r := DoubleToString(n1);
-    Check(I.ToTextFunc(n1)=r);
+    r := I.ToTextFunc(n1);
+    CheckSame(StrToFloat(r),n1);
     o := [tfoIndex,tfoCaseInsensitive];
     i3 := i1;
     c := cardinal(i2);

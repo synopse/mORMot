@@ -96,12 +96,10 @@ type
     /// initialize access to a SQLite3 engine with some properties
     // - only used parameter is aServerName, which should point to the SQLite3
     // database file to be opened (one will be created if none exists)
-    // - you can specify an optional password, which will be used to access
-    // the database via some custom kind of encryption - not compatible with the
-    // official SQLite Encryption Extension module - see
-    // @http://www.hwaci.com/sw/sqlite/see.html (beta feature - better not to
-    // be used on production - in which the default encryption level is
-    // very low)
+    // - if specified, the password will be used to cypher this file on disk
+    // (the main SQLite3 database file is encrypted, not the wal file during run);
+    // the password may be a JSON-serialized TSynSignerParams object, or will use
+    // AES-OFB-128 after SHAKE_128 with rounds=1000 and a fixed salt on plain password text
     // - other parameters (DataBaseName, UserID) are ignored
     constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); overload; override;
     /// initialize access to an existing SQLite3 engine

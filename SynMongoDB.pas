@@ -169,7 +169,7 @@ type
     /// fills with a native floating-point value
     // - note that it doesn't make much sense to use this method: you should
     // rather use the native betFloat BSON format, with native double precision
-    // - this method is just a wrapper around ExtendedToString and ToText,
+    // - this method is just a wrapper around ExtendedToShort and ToText,
     // so you should provide the expected precision, from the actual storage
     // variable (you may specify e.g. SINGLE_PRECISION or EXTENDED_PRECISION if
     // you don't use a double kind of value)
@@ -267,11 +267,13 @@ type
   /// points to 24-bit storage, mapped as a 3 bytes buffer
   PBSON24 = ^TBSON24;
 
-  /// BSON ObjectID internal binary representation
+  /// BSON ObjectID 12-byte internal binary representation
   // - in MongoDB, documents stored in a collection require a unique _id field
   // that acts as a primary key: by default, it uses such a 12-byte ObjectID
   // - by design, sorting by _id: ObjectID is roughly equivalent to sorting by
   // creation time, so ease sharding and BTREE storage
+  // - in our ODM, we rather use 64-bit genuine integer identifiers (TID),
+  // as computed by an internal sequence or TSynUniqueIdentifierGenerator
   // - match betObjectID TBSONElementType
   {$A-}
   {$ifdef USERECORDWITHMETHODS}TBSONObjectID = record
@@ -288,6 +290,8 @@ type
     /// 3-byte counter, starting with a random value
     // - used to avoid collision
     Counter: TBSON24;
+    /// set all internal fields to zero
+    procedure Init; {$ifdef HASINLINE} inline; {$endif}
     /// ObjectID content be filled with some unique values
     // - this implementation is thread-safe
     procedure ComputeNew;
@@ -308,13 +312,18 @@ type
     /// convert this ObjectID to its hexadecimal string value
     procedure ToText(var result: RawUTF8); overload;
     /// convert this ObjectID to its TBSONVariant custom variant value
-    function ToVariant: variant;
+    function ToVariant: variant; overload;
+    /// convert this ObjectID to its TBSONVariant custom variant value
+    procedure ToVariant(var result: variant); overload;
     /// returns the timestamp portion of the ObjectId() object as a Delphi date
     // - time is expressed in Coordinated Universal Time (UTC), not local time
     // so you can compare it to NowUTC returned time
     function CreateDateTime: TDateTime;
     /// compare two Object IDs
-    function Equal(const Another: TBSONObjectID): boolean;
+    function Equal(const Another: TBSONObjectID): boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// compare two Object IDs, the second being stored in a TBSONVariant
+    function Equal(const Another: variant): boolean; overload;
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
@@ -361,6 +370,9 @@ type
     );
   end;
   {$A+}
+
+  /// points to memory structure used for some special BSON storage as variant
+  PBSONVariantData = ^TBSONVariantData;
 
   /// custom variant type used to store some special BSON elements
   // - internal layout will follow TBSONVariantData
@@ -457,8 +469,9 @@ type
   // - see http://bsonspec.org/#/specification
   // - this structure has been optimized to map the BSON binary content,
   // without any temporary memory allocation (the SAX way)
-  {$ifdef USERECORDWITHMETHODS}TBSONElement = record private
-    {$else}TBSONElement = object protected{$endif}
+  {$ifdef USERECORDWITHMETHODS}TBSONElement = record
+    {$else}TBSONElement = object {$endif}
+  private
     /// used internally to set the TBSONElement content, once Kind has been set
     procedure FromBSON(bson: PByte);
   public
@@ -626,8 +639,9 @@ type
 
   /// data structure used for iterating over a BSON binary buffer
   // - is just a wrapper around a PByte value, to be used with a TBSONDocument
-  {$ifdef USERECORDWITHMETHODS}TBSONIterator = record private
-    {$else}TBSONIterator = object protected{$endif}
+  {$ifdef USERECORDWITHMETHODS}TBSONIterator = record
+    {$else}TBSONIterator = object {$endif}
+  private
     fBson: PByte;
   public
     /// map the current item, after the Next method did return TRUE
@@ -870,7 +884,7 @@ function ObjectID: variant; overload;
 /// create a TBSONVariant Object ID custom variant type from a supplied text
 // - will raise an EBSONException if the supplied text is not valid hexadecimal
 // - will set a BSON element of betObjectID kind
-function ObjectID(const Hexa: RaWUTF8): variant; overload;
+function ObjectID(const Hexa: RawUTF8): variant; overload;
 
 /// convert a TBSONVariant Object ID custom variant into a TBSONObjectID
 // - raise an exception if the supplied variant is not a TBSONVariant Object ID
@@ -1066,7 +1080,7 @@ function BSONParseLength(var BSON: PByte; ExpectedBSONLen: integer=0): integer;
 // point to the next element, and return TRUE
 // - returns FALSE when you reached betEOF, so that you can use it in a loop:
 // ! var bson: PByte;
-// !     name: RaWUTF8;
+// !     name: RawUTF8;
 // !     value: variant;
 // ! ...
 // ! BSONParseLength(bson);
@@ -1494,8 +1508,9 @@ type
   // response, and navigate within all nested documents
   // - several TMongoReplyCursor instances may map the same TMongoReply content
   // - you can safely copy one TMongoReplyCursor instance to another
-  {$ifdef USERECORDWITHMETHODS}TMongoReplyCursor = record private
-    {$else}TMongoReplyCursor = object protected{$endif}
+  {$ifdef USERECORDWITHMETHODS}TMongoReplyCursor = record
+    {$else}TMongoReplyCursor = object {$endif}
+  private
     fReply: TMongoReply;
     fRequestID: integer;
     fResponseTo: integer;
@@ -2267,13 +2282,13 @@ type
     // !   // here _id is forced on the client side
     // !   products.insert('{ item: ?, qty: ? }',[1,'card',15]);
     // !   // here the _id will be created on the client side as an ObjectID
-    // - you can retrieve the client-side computed ObjectID, as such:
+    // - you can retrieve the associated ObjectID, as such:
     // ! var oid: TBSONObjectID;
     // ! ...
     // !   products.insert('{ item: ?, qty: ? }',['card',15],@oid);
     // !   writeln(oid.ToText);
     procedure Insert(const Document: RawUTF8; const Params: array of const;
-      CreatedObjectID: PBSONObjectID=nil); overload;
+      DocumentObjectID: PBSONObjectID=nil); overload;
     /// insert one or more documents in the collection
     // - Documents is an array of TDocVariant (i.e. created via _JsonFast()
     // or _JsonFastFmt()) - or of TBSONVariant (created via BSONVariant())
@@ -2306,23 +2321,23 @@ type
     // so it is pointless to use BSONVariant() here
     // - if the document does not contain an _id field, then the Save() method
     // performs an insert; during the operation, the client will add to the
-    // Document variant the _id field and assign it a unique ObjectId - you can
-    // optionally retrieve it with the CreatedObjectID pointer - and the method
-    // returns FALSE
+    // Document variant the _id field and assign it a unique ObjectId - and the
+    // method returns FALSE
     // - if the document contains an _id field, then the save() method performs
     // an upsert, querying the collection on the _id field: if a document does
     // not exist with the specified _id value, the save() method performs an
     // insert; if a document exists with the specified _id value, the save()
     // method performs an update that replaces ALL fields in the existing
     // document with the fields from the document - and the method returns TRUE
-    function Save(var Document: variant; CreatedObjectID: PBSONObjectID=nil): boolean; overload;
+    // - you can optionally retrieve the _id value with the DocumentObjectID pointer
+    function Save(var Document: variant; DocumentObjectID: PBSONObjectID=nil): boolean; overload;
     /// updates an existing document or inserts a new document, depending on
     // its document parameter, supplied as (extended) JSON and parameters
     // - supplied JSON could be either strict or in MongoDB Shell syntax:
     // - will perform either an insert or an update, depending of the
     // presence of the _id field, as overloaded Save(const Document: variant)
     procedure Save(const Document: RawUTF8; const Params: array of const;
-      CreatedObjectID: PBSONObjectID=nil); overload;
+      DocumentObjectID: PBSONObjectID=nil); overload;
 
     /// modifies an existing document or several documents in a collection
     // - the method can modify specific fields of existing document or documents
@@ -2757,7 +2772,7 @@ end;
 begin
   case Kind of
   betFloat:
-    ExtendedToStr(unaligned(PDouble(Element)^),DOUBLE_PRECISION,result);
+    DoubleToStr(unaligned(PDouble(Element)^),result);
   betString:
     FastSetString(result,Data.Text,Data.TextLen);
   betInt32:
@@ -2897,29 +2912,30 @@ const ELEMKIND: array[varEmpty..varWord64] of TBSONElementType = (
   betEOF, betNull, betInt32, betInt32, betFloat, betFloat, betFloat, betDateTime,
   betString, betEOF, betEOF, betBoolean, betEof, betEOF, betEOF, betEOF,
   betInt32, betInt32, betInt32, betInt64, betInt64, betInt64);
-var aVarData: TVarData absolute aValue;
-    aBson: TBSONVariantData absolute aValue;
-    aDoc: TDocVariantData absolute aValue;
+var v: PVarData;
+    vbson: PBSONVariantData absolute v;
+    vdoc: PDocVariantData absolute v;
+    vt: cardinal;
 label str, st2;
 begin
-  if aVarData.VType=varByRef or varVariant then begin
-    FromVariant(aName,PVariant(aVarData.VPointer)^,aTemp);
-    exit;
-  end;
+  v := @aValue;
+  while v.VType=varByRef or varVariant do
+    v := v.VPointer;
   FillCharFast(self,sizeof(self),0);
   Name := pointer(aName);
   NameLen := length(aName);
-  case aVarData.VType of
+  vt := v.VType;
+  case vt of
   0..varDate,varBoolean..high(ELEMKIND): begin // simple types
     Element := @Data.InternalStorage;
-    Kind := ELEMKIND[aVarData.VType];
+    Kind := ELEMKIND[vt];
     case Kind of
     betFloat:
       unaligned(PDouble(Element)^) := double(aValue);
     betDateTime:
-      PUnixMSTime(Element)^ := DateTimeToUnixMSTime(aVarData.VDate);
+      PUnixMSTime(Element)^ := DateTimeToUnixMSTime(v.VDate);
     betBoolean:
-      PBoolean(Element)^ := aVarData.VBoolean;
+      PBoolean(Element)^ := v.VBoolean;
     betInt32:
       if not VariantToInteger(aValue,PInteger(Element)^) then
         raise EBSONException.Create('TBSONElement.FromVariant(betInt32)');
@@ -2930,9 +2946,9 @@ begin
     ElementBytes := BSON_ELEMENTSIZE[Kind];
   end;
   varString:
-    if (aVarData.VAny<>nil) and
-       (PInteger(aVarData.VAny)^ and $ffffff=JSON_SQLDATE_MAGIC) and
-       Iso8601CheckAndDecode(PUTF8Char(aVarData.VAny)+3,Length(RawUTF8(aVarData.VAny))-3,
+    if (v.VAny<>nil) and
+       (PInteger(v.VAny)^ and $ffffff=JSON_SQLDATE_MAGIC) and
+       Iso8601CheckAndDecode(PUTF8Char(v.VAny)+3,Length(RawUTF8(v.VAny))-3,
          PDateTime(@Data.InternalStorage)^) then begin
       // recognized TTextWriter.AddDateTime(woDateTimeWithMagic) ISO-8601 format
       Element := @Data.InternalStorage;
@@ -2940,54 +2956,54 @@ begin
       ElementBytes := BSON_ELEMENTSIZE[betDateTime];
     end else begin
       Kind := betString;
-      Data.Text := aVarData.VAny;
-      Data.TextLen := Length(RawUTF8(aVarData.VAny));
+      Data.Text := v.VAny;
+      Data.TextLen := Length(RawUTF8(v.VAny));
 st2:  ElementBytes := Data.TextLen+1;
-      if aVarData.VAny=nil then
+      if v.VAny=nil then
         Data.InternalStorage := 1 else
         Element := nil; // special case handled by TBSONWriter.BSONWrite()
     end;
   {$ifdef HASVARUSTRING}
   varUString: begin
-    RawUnicodeToUtf8(aVarData.VAny,length(UnicodeString(aVarData.VAny)),RawUTF8(aTemp));
+    RawUnicodeToUtf8(v.VAny,length(UnicodeString(v.VAny)),RawUTF8(aTemp));
     goto str;
   end;
   {$endif}
   varOleStr: begin
-    RawUnicodeToUtf8(aVarData.VAny,length(WideString(aVarData.VAny)),RawUTF8(aTemp));
+    RawUnicodeToUtf8(v.VAny,length(WideString(v.VAny)),RawUTF8(aTemp));
 str:Kind := betString;
     Data.Text := pointer(aTemp);
     Data.TextLen := Length(aTemp);
     goto st2;
   end;
   else
-  if aVarData.VType=BSONVariantType.VarType then begin
-    Kind := aBson.VKind;
+  if vt=cardinal(BSONVariantType.VarType) then begin
+    Kind := vbson.VKind;
     case Kind of
-    betObjectID: FromBSON(@aBson.VObjectID); // stored inlined
-    else         FromBSON(aBson.VBlob); // complex type stored as a RawByteString
+    betObjectID: FromBSON(@vbson.VObjectID); // stored inlined
+    else         FromBSON(vbson.VBlob); // complex type stored as a RawByteString
     end;
     if ElementBytes<0 then
       raise EBSONException.CreateUTF8('TBSONElement.FromVariant(bson,%)',[ToText(Kind)^]);
   end else
-  if aVarData.VType=DocVariantType.VarType then begin
+  if vt=cardinal(DocVariantVType) then begin
     with TBSONWriter.Create(TRawByteStringStream) do // inlined BSON()
     try
-      BSONWriteDoc(aDoc);
+      BSONWriteDoc(vdoc^);
       ToBSONDocument(aTemp);
     finally
       Free;
     end;
-    if dvoIsObject in aDoc.Options then
+    if dvoIsObject in vdoc.Options then
       Kind := betDoc else
-    if dvoIsArray in aDoc.Options then
+    if dvoIsArray in vdoc.Options then
       Kind := betArray else
-      raise EBSONException.CreateUTF8('TBSONElement.FromVariant(doc,%)',[ToText(aDoc.Kind)^]);
+      raise EBSONException.CreateUTF8('TBSONElement.FromVariant(doc,%)',[ToText(vdoc.Kind)^]);
     FromBSON(pointer(aTemp));
     if ElementBytes<0 then
       raise EBSONException.CreateUTF8('TBSONElement.FromVariant(docbson,%)',[ToText(Kind)^]);
   end else
-    raise EBSONException.CreateUTF8('TBSONElement.FromVariant(VType=%)',[aVarData.VType]);
+    raise EBSONException.CreateUTF8('TBSONElement.FromVariant(VType=%)',[v.VType]);
   end;
 end;
 
@@ -3527,7 +3543,7 @@ procedure TBSONWriter.BSONWriteVariant(const name: RawUTF8; const value: variant
   end;
 var dt: TDateTime;
 begin
-  with TVarData(value) do begin
+  with TVarData(value) do
     case VType of
     varEmpty,
     varNull:     BSONWrite(Name,betNull);
@@ -3561,7 +3577,6 @@ begin
       BSONWrite(name,TDocVariantData(value)) else
       WriteComplex;
     end;
-  end;
 end;
 
 procedure TBSONWriter.BSONWriteDoc(const doc: TDocVariantData);
@@ -3569,10 +3584,10 @@ var Name: RawUTF8;
     i: PtrInt;
 begin
   BSONDocumentBegin;
-  if TVarData(doc).VType>varNull then // null,empty will write {}
-    if TVarData(doc).VType<>DocVariantType.VarType then
+  if doc.VarType>varNull then // null,empty will write {}
+    if doc.VarType<>DocVariantType.VarType then
       raise EBSONException.CreateUTF8('%.BSONWriteDoc(VType=%)',
-        [self,TVarData(doc).VType]) else
+        [self,doc.VarType]) else
     for i := 0 to doc.Count-1 do begin
       if doc.Names<>nil then
         Name := doc.Names[i] else
@@ -3850,7 +3865,16 @@ begin
     with ExeVersion do
       PCardinal(@MachineID)^ := crc32c(crc32c(0,pointer(Host),length(Host)),
         pointer(User),length(User));
-    ProcessID := (ProcessID shl 8) xor PtrUInt(MainThreadID);
+    ProcessID := crc32c(0,@MainThreadID,SizeOf(MainThreadID)); // lower 16-bit
+  end;
+end;
+
+procedure TBSONObjectID.Init;
+begin // 12 bytes fill zero
+  with PHash128Rec(@self)^ do begin
+    i0 := 0;
+    i1 := 0;
+    i2 := 0;
   end;
 end;
 
@@ -3874,7 +3898,7 @@ begin
     Counter.b2 := count shr 8;
     Counter.b3 := count;
     LastCounter := count;
-    UnixCreateTime := {$ifdef CPUINTEL}bswap32{$else}SwapEndian{$endif}(LastCreateTime);
+    UnixCreateTime := bswap32(LastCreateTime);
     MachineID := Default.MachineID;
     ProcessID := Default.ProcessID;
     LeaveCriticalSection(Section);
@@ -3882,7 +3906,7 @@ begin
 end;
 
 function TBSONObjectID.Equal(const Another: TBSONObjectID): boolean;
-begin
+begin // first check Counter last field, which is more likely to diverse
   result := (PIntegerArray(@Self)[2]=PIntegerArray(@Another)[2]) and
     {$ifdef CPU64}
     (PInt64(@Self)^=PInt64(@Another)^);
@@ -3890,6 +3914,12 @@ begin
     (PIntegerArray(@Self)[1]=PIntegerArray(@Another)[1]) and
     (PIntegerArray(@Self)[0]=PIntegerArray(@Another)[0]);
     {$endif}
+end;
+
+function TBSONObjectID.Equal(const Another: variant): boolean;
+var oid2: TBSONObjectID;
+begin
+  result := oid2.FromVariant(Another) and Equal(oid2);
 end;
 
 function TBSONObjectID.CreateDateTime: TDateTime;
@@ -3903,6 +3933,16 @@ begin
 end;
 
 function TBSONObjectID.ToVariant: variant;
+begin
+  VarClear(result);
+  with TBSONVariantData(result) do begin
+    VType := BSONVariantType.VarType;
+    VKind := betObjectID;
+    VObjectID := self;
+  end;
+end;
+
+procedure TBSONObjectID.ToVariant(var result: variant);
 begin
   VarClear(result);
   with TBSONVariantData(result) do begin
@@ -3927,13 +3967,14 @@ end;
 function TBSONObjectID.FromVariant(const value: variant): boolean;
 var txt: RawUTF8;
     wasString: boolean;
-    bson: TBSONVariantData absolute value;
+    bson: PBSONVariantData;
 begin
-  if TVarData(value).VType=varByRef or varVariant then
-    result := FromVariant(PVariant(TVarData(value).VPointer)^) else
-  if (bson.VType=BSONVariantType.VarType) and (bson.VKind=betObjectID) then begin
-    self := bson.VObjectID;
-    result:= true;
+  bson := @value;
+  if bson^.VType=varByRef or varVariant then
+    bson := TVarData(value).VPointer;
+  if (bson^.VType=BSONVariantType.VarType) and (bson^.VKind=betObjectID) then begin
+    self := bson^.VObjectID;
+    result := true;
   end else begin
     VariantToUTF8(value,txt,wasString);
     result := wasString and FromText(txt);
@@ -4146,7 +4187,7 @@ var bsonvalue: TBSONVariantData absolute Value;
     Reg := P;
     inc(P,RegLen);
     if P^<>'/' then exit else inc(P);
-    OptLen := 0; while ord(P[OptLen]) in IsWord do inc(OptLen);
+    OptLen := 0; while tcWord in TEXT_CHARS[P[OptLen]] do inc(OptLen);
     if P[OptLen]=#0 then exit;
     Opt := P;
     ReturnRegEx(Opt+OptLen-1,#0);
@@ -4332,14 +4373,14 @@ function ObjectID: variant;
 var ID: TBSONObjectID;
 begin
   ID.ComputeNew;
-  result := ID.ToVariant;
+  ID.ToVariant(result);
 end;
 
-function ObjectID(const Hexa: RaWUTF8): variant;
+function ObjectID(const Hexa: RawUTF8): variant;
 var ID: TBSONObjectID;
 begin
   if ID.FromText(Hexa) then
-    result := ID.ToVariant else
+    ID.ToVariant(result) else
     raise EBSONException.CreateUTF8('Invalid ObjectID("%")',[Hexa]);
 end;
 
@@ -4395,11 +4436,11 @@ end;
 
 function BSON(const doc: TDocVariantData): TBSONDocument;
 begin
-  if TVarData(doc).VType=varVariant or varByRef then begin
+  if doc.VarType=varVariant or varByRef then begin
     result := BSON(PDocVariantData(TVarData(doc).VPointer)^);
     exit;
   end;
-  if TVarData(doc).VType<>DocVariantType.VarType then
+  if doc.VarType<>DocVariantType.VarType then
     raise EBSONException.Create('doc is not a TDocVariant');
   with TBSONWriter.Create(TRawByteStringStream) do
   try
@@ -5051,7 +5092,7 @@ end;
 function TMongoReplyCursor.AppendAllToDocVariant(var Dest: TDocVariantData): integer;
 var item: variant;
 begin
-  if TVarData(Dest).VType<>DocVariantType.VarType then
+  if Dest.VarType<>DocVariantType.VarType then
     TDocVariant.New(Variant(Dest),JSON_OPTIONS_FAST);
   result := Dest.Count;
   if (fReply='') or (DocumentCount<=0) then
@@ -6345,56 +6386,61 @@ begin
     fFullCollectionName,JSONDocuments,Flags),NoAcknowledge);
 end;
 
-function EnsureDocumentHasID(var doc: TDocVariantData; var oid: variant;
-  CreatedObjectID: PBSONObjectID): boolean;
+function EnsureDocumentHasID(var doc: TDocVariantData; oid: PPVariant;
+  DocumentObjectID: PBSONObjectID): boolean;
 var ndx: integer;
-begin // return TRUE if _id has been computed (i.e. save=insert)
+    id: TBSONObjectID;
+    v: PVariant;
+begin
   ndx := doc.GetValueIndex('_id',3,true);
   if ndx<0 then begin
-    oid := ObjectID;
-    doc.AddValue('_id',oid);
-    result := true;
-  end else
-  if TVarData(doc.Values[ndx]).VType<=varNull then begin
-    oid := ObjectID;
-    doc.Values[ndx] := oid;
-    result := true;
+    ndx := doc.InternalAdd('_id');
+    v := @doc.Values[ndx];
+    result := true; // if _id needed to be computed (i.e. save=insert)
   end else begin
-    oid := doc.Values[ndx];
-    result := false;
+    v := @doc.Values[ndx];
+    result := PVarData(v)^.VType<=varNull; // _id may be an Int64=TID, not a ObjectID
   end;
-  if CreatedObjectID<>nil then
-    CreatedObjectID^.FromVariant(oid)
+  if result then begin
+    id.ComputeNew;
+    id.ToVariant(v^);
+    if DocumentObjectID<>nil then
+      DocumentObjectID^ := id;
+  end else
+    if DocumentObjectID<>nil then
+      if not DocumentObjectID^.FromVariant(v^) then
+        DocumentObjectID^.Init;
+  if oid<>nil then
+    oid^ := v;
 end;
 
 procedure TMongoCollection.Insert(const Document: RawUTF8;
-  const Params: array of const; CreatedObjectID: PBSONObjectID);
+  const Params: array of const; DocumentObjectID: PBSONObjectID);
 var doc: variant;
-    oid: variant;
 begin
   _JsonFmt(Document,[],Params,JSON_OPTIONS_FAST,doc);
-  EnsureDocumentHasID(TDocVariantData(doc),oid,CreatedObjectID);
+  EnsureDocumentHasID(TDocVariantData(doc),nil,DocumentObjectID);
   Insert([doc]);
 end;
 
 function TMongoCollection.Save(var Document: variant;
-  CreatedObjectID: PBSONObjectID): boolean;
-var oid: variant;
+  DocumentObjectID: PBSONObjectID): boolean;
+var oid: PVariant;
 begin
   if not DocVariantType.IsOfType(Document) then
     Document := _JsonFast(VariantSaveMongoJSON(Document,modMongoShell));
-  result := EnsureDocumentHasID(TDocVariantData(Document),oid,CreatedObjectID);
+  result := EnsureDocumentHasID(_Safe(Document,dvObject)^,@oid,DocumentObjectID);
   if result then
     Insert([Document]) else
-    Update(BSONVariant(['_id',oid]),Document,[mufUpsert])
+    Update(BSONVariant(['_id',oid^]),Document,[mufUpsert])
 end;
 
 procedure TMongoCollection.Save(const Document: RawUTF8;
-  const Params: array of const; CreatedObjectID: PBSONObjectID);
+  const Params: array of const; DocumentObjectID: PBSONObjectID);
 var doc: variant;
 begin
   _JsonFmt(Document,[],Params,JSON_OPTIONS_FAST,doc);
-  Save(doc,CreatedObjectID);
+  Save(doc,DocumentObjectID);
 end;
 
 procedure TMongoCollection.Update(Query: PUTF8Char;
@@ -6512,14 +6558,14 @@ end;
 function TDecimal128.FromFloat(const value: TSynExtended; precision: integer): boolean;
 var tmp: shortstring;
 begin
-  if precision<=0 then
-    precision := DOUBLE_PRECISION;
-  tmp[0] := AnsiChar(ExtendedToString(tmp,value,precision));
+  if (precision<=0) or (precision=DOUBLE_PRECISION) then
+    tmp[0] := AnsiChar(DoubleToShort(tmp,value)) else
+    tmp[0] := AnsiChar(ExtendedToShort(tmp,value,precision));
   result := true;
-  case ExtendedToStringNan(tmp) of
-  seNan:    SetSpecial(dsvNan);
-  seInf:    SetSpecial(dsvPosInf);
-  seNegInf: SetSpecial(dsvNegInf);
+  case FloatToShortNan(tmp) of
+  fnNan:    SetSpecial(dsvNan);
+  fnInf:    SetSpecial(dsvPosInf);
+  fnNegInf: SetSpecial(dsvNegInf);
   else result := FromText(@tmp[1],ord(tmp[0]))<>dsvError;
   end;
 end;
@@ -6958,9 +7004,6 @@ initialization
   Assert(sizeof(TBSONObjectID)=12);
   Assert(sizeof(TBSONVariantData)=sizeof(variant));
   Assert(sizeof(TMongoReplyHeader)=36);
-  // ensure TDocVariant and TBSONVariant custom types are registered
-  if DocVariantType=nil then
-    DocVariantType := SynRegisterCustomVariantType(TDocVariant) as TDocVariant;
   BSONVariantType := SynRegisterCustomVariantType(TBSONVariant) as TBSONVariant;
   InitBSONObjectIDComputeNew;
 

@@ -1159,7 +1159,7 @@ begin // URI is e.g. GET http://localhost:888/root/wrapper/Delphi/UnitName.pas
       repeat
         Split(StringToUTF8(SR.Name),'.',templateName,templateExt);
         templateTitle := templateName;
-        i := PosEx('-',templateName);
+        i := PosExChar('-',templateName);
         if i>0 then begin
           SetLength(templateTitle,i-1);
           savedName := copy(templateName,i+1,maxInt);
@@ -1185,7 +1185,7 @@ begin // URI is e.g. GET http://localhost:888/root/wrapper/Delphi/UnitName.pas
   end;
   Split(Ctxt.URIBlobFieldName,'/',templateName,unitName);
   Split(unitName,'.',unitName,templateExt);
-  if PosEx('.',templateExt)>0 then begin // see as text
+  if PosExChar('.',templateExt)>0 then begin // see as text
     if IdemPropNameU(Split(templateExt,'.',templateExt),'mustache') then
       unitName := ''; // force return .mustache
     head := TEXT_CONTENT_TYPE_HEADER;

@@ -21,6 +21,11 @@ uses
   mORMotSQLite3,
   mORMotMongoDB;
 
+const
+  MONGOSERVER = 'localhost';
+  // MONGOSERVER = '10.0.2.2'; // from a VirtualBox VM
+  MONGOPORT = 27017;
+
 type
   TTestDirect = class(TSynTestCase)
   protected
@@ -114,8 +119,6 @@ end;
 
 const
   DB_NAME = 'test24';
-  USER_NAME = 'toto';
-  USER_PWD = 'pass';
   COLL_NAME = 'direct';
   {$ifndef ADD5000}
   COLL_COUNT = 100;
@@ -128,6 +131,9 @@ const
   {$endif}
 
 {$ifdef TESTMONGOAUTH}
+const
+  USER_NAME = 'toto';
+  USER_PWD = 'pass';
 var
   UserCreated: boolean;
 {$endif}
@@ -145,7 +151,7 @@ begin
   assert(fClient=nil);
   {$ifdef TESTMONGOAUTH}
   if not UserCreated then begin
-    fClient := TMongoClient.Create('localhost',27017);
+    fClient := TMongoClient.Create(MONGOSERVER,MONGOPORT);
     with fClient.Database[DB_NAME] do begin
       DropUser(USER_NAME);
       Check(CreateUserForThisDatabase(USER_NAME,USER_PWD,true)='');
@@ -154,7 +160,7 @@ begin
     UserCreated := true;
   end;
   {$endif}
-  fClient := TMongoClient.Create('localhost',27017);
+  fClient := TMongoClient.Create(MONGOSERVER,MONGOPORT);
   if ClassType=TTestDirectWithAcknowledge then
     fClient.WriteConcern := wcAcknowledged else
   if ClassType=TTestDirectWithoutAcknowledge then
@@ -204,7 +210,7 @@ begin
   SetLength(fValues,COLL_COUNT);
   for i := 0 to COLL_COUNT-1 do begin
     TDocVariant.New(fValues[i]);
-    if i<50 then
+    if i<0 then
       fValues[i]._id := null else
       fValues[i]._id := ObjectID;
     fValues[i].Name := 'Name '+IntToStr(i+1);
@@ -228,9 +234,9 @@ begin
   Coll.EnsureIndex(['Name']);
   bytes := fClient.BytesTransmitted;
   for i := 0 to COLL_COUNT-1 do begin
-    Check(Coll.Save(fValues[i],@oid)=(i<50));
+    Check(Coll.Save(fValues[i],@oid)=(i<0));
     Check(BSONVariantType.IsOfKind(fValues[i]._id,betObjectID));
-    Check(fValues[i]._id=oid.ToVariant,'EnsureDocumentHasID failure');
+    Check(oid.Equal(fValues[i]._id),'EnsureDocumentHasID failure');
   end;
   NotifyTestSpeed('rows inserted',COLL_COUNT,fClient.BytesTransmitted-bytes);
   Check(Coll.Count=COLL_COUNT);
@@ -370,7 +376,7 @@ end;
 
 procedure TTestORM.ConnectToLocalServer;
 begin
-  fMongoClient := TMongoClient.Create('localhost',27017);
+  fMongoClient := TMongoClient.Create(MONGOSERVER,MONGOPORT);
   if ClassType=TTestORMWithAcknowledge then
     fMongoClient.WriteConcern := wcAcknowledged else
   if ClassType=TTestORMWithoutAcknowledge then

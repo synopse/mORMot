@@ -17,9 +17,9 @@ unit SynDBPostgres;
     - works with PostgreSQL>=7.4 and (v3 protocol)
     - consider creating the database with UTF8 collation
     - notifications are not implemented
-    - Postgres level prepared statements works only for SQLs what starts
+    - Postgres level prepared cached statements works only for SQLs what starts
       exactly with SELECT INSERT UPDATE DELETE VALUES and not contains ";"
-    - parameter parser will fails in case SQL contains comments with ? inside
+    - parameters parser will fails in case SQL contains comments with ? inside
       (TODO - will be fixed)
     - all query rows are returned at once, caller should care about pagination
       (TODO - implement singleRowMode?)
@@ -93,7 +93,7 @@ type
     // fServerSettings: set of (ssByteAasHex);
     // maintain fPrepared[] hash list to identify already cached
     function PrepareCached(const aSQL: RawUTF8; aParamCount: integer;
-      out aName: RaWUTF8): integer;
+      out aName: RawUTF8): integer;
     /// direct execution of SQL statement what do not returns a result
     // - statement should not contains parameters
     // - raise an ESQLDBPostgres on error
@@ -386,6 +386,8 @@ var
 const
   LIBNAME = {$ifdef MSWINDOWS}'libpq.dll'{$else}
     {$ifdef darwin}'libpq.dylib'{$else}'libpq.so.5'{$endif}{$endif};
+  LIBNAME2 = {$ifdef MSWINDOWS}''{$else}
+    {$ifdef darwin}''{$else}'libpq.so.4'{$endif}{$endif};
 
 constructor TSQLDBPostgresLib.Create;
 var
@@ -396,6 +398,14 @@ begin
   if fLibraryPath = '' then
     fLibraryPath := LIBNAME;
   fHandle := SafeLoadLibrary(fLibraryPath);
+  if (fHandle = 0) and (fLibraryPath <> LIBNAME) then begin
+    fLibraryPath := LIBNAME; // try standard name
+    fHandle := SafeLoadLibrary(fLibraryPath);
+  end;
+  if (fHandle = 0) and (LIBNAME2 <> '') then begin
+    fLibraryPath := LIBNAME2; // try alternate (older) revision
+    fHandle := SafeLoadLibrary(fLibraryPath);
+  end;
   if fHandle = 0 then
     raise ESQLDBPostgres.CreateUTF8('Unable to find %', [fLibraryPath]);
   P := @@LibVersion;
@@ -446,7 +456,7 @@ end;
 { TSQLDBPostgresConnection }
 
 function TSQLDBPostgresConnection.PrepareCached(const aSQL: RawUTF8; aParamCount: integer;
-  out aName: RaWUTF8): integer;
+  out aName: RawUTF8): integer;
 var
   dig: TSHA256Digest;
 begin
@@ -537,7 +547,7 @@ begin
     begin
       PQ.SetNoticeProcessor(fPGConn, SynLogNoticeProcessor, pointer(self));
       log.Log(sllDB, 'Connected to % % using % v%', [fProperties.ServerName,
-        fProperties.DatabaseNameSafe, PQ.fLibraryPath, PQ.LibVersion]);
+        fProperties.DatabaseNameSafe, PQ.fLibraryPath, PQ.LibVersion], self);
     end
     else // to ensure no performance drop due to notice to console
       PQ.SetNoticeProcessor(fPGConn, DummyNoticeProcessor, nil);
@@ -667,11 +677,11 @@ begin
   fDBMS := dPostgreSQL;
   FillOidMapping;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
-  // disable MultiInsert to enable cCreate array binding and "unnest" statements
+  // JSONDecodedPrepareToSQL will detect cPostgreBulkArray and set
+  // DecodedFieldTypesToUnnest -> fast bulk insert/delete/update
+  fBatchSendingAbilities := [cCreate, cDelete, cUpdate, cPostgreBulkArray];
+  // disable MultiInsert SQL and rely on cPostgreBulkArray process for cCreate
   fOnBatchInsert := nil; // see TSQLRestStorageExternal.InternalBatchStop
-  // JSONDecodedPrepareToSQL will detect it and set DecodedFieldTypesToUnnest
-  //  -> fast bulk insert/delete/update
-  fBatchSendingAbilities := [cCreate, cDelete, cUpdate];
 end;
 
 function TSQLDBPostgresConnectionProperties.NewConnection: TSQLDBConnection;
@@ -801,7 +811,7 @@ begin
     p := @fParams[i];
     if p^.VArray <> nil then
     begin
-      if not (p^.VType in [ftInt64, ftDouble, ftCurrency, ftUTF8]) then
+      if not (p^.VType in [ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8]) then
         raise ESQLDBPostgres.CreateUTF8('%.ExecutePrepared: Invalid array type % ' +
           'on bound parameter #%', [Self, ToText(p^.VType)^, i]);
       p^.VData := BoundArrayToJSONArray(p^.VArray);
@@ -817,7 +827,7 @@ begin
         ftCurrency:
           Curr64ToStr(p^.VInt64, RawUTF8(p^.VData));
         ftDouble:
-          ExtendedToStr(PDouble(@p^.VInt64)^, DOUBLE_PRECISION, RawUTF8(p^.VData));
+          DoubleToStr(PDouble(@p^.VInt64)^, RawUTF8(p^.VData));
         ftDate:
           // Postgres expects space instead of T in ISO8601 expanded format
           p^.VData := DateTimeToIso8601(PDateTime(@p^.VInt64)^, true, ' ');
