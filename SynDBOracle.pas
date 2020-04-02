@@ -1831,7 +1831,7 @@ var log: ISynLog;
     Props: TSQLDBOracleConnectionProperties;
     mode: ub4;
     msg: RawUTF8;
-    dummyusermem: pointer;
+    r: sword;
 const
     type_owner_name: RawUTF8 = 'SYS';
     type_NymberListName: RawUTF8 = 'ODCINUMBERLIST';
@@ -1844,11 +1844,12 @@ begin
   with OCI do
   try
     if fEnv=nil then begin
-      dummyusermem := nil; // try to circumvent random A/V in newest OCI
       // will use UTF-8 encoding by default, in a multi-threaded context
       // OCI_EVENTS is needed to support Oracle RAC Connection Load Balancing
-      EnvNlsCreate(fEnv,Props.EnvironmentInitializationMode,
-        nil,nil,nil,nil,0,@dummyusermem,OCI_UTF8,OCI_UTF8);
+      r := EnvNlsCreate(fEnv,Props.EnvironmentInitializationMode,
+        nil,nil,nil,nil,0,nil{@dummyusermem not works},OCI_UTF8,OCI_UTF8);
+      if r <> OCI_SUCCESS then
+        raise ESQLDBOracle.CreateUTF8('OCIEnvNlsCreate fails with code %', [r]);
     end;
     HandleAlloc(fEnv,fError,OCI_HTYPE_ERROR);
     HandleAlloc(fEnv,fServer,OCI_HTYPE_SERVER);
