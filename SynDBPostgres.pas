@@ -393,11 +393,31 @@ constructor TSQLDBPostgresLib.Create;
 var
   P: PPointer;
   i: PtrInt;
+  {$ifdef MSWINDOWS}
+  newpath, temp: TFileName;
+  {$endif}
 begin
   fLibraryPath := SynDBPostgresLibrary;
   if fLibraryPath = '' then
     fLibraryPath := LIBNAME;
+  {$ifdef MSWINDOWS}
+  // libpg.dll search for dependencies in the cwd, so we need to SetCurrentDir
+  // in case SynDBPostgresLibrary contains a full path to libpq.dll
+  temp := ''; //init for FPC
+  newpath := ExtractFilePath(fLibraryPath);
+  try
+   if newpath <> '' then begin
+     temp := GetCurrentDir;
+     SetCurrentDir(newpath);
+   end;
+   fHandle := SafeLoadLibrary(fLibraryPath);
+  finally
+   if temp<>'' then
+     SetCurrentDir(temp);
+  end;
+  {$else}
   fHandle := SafeLoadLibrary(fLibraryPath);
+  {$endif}
   if (fHandle = 0) and (fLibraryPath <> LIBNAME) then begin
     fLibraryPath := LIBNAME; // try standard name
     fHandle := SafeLoadLibrary(fLibraryPath);
