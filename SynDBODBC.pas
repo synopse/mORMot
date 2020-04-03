@@ -297,7 +297,7 @@ type
 // create a new TStringList), or any existing TStrings instance (may be from VCL
 // - aIncludeVersion: include the DLL driver version as <driver name>=<dll version>
 // in aDrivers (somewhat slower)
-function ODBCInstalledDriversList(const aIncludeVersion: Boolean; out aDrivers: TStrings): boolean;
+function ODBCInstalledDriversList(const aIncludeVersion: Boolean; var aDrivers: TStrings): boolean;
 {$endif MSWINDOWS}
 
 implementation
@@ -1055,7 +1055,7 @@ var
   ODBC: TODBCLib = nil;
 
 {$ifdef MSWINDOWS}
-function ODBCInstalledDriversList(const aIncludeVersion: Boolean; out aDrivers: TStrings): Boolean;
+function ODBCInstalledDriversList(const aIncludeVersion: Boolean; var aDrivers: TStrings): Boolean;
 
   // expand environment variables, i.e %windir%
   // adapted from http://delphidabbler.com/articles?article=6
@@ -1914,16 +1914,14 @@ constructor TODBCLib.Create;
 var P: PPointer;
     i: integer;
 begin
-  fHandle := SafeLoadLibrary(ODBC_LIB);
-  if fHandle=0 then
-    raise EODBCException.CreateUTF8('Unable to find ODBC Client Interface (%)',[ODBC_LIB]);
+  TryLoadLibrary([ODBC_LIB], EODBCException);
   P := @@AllocEnv;
   for i := 0 to High(ODBC_ENTRIES) do begin
     P^ := GetProcAddress(fHandle,ODBC_ENTRIES[i]);
     if P^=nil then begin
       FreeLibrary(fHandle);
       fHandle := 0;
-      raise EODBCException.CreateUTF8('Invalid %: missing %',[ODBC_LIB,ODBC_ENTRIES[i]]);
+      raise EODBCException.CreateUTF8('Invalid %: missing %',[fLibraryPath,ODBC_ENTRIES[i]]);
     end;
     inc(P);
   end;

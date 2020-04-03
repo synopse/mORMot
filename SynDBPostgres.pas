@@ -35,8 +35,6 @@ interface
 uses
   {$ifdef MSWINDOWS}
   Windows,
-  {$else}
-  dynlibs,
   {$endif}
   SysUtils,
   SynCommons,
@@ -325,7 +323,6 @@ type
   // - only the endpoints needed by this unit are imported
   TSQLDBPostgresLib = class(TSQLDBLib)
   protected
-    fLibraryPath: TFileName;
     /// raise an exception on error and clean result
     // - will set pRes to nil if passed
     // - if andClear is true - will call always PQ.Clear(res)
@@ -393,21 +390,12 @@ constructor TSQLDBPostgresLib.Create;
 var
   P: PPointer;
   i: PtrInt;
+  l2: TFileName;
 begin
-  fLibraryPath := SynDBPostgresLibrary;
-  if fLibraryPath = '' then
-    fLibraryPath := LIBNAME;
-  fHandle := SafeLoadLibrary(fLibraryPath);
-  if (fHandle = 0) and (fLibraryPath <> LIBNAME) then begin
-    fLibraryPath := LIBNAME; // try standard name
-    fHandle := SafeLoadLibrary(fLibraryPath);
-  end;
-  if (fHandle = 0) and (LIBNAME2 <> '') then begin
-    fLibraryPath := LIBNAME2; // try alternate (older) revision
-    fHandle := SafeLoadLibrary(fLibraryPath);
-  end;
-  if fHandle = 0 then
-    raise ESQLDBPostgres.CreateUTF8('Unable to find %', [fLibraryPath]);
+  if LIBNAME2 <> '' then
+    l2 := ExeVersion.ProgramFilePath + LIBNAME2;
+  TryLoadLibrary([SynDBPostgresLibrary, ExeVersion.ProgramFilePath + LIBNAME,
+    l2, LIBNAME, LIBNAME2], ESQLDBPostgres);
   P := @@LibVersion;
   for i := 0 to High(PQ_ENTRIES) do
   begin

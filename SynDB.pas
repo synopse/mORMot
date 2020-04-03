@@ -2814,11 +2814,17 @@ type
   TSQLDBLib = class
   protected
     fHandle: {$ifdef FPC}TLibHandle{$else}HMODULE{$endif};
+    fLibraryPath: TFileName;
+    /// same as SafeLoadLibrary() but setting fLibraryPath and cwd on Windows
+    function TryLoadLibrary(const aLibrary: array of TFileName;
+      aRaiseExceptionOnFailure: ESynExceptionClass): boolean; virtual;
   public
     /// release associated memory and linked library
     destructor Destroy; override;
     /// the associated library handle
     property Handle: {$ifdef FPC}TLibHandle{$else}HMODULE{$endif} read fHandle write fHandle;
+    /// the loaded library path
+    property LibraryPath: TFileName read fLibraryPath;
   end;
 
 
@@ -8144,6 +8150,42 @@ end;
 
 
 { TSQLDBLib }
+
+function TSQLDBLib.TryLoadLibrary(const aLibrary: array of TFileName;
+  aRaiseExceptionOnFailure: ESynExceptionClass): boolean;
+var i: integer;
+    lib, libs {$ifdef MSWINDOWS} , nwd, cwd {$endif}: TFileName;
+begin
+  for i := 0 to high(aLibrary) do begin
+    lib := aLibrary[i];
+    if lib = '' then
+      continue;
+    {$ifdef MSWINDOWS}
+    nwd := ExtractFilePath(lib);
+    if nwd <> '' then begin
+      cwd := GetCurrentDir;
+      SetCurrentDir(nwd); // search for dll dependencies in the same folder
+    end;
+    fHandle := SafeLoadLibrary(lib);
+    if nwd <> '' then
+      SetCurrentDir(cwd);
+    {$else}
+    fHandle := SafeLoadLibrary(lib);
+    {$endif MSWINDOWS}
+    if fHandle <> 0 then begin
+      fLibraryPath := lib;
+      result := true;
+      exit;
+    end;
+    if libs = '' then
+      libs := lib else
+      libs := libs + ', ' + lib;
+  end;
+  result := false;
+  if aRaiseExceptionOnFailure <> nil then
+    raise aRaiseExceptionOnFailure.CreateUTF8(
+      '%.LoadLibray failed - searched in %', [self, libs]);
+end;
 
 destructor TSQLDBLib.Destroy;
 begin

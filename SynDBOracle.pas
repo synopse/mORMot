@@ -1250,7 +1250,6 @@ type
   /// direct access to the native Oracle Client Interface (OCI)
   TSQLDBOracleLib = class(TSQLDBLib)
   protected
-    fLibraryPath: TFileName;
     procedure HandleError(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
       Status: Integer; ErrorHandle: POCIError; InfoRaiseException: Boolean=false;
       LogLevelNoRaise: TSynLogInfo=sllNone);
@@ -1684,38 +1683,28 @@ begin
     result := OCI_WE8MSWIN1252;
 end;
 
-{$ifdef KYLIX3}
-function SafeLoadLibrary(const aFileName: TFileName): HMODULE;
-begin
- result := LoadLibrary(PAnsiChar(AnsiString(aFileName)));
-end;
-{$endif KYLIX3}
-
 constructor TSQLDBOracleLib.Create;
 const LIBNAME = {$ifdef MSWINDOWS}'oci.dll'{$else}'libclntsh.so'{$endif};
 var P: PPointer;
     i: integer;
-    orhome: string;
+    l1, l2, l3: TFileName;
 begin
-  fLibraryPath := LIBNAME;
   if (SynDBOracleOCIpath<>'') and DirectoryExists(SynDBOracleOCIpath) then
-    fLibraryPath := ExtractFilePath(ExpandFileName(SynDBOracleOCIpath+PathDelim))+fLibraryPath;
-  fHandle := SafeLoadLibrary(fLibraryPath);
-  if fHandle=0 then begin
-    if fHandle=0 then begin
-      orhome := GetEnvironmentVariable('ORACLE_HOME');
-      if orhome<>'' then begin
-        fLibraryPath := IncludeTrailingPathDelimiter(orhome)+'bin'+PathDelim+LIBNAME;
-        fHandle := SafeLoadLibrary(fLibraryPath);
-      end;
+    l1 := ExtractFilePath(ExpandFileName(SynDBOracleOCIpath+PathDelim))+LIBNAME;
+  l2 := ExeVersion.ProgramFilePath+LIBNAME;
+  if not FileExists(l2) then begin
+    l2 := ExeVersion.ProgramFilePath+'OracleInstantClient';
+    if not DirectoryExists(l2) then begin
+      l2 := ExeVersion.ProgramFilePath+'OCI';
+      if not DirectoryExists(l2) then
+        l2 := ExeVersion.ProgramFilePath+'Oracle';
     end;
+    l2 := l2+PathDelim+LIBNAME;
   end;
-  if fHandle=0 then begin
-    fLibraryPath := ExeVersion.ProgramFilePath+'OracleInstantClient'+PathDelim+LIBNAME;
-    fHandle := SafeLoadLibrary(fLibraryPath);
-  end;
-  if fHandle=0 then
-    raise ESQLDBOracle.Create('Unable to find Oracle Client Interface '+LIBNAME);
+  l3 := GetEnvironmentVariable('ORACLE_HOME');
+  if l3<>'' then
+    l3 := IncludeTrailingPathDelimiter(l3)+'bin'+PathDelim+LIBNAME;
+  TryLoadLibrary([l1, l2, l3, LIBNAME], ESQLDBOracle);
   P := @@ClientVersion;
   for i := 0 to High(OCI_ENTRIES) do begin
     P^ := GetProcAddress(fHandle,OCI_ENTRIES[i]);

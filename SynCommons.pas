@@ -10507,7 +10507,8 @@ type
   PValuePUTF8CharArray = ^TValuePUTF8CharArray;
 
   /// store one name/value pair of raw UTF-8 content, from a JSON buffer
-  // - used e.g. by JSONDecode() overloaded function to returns names/values
+  // - used e.g. by JSONDecode() overloaded function or UrlEncodeJsonObject()
+  // to returns names/values
   TNameValuePUTF8Char = record
     /// a pointer to the actual UTF-8 name text
     Name: PUTF8Char;
@@ -27058,9 +27059,9 @@ function RefCntDecFree(var refcnt: TRefCnt): boolean;
 {$ifdef CPUINTEL} {$ifdef FPC}nostackframe; assembler; {$endif}
 asm {$ifdef CPU64DELPHI} .noframe {$endif}
         {$ifdef FPC_64}
-        lock dec qword ptr[refcnt]  // SizeInt=PtrInt=Int64 for FPC_64
+        lock dec qword ptr[refcnt]  // TRefCnt=SizeInt=PtrInt=Int64 for FPC_64
         {$else}
-        lock dec dword ptr[refcnt]  // always longint on Delphi
+        lock dec dword ptr[refcnt]  // TRefCnt=longint on Delphi and FPC_32
         {$endif}
         setbe   al
 end; // we don't check for ismultithread global since lock is cheap on new CPUs
@@ -34343,56 +34344,55 @@ begin
   result := UrlEncode(pointer(svar));
 end;
 
+procedure _UrlEncode_Write(s, p: PByte; tab: PTextByteSet);
+var c: cardinal;
+    hex: ^TByteToWord;
+begin
+ hex := @TwoDigitsHexWB;
+ repeat
+   c := s^;
+   inc(s);
+   if tcURIUnreserved in tab[c] then begin
+     p^ := c; // cf. rfc3986 2.3. Unreserved Characters
+     inc(p);
+   end else
+   if c=0 then
+     exit else
+   if c=32 then begin
+     p^ := ord('+');
+     inc(p);
+   end else begin
+     p^ := ord('%'); inc(p);
+     PWord(p)^ := hex[c];
+     inc(p,2);
+   end;
+ until false;
+end;
+
+function _UrlEncode_ComputeLen(s: PByte; tab: PTextByteSet): PtrInt;
+var c: cardinal;
+begin
+ result := 0;
+ repeat
+   c := s^;
+   inc(s);
+   if (tcURIUnreserved in tab[c]) or (c=32) then begin
+     inc(result);
+     continue;
+   end;
+   if c=0 then
+     exit;
+   inc(result,3);
+ until false;
+end;
+
 function UrlEncode(Text: PUTF8Char): RawUTF8;
-  function Enc(s, p: PUTF8Char): PUTF8Char;
-  var c: PtrInt;
-  begin
-    repeat
-      c := ord(s^);
-      case c of
-      0: break;
-      ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z'),
-      ord('_'),ord('-'),ord('.'),ord('~'): begin
-        // cf. rfc3986 2.3. Unreserved Characters
-        p^ := AnsiChar(c);
-        inc(p);
-        inc(s);
-        continue;
-      end;
-      ord(' '): p^ := '+';
-      else begin
-        p^ := '%'; inc(p);
-        PWord(p)^ := TwoDigitsHexWB[c]; inc(p);
-      end;
-      end; // case c of
-      inc(p);
-      inc(s);
-    until false;
-    result := p;
-  end;
-  function Size(s: PUTF8Char): PtrInt;
-  begin
-    result := 0;
-    if s<>nil then
-    repeat
-      case s^ of
-        #0: exit;
-        '0'..'9','a'..'z','A'..'Z','_','-','.','~',' ': begin
-          inc(result);
-          inc(s);
-          continue;
-        end;
-        else inc(result,3);
-      end;
-      inc(s);
-    until false;
-  end;
 begin
   result := '';
   if Text=nil then
     exit;
-  FastSetString(result,nil,Size(Text)); // reserve exact memory count
-  Enc(Text,pointer(result));
+  FastSetString(result,nil,_UrlEncode_ComputeLen(pointer(Text),@TEXT_CHARS));
+  _UrlEncode_Write(pointer(Text),pointer(result),@TEXT_BYTES);
 end;
 
 function UrlEncode(const NameValuePairs: array of const): RawUTF8;
@@ -36738,6 +36738,8 @@ var i,len: integer;
     d: PCardinal;
     tab: PCrc32tab;
 begin
+  if data='' then
+    exit; // nothing to cypher
   tab := @crc32ctab;
   {$ifdef FPC}
   UniqueString(data); // @data[1] won't call UniqueString() under FPC :(
@@ -42172,19 +42174,19 @@ asm // faster version by AB
         add     eax, ebx // eax=data to be initialized
         jmp     dword ptr[@tab + ecx * 4 - tkLString * 4]
 @tab:   dd      @ptr, @ptr, @varrec, @array, @array, @ptr, @ptr, @ptr, @ptr
-@ptr:   dec     edi
-        mov     dword ptr[eax], 0 // pointer initialization
+@ptr:   mov     dword ptr[eax], 0 // pointer initialization
+        dec     edi
         jg      @loop
 @end:   pop     edi
         pop     esi
         pop     ebx
         ret
 @varrec:xor     ecx, ecx
-        dec     edi
         mov     dword ptr[eax], ecx
         mov     dword ptr[eax + 4], ecx
         mov     dword ptr[eax + 8], ecx
         mov     dword ptr[eax + 12], ecx
+        dec     edi
         jg      @loop
         pop     edi
         pop     esi
@@ -45569,7 +45571,7 @@ begin
   c := json[0];
   if (jcDigitFirstChar in JSON_CHARS[c]) and
      (((c>='1') and (c<='9')) or // is first char numeric?
-     ((c='0') and ((json[1]<'0') or (json[1]>'9'))) or // '012' excluded by JSON
+     ((c='0') and ((json[1]='.') or (json[1]=#0))) or // '012' excluded by JSON
      ((c='-') and (json[1]>='0') and (json[1]<='9'))) then begin
     start := json;
     repeat inc(json) until (json^<'0') or (json^>'9'); // check digits
@@ -45597,11 +45599,15 @@ begin
   c := json[0];
   if (jcDigitFirstChar in JSON_CHARS[c]) and
      (((c>='1') and (c<='9')) or // is first char numeric?
-     ((c='0') and ((json[1]<'0') or (json[1]>'9'))) or // '012' excluded by JSON
+     ((c='0') and ((json[1]='.') or (json[1]=#0))) or // '012' excluded by JSON
      ((c='-') and (json[1]>='0') and (json[1]<='9'))) then begin
     start := json;
     repeat inc(json) until (json^<'0') or (json^>'9'); // check digits
     case json^ of
+    #0:
+      if json-start<=19 then // signed Int64 precision
+        result := varInt64 else
+        result := varDouble; // we may lost precision, but still a number
     '.':
       if (json[1]>='0') and (json[1]<='9') and (json[2] in [#0,'e','E','0'..'9']) then
         if (json[2]=#0) or (json[3]=#0) or
@@ -45651,10 +45657,6 @@ exponent:   inc(json); // inlined custom GetInteger()
         end;
     'e','E':
       goto exponent;
-    #0:
-      if json-start<=19 then // signed Int64 precision
-        result := varInt64 else
-        result := varDouble; // we may lost precision, but still a number
     end;
   end;
 end;
@@ -48681,14 +48683,16 @@ begin //  caller ensured ElemTypeInfo<>nil and n>0
       RawAnsiStringDynArrayClear(pointer(v),n);
     tkWString:
       repeat
-        {$ifdef FPC}Finalize(WideString(v^)){$else}WideString(v^) := ''{$endif};
+        if v^<>nil then
+          {$ifdef FPC}Finalize(WideString(v^)){$else}WideString(v^) := ''{$endif};
         inc(v);
         dec(n);
       until n=0;
     {$ifdef HASVARUSTRING}
     tkUString:
       repeat
-        {$ifdef FPC}Finalize(UnicodeString(v^)){$else}UnicodeString(v^) := ''{$endif};
+        if v^<>nil then
+          {$ifdef FPC}Finalize(UnicodeString(v^)){$else}UnicodeString(v^) := ''{$endif};
         inc(v);
         dec(n);
       until n=0;
@@ -48696,7 +48700,8 @@ begin //  caller ensured ElemTypeInfo<>nil and n>0
     {$ifndef DELPHI5OROLDER}
     tkInterface:
       repeat
-        {$ifdef FPC}Finalize(IInterface(v^)){$else}IInterface(v^) := nil{$endif};
+        if v^<>nil then
+          {$ifdef FPC}Finalize(IInterface(v^)){$else}IInterface(v^) := nil{$endif};
         inc(v);
         dec(n);
       until n=0;
@@ -48704,7 +48709,8 @@ begin //  caller ensured ElemTypeInfo<>nil and n>0
     tkDynArray: begin
       ElemTypeInfo := Deref(GetTypeInfo(ElemTypeInfo)^.elType);
       repeat
-        FastDynArrayClear(v,ElemTypeInfo);
+        if v^<>nil then
+          FastDynArrayClear(v,ElemTypeInfo);
         inc(v);
         dec(n);
       until n=0;
@@ -54802,8 +54808,12 @@ var B: PUTF8Char;
 begin
   if Len>0 then
   case CodePage of
-  CP_UTF8, CP_RAWBYTESTRING:
-    Add(PUTF8Char(P),Len,Escape);  // direct write of RawUTF8/RawByteString content
+  CP_UTF8: // direct write of RawUTF8 content
+    if Escape<>twJSONEscape then
+      Add(PUTF8Char(P),Len,Escape) else
+      Add(PUTF8Char(P),0,Escape);
+  CP_RAWBYTESTRING:
+    Add(PUTF8Char(P),Len,Escape);  // direct write of RawByteString content
   CP_UTF16:
     AddW(PWord(P),0,Escape); // direct write of UTF-16 content
   CP_SQLRAWBLOB: begin
@@ -55937,6 +55947,8 @@ begin
     // Value is a number or null/true/false
     result := '{"'+Name+'":'+SQLValue+'}';
 end;
+
+{ TValuePUTF8Char }
 
 procedure TValuePUTF8Char.ToUTF8(var Text: RawUTF8);
 begin
