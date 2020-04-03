@@ -682,10 +682,10 @@ type
     // - if aAggregate is nil, fCurrentORMInstance field values would be used
     // - if aAggregate is set, its fields would be set to fCurrentORMInstance
     procedure ORMPrepareForCommit(aCommand: TSQLOccasion;
-      aAggregate: TObject; var Result: TCQRSResult); virtual;
+      aAggregate: TObject; var Result: TCQRSResult; aAllFields: boolean=false); virtual;
     /// minimal implementation using AggregateToTable() conversion
-    function ORMAdd(aAggregate: TObject): TCQRSResult; virtual;
-    function ORMUpdate(aAggregate: TObject): TCQRSResult; virtual;
+    function ORMAdd(aAggregate: TObject; aAllFields: boolean=false): TCQRSResult; virtual;
+    function ORMUpdate(aAggregate: TObject; aAllFields: boolean=false): TCQRSResult; virtual;
     /// this default implementation will send the internal BATCH
     // - you should override it, if you need a specific behavior
     procedure InternalCommit(var Result: TCQRSResult); virtual;
@@ -1953,16 +1953,18 @@ begin
       end;
 end;
 
-function TDDDRepositoryRestCommand.ORMAdd(aAggregate: TObject): TCQRSResult;
+function TDDDRepositoryRestCommand.ORMAdd(aAggregate: TObject;
+  aAllFields: boolean): TCQRSResult;
 begin
   if CqrsBeginMethod(qaCommandDirect,result) then
-    ORMPrepareForCommit(soInsert,aAggregate,result);
+    ORMPrepareForCommit(soInsert,aAggregate,result,aAllFields);
 end;
 
-function TDDDRepositoryRestCommand.ORMUpdate(aAggregate: TObject): TCQRSResult;
+function TDDDRepositoryRestCommand.ORMUpdate(aAggregate: TObject;
+  aAllFields: boolean): TCQRSResult;
 begin
   if CqrsBeginMethod(qaCommandOnSelect,result) then
-    ORMPrepareForCommit(soUpdate,aAggregate,result);
+    ORMPrepareForCommit(soUpdate,aAggregate,result,aAllFields);
 end;
 
 procedure TDDDRepositoryRestCommand.ORMEnsureBatchExists;
@@ -1973,10 +1975,12 @@ begin
 end;
 
 procedure TDDDRepositoryRestCommand.ORMPrepareForCommit(
-  aCommand: TSQLOccasion; aAggregate: TObject; var Result: TCQRSResult);
+  aCommand: TSQLOccasion; aAggregate: TObject; var Result: TCQRSResult;
+  aAllFields: boolean);
 var msg: RawUTF8;
     validator: TSynValidate;
     ndx: integer;
+    fields: TSQLFieldBits;
 
   procedure SetValidationError(default: TCQRSResult);
   begin
@@ -2016,9 +2020,12 @@ begin
   end;
   ORMEnsureBatchExists;
   ndx := -1;
+  if aAllFields then
+    fields := ALL_FIELDS else
+    fields := [];
   case aCommand of
-  soInsert: ndx := fBatch.Add(fCurrentORMInstance,true,fFactory.fAggregateID<>nil );
-  soUpdate: ndx := fBatch.Update(fCurrentORMInstance);
+  soInsert: ndx := fBatch.Add(fCurrentORMInstance,true,fFactory.fAggregateID<>nil,fields);
+  soUpdate: ndx := fBatch.Update(fCurrentORMInstance,fields);
   soDelete: ndx := fBatch.Delete(fCurrentORMInstance.IDValue);
   end;
   CqrsSetResultSuccessIf(ndx>=0,Result);
