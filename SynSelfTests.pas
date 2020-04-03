@@ -5472,23 +5472,23 @@ begin
   check(Iso8601ToDateTime(tmp)=0);
   check(Iso8601ToTimelog(tmp)=0);
   tmp := UnixTimePeriodToString(0);
-  assert(tmp='T00:00:00');
+  check(tmp='T00:00:00');
   tmp := UnixTimePeriodToString(30);
-  assert(tmp='T00:00:30');
+  check(tmp='T00:00:30');
   tmp := UnixTimePeriodToString(SecsPerMin);
-  assert(tmp='T00:01:00');
+  check(tmp='T00:01:00');
   tmp := UnixTimePeriodToString(SecsPerMin*MinsPerHour);
-  assert(tmp='T01:00:00');
+  check(tmp='T01:00:00');
   tmp := UnixTimePeriodToString(SecsPerDay);
-  assert(tmp='0000-00-01');
+  check(tmp='0000-00-01');
   tmp := UnixTimePeriodToString(SecsPerDay*15);
-  assert(tmp='0000-00-15');
+  check(tmp='0000-00-15');
   tmp := UnixTimePeriodToString(SecsPerDay*365);
-  assert(tmp='0000-12-31');
+  check(tmp='0000-12-31');
   tmp := UnixTimePeriodToString(SecsPerDay*366);
-  assert(tmp='0001-00-00');
+  check(tmp='0001-00-00');
   tmp := UnixTimePeriodToString(SecsPerDay*732);
-  assert(tmp='0002-00-00');
+  check(tmp='0002-00-00');
 end;
 
 {$ifdef FPC}
