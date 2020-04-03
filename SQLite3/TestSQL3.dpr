@@ -161,6 +161,7 @@ uses
       SynDBPostgres in '..\SynDBPostgres.pas',
       SynOleDB in '..\SynOleDB.pas',
       SynDBODBC in '..\SynDBODBC.pas',
+      // SynDBFirebird in '..\SynDBFirebird.pas',
       // SynDBDataSet in '..\SynDBDataSet.pas',
       {$ifdef USEZEOS}
         SynDBZeos in '..\SynDBZeos.pas',
