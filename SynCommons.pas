@@ -12824,8 +12824,12 @@ function Char3ToWord(P: PUTF8Char; out Value: Cardinal): Boolean;
 // - returns FALSE on success, TRUE if P^ is not correct
 function Char4ToWord(P: PUTF8Char; out Value: Cardinal): Boolean;
 
-/// our own fast version of the corresponding low-level function
+/// our own fast version of the corresponding low-level RTL function
 function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): Boolean;
+
+/// our own fast version of the corresponding low-level RTL function
+function IsLeapYear(Year: cardinal): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// retrieve the current Date, in the ISO 8601 layout, but expanded and
 // ready to be displayed
@@ -23358,10 +23362,11 @@ type TDiv100Rec = packed record D, M: cardinal; end;
 
 procedure Div100(Y: cardinal; var res: TDiv100Rec);
 {$ifdef FPC} inline;
+var Y100: cardinal;
 begin
-  res.M := Y;
-  res.D := Y div 100;   // FPC will use fast reciprocal
-  dec(res.M,res.D*100); // avoid div twice
+  Y100 := Y div 100; // FPC will use fast reciprocal
+  res.D := Y100;
+  res.M := Y-Y100*100; // avoid div twice
 end;
 {$else}
 {$ifdef CPUX64}
@@ -37635,13 +37640,23 @@ begin
     result := EncodeTime((lo shr(6+6))and 31, (lo shr 6)and 63, lo and 63, 0);
 end;
 
+function IsLeapYear(Year: cardinal): boolean;
+var d100: TDiv100Rec;
+begin
+  if Year and 3 = 0 then begin
+    Div100(Year,d100);
+    result := ((d100.M <> 0) or // (Year mod 100 > 0)
+               (Year - ((d100.D shr 2) * 400) = 0)); // (Year mod 400 = 0))
+  end else
+    result := false;
+end;
+
 function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): Boolean;
 var d100: TDiv100Rec;
 begin // faster version by AB
   Result := False;
   if (Month<1) or (Month>12) then exit;
-  if (Day <= MonthDays[
-      ((Year and 3)=0) and ((Year mod 100>0) or (Year mod 400=0))][Month]) and
+  if (Day <= MonthDays[IsLeapYear(Year)][Month]) and
      (Year>=1) and (Year<10000) and
      (Month<13) and (Day>0) then begin
     if Month>2 then

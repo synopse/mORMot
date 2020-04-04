@@ -5431,6 +5431,8 @@ var i: integer;
     tmp: RawUTF8;
     b: TTimeLogBits;
 begin
+  for i := 1700 to 2500 do
+    Check(SynCommons.IsLeapYear(i) = SysUtils.IsLeapYear(i), 'IsLeapYear');
   // this will test typically from year 1905 to 2065
   D := Now/20+Random*20; // some starting random date/time
   for i := 1 to 2000 do begin
