@@ -415,6 +415,22 @@ var
   // - you can specify here a folder name in which the oci.dll is to be found
   SynDBOracleOCIpath: TFileName;
 
+const
+  // defined here for overriding OCI_CHARSET_UTF8/OCI_CHARSET_WIN1252 if needed
+  OCI_UTF8 = $367;
+  OCI_AL32UTF8 = $369;
+  OCI_UTF16ID = 1000;
+  OCI_WE8MSWIN1252 = 178;
+
+var
+  /// the OCI charset used for UTF-8 encoding
+  // - OCI_UTF8 is a deprecated encoding, and OCI_AL32UTF8 should be preferred
+  // - but you can fallback for OCI_UTF8 for compatibility purposes
+  OCI_CHARSET_UTF8: cardinal = OCI_AL32UTF8;
+
+  /// the OCI charset used for WinAnsi encoding
+  OCI_CHARSET_WIN1252: cardinal = OCI_WE8MSWIN1252;
+
 
 implementation
 
@@ -827,12 +843,6 @@ const
   OCI_SHARED      = $10;
   OCI_NO_UCB      = $40;
   OCI_NO_MUTEX    = $80;
-
-  { fixed Client Character Set }
-  OCI_UTF8 = $367;
-  OCI_AL32UTF8 = $369;
-  OCI_UTF16ID = 1000;
-  OCI_WE8MSWIN1252 = 178;
 
   { OCI Credentials }
   OCI_CRED_RDBMS  = 1;
@@ -1474,7 +1484,7 @@ begin
     if Len>0 then begin
       Len := Len*3; // max UTF-8 size according to number of characters
       SetLength(Text,Len);
-      result := BlobRead(Stmt,svchp,errhp,locp,pointer(Text),Len,OCI_UTF8,ColumnDBForm);
+      result := BlobRead(Stmt,svchp,errhp,locp,pointer(Text),Len,OCI_CHARSET_UTF8,ColumnDBForm);
       if TextResize then
         SetLength(Text,result) else
         Text[result+1] := #0; // ensure ASCIIZ (e.g. when escaping to JSON)
@@ -1666,7 +1676,7 @@ begin
         result := CodePageToCharSetID(env,GetACP);
   end;
   CP_UTF8:
-    result := OCI_UTF8;
+    result := OCI_CHARSET_UTF8;
   CP_UTF16:
     result := OCI_UTF16ID;
   else begin
@@ -1836,7 +1846,7 @@ begin
       // will use UTF-8 encoding by default, in a multi-threaded context
       // OCI_EVENTS is needed to support Oracle RAC Connection Load Balancing
       r := EnvNlsCreate(fEnv,Props.EnvironmentInitializationMode,
-        nil,nil,nil,nil,0,nil{@dummyusermem not works},OCI_UTF8,OCI_UTF8);
+        nil,nil,nil,nil,0,nil,OCI_CHARSET_UTF8,OCI_CHARSET_UTF8);
       if r <> OCI_SUCCESS then
         raise ESQLDBOracle.CreateUTF8('OCIEnvNlsCreate fails with code %', [r]);
     end;
@@ -2034,8 +2044,9 @@ procedure TSQLDBOracleConnection.STRToUTF8(P: PAnsiChar; var result: RawUTF8;
 var L: integer;
 begin
   L := StrLen(PUTF8Char(P));
-  if (L=0) or (ColumnDBCharSet=OCI_UTF8) or (ColumnDBForm=SQLCS_NCHAR) then
-    SetString(result,P,L) else
+  if (L=0) or (ColumnDBCharSet=OCI_AL32UTF8) or (ColumnDBCharSet=OCI_UTF8) or
+     (ColumnDBForm=SQLCS_NCHAR) then
+    FastSetString(result,P,L) else
     result := fAnsiConvert.AnsiBufferToRawUTF8(P,L);
 end;
 
@@ -2045,12 +2056,12 @@ procedure TSQLDBOracleConnection.STRToAnsiString(P: PAnsiChar; var result: AnsiS
 var L: integer;
 begin
   L := StrLen(PUTF8Char(P));
-  if (L=0) or ((ColumnDBCharSet<>OCI_UTF8) and (ColumnDBForm<>SQLCS_NCHAR) and
-     (fAnsiConvert.CodePage=GetACP)) then
+  if (L=0) or ((ColumnDBCharSet<>OCI_AL32UTF8) and (ColumnDBCharSet<>OCI_UTF8) and
+      (ColumnDBForm<>SQLCS_NCHAR) and (fAnsiConvert.CodePage=GetACP)) then
     SetString(result,P,L) else
     result := CurrentAnsiConvert.AnsiToAnsi(fAnsiConvert,P,L);
 end;
-{$endif}
+{$endif UNICODE}
 
 
 { TSQLDBOracleStatement }
@@ -2539,6 +2550,7 @@ procedure TSQLDBOracleStatement.ExecutePrepared;
 var i,j: PtrInt;
     Env: POCIEnv;
     Context: POCISvcCtx;
+    param: PSQLDBParam;
     Type_List: POCIType;
     oData: pointer;
     oDataDAT: ^TOracleDateArray absolute oData;
@@ -2684,7 +2696,8 @@ begin
         for i := 0 to fParamCount-1 do
         if Length(fParams[i].VArray)>0 then begin
           // 1.2.1. Bind an array as one object
-          case fParams[i].VType of
+          param := @fParams[i];
+          case param.VType of
           ftInt64:
             Type_List := TSQLDBOracleConnection(Connection).fType_numList;
           ftUTF8:
@@ -2699,18 +2712,18 @@ begin
           OCI.Check(nil,self,OCI.ObjectNew(Env, fError, Context, OCI_TYPECODE_VARRAY, Type_List, nil,
             OCI_DURATION_SESSION, True, ociArrays[ociArraysCount]), fError);
           inc(ociArraysCount);
-          SetString(fParams[i].VData,nil,Length(fParams[i].VArray)*sizeof(Int64));
-          oData := pointer(fParams[i].VData);
-          for j := 0 to Length(fParams[i].VArray)-1 do
-            case fParams[i].VType of
+          SetString(param.VData,nil,Length(param.VArray)*sizeof(Int64));
+          oData := pointer(param.VData);
+          for j := 0 to Length(param.VArray)-1 do
+            case param.VType of
             ftInt64: begin
-              SetInt64(pointer(fParams[i].Varray[j]),oDataINT^[j]);
+              SetInt64(pointer(param.Varray[j]),oDataINT^[j]);
               OCI.Check(nil,self,OCI.NumberFromInt(fError, @oDataINT[j], sizeof(Int64), OCI_NUMBER_SIGNED, num_val), fError);
               OCI.Check(nil,self,OCI.CollAppend(Env, fError, @num_val, nil, ociArrays[ociArraysCount-1]),fError);
             end;
             ftUTF8: begin
               str_val := nil;
-              SynCommons.UnQuoteSQLStringVar(pointer(fParams[i].VArray[j]),tmp);
+              SynCommons.UnQuoteSQLStringVar(pointer(param.VArray[j]),tmp);
               OCI.Check(nil,self,OCI.StringAssignText(Env, fError, pointer(tmp), length(tmp), str_val), fError);
               OCI.Check(nil,self,OCI.CollAppend(Env, fError, str_val, nil, ociArrays[ociArraysCount-1]),fError);
             end;
@@ -3008,10 +3021,6 @@ begin
     OCI.AttrGet(fStatement,OCI_HTYPE_STMT,@result,nil,OCI_ATTR_ROW_COUNT,fError);
 end;
 
-const
-  CHARSET_UTF8: cardinal = OCI_UTF8;
-  CHARSET_WIN1252: cardinal = OCI_WE8MSWIN1252;
-
 procedure TSQLDBOracleStatement.SetColumnsForPreparedStatement;
 var aName: RawUTF8;
     Env: POCIEnv;
@@ -3237,14 +3246,17 @@ begin
         ColumnValueDBSize,ColumnValueDBType,Indicators,nil,nil,OCI_DEFAULT),fError);
       case ColumnType of
       ftCurrency: // currency content is returned as SQLT_STR
-        Check(nil,self,AttrSet(oDefine,OCI_HTYPE_DEFINE,@CHARSET_WIN1252,0,OCI_ATTR_CHARSET_ID,fError),fError);
+        Check(nil,self,AttrSet(oDefine,OCI_HTYPE_DEFINE,@OCI_CHARSET_WIN1252,0,
+          OCI_ATTR_CHARSET_ID,fError),fError);
       ftUTF8:
         case ColumnValueDBForm of
         SQLCS_IMPLICIT: // force CHAR + VARCHAR2 inlined fields charset
           // -> a conversion into UTF-8 will probably truncate the inlined result
-          Check(nil,self,AttrSet(oDefine,OCI_HTYPE_DEFINE,@ColumnValueDBCharSet,0,OCI_ATTR_CHARSET_ID,fError),fError);
+          Check(nil,self,AttrSet(oDefine,OCI_HTYPE_DEFINE,@ColumnValueDBCharSet,0,
+            OCI_ATTR_CHARSET_ID,fError),fError);
         SQLCS_NCHAR: // NVARCHAR2 + NCLOB will be retrieved directly as UTF-8 content
-          Check(nil,self,AttrSet(oDefine,OCI_HTYPE_DEFINE,@CHARSET_UTF8,0,OCI_ATTR_CHARSET_ID,fError),fError);
+          Check(nil,self,AttrSet(oDefine,OCI_HTYPE_DEFINE,@OCI_CHARSET_UTF8,0,
+            OCI_ATTR_CHARSET_ID,fError),fError);
         end;
       end;
       inc(RowSize,fRowBufferCount*ColumnValueDBSize);

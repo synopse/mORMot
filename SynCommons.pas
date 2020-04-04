@@ -7416,7 +7416,7 @@ function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer): PAnsiChar; o
 procedure RecordSave(const Rec; var Dest: TSynTempBuffer; TypeInfo: pointer); overload;
 
 /// save a record content into a Base-64 encoded UTF-8 text content
-// - will use RecordSave() format, with a left-sided binary CRC
+// - will use RecordSave() format, with a left-sided binary CRC32C
 function RecordSaveBase64(const Rec; TypeInfo: pointer; UriCompatible: boolean=false): RawUTF8;
 
 /// compute the number of bytes needed to save a record content
