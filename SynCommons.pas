@@ -1998,6 +1998,22 @@ const
   JSON_NAN: array[TFloatNan] of string[11] = (
     '0', '"NaN"', '"Infinity"', '"-Infinity"');
 
+type
+  /// small structure used as convenient result to Div100() procedure
+  TDiv100Rec = packed record
+    /// contains V div 100 after Div100(V)
+    D: cardinal;
+    /// contains V mod 100 after Div100(V)
+    M: cardinal;
+  end;
+
+/// simple wrapper to efficiently compute both division and modulo per 100
+// - compute result.D = Y div 100 and result.M = Y mod 100
+// - under FPC, will use fast multiplication by reciprocal so can be inlined
+// - under Delphi, we use our own optimized asm version (which can't be inlined)
+procedure Div100(Y: cardinal; var res: TDiv100Rec);
+  {$ifdef FPC} inline; {$endif}
+
 /// compare to floating point values, with IEEE 754 double precision
 // - use this function instead of raw = operator
 // - the precision is calculated from the A and B value range
@@ -23358,10 +23374,8 @@ begin
   end;
 end;
 
-type TDiv100Rec = packed record D, M: cardinal; end;
-
 procedure Div100(Y: cardinal; var res: TDiv100Rec);
-{$ifdef FPC} inline;
+{$ifdef FPC}
 var Y100: cardinal;
 begin
   Y100 := Y div 100; // FPC will use fast reciprocal
