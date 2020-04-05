@@ -733,14 +733,14 @@ type
   // match our expectations to be able to release the resources in the thread
   // context which created them (e.g. for COM objects, or some DB drivers)
   // - used internally by THttpServerGeneric.NotifyThreadStart() - you should
-  // not have to use the protected fOnTerminate event handler
+  // not have to use the protected fOnThreadTerminate event handler
   // - also define a Start method for compatibility with older versions of Delphi
   TSynThread = class(TThread)
   protected
-    // ensure fOnTerminate is called only if NotifyThreadStart has been done
+    // ensure fOnThreadTerminate is called only if NotifyThreadStart has been done
     fStartNotified: TObject;
     {$ifndef LVCL} // already available in LVCL
-    // we re-defined an fOnTerminate event which would be run in the terminated
+    // we defined an fOnThreadTerminate event which would be run in the terminated
     // thread context (whereas TThread.OnTerminate is called in the main thread)
     // -> see THttpServerGeneric.OnHttpThreadTerminate event property
     fOnThreadTerminate: TNotifyThreadEvent;
