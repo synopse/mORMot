@@ -32736,12 +32736,12 @@ begin
     result := 0;
 end;
 
-const POW10: array[-31..32] of TSynExtended = (
+const POW10: array[-31..33] of TSynExtended = (
   1E-31,1E-30,1E-29,1E-28,1E-27,1E-26,1E-25,1E-24,1E-23,1E-22,1E-21,1E-20,
   1E-19,1E-18,1E-17,1E-16,1E-15,1E-14,1E-13,1E-12,1E-11,1E-10,1E-9,1E-8,1E-7,
   1E-6,1E-5,1E-4,1E-3,1E-2,1E-1,1E0,1E1,1E2,1E3,1E4,1E5,1E6,1E7,1E8,1E9,1E10,
   1E11,1E12,1E13,1E14,1E15,1E16,1E17,1E18,1E19,1E20,1E21,1E22,1E23,1E24,1E25,
-  1E26,1E27,1E28,1E29,1E30,1E31,0);
+  1E26,1E27,1E28,1E29,1E30,1E31,0,-1);
 
 function HugePower10(exponent: integer): TSynExtended; {$ifdef HASINLINE}inline;{$endif}
 var e: TSynExtended;
@@ -32844,17 +32844,17 @@ begin
       dec(frac,exp) else
       inc(frac,exp);
   end;
-  if (frac>=low(POW10)) and (frac<high(POW10)) then
+  if (frac>=-31) and (frac<=31) then
     result := POW10[frac] else
     result := HugePower10(frac);
   if fNeg in flags then
-    result := -result;
+    result := result*POW10[33]; // *-1
   if (fValid in flags) and (c=#0) then begin
     err := 0;
     result := result*v;
   end else begin
 e:  err := 1;
-    result := POW10[32]; // return some value to make the compile happy
+    result := POW10[32]; // returns 0 to make the compile happy
   end;
 end;
 {$else}
@@ -37668,11 +37668,9 @@ end;
 function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): Boolean;
 var d100: TDiv100Rec;
 begin // faster version by AB
-  Result := False;
-  if (Month<1) or (Month>12) then exit;
-  if (Day <= MonthDays[IsLeapYear(Year)][Month]) and
-     (Year>=1) and (Year<10000) and
-     (Month<13) and (Day>0) then begin
+  result := False;
+  if (Year>0) and (Year<10000) and (Month>0) and (Month<13) and (Day>0) and
+     (Day <= MonthDays[IsLeapYear(Year)][Month]) then begin
     if Month>2 then
       dec(Month,3) else
     if (Month>0) then begin
