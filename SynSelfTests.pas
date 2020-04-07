@@ -10193,7 +10193,7 @@ begin
     Check(Doc.Names[i]=Doc.Values[i]);
   Check(TDocVariantData(V1)._[1].U['name']='Jim');
   Check(TDocVariantData(V1)._[1].I['year']=1972);
-  V1.Add(3.1415);
+  {$ifdef FPC}_Safe(V1)^.AddItem{$else}V1.Add{$endif}(3.1415);
   Check(V1{$ifdef FPC}._JSON{$endif}='["root",{"name":"Jim","year":1972},3.1415]');
   V1._(1).Delete('year');
   Check(V1{$ifdef FPC}._JSON{$endif}='["root",{"name":"Jim"},3.1415]');
@@ -10261,10 +10261,10 @@ begin
   Check((j<>'')and(j[1]=#$E2)and(j[2]=#$80)and(j[3]=#$9D));
   v1 := _Arr([]);
   vs := 1.5;
-  v1.Add(vs);
+  {$ifdef FPC}_Safe(V1)^.AddItem{$else}V1.Add{$endif}(vs);
   CheckEqual(VariantSaveJSON(v1),'[1.5]','VariantSaveJSON');
   vd := 1.7;
-  v1.Add(vd);
+  {$ifdef FPC}_Safe(V1)^.AddItem{$else}V1.Add{$endif}(vd);
   CheckEqual(VariantSaveJSON(v1),'[1.5,1.7]');
   v2 := _obj(['id',1]);
   Check(VariantSaveJSON(v2)='{"id":1}');
