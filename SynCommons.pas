@@ -7747,10 +7747,10 @@ function HashVariantI(const Elem; Hasher: THasher): cardinal;
 /// hash one PtrUInt (=NativeUInt) value with the suppplied Hasher() function
 function HashPtrUInt(const Elem; Hasher: THasher): cardinal;
 
-/// hash one Byte value - simply return the value ignore Hasher() parameter
+/// hash one Byte value
 function HashByte(const Elem; Hasher: THasher): cardinal;
 
-/// hash one Word value - simply return the value ignore Hasher() parameter
+/// hash one Word value
 function HashWord(const Elem; Hasher: THasher): cardinal;
 
 /// hash one Integer/cardinal value - simply return the value ignore Hasher() parameter
@@ -20188,7 +20188,7 @@ begin
     inc(P1,SizeOf(c));
     inc(P2,SizeOf(c));
   end;
-  for i := 0 to (count and pred(SizeOf(c)))-1 do begin
+  for i := 0 to (count and POINTERAND)-1 do begin
     u := P1[i];
     P1[i] := P2[i];
     P2[i] := u;
