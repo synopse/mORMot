@@ -5076,6 +5076,10 @@ const
   /// cross-compiler negative offset to TStrRec.length field
   // - to be used inlined e.g. as PStrLen(p-_STRLEN)^
   _STRLEN = SizeOf(TStrLen);
+  /// cross-compiler negative offset to TStrRec.refCnt field
+  // - to be used inlined e.g. as PRefCnt(p-_STRREFCNT)^
+  _STRREFCNT = Sizeof(TRefCnt)+_STRLEN;
+
   /// cross-compiler negative offset to TDynArrayRec.high/length field
   // - to be used inlined e.g. as PDALen(PtrUInt(Values)-_DALEN)^{$ifdef FPC}+1{$endif}
   _DALEN = SizeOf(PtrInt);
@@ -19762,7 +19766,7 @@ end;
 
 procedure TRawUTF8InterningSlot.Unique(var aResult: RawUTF8;
   const aText: RawUTF8; aTextHash: cardinal);
-var i: integer;
+var i: PtrInt;
     added: boolean;
 begin
   EnterCriticalSection(Safe.fSection);
@@ -19779,7 +19783,7 @@ begin
 end;
 
 procedure TRawUTF8InterningSlot.UniqueText(var aText: RawUTF8; aTextHash: cardinal);
-var i: integer;
+var i: PtrInt;
     added: boolean;
 begin
   EnterCriticalSection(Safe.fSection);
@@ -19816,13 +19820,12 @@ begin
     s := pointer(Value);
     d := s;
     for i := 1 to Safe.Padding[0].VInteger do begin
-      {$ifdef FPC}
-      if StringRefCount(PAnsiString(s)^)<=aMaxRefCount then begin
+      if PRefCnt(PAnsiChar(s)-_STRREFCNT)^<=aMaxRefCount then begin
+        {$ifdef FPC}
         Finalize(PRawUTF8(s)^);
-      {$else}
-      if PInteger(s^-8)^<=aMaxRefCount then begin
+        {$else}
         PRawUTF8(s)^ := '';
-      {$endif FPC}
+        {$endif FPC}
         inc(result);
       end else begin
         if s<>d then begin
@@ -19846,7 +19849,8 @@ end;
 { TRawUTF8Interning }
 
 constructor TRawUTF8Interning.Create(aHashTables: integer);
-var p,i: integer;
+var p: integer;
+    i: PtrInt;
 begin
   for p := 0 to 9 do
     if aHashTables=1 shl p then begin
@@ -19861,7 +19865,7 @@ begin
 end;
 
 destructor TRawUTF8Interning.Destroy;
-var i: integer;
+var i: PtrInt;
 begin
   for i := 0 to fPoolLast do
     fPool[i].Done;
@@ -19869,7 +19873,7 @@ begin
 end;
 
 procedure TRawUTF8Interning.Clear;
-var i: integer;
+var i: PtrInt;
 begin
   if self<>nil then
     for i := 0 to fPoolLast do
@@ -19877,7 +19881,7 @@ begin
 end;
 
 function TRawUTF8Interning.Clean(aMaxRefCount: integer): integer;
-var i: integer;
+var i: PtrInt;
 begin
   result := 0;
   if self<>nil then
@@ -19886,7 +19890,7 @@ begin
 end;
 
 function TRawUTF8Interning.Count: integer;
-var i: integer;
+var i: PtrInt;
 begin
   result := 0;
   if self<>nil then
@@ -41511,7 +41515,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   result := 0; // A^<>B^
   case info^.Kind of // should match tkManagedTypes
   tkLString{$ifdef FPC},tkLStringOld{$endif}:
-    if PAnsiString(A)^=PAnsiString(B)^ then
+    if PRawByteString(A)^=PRawByteString(B)^ then
       result := SizeOf(pointer);
   tkWString:
     if PWideString(A)^=PWideString(B)^ then
@@ -44822,8 +44826,7 @@ var vt: cardinal;
 begin
   VarClear(Dest);
   vt := TVarData(Source).VType;
-  if (vt=varVariant or varByRef) or
-     (vt in [varEmpty..varDate,varBoolean,varShortInt..varWord64]) then
+  if ((vt and varByRef)<>0) or (vt in [varEmpty..varDate,varBoolean,varShortInt..varWord64]) then
     TVarData(Dest) := TVarData(Source) else
   if not SetVariantUnRefSimpleValue(Source,TVarData(Dest)) then begin
     TVarData(Dest).VType := varVariant or varByRef;
