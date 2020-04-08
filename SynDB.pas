@@ -5266,7 +5266,8 @@ begin
       SetSchemaNameToOwner(Owner);
     end
     else if fDBMS=dMSSQL then
-      Split(ProcName, ';', ProcName); // discard ;1 when MSSQL stored procedure name is ProcName;1
+      // discard ;1 when MSSQL stored procedure name is ProcName;1
+      Split(ProcName,';',ProcName);
   end;
   end;
 end;

@@ -733,17 +733,17 @@ type
   // match our expectations to be able to release the resources in the thread
   // context which created them (e.g. for COM objects, or some DB drivers)
   // - used internally by THttpServerGeneric.NotifyThreadStart() - you should
-  // not have to use the protected fOnTerminate event handler
+  // not have to use the protected fOnThreadTerminate event handler
   // - also define a Start method for compatibility with older versions of Delphi
   TSynThread = class(TThread)
   protected
-    // ensure fOnTerminate is called only if NotifyThreadStart has been done
+    // ensure fOnThreadTerminate is called only if NotifyThreadStart has been done
     fStartNotified: TObject;
     {$ifndef LVCL} // already available in LVCL
-    // we re-defined an fOnTerminate event which would be run in the terminated
+    // we defined an fOnThreadTerminate event which would be run in the terminated
     // thread context (whereas TThread.OnTerminate is called in the main thread)
     // -> see THttpServerGeneric.OnHttpThreadTerminate event property
-    fOnTerminate: TNotifyThreadEvent;
+    fOnThreadTerminate: TNotifyThreadEvent;
     procedure DoTerminate; override;
     {$endif}
   public
@@ -836,7 +836,7 @@ type
     fSubThreadCount: integer;
     fRunningThreads: integer;
     fExceptionsCount: integer;
-    fOnTerminate: TNotifyThreadEvent;
+    fOnThreadTerminate: TNotifyThreadEvent;
     fOnThreadStart: TNotifyThreadEvent;
     fTerminated: boolean;
     fContentionAbortCount: cardinal;
@@ -1211,7 +1211,7 @@ type
     // !   fMyConnectionProps.EndCurrentThread;
     // ! end;
     // - is used e.g. by TSQLRest.EndCurrentThread for proper multi-threading
-    property OnHttpThreadTerminate: TNotifyThreadEvent read fOnTerminate write SetOnTerminate;
+    property OnHttpThreadTerminate: TNotifyThreadEvent read fOnThreadTerminate write SetOnTerminate;
     /// reject any incoming request with a body size bigger than this value
     // - default to 0, meaning any input size is allowed
     // - returns STATUS_PAYLOADTOOLARGE = 413 error if "Content-Length" incoming
@@ -1389,7 +1389,7 @@ type
     procedure DestroyMainThread; virtual;
   public
     /// initialize the HTTP Service
-    // - will raise an exception if http.sys is not available (e.g. before
+    // - will raise an exception if http.sys is not available e.g. before
     // Windows XP SP2) or if the request queue creation failed
     // - if you override this contructor, put the AddUrl() methods within,
     // and you can set CreateSuspended to FALSE
@@ -5979,7 +5979,7 @@ end;
 
 procedure TServerGeneric.SetOnTerminate(const Event: TNotifyThreadEvent);
 begin
-  fOnTerminate := Event;
+  fOnThreadTerminate := Event;
 end;
 
 
@@ -6502,8 +6502,8 @@ end;
 {$ifndef LVCL}
 procedure TSynThread.DoTerminate;
 begin
-  if Assigned(fStartNotified) and Assigned(fOnTerminate) then begin
-    fOnTerminate(self);
+  if Assigned(fStartNotified) and Assigned(fOnThreadTerminate) then begin
+    fOnThreadTerminate(self);
     fStartNotified := nil;
   end;
   inherited DoTerminate;
@@ -6535,7 +6535,7 @@ constructor THttpServerResp.Create(aServerSock: THttpServerSocket; aServer: THtt
 begin
   fServer := aServer;
   fServerSock := aServerSock;
-  fOnTerminate := fServer.fOnTerminate;
+  fOnThreadTerminate := fServer.fOnThreadTerminate;
   fServer.InternalHttpServerRespListAdd(self);
   fConnectionID := aServerSock.RemoteConnectionID;
   if fConnectionID=0 then
@@ -7333,7 +7333,7 @@ end;
 constructor TSynThreadPoolSubThread.Create(Owner: TSynThreadPool);
 begin
   fOwner := Owner; // ensure it is set ASAP: on Linux, Execute raises immediately
-  fOnTerminate := Owner.fOnTerminate;
+  fOnThreadTerminate := Owner.fOnThreadTerminate;
   {$ifndef USE_WINIOCP}
   fEvent := TEvent.Create(nil,false,false,'');
   {$endif}
@@ -7430,7 +7430,7 @@ end;
 constructor TSynThreadPoolTHttpServer.Create(Server: THttpServer; NumberOfThreads: Integer=32);
 begin
   fServer := Server;
-  fOnTerminate := fServer.fOnTerminate;
+  fOnThreadTerminate := fServer.fOnThreadTerminate;
   inherited Create(NumberOfThreads{$ifndef USE_WINIOCP},{queuepending=}true{$endif});
 end;
 
@@ -8794,7 +8794,7 @@ begin
   SetRemoteIPHeader(From.RemoteIPHeader);
   SetRemoteConnIDHeader(From.RemoteConnIDHeader);
   fLoggingServiceName := From.fLoggingServiceName;
-  inherited Create(false,From.fOnHttpThreadStart,From.fOnTerminate,From.ProcessName);
+  inherited Create(false,From.fOnHttpThreadStart,From.fOnThreadTerminate,From.ProcessName);
 end;
 
 procedure THttpApiServer.DestroyMainThread;
@@ -10553,7 +10553,7 @@ constructor TSynThreadPoolHttpApiWebSocketServer.Create(Server: THttpApiWebSocke
 begin
   fServer := Server;
   fOnThreadStart := OnThreadStart;
-  fOnTerminate := OnThreadTerminate;
+  fOnThreadTerminate := OnThreadTerminate;
   inherited Create(NumberOfThreads, Server.fReqQueue);
 end;
 

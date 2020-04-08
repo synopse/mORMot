@@ -1998,6 +1998,22 @@ const
   JSON_NAN: array[TFloatNan] of string[11] = (
     '0', '"NaN"', '"Infinity"', '"-Infinity"');
 
+type
+  /// small structure used as convenient result to Div100() procedure
+  TDiv100Rec = packed record
+    /// contains V div 100 after Div100(V)
+    D: cardinal;
+    /// contains V mod 100 after Div100(V)
+    M: cardinal;
+  end;
+
+/// simple wrapper to efficiently compute both division and modulo per 100
+// - compute result.D = Y div 100 and result.M = Y mod 100
+// - under FPC, will use fast multiplication by reciprocal so can be inlined
+// - under Delphi, we use our own optimized asm version (which can't be inlined)
+procedure Div100(Y: cardinal; var res: TDiv100Rec);
+  {$ifdef FPC} inline; {$endif}
+
 /// compare to floating point values, with IEEE 754 double precision
 // - use this function instead of raw = operator
 // - the precision is calculated from the A and B value range
@@ -7400,7 +7416,7 @@ function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer): PAnsiChar; o
 procedure RecordSave(const Rec; var Dest: TSynTempBuffer; TypeInfo: pointer); overload;
 
 /// save a record content into a Base-64 encoded UTF-8 text content
-// - will use RecordSave() format, with a left-sided binary CRC
+// - will use RecordSave() format, with a left-sided binary CRC32C
 function RecordSaveBase64(const Rec; TypeInfo: pointer; UriCompatible: boolean=false): RawUTF8;
 
 /// compute the number of bytes needed to save a record content
@@ -7731,10 +7747,10 @@ function HashVariantI(const Elem; Hasher: THasher): cardinal;
 /// hash one PtrUInt (=NativeUInt) value with the suppplied Hasher() function
 function HashPtrUInt(const Elem; Hasher: THasher): cardinal;
 
-/// hash one Byte value - simply return the value ignore Hasher() parameter
+/// hash one Byte value
 function HashByte(const Elem; Hasher: THasher): cardinal;
 
-/// hash one Word value - simply return the value ignore Hasher() parameter
+/// hash one Word value
 function HashWord(const Elem; Hasher: THasher): cardinal;
 
 /// hash one Integer/cardinal value - simply return the value ignore Hasher() parameter
@@ -12824,8 +12840,12 @@ function Char3ToWord(P: PUTF8Char; out Value: Cardinal): Boolean;
 // - returns FALSE on success, TRUE if P^ is not correct
 function Char4ToWord(P: PUTF8Char; out Value: Cardinal): Boolean;
 
-/// our own fast version of the corresponding low-level function
+/// our own fast version of the corresponding low-level RTL function
 function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): Boolean;
+
+/// our own fast version of the corresponding low-level RTL function
+function IsLeapYear(Year: cardinal): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// retrieve the current Date, in the ISO 8601 layout, but expanded and
 // ready to be displayed
@@ -20168,7 +20188,7 @@ begin
     inc(P1,SizeOf(c));
     inc(P2,SizeOf(c));
   end;
-  for i := 0 to (count and pred(SizeOf(c)))-1 do begin
+  for i := 0 to (count and POINTERAND)-1 do begin
     u := P1[i];
     P1[i] := P2[i];
     P2[i] := u;
@@ -23354,14 +23374,13 @@ begin
   end;
 end;
 
-type TDiv100Rec = packed record D, M: cardinal; end;
-
 procedure Div100(Y: cardinal; var res: TDiv100Rec);
-{$ifdef FPC} inline;
+{$ifdef FPC}
+var Y100: cardinal;
 begin
-  res.M := Y;
-  res.D := Y div 100;   // FPC will use fast reciprocal
-  dec(res.M,res.D*100); // avoid div twice
+  Y100 := Y div 100; // FPC will use fast reciprocal
+  res.D := Y100;
+  res.M := Y-Y100*100; // avoid div twice
 end;
 {$else}
 {$ifdef CPUX64}
@@ -32717,12 +32736,12 @@ begin
     result := 0;
 end;
 
-const POW10: array[-31..32] of TSynExtended = (
+const POW10: array[-31..33] of TSynExtended = (
   1E-31,1E-30,1E-29,1E-28,1E-27,1E-26,1E-25,1E-24,1E-23,1E-22,1E-21,1E-20,
   1E-19,1E-18,1E-17,1E-16,1E-15,1E-14,1E-13,1E-12,1E-11,1E-10,1E-9,1E-8,1E-7,
   1E-6,1E-5,1E-4,1E-3,1E-2,1E-1,1E0,1E1,1E2,1E3,1E4,1E5,1E6,1E7,1E8,1E9,1E10,
   1E11,1E12,1E13,1E14,1E15,1E16,1E17,1E18,1E19,1E20,1E21,1E22,1E23,1E24,1E25,
-  1E26,1E27,1E28,1E29,1E30,1E31,0);
+  1E26,1E27,1E28,1E29,1E30,1E31,0,-1);
 
 function HugePower10(exponent: integer): TSynExtended; {$ifdef HASINLINE}inline;{$endif}
 var e: TSynExtended;
@@ -32825,17 +32844,17 @@ begin
       dec(frac,exp) else
       inc(frac,exp);
   end;
-  if (frac>=low(POW10)) and (frac<high(POW10)) then
+  if (frac>=-31) and (frac<=31) then
     result := POW10[frac] else
     result := HugePower10(frac);
   if fNeg in flags then
-    result := -result;
+    result := result*POW10[33]; // *-1
   if (fValid in flags) and (c=#0) then begin
     err := 0;
     result := result*v;
   end else begin
 e:  err := 1;
-    result := POW10[32]; // return some value to make the compile happy
+    result := POW10[32]; // returns 0 to make the compile happy
   end;
 end;
 {$else}
@@ -37635,15 +37654,23 @@ begin
     result := EncodeTime((lo shr(6+6))and 31, (lo shr 6)and 63, lo and 63, 0);
 end;
 
+function IsLeapYear(Year: cardinal): boolean;
+var d100: TDiv100Rec;
+begin
+  if Year and 3 = 0 then begin
+    Div100(Year,d100);
+    result := ((d100.M <> 0) or // (Year mod 100 > 0)
+               (Year - ((d100.D shr 2) * 400) = 0)); // (Year mod 400 = 0))
+  end else
+    result := false;
+end;
+
 function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): Boolean;
 var d100: TDiv100Rec;
 begin // faster version by AB
-  Result := False;
-  if (Month<1) or (Month>12) then exit;
-  if (Day <= MonthDays[
-      ((Year and 3)=0) and ((Year mod 100>0) or (Year mod 400=0))][Month]) and
-     (Year>=1) and (Year<10000) and
-     (Month<13) and (Day>0) then begin
+  result := False;
+  if (Year>0) and (Year<10000) and (Month>0) and (Month<13) and (Day>0) and
+     (Day <= MonthDays[IsLeapYear(Year)][Month]) then begin
     if Month>2 then
       dec(Month,3) else
     if (Month>0) then begin

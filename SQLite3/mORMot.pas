@@ -3585,14 +3585,24 @@ function ToMethod(const method: RawUTF8): TSQLURIMethod;
 
 var
   /// the options used by TSynJsonFileSettings.SaveIfNeeded
+  // - you can modify this global variable to customize the whole process
   SETTINGS_WRITEOPTIONS: TTextWriterWriteObjectOptions =
     [woHumanReadable, woStoreStoredFalse, woHumanReadableFullSetsAsStar,
      woHumanReadableEnumSetAsComment, woInt64AsHex];
 
   /// the options used by TServiceFactoryServer.OnLogRestExecuteMethod
+  // - you can modify this global variable to customize the whole process
   SERVICELOG_WRITEOPTIONS: TTextWriterWriteObjectOptions =
     [woDontStoreDefault, woDontStoreEmptyString, woDontStore0,
      woHideSynPersistentPassword];
+
+  /// the options used by TObjArraySerializer, TInterfacedObjectFake and
+  // TServiceMethodExecute when serializing values as JSON
+  // - used as DEFAULT_WRITEOPTIONS[DontStoreVoidJSON]
+  // - you can modify this global variable to customize the whole process
+  DEFAULT_WRITEOPTIONS: array[boolean] of TTextWriterWriteObjectOptions = (
+    [woDontStoreDefault, woSQLRawBlobAsBase64],
+    [woDontStoreDefault, woDontStoreEmptyString, woDontStore0, woSQLRawBlobAsBase64]);
 
 {$ifdef MSWINDOWS}
 {$ifdef ISDELPHIXE} // fix Delphi XE imcompatilibility
@@ -22616,11 +22626,9 @@ end;
 procedure TObjArraySerializer.DefaultCustomWriter(const aWriter: TTextWriter; const aValue);
 var opt: TTextWriterWriteObjectOptions;
 begin
+  opt := DEFAULT_WRITEOPTIONS[twoIgnoreDefaultInRecord in aWriter.CustomOptions];
   if twoEnumSetsAsTextInRecord in aWriter.CustomOptions then
-    opt := [woDontStoreDefault,woSQLRawBlobAsBase64,woEnumSetsAsText] else
-    opt := [woDontStoreDefault,woSQLRawBlobAsBase64];
-  if twoIgnoreDefaultInRecord in aWriter.CustomOptions then
-    opt := opt+[woDontStoreEmptyString,woDontStore0];
+    include(opt,woEnumSetsAsText);
   aWriter.WriteObject(TObject(aValue),opt);
 end;
 
@@ -53414,13 +53422,11 @@ var method: PServiceMethod;
       if ifoJsonAsExtended in fOptions then
         include(Params.fCustomOptions,twoForceJSONExtended) else
         include(Params.fCustomOptions,twoForceJSONStandard); // e.g. for AJAX
-      if (ifoDontStoreVoidJSON in fOptions) {GPF or ((fServiceFactory<>nil) and
-         (optDontStoreVoidJSON in fServiceFactory.fExecution[
-           integer(aCall.MethodIndex)-SERVICE_PSEUDO_METHOD_COUNT].Options))} then begin
-        opt := [woDontStoreDefault,woDontStoreEmptyString,woDontStore0];
+      if ifoDontStoreVoidJSON in fOptions then begin
+        opt := DEFAULT_WRITEOPTIONS[true];
         include(Params.fCustomOptions,twoIgnoreDefaultInRecord);
       end else
-        opt := [woDontStoreDefault];
+        opt := DEFAULT_WRITEOPTIONS[false];
       FillCharFast(I64s,method^.ArgsUsedCount[smvv64]*SizeOf(Int64),0);
       for arg := 1 to high(method^.Args) do
       with method^.Args[arg] do
@@ -60584,9 +60590,7 @@ begin
           exit;
         end;
       // write the '{"result":[...' array or object
-      if optDontStoreVoidJSON in Options then
-        opt[false] := [woDontStoreDefault,woDontStoreEmptyString,woDontStore0] else
-        opt[false] := [woDontStoreDefault];
+      opt[{smdVar=}false] := DEFAULT_WRITEOPTIONS[optDontStoreVoidJSON in Options];
       opt[{smdVar=}true] := []; // let var params override void/default values
       for a := ArgsOutFirst to ArgsOutLast do
       with Args[a] do

@@ -3768,7 +3768,7 @@ constructor TAsynchConnectionsThread.Create(aOwner: TAsynchConnections;
 begin
   fOwner := aOwner;
   fProcess := aProcess;
-  fOnTerminate := fOwner.fOnTerminate;
+  fOnThreadTerminate := fOwner.fOnThreadTerminate;
   inherited Create(false);
 end;
 
