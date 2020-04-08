@@ -118,7 +118,10 @@ function msize(p: pointer): PtrUInt; cdecl; external 'c' name 'malloc_usable_siz
 
 {$ifndef FPC_SYNCMEM_NO_MCHECK}
   {$define FPC_SYNCMEM_MCHECK}
-  // enabled even if glibc seems to have hooks disabled on most distros
+  // try to override default error handler which calls abort()
+  // - it would call mcheck() to trigger Error(reExternalException)
+  // - enabled even if glibc seems to have hooks disabled on most distros; it
+  // shouldn't hurt anyway
   // - define FPC_SYNCMEM_NO_MCHECK if you encounter e.g. linking issue
 {$endif FPC_SYNCMEM_NO_MCHECK}
 
@@ -267,6 +270,7 @@ begin
   end else
     writeln(StdErr, dlerror, '  [apt-get install libjemalloc1]');
   {$else}
+  {$ifdef FPC_SYNTBB}
   lib := dlopen('libtbbmalloc.so.2', RTLD_LAZY);
   if lib = nil then
    lib := dlopen('libtbbmalloc.so', RTLD_LAZY);
@@ -280,11 +284,12 @@ begin
     pointer(@msize)   := dlsym(lib, 'scalable_msize');
     {$ifdef VERBOSE}writeln('using Intel TBB');{$endif}
   end;
+  {$endif FPC_SYNTBB}
   {$endif FPC_SYNJEMALLOC}
   {$endif FPC_SYNCMEM}
   if pointer(@msize) <> nil then begin
     {$ifdef CPUX64} // no cdecl on x86_64 -> direct call is just fine :)
-    NewMM.GetMem := pointer(@malloc);
+    NewMM.GetMem  := pointer(@malloc);
     NewMM.FreeMem := pointer(@free);
     NewMM.MemSize := pointer(@msize);
     {$endif CPUX64}
