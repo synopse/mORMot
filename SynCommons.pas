@@ -19820,7 +19820,7 @@ begin
     s := pointer(Value);
     d := s;
     for i := 1 to Safe.Padding[0].VInteger do begin
-      if PRefCnt(PAnsiChar(s)-_STRREFCNT)^<=aMaxRefCount then begin
+      if PRefCnt(PAnsiChar(s^)-_STRREFCNT)^<=aMaxRefCount then begin
         {$ifdef FPC}
         Finalize(PRawUTF8(s)^);
         {$else}
