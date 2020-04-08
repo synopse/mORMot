@@ -22,6 +22,7 @@ const
   atI32: Cardinal  = (1 shl byte(JSTYPE_NUMBER)) or (1 shl (byte(JSTYPE_LIMIT) + 2));
   atDbl: Cardinal  = (1 shl byte(JSTYPE_NUMBER)) or (1 shl (byte(JSTYPE_LIMIT) + 3));
   atDate: Cardinal = (1 shl byte(JSTYPE_OBJECT)) or (1 shl (byte(JSTYPE_LIMIT) + 4));
+  atArr: Cardinal  =  (1 shl byte(JSTYPE_OBJECT)) or (1 shl (byte(JSTYPE_LIMIT) + 5));
 
   JSTYPE2STR: array[JSType] of string = ('undefined', 'Object', 'Function', 'String',
     'Number', 'Boolean', 'null', 'Symbol', '');
@@ -43,6 +44,7 @@ const
   TYPE_I32 = 'Int32';
   TYPE_DOUBLE='Double';
   TYPE_DATE='Date';
+  TYPE_ARRAY='Array';
 
 function checkFuncArgs(cx: PJSContext; argc: uintN; var vp: jsargRec; const expect: array of Cardinal): boolean;
 var
@@ -63,6 +65,8 @@ var
         Result := Result + TYPE_BUFFER + '|'
       else if (e and atDate) = atDate then
         Result := Result + TYPE_DATE + '|'
+      else if (e and atArr) = atArr then
+        Result := Result + TYPE_ARRAY + '|'
       else
         Result := Result + JSTYPE2STR[JSTYPE_OBJECT] + '|'
     end;
@@ -123,6 +127,10 @@ begin
       es := FormatUTF8(WRONG_ARG_TYPE, [vp.calleObject.GetFunctionId().ToUTF8(cx),
         i, JSTYPE2STR[vt], TYPE_DATE]);
       goto err;
+    end else if (expect[i] = atArr) and not vp.argv^[i].asObject.isArray(cx) then begin
+      es := FormatUTF8(WRONG_ARG_TYPE, [vp.calleObject.GetFunctionId().ToUTF8(cx),
+        i, JSTYPE2STR[vt], TYPE_ARRAY]);
+      goto err;;
     end;
   end;
   if (argc < length(expect)) then
