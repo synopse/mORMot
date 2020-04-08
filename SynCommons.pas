@@ -48172,7 +48172,7 @@ procedure TDocVariant.ToJSON(W: TTextWriter; const Value: variant;
   escape: TTextWriterKind);
 var ndx: integer;
     vt: cardinal;
-    backup: TTextWriterOptions;
+    forced: TTextWriterOption;
     checkExtendedPropName: boolean;
 begin
   vt := TDocVariantData(Value).VType;
@@ -48181,11 +48181,13 @@ begin
   with TDocVariantData(Value) do
   if [dvoIsArray,dvoIsObject]*VOptions=[] then
     W.AddShort('null') else begin
-    backup := W.fCustomOptions;
-    if [twoForceJSONExtended,twoForceJSONStandard]*backup=[] then
+    if [twoForceJSONExtended,twoForceJSONStandard]*W.CustomOptions=[] then begin
       if dvoSerializeAsExtendedJson in VOptions then
-        include(W.fCustomOptions,twoForceJSONExtended) else
-        include(W.fCustomOptions,twoForceJSONStandard);
+        forced := twoForceJSONExtended else
+        forced := twoForceJSONStandard;
+      W.CustomOptions := W.CustomOptions+forced;
+    end else
+      forced := twoStreamIsOwned; // indicates nothing to restore
     if dvoIsObject in VOptions then begin
       checkExtendedPropName := twoForceJSONExtended in W.CustomOptions;
       W.Add('{');
@@ -48212,7 +48214,8 @@ begin
       W.CancelLastComma;
       W.Add(']');
     end;
-    W.fCustomOptions := backup;
+    if forced<>twoStreamIsOwned then
+      W.CustomOptions := W.CustomOptions-forced;
   end else
     raise ESynException.CreateUTF8('Unexpected variant type %',[vt]) else
     W.AddShort('null');
