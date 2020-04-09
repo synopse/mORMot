@@ -117,7 +117,8 @@ type
       const aUserName: RawUTF8=''; const aPassword: RawUTF8='';
       aHttps: boolean=false; aThreadPoolCount: integer=1;
       aProtocol: TSQLDBProxyConnectionProtocolClass=nil;
-      aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode=tmMainConnection); virtual;
+      aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode=tmMainConnection;
+      aAuthenticate: TSynAuthenticationAbstract=nil); virtual;
     /// released used memory
     destructor Destroy; override;
     /// the associated database connection properties
@@ -151,7 +152,8 @@ type
       const aUserName: RawUTF8=''; const aPassword: RawUTF8='';
       aHttps: boolean=false; aThreadPoolCount: integer=1;
       aProtocol: TSQLDBProxyConnectionProtocolClass=nil;
-      aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode=tmMainConnection); override;
+      aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode=tmMainConnection;
+      aAuthenticate: TSynAuthenticationAbstract=nil); override;
   end;
 
   {$ifdef ONLYUSEHTTPSOCKET}
@@ -175,7 +177,8 @@ type
       const aUserName: RawUTF8=''; const aPassword: RawUTF8='';
       aHttps: boolean=false; aThreadPoolCount: integer=1;
       aProtocol: TSQLDBProxyConnectionProtocolClass=nil;
-      aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode=tmMainConnection); override;
+      aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode=tmMainConnection;
+      aAuthenticate: TSynAuthenticationAbstract=nil); override;
   end;
 
   /// the default SynDB HTTP server class on each platform
@@ -292,7 +295,8 @@ implementation
 constructor TSQLDBServerAbstract.Create(aProperties: TSQLDBConnectionProperties;
   const aDatabaseName, aPort, aUserName,aPassword: RawUTF8; aHttps: boolean;
   aThreadPoolCount: integer; aProtocol: TSQLDBProxyConnectionProtocolClass;
-  aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode);
+  aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode;
+  aAuthenticate: TSynAuthenticationAbstract);
 begin
   fProperties := aProperties;
   if fProperties.InheritsFrom(TSQLDBConnectionPropertiesThreadSafe) then begin
@@ -307,7 +311,9 @@ begin
   fThreadPoolCount := aThreadPoolCount;
   if aProtocol=nil then
     aProtocol := TSQLDBRemoteConnectionProtocol;
-  fProtocol := aProtocol.Create(TSynAuthentication.Create(aUserName,aPassword));
+  if aAuthenticate=nil then
+    aAuthenticate := TSynAuthentication.Create(aUserName,aPassword);
+  fProtocol := aProtocol.Create(aAuthenticate);
 end;
 
 destructor TSQLDBServerAbstract.Destroy;
@@ -486,7 +492,8 @@ end;
 constructor TSQLDBServerHttpApi.Create(aProperties: TSQLDBConnectionProperties;
   const aDatabaseName, aPort, aUserName,aPassword: RawUTF8; aHttps: boolean;
   aThreadPoolCount: integer; aProtocol: TSQLDBProxyConnectionProtocolClass;
-  aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode);
+  aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode;
+  aAuthenticate: TSynAuthenticationAbstract);
 var status: integer;
 begin
   inherited;
@@ -513,7 +520,8 @@ end;
 constructor TSQLDBServerSockets.Create(aProperties: TSQLDBConnectionProperties;
   const aDatabaseName, aPort, aUserName, aPassword: RawUTF8;
   aHttps: boolean; aThreadPoolCount: integer; aProtocol: TSQLDBProxyConnectionProtocolClass;
-  aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode);
+  aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode;
+  aAuthenticate: TSynAuthenticationAbstract);
 var
   ident: RawUTF8;
 begin

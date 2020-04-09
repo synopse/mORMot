@@ -2658,6 +2658,8 @@ type
     function ComputeCredential(previous: boolean; const UserName,PassWord: RawUTF8): cardinal; virtual;
     function GetPassword(const UserName: RawUTF8; out Password: RawUTF8): boolean; virtual; abstract;
     function GetUsersCount: integer; virtual; abstract;
+    // check the given Hash challenge, against stored credentials
+    function CheckCredentials(const UserName: RaWUTF8; Hash: cardinal): boolean; virtual;
   public
     /// initialize the authentication scheme
     constructor Create;
@@ -13702,19 +13704,23 @@ begin
   raise ESynException.CreateFmt('%.DisauthenticateUser() is not implemented',[self]);
 end;
 
-function TSynAuthenticationAbstract.CreateSession(const User: RawUTF8; Hash: cardinal): integer;
+function TSynAuthenticationAbstract.CheckCredentials(const UserName: RaWUTF8;
+  Hash: cardinal): boolean;
 var password: RawUTF8;
+begin
+  result := GetPassword(UserName,password) and
+     ((ComputeCredential(false,UserName,password)=Hash) or
+      (ComputeCredential(true,UserName,password)=Hash));
+end;
+
+function TSynAuthenticationAbstract.CreateSession(const User: RawUTF8;
+  Hash: cardinal): integer;
 begin
   result := 0;
   fSafe.Lock;
   try
-    // check the given Hash challenge, against stored credentials
-    if not GetPassword(User,password) then
+    if not CheckCredentials(User, Hash) then;
       exit;
-    if (ComputeCredential(false,User,password)<>Hash) and
-       (ComputeCredential(true,User,password)<>Hash) then
-      exit;
-    // create the new session
     repeat
       result := fSessionGenerator;
       inc(fSessionGenerator);
