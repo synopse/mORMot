@@ -813,7 +813,7 @@ end;
 function TOpenSSLConnectionClient.Connect(const Read, Write: TOnOpenSSLData;
   Level: TOpenSSLConnectionLevel; Options: TOpenSSLConnectionOptions): boolean;
 begin
-
+  result := false;
 end;
 
 procedure TOpenSSLConnectionClient.Disconnect;
@@ -828,7 +828,7 @@ end;
 
 function TOpenSSLConnectionClient.SecureWrite(Buffer: pointer; Len: integer): boolean;
 begin
-
+  result := false;
 end;
 
 procedure TOpenSSLConnectionClient.SetNotify(States: TOpenSSLConnectionStates;
