@@ -782,10 +782,7 @@ type
 // into .zip archive files
 // - resulting file will be named YYYYMM.zip and will be located in the
 // aDestinationPath directory, i.e. TSynLogFamily.ArchivePath+'\log\YYYYMM.zip'
-{$ifdef MSWINDOWS}
 function EventArchiveZip(const aOldLogFileName, aDestinationPath: TFileName): boolean;
-{$endif}
-
 
 implementation
 
@@ -822,7 +819,6 @@ const
 var
   EventArchiveZipWrite: TZipWrite = nil;
 
-{$ifdef MSWINDOWS}
 function EventArchiveZip(const aOldLogFileName, aDestinationPath: TFileName): boolean;
 var n: integer;
 begin
@@ -840,7 +836,6 @@ begin
       result := True;
   end;
 end;
-{$endif MSWINDOWS}
 
 function Is7BitAnsi(P: PChar): boolean;
 begin
