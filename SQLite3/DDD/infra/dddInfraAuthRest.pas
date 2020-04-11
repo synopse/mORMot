@@ -77,11 +77,11 @@ type
   published
     /// will map TAuthInfo.LogonName
     // - is defined as "stored AS_UNIQUE" so that it may be used as primary key
-    property Logon: RawUTF8 read fLogon write fLogon stored AS_UNIQUE;
+    property Logon: RawUTF8 index 128 read fLogon write fLogon stored AS_UNIQUE;
     /// the password, stored in a hashed form
     // - this property does not exist at TAuthInfo level, so will be private
     // to the storage layer - which is the safest option possible
-    property HashedPassword: RawUTF8 read fHashedPassword write fHashedPassword;
+    property HashedPassword: RawUTF8 index 128 read fHashedPassword write fHashedPassword;
   end;
 
   /// generic class for implementing authentication

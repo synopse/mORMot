@@ -200,7 +200,7 @@ type
     fEmail: RawUTF8;
   published
     /// the stored email address
-    property Email: RawUTF8 read fEmail write fEmail;
+    property Email: RawUTF8 index 128 read fEmail write fEmail;
   end;
 
   /// ORM class for email validation process
@@ -217,11 +217,11 @@ type
   public
     function IsValidated(const aEmail: RawUTF8): Boolean;
   published
-    property Logon: RawUTF8 read fLogon write fLogon stored AS_UNIQUE;
+    property Logon: RawUTF8 index 128 read fLogon write fLogon stored AS_UNIQUE;
     property RequestTime: TTimeLog read fRequestTime write fRequestTime;
     property ValidationSalt: Integer read fValidationSalt write fValidationSalt;
     property ValidationTime: TTimeLog read fValidationTime write fValidationTime;
-    property ValidationIP: RawUTF8 read fValidationIP write fValidationIP;
+    property ValidationIP: RawUTF8 index 128 read fValidationIP write fValidationIP;
   end;
 
 
