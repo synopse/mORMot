@@ -3480,6 +3480,8 @@ const
   HTTP_BADREQUEST = 400;
   /// HTTP Status Code for "Unauthorized"
   HTTP_UNAUTHORIZED = 401;
+  /// HTTP Status Code for "Paramter Required"
+  HTTP_PARAMETER_REQUIRED = 402;
   /// HTTP Status Code for "Forbidden"
   HTTP_FORBIDDEN = 403;
   /// HTTP Status Code for "Not Found"
