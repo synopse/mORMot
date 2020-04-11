@@ -3739,9 +3739,9 @@ begin
       int.Unique(tmp,SmallUInt32UTF8[v]);
       check(UTF8ToInteger(tmp)=v);
     end;
-    check(int.Count=512);
-    check(int.Clean=0);
-    check(int.Count=512);
+    checkEqual(int.Count,512);
+    checkEqual(int.Clean,0);
+    checkEqual(int.Count,512);
   finally
     int.Free;
   end;
@@ -10066,7 +10066,7 @@ const MAX=20000;
   '"TIMESTAMP_CALL":"2017-10-26T04:48:14"}]';
 var Doc,Doc2: TDocVariantData;
     vr: TTVarRecDynArray;
-    i,ndx: integer;
+    i,ndx: PtrInt;
     V,V1,V2: variant;
     s,j: RawUTF8;
     vd: double;
@@ -10185,12 +10185,23 @@ begin
     Check(GetInteger(Pointer(Doc.Names[i]))=i);
   for i := 0 to MAX do
     Check(Doc.Values[i]=i);
+  Doc2.Clear;
+  check(Doc2.Count=0);
+  s := Doc.ToJSON;
+  CheckEqual(Hash32(s),2110959969,'bigjson');
+  Doc2.InitJSON(s);
+  check(Doc2.Count=MAX+1);
+  for i := 0 to MAX do
+    Check(Doc2.Values[i]=Doc.Values[i]);
   for i := MAX downto 0 do
     if i and 1=0 then
       Doc.Delete(i);
   Check(Doc.Count=MAX div 2);
+  check(Doc2.Count=MAX+1);
   for i := 0 to Doc.Count-1 do
     Check(Doc.Names[i]=Doc.Values[i]);
+  s := Doc2.ToJSON;
+  CheckEqual(Hash32(s),2110959969,'bigjson2');
   Check(TDocVariantData(V1)._[1].U['name']='Jim');
   Check(TDocVariantData(V1)._[1].I['year']=1972);
   {$ifdef FPC}_Safe(V1)^.AddItem{$else}V1.Add{$endif}(3.1415);

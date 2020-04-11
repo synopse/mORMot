@@ -2303,11 +2303,11 @@ type
   TSynLogFileIndex = array[0..MAX_SYNLOGFAMILY] of integer;
 
 var
-  /// internal list of registered TSynLogFamily
+  /// internal list of registered TSynLogFamily instances
   // - up to MAX_SYNLOGFAMILY+1 families may be defined
-  SynLogFamily: TSynList = nil;
+  SynLogFamily: TSynObjectList = nil;
 
-  /// internal list of created TSynLog instance, one per each log file on disk
+  /// internal list of created TSynLog instances, one per each log file on disk
   // - do not use directly - necessary for inlining TSynLogFamily.SynLog method
   // - also used by AutoFlushProc() to get a global list of TSynLog instances
   SynLogFileList: TSynObjectListLocked = nil;
@@ -3150,8 +3150,6 @@ end;
 constructor TSynLogFamily.Create(aSynLog: TSynLogClass);
 begin
   fSynLogClass := aSynLog;
-  if SynLogFamily=nil then
-    GarbageCollectorFreeAndNil(SynLogFamily,TSynList.Create);
   fIdent := SynLogFamily.Add(self);
   fDestinationPath := ExeVersion.ProgramFilePath; // use .exe path
   fDefaultExtension := '.log';
@@ -4003,10 +4001,8 @@ begin // private sub function makes the code faster in most case
       result := PPointer(PVMT)^;
       if result=nil then begin // protect from (unlikely) concurrent call
         // create the properties information from RTTI
-        result := TSynLogFamily.Create(self);
-        PatchCodePtrUInt(PVMT,PtrUInt(result),true); // LeaveUnprotected=true
-        // register to the internal garbage collection (avoid memory leak)
-        GarbageCollectorFreeAndNil(PVMT^,result); // set to nil at finalization
+        result := TSynLogFamily.Create(self); // stored in SynLogFamily list
+        PatchCodePtrUInt(PVMT,PtrUInt(result),{LeaveUnprotected=}true);
       end;
     finally
       LeaveCriticalSection(GlobalThreadLock);
@@ -5956,8 +5952,9 @@ const
 initialization
   assert(ord(sfLocal7)=23);
   assert(ord(ssDebug)=7);
-  InitializeCriticalSection(GlobalThreadLock); // will be deleted with the process
-  GarbageCollectorFreeAndNil(SynLogFileList,TSynObjectListLocked.Create);
+  InitializeCriticalSection(GlobalThreadLock);   // deleted with the process
+  SynLogFamily := TSynObjectList.Create;         // TSynLogFamily instances
+  SynLogFileList := TSynObjectListLocked.Create; // TSynLog instances
   {$ifndef NOEXCEPTIONINTERCEPT}
   DefaultSynLogExceptionToStr := InternalDefaultSynLogExceptionToStr;
   {$endif}
@@ -5967,4 +5964,8 @@ initialization
   TTextWriter.RegisterCustomJSONSerializerFromText([
     TypeInfo(TSynMapSymbol),_TSynMapSymbol,
     TypeInfo(TSynMapUnit),_TSynMapUnit]);
+
+finalization
+  SynLogFileList.Free; // release in proper order: TSynLog then TSynLogFamily
+  SynLogFamily.Free;
 end.

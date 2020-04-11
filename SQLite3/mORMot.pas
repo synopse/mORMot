@@ -1378,7 +1378,6 @@ type
     /// compute how many bytes this type will use to be stored as a set
     function SizeInStorageAsSet: Integer;
     /// store an enumeration value from its ordinal representation
-    // - copy SizeInStorageAsEnum bytes from Ordinal to Value pointer
     procedure SetEnumFromOrdinal(out Value; Ordinal: Integer);
   end;
 
@@ -32024,7 +32023,7 @@ begin // private sub function makes the code faster in most case
   end;
   EnterCriticalSection(vmtAutoTableLock);
   try
-    // TSQLRecordProperties instance is store into "AutoTable" unused VMT entry
+    // TSQLRecordProperties instance is stored into "AutoTable" unused VMT entry
     PVMT := pointer(PtrInt(PtrUInt(aTable))+vmtAutoTable);
     result := PPointer(PVMT)^;
     if result=nil then begin // protect from (unlikely) concurrent call
@@ -61487,9 +61486,17 @@ begin
   inherited Create(@WeakZeroClassSubProp);
   PVMT := pointer(PtrInt(PtrUInt(aClass))+vmtAutoTable);
   if PVMT^=nil then begin
-    PatchCodePtrUInt(pointer(PVMT),PtrUInt(self),true); // LeaveUnprotected=true
-    GarbageCollectorFreeAndNil(PVMT^,self); // set to nil at finalization
-  end else
+    EnterCriticalSection(vmtAutoTableLock); // protect from concurrent access
+    try
+      if PVMT^=nil then begin
+        PatchCodePtrUInt(pointer(PVMT),PtrUInt(self),true); // LeaveUnprotected=true
+        GarbageCollectorFreeAndNil(PVMT^,self); // set to nil at finalization
+      end;
+    finally
+      LeaveCriticalSection(vmtAutoTableLock);
+    end;
+  end;
+  if (PVMT^<>nil) and (PVMT^<>self) then
     if TClass(PPointer(PVMT^)^)=TSQLRecordProperties then
       GarbageCollectorFreeAndNil(  // set to nil at finalization
         TSQLRecordProperties(PVMT^).fWeakZeroClass,self) else

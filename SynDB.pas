@@ -1474,13 +1474,13 @@ type
   // - inherit from this class to customize the transmission layer content
   TSQLDBProxyConnectionProtocol = class
   protected
-    fAuthenticate: TSynAuthentication;
+    fAuthenticate: TSynAuthenticationAbstract;
     fTransactionSessionID: integer;
     fTransactionRetryTimeout: Int64;
     fTransactionActiveTimeout: Int64;
     fTransactionActiveAutoReleaseTicks: Int64;
     fLock: TRTLCriticalSection;
-    function GetAuthenticate: TSynAuthentication;
+    function GetAuthenticate: TSynAuthenticationAbstract;
     /// default Handle*() will just return the incoming value
     function HandleInput(const input: RawByteString): RawByteString; virtual;
     function HandleOutput(const output: RawByteString): RawByteString; virtual;
@@ -1491,12 +1491,12 @@ type
   public
     /// initialize a protocol, with a given authentication scheme
     // - if no authentication is given, none will be processed
-    constructor Create(aAuthenticate: TSynAuthentication); reintroduce;
+    constructor Create(aAuthenticate: TSynAuthenticationAbstract); reintroduce;
     /// release associated authentication class
     destructor Destroy; override;
     /// the associated authentication information
     // - you can manage users via AuthenticateUser/DisauthenticateUser methods
-    property Authenticate: TSynAuthentication read GetAuthenticate write fAuthenticate;
+    property Authenticate: TSynAuthenticationAbstract read GetAuthenticate write fAuthenticate;
   end;
 
   /// server-side implementation of a remote connection to any SynDB engine
@@ -4249,7 +4249,7 @@ type
   end;
   PRemoteMessageHeader = ^TRemoteMessageHeader;
 
-constructor TSQLDBProxyConnectionProtocol.Create(aAuthenticate: TSynAuthentication);
+constructor TSQLDBProxyConnectionProtocol.Create(aAuthenticate: TSynAuthenticationAbstract);
 begin
   fAuthenticate := aAuthenticate;
   fTransactionRetryTimeout := 100;
@@ -4257,7 +4257,7 @@ begin
   InitializeCriticalSection(fLock);
 end;
 
-function TSQLDBProxyConnectionProtocol.GetAuthenticate: TSynAuthentication;
+function TSQLDBProxyConnectionProtocol.GetAuthenticate: TSynAuthenticationAbstract;
 begin
   if self=nil then
     result := nil else
