@@ -2233,6 +2233,8 @@ type
     fOnDownloadChunkSize: cardinal;
     /// used for internal connection
     fSession, fConnection, fRequest: HINTERNET;
+    /// do not add "Accept: */*" HTTP header by default
+    fNoAllAccept: boolean;
     function InternalGetInfo(Info: DWORD): SockString; virtual; abstract;
     function InternalGetInfo32(Info: DWORD): DWORD; virtual; abstract;
     function InternalReadData(var Data: SockString; Read: integer): cardinal; virtual; abstract;
@@ -2241,6 +2243,8 @@ type
   public
     /// returns TRUE if the class is actually supported on this system
     class function IsAvailable: boolean; override;
+    /// do not add "Accept: */*" HTTP header by default
+    property NoAllAccept: boolean read fNoAllAccept write fNoAllAccept;
     /// download would call this method to notify progress of incoming data
     property OnProgress: TWinHttpProgress read fOnProgress write fOnProgress;
     /// download would call this method instead of filling Data: SockString value
@@ -11019,6 +11023,7 @@ end;
 
 procedure TWinINet.InternalCreateRequest(const aMethod,aURL: SockString);
 const ALL_ACCEPT: array[0..1] of PAnsiChar = ('*/*',nil);
+      ACCEPT_TYPES: array[boolean] of PLPSTR = (@ALL_ACCEPT,nil);
 var Flags: DWORD;
 begin
   Flags := INTERNET_FLAG_HYPERLINK or INTERNET_FLAG_PRAGMA_NOCACHE or
@@ -11028,7 +11033,7 @@ begin
   if fHttps then
     Flags := Flags or INTERNET_FLAG_SECURE;
   FRequest := HttpOpenRequestA(FConnection,Pointer(aMethod),Pointer(aURL),
-    nil,nil,@ALL_ACCEPT,Flags,0);
+    nil,nil,ACCEPT_TYPES[fNoAllAccept],Flags,0);
   if FRequest=nil then
     raise EWinINet.Create;
 end;
@@ -11439,13 +11444,14 @@ end;
 
 procedure TWinHTTP.InternalCreateRequest(const aMethod,aURL: SockString);
 const ALL_ACCEPT: array[0..1] of PWideChar = ('*/*',nil);
+      ACCEPT_TYPES: array[boolean] of PLPWSTR = (@ALL_ACCEPT,nil);
 var Flags: DWORD;
 begin
   Flags := WINHTTP_FLAG_REFRESH; // options for a true RESTful request
   if fHttps then
     Flags := Flags or WINHTTP_FLAG_SECURE;
   fRequest := WinHttpAPI.OpenRequest(fConnection,pointer(Ansi7ToUnicode(aMethod)),
-    pointer(Ansi7ToUnicode(aURL)),nil,nil,@ALL_ACCEPT,Flags);
+    pointer(Ansi7ToUnicode(aURL)),nil,nil,ACCEPT_TYPES[fNoAllAccept],Flags);
   if fRequest=nil then
     RaiseLastModuleError(winhttpdll,EWinHTTP);
   if fKeepAlive = 0 then begin
