@@ -2237,7 +2237,9 @@ type
     fNoAllAccept: boolean;
     function InternalGetInfo(Info: DWORD): SockString; virtual; abstract;
     function InternalGetInfo32(Info: DWORD): DWORD; virtual; abstract;
-    function InternalReadData(var Data: SockString; Read: integer): cardinal; virtual; abstract;
+    function InternalQueryDataAvailable: DWORD; virtual; abstract;
+    function InternalReadData(var Data: SockString; Read: integer;
+      Size: cardinal): cardinal; virtual; abstract;
     function InternalRetrieveAnswer(
       var Header, Encoding, AcceptEncoding, Data: SockString): integer; override;
   public
@@ -2281,7 +2283,9 @@ type
     procedure InternalSendRequest(const aMethod,aData: SockString); override;
     function InternalGetInfo(Info: DWORD): SockString; override;
     function InternalGetInfo32(Info: DWORD): DWORD; override;
-    function InternalReadData(var Data: SockString; Read: integer): cardinal; override;
+    function InternalQueryDataAvailable: DWORD; override;
+    function InternalReadData(var Data: SockString; Read: integer;
+      Size: cardinal): cardinal; override;
   public
     /// relase the connection
     destructor Destroy; override;
@@ -2323,7 +2327,9 @@ type
     procedure InternalSendRequest(const aMethod,aData: SockString); override;
     function InternalGetInfo(Info: DWORD): SockString; override;
     function InternalGetInfo32(Info: DWORD): DWORD; override;
-    function InternalReadData(var Data: SockString; Read: integer): cardinal; override;
+    function InternalQueryDataAvailable: DWORD; override;
+    function InternalReadData(var Data: SockString; Read: integer;
+      Size: cardinal): cardinal; override;
   public
     /// relase the connection
     destructor Destroy; override;
@@ -4760,7 +4766,7 @@ begin
     exit; // file closed = no socket -> error
   end;
   result := Sock.fSockInEofError;
-  if result<>0 then               
+  if result<>0 then
     exit; // already reached error below
   Size := F.BufSize;
   if Sock.SocketLayer=cslUDP then begin
@@ -4911,8 +4917,8 @@ begin
       fPort := aPort;
     fServer := aServer;
     if doBind then // allow small number of retries (e.g. XP or BSD during aggressive tests)
-      retry := 10 else 
-      retry := {$ifdef BSD}10{$else}2{$endif}; 
+      retry := 10 else
+      retry := {$ifdef BSD}10{$else}2{$endif};
     repeat
       fSock := CallServer(aServer,Port,doBind,aLayer,Timeout); // OPEN or BIND
       if (fSock>0) or WSAIsFatalError(WSAEADDRNOTAVAIL) then
@@ -10879,7 +10885,12 @@ begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHTT
       Bytes := 65536; // 64KB seems fair enough by default
     SetLength(tmp,Bytes);
     repeat
-      Bytes := InternalReadData(tmp,0);
+      Bytes := InternalQueryDataAvailable;
+      if Bytes=0 then
+        break;
+      if Integer(Bytes) > Length(tmp) then
+        SetLength(tmp, Bytes);
+      Bytes := InternalReadData(tmp,0,Bytes);
       if Bytes=0 then
         break;
       inc(Read,Bytes);
@@ -10893,7 +10904,12 @@ begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHTT
     // optimized version reading "Content-Length: xxx" bytes
     SetLength(Data,ContentLength);
     repeat
-      Bytes := InternalReadData(Data,Read);
+      Bytes := InternalQueryDataAvailable;
+      if Bytes=0 then begin
+        SetLength(Data,Read); // truncated content
+        break;
+      end;
+      Bytes := InternalReadData(Data,Read,Bytes);
       if Bytes=0 then begin
         SetLength(Data,Read); // truncated content
         break;
@@ -10905,8 +10921,11 @@ begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHTT
   end else begin
     // Content-Length not set: read response in blocks of HTTP_RESP_BLOCK_SIZE
     repeat
-      SetLength(Data,Read+HTTP_RESP_BLOCK_SIZE);
-      Bytes := InternalReadData(Data,Read);
+      Bytes := InternalQueryDataAvailable;
+      if Bytes=0 then
+        break;
+      SetLength(Data,Read+Bytes{HTTP_RESP_BLOCK_SIZE});
+      Bytes := InternalReadData(Data,Read,Bytes);
       if Bytes=0 then
         break;
       inc(Read,Bytes);
@@ -11015,9 +11034,15 @@ begin
     result := 0;
 end;
 
-function TWinINet.InternalReadData(var Data: SockString; Read: integer): cardinal;
+function TWinINet.InternalQueryDataAvailable: DWORD;
 begin
-  if not InternetReadFile(fRequest, @PByteArray(Data)[Read], length(Data)-Read, result) then
+  if not InternetQueryDataAvailable(fRequest, Result, 0, 0) then
+    raise EWinINet.Create;
+end;
+
+function TWinINet.InternalReadData(var Data: SockString; Read: integer; Size: cardinal): cardinal;
+begin
+  if not InternetReadFile(fRequest, @PByteArray(Data)[Read], Size, result) then
     raise EWinINet.Create;
 end;
 
@@ -11221,6 +11246,9 @@ type
     /// Retrieves header information associated with an HTTP request.
     QueryHeaders: function(hRequest: HINTERNET; dwInfoLevel: DWORD; pwszName: PWideChar;
       lpBuffer: Pointer; var lpdwBufferLength, lpdwIndex: DWORD): BOOL; stdcall;
+    /// Returns the amount of data, in bytes, available to be read with WinHttpReadData.
+    QueryDataAvailable: function(hRequest: HINTERNET;
+      var lpdwNumberOfBytesAvailable: DWORD): BOOL; stdcall;
     /// Reads data from a handle opened by the WinHttpOpenRequest function.
     ReadData: function(hRequest: HINTERNET; lpBuffer: Pointer;
       dwNumberOfBytesToRead: DWORD; var lpdwNumberOfBytesRead: DWORD): BOOL; stdcall;
@@ -11260,7 +11288,7 @@ type
   TWinHttpAPIs = (hOpen, hSetStatusCallback, hConnect,
     hOpenRequest, hCloseHandle, hAddRequestHeaders,
     hSendRequest, hReceiveResponse, hQueryHeaders,
-    hReadData, hSetTimeouts, hSetOption, hSetCredentials,
+    hQueryDataAvailable, hReadData, hSetTimeouts, hSetOption, hSetCredentials,
     hWebSocketCompleteUpgrade, hWebSocketClose, hWebSocketQueryCloseStatus,
     hWebSocketSend, hWebSocketReceive, hWriteData);
 const
@@ -11271,9 +11299,11 @@ const
     'WinHttpOpen', 'WinHttpSetStatusCallback', 'WinHttpConnect',
     'WinHttpOpenRequest', 'WinHttpCloseHandle', 'WinHttpAddRequestHeaders',
     'WinHttpSendRequest', 'WinHttpReceiveResponse', 'WinHttpQueryHeaders',
-    'WinHttpReadData', 'WinHttpSetTimeouts', 'WinHttpSetOption', 'WinHttpSetCredentials',
-    'WinHttpWebSocketCompleteUpgrade', 'WinHttpWebSocketClose', 'WinHttpWebSocketQueryCloseStatus',
-    'WinHttpWebSocketSend', 'WinHttpWebSocketReceive', 'WinHttpWriteData');
+    'WinHttpQueryDataAvailable', 'WinHttpReadData', 'WinHttpSetTimeouts',
+    'WinHttpSetOption', 'WinHttpSetCredentials',
+    'WinHttpWebSocketCompleteUpgrade', 'WinHttpWebSocketClose',
+    'WinHttpWebSocketQueryCloseStatus', 'WinHttpWebSocketSend',
+    'WinHttpWebSocketReceive', 'WinHttpWriteData');
 
 procedure WinHttpAPIInitialize;
 var api: TWinHttpAPIs;
@@ -11436,9 +11466,15 @@ begin
     result := 0;
 end;
 
-function TWinHTTP.InternalReadData(var Data: SockString; Read: integer): cardinal;
+function TWinHTTP.InternalQueryDataAvailable: DWORD;
 begin
-  if not WinHttpAPI.ReadData(fRequest, @PByteArray(Data)[Read], length(Data)-Read, result) then
+  if not WinHttpAPI.QueryDataAvailable(fRequest, result) then
+    RaiseLastModuleError(winhttpdll,EWinHTTP);
+end;
+
+function TWinHTTP.InternalReadData(var Data: SockString; Read: integer; Size: cardinal): cardinal;
+begin
+  if not WinHttpAPI.ReadData(fRequest, @PByteArray(Data)[Read], Size, result) then
     RaiseLastModuleError(winhttpdll,EWinHTTP);
 end;
 
