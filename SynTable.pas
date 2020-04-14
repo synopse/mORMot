@@ -13719,7 +13719,7 @@ begin
   result := 0;
   fSafe.Lock;
   try
-    if not CheckCredentials(User, Hash) then
+    if not CheckCredentials(User,Hash) then
       exit;
     repeat
       result := fSessionGenerator;

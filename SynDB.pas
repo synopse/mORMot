@@ -888,7 +888,8 @@ type
     fOnBatchInsert: TOnBatchInsert;
     fDBMS: TSQLDBDefinition;
     fUseCache, fStoreVoidStringAsNull, fLogSQLStatementOnException,
-    fRollbackOnDisconnect, fReconnectAfterConnectionError: boolean;
+    fRollbackOnDisconnect, fReconnectAfterConnectionError,
+    fFilterTableViewSchemaName: boolean;
     {$ifndef UNICODE}
     fVariantWideString: boolean;
     {$endif}
@@ -1406,6 +1407,10 @@ type
     // the default 'dbo' for MS SQL or 'public' for PostgreSQL
     // - you can set a custom schema to be used instead
     property ForcedSchemaName: RawUTF8 read fForcedSchemaName write fForcedSchemaName;
+    /// if GetTableNames/GetViewNames should only return the table names
+    // starting with 'ForcedSchemaName.' prefix
+    property FilterTableViewSchemaName: boolean
+      read fFilterTableViewSchemaName write fFilterTableViewSchemaName;
     /// TRUE if an internal cache of SQL statement should be used
     // - cache will be accessed for NewStatementPrepared() method only, by
     // returning ISQLDBStatement interface instances
@@ -5175,16 +5180,21 @@ begin
 end;
 
 procedure TSQLDBConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
-var SQL: RawUTF8;
+var SQL, table, checkschema: RawUTF8;
     count: integer;
 begin
   SQL := SQLGetTableNames;
   if SQL<>'' then
   try
+    if FilterTableViewSchemaName and (fForcedSchemaName<>'') then
+      checkschema := UpperCase(fForcedSchemaName)+'.';
     with Execute(SQL,[]) do begin
       count := 0;
-      while Step do
-        AddSortedRawUTF8(Tables,count,trim(ColumnUTF8(0)));
+      while Step do begin
+        table := trim(ColumnUTF8(0));
+        if (checkschema='') or IdemPChar(pointer(table),pointer(checkschema)) then
+          AddSortedRawUTF8(Tables,count,table);
+      end;
       SetLength(Tables,count);
     end;
   except
@@ -5194,16 +5204,21 @@ begin
 end;
 
 procedure TSQLDBConnectionProperties.GetViewNames(out Views: TRawUTF8DynArray);
-var SQL: RawUTF8;
+var SQL, table, checkschema: RawUTF8;
     count: integer;
 begin
   SQL := SQLGetViewNames;
   if SQL<>'' then
   try
+    if FilterTableViewSchemaName and (fForcedSchemaName<>'') then
+      checkschema := UpperCase(fForcedSchemaName)+'.';
     with Execute(SQL,[]) do begin
       count := 0;
-      while Step do
-        AddSortedRawUTF8(Views,count,trim(ColumnUTF8(0)));
+      while Step do begin
+        table := trim(ColumnUTF8(0));
+        if (checkschema='') or IdemPChar(pointer(table),pointer(checkschema)) then
+          AddSortedRawUTF8(Views,count,table);
+      end;
       SetLength(Views,count);
     end;
   except
@@ -5475,7 +5490,7 @@ begin
     result := 'select (TABLE_SCHEMA + ''.'' + TABLE_NAME) as name '+
       'from INFORMATION_SCHEMA.TABLES where TABLE_TYPE=''BASE TABLE'' order by name';
   dMySQL:
-    result := 'select concact(TABLE_SCHEMA,''.'',TABLE_NAME) as name '+
+    result := 'select concat(TABLE_SCHEMA,''.'',TABLE_NAME) as name '+
       'from INFORMATION_SCHEMA.TABLES where TABLE_TYPE=''BASE TABLE'' order by name';
   dPostgreSQL:
     result := 'select (TABLE_SCHEMA||''.''||TABLE_NAME) as name '+
@@ -5498,7 +5513,7 @@ begin
     result := 'select (TABLE_SCHEMA + ''.'' + TABLE_NAME) as name '+
       'from INFORMATION_SCHEMA.VIEWS order by name';
   dMySQL:
-    result := 'select concact(TABLE_SCHEMA,''.'',TABLE_NAME) as name '+
+    result := 'select concat(TABLE_SCHEMA,''.'',TABLE_NAME) as name '+
       'from INFORMATION_SCHEMA.VIEWS order by name';
   dPostgreSQL:
     result := 'select (TABLE_SCHEMA||''.''||TABLE_NAME) as name '+
