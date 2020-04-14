@@ -157,6 +157,7 @@ type
     fDllModulesUnInitProcList: TList;
     fNeverExpire: boolean;
     fWebAppRootDir: RawUTF8;
+    fTag: PtrInt;
     /// called from SpiderMonkey callback. Do not raise exception here
     // instead use CheckJSError metod after JSAPI compile/evaluate call
     procedure DoProcessJSError(report: PJSErrorReport); virtual;
@@ -302,6 +303,9 @@ type
     procedure DefineNodeProcess;
     procedure DefineModuleLoader;
 
+    /// can hold any engine-specific data; Can be specified as second arg
+    // for TSMEngineManager.ThreadSafeEngine to set Tag ASAP
+    property Tag: PtrInt read FTag write FTag;
     /// Used by debugger
     property PrivateDataForDebugger: Pointer read FPrivateDataForDebugger write SetPrivateDataForDebugger;
     /// Name of this engine. Will be shown in debugger for indentify this engine
@@ -409,7 +413,7 @@ type
     /// get or create one Engine associated with current running thread
     // pThreadData is a pointer to any structure relative to this thread
     // accessible via TsmEngine.ThreadData
-    function ThreadSafeEngine(pThreadData: pointer): TSMEngine;
+    function ThreadSafeEngine(pThreadData: pointer; aTagForNewEngine: PtrInt = 0): TSMEngine;
     /// method to be called when a thread is about to be finished
     // - you can call this method just before a thread is finished to ensure
     // that the associated scripting Engine will be released
@@ -476,7 +480,7 @@ type
     property CoreModulesPath: RawUTF8 read FCoreModulesPath;
     /// event triggered every time a new Engine is created
     // event trigered before OnDebuggerInit and OnNewEngine events
-    // Result og this method is Engine's name for debug
+    // Result of this method is Engine's name for debug
     property OnGetName: TEngineNameEvent read FOnGetName write FOnGetName;
     /// event triggered every time a new Engine is created
     // event trigered before OnDebuggerInit and OnNewEngine events
@@ -1264,7 +1268,7 @@ begin
     result := false;
 end;
 
-function TSMEngineManager.ThreadSafeEngine(pThreadData: pointer): TSMEngine;
+function TSMEngineManager.ThreadSafeEngine(pThreadData: pointer; aTagForNewEngine: PtrInt = 0): TSMEngine;
 var i: integer;
     ThreadID: TThreadID;
 begin
@@ -1308,6 +1312,7 @@ begin
     {$endif}
 
     Result := FEngineClass.Create(Self);
+    Result.Tag := aTagForNewEngine;
     if grandParent = nil then
       grandParent := Result;
 
@@ -1366,8 +1371,11 @@ begin
 end;
 
 procedure TSMEngineManager.ReleaseCurrentThreadEngine;
+var
+  tid: TThreadID;
 begin
-  ReleaseEngineForThread(GetCurrentThreadId);
+  tid := GetCurrentThreadId;
+  ReleaseEngineForThread(tid);
 end;
 
 function TSMEngineManager.CurrentThreadEngine: TSMEngine;
