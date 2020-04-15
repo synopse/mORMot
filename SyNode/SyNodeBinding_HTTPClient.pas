@@ -140,7 +140,7 @@ begin
     fClient := {$IFDEF MSWINDOWS}TWinHTTP{$ELSE}TCurlHTTP{$ENDIF}
       .Create(aServer, aPort, aHttps, aProxyName, aProxyByPass, fConnectTimeout, fSendTimeout, fReceiveTimeout);
 
-    if (argc > 3) and (in_argv[3].isBoolean)  then
+    if (argc > 3) and (in_argv^[3].isBoolean) and (in_argv^[3].asBoolean) then
       fClient.RegisterCompress(CompressGZip);
 
     if aHttps and not aStrictSSL then
