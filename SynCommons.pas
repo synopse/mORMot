@@ -7338,7 +7338,7 @@ procedure GUIDToShort({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
 
 /// convert some text into its TGUID binary value
 // - expect e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {})
-// - return  if the supplied text buffer is not a valid TGUID
+// - return nil if the supplied text buffer is not a valid TGUID
 // - this will be the format used for JSON encoding, e.g.
 // $ { "UID": "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633" }
 function TextToGUID(P: PUTF8Char; guid: PByteArray): PUTF8Char;

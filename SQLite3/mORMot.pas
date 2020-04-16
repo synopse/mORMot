@@ -48938,7 +48938,7 @@ end;
 procedure TClassInstance.SetCustomComment(var CustomComment: RawUTF8);
 begin
   FormatUTF8('array of {%}',[ClassFieldNamesAllPropsAsText(ItemClass,true)],
-    CustomComment)
+    CustomComment);
 end;
 
 {$ifdef MSWINDOWS}
