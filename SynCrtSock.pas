@@ -4911,10 +4911,11 @@ begin
       retry := {$ifdef BSD}10{$else}2{$endif}; 
     repeat
       fSock := CallServer(aServer,Port,doBind,aLayer,Timeout); // OPEN or BIND
-      if (fSock>0) or WSAIsFatalError(WSAEADDRNOTAVAIL) then
+      if (fSock>0) then
         break;
       dec(retry);
-      if retry<=0 then
+      // check WSAIsFatalError only if socket=-1 in other case we can got prev. application error there
+      if WSAIsFatalError(WSAEADDRNOTAVAIL) or (retry<=0) then
         raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s) failed: %s',
           [aServer,fPort,BINDTXT[doBind],BINDMSG[doBind]],-1);
       sleep(10);
@@ -6107,6 +6108,7 @@ constructor THttpServer.Create(const aPort: SockString; OnStart,
 begin
   fInternalHttpServerRespList := {$ifdef FPC}TFPList{$else}TList{$endif}.Create;
   InitializeCriticalSection(fProcessCS);
+  fExecuteFinished := true; // prevent hangs in case of Bind error
   fSock := TCrtSocket.Bind(aPort); // BIND + LISTEN
   fServerKeepAliveTimeOut := KeepAliveTimeOut; // 30 seconds by default
   if fThreadPool<>nil then
@@ -6261,6 +6263,7 @@ var ClientSock: TSocket;
     {$endif}
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
+  fExecuteFinished := false;
   NotifyThreadStart(self);
   // main server process loop
   if Sock.Sock>0 then
