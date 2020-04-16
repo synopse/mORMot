@@ -1847,7 +1847,7 @@ type
     fOnSendFile: TOnHttpServerSendFile;
     fNginxSendFileFrom: array of TFileName;
     fHTTPQueueLength: cardinal;
-    fExecuteFinished: boolean;
+    fExecuteState: (esNotStarted, esRunning, esFinished);
     fStats: array[THttpServerSocketGetRequestResult] of integer;
     fSocketClass: THttpServerSocketClass;
     fHeadersNotFiltered: boolean;
@@ -6108,7 +6108,6 @@ constructor THttpServer.Create(const aPort: SockString; OnStart,
 begin
   fInternalHttpServerRespList := {$ifdef FPC}TFPList{$else}TList{$endif}.Create;
   InitializeCriticalSection(fProcessCS);
-  fExecuteFinished := true; // prevent hangs in case of Bind error
   fSock := TCrtSocket.Bind(aPort); // BIND + LISTEN
   fServerKeepAliveTimeOut := KeepAliveTimeOut; // 30 seconds by default
   if fThreadPool<>nil then
@@ -6141,7 +6140,7 @@ begin
   Terminate; // set Terminated := true for THttpServerResp.Execute
   if fThreadPool<>nil then
     fThreadPool.fTerminated := true; // notify background process
-  if not fExecuteFinished and (Sock<>nil) then begin
+  if (fExecuteState=esRunning) and (Sock<>nil) then begin
     Sock.Close; // shutdown the socket to unlock Accept() in Execute
     DirectShutdown(CallServer('127.0.0.1',Sock.Port,false,cslTCP,1));
   end;
@@ -6155,7 +6154,7 @@ begin
         DirectShutdown(resp.fServerSock.Sock,{rdwr=}true);
       end;
       repeat // wait for all THttpServerResp.Execute to be finished
-        if (fInternalHttpServerRespList.Count=0) and fExecuteFinished then
+        if (fInternalHttpServerRespList.Count=0) and (fExecuteState<>esRunning) then
           break;
         LeaveCriticalSection(fProcessCS);
         SleepHiRes(100);
@@ -6263,7 +6262,7 @@ var ClientSock: TSocket;
     {$endif}
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
-  fExecuteFinished := false;
+  fExecuteState := esRunning;
   NotifyThreadStart(self);
   // main server process loop
   if Sock.Sock>0 then
@@ -6314,7 +6313,7 @@ begin
       ; // any exception would break and release the thread
   end;
   EnterCriticalSection(fProcessCS);
-  fExecuteFinished := true;
+  fExecuteState := esFinished;
   LeaveCriticalSection(fProcessCS);
 end;
 
