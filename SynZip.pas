@@ -1613,7 +1613,7 @@ end;
 function TGZRead.ToMem: ZipString;
 begin
   result := '';
-  if comp=nil then
+  if (comp=nil) or ((uncomplen32=0) and (crc32=0){0 length stream}) then
     exit;
   SetLength(result,uncomplen32);
   if (UnCompressMem(comp,pointer(result),complen,uncomplen32)<>integer(uncomplen32)) or

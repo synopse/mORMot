@@ -1847,7 +1847,7 @@ type
     fOnSendFile: TOnHttpServerSendFile;
     fNginxSendFileFrom: array of TFileName;
     fHTTPQueueLength: cardinal;
-    fExecuteFinished: boolean;
+    fExecuteState: (esNotStarted, esRunning, esFinished);
     fStats: array[THttpServerSocketGetRequestResult] of integer;
     fSocketClass: THttpServerSocketClass;
     fHeadersNotFiltered: boolean;
@@ -4911,10 +4911,11 @@ begin
       retry := {$ifdef BSD}10{$else}2{$endif}; 
     repeat
       fSock := CallServer(aServer,Port,doBind,aLayer,Timeout); // OPEN or BIND
-      if (fSock>0) or WSAIsFatalError(WSAEADDRNOTAVAIL) then
+      if (fSock>0) then
         break;
       dec(retry);
-      if retry<=0 then
+      // check WSAIsFatalError only if socket=-1 in other case we can got prev. application error there
+      if WSAIsFatalError(WSAEADDRNOTAVAIL) or (retry<=0) then
         raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s) failed: %s',
           [aServer,fPort,BINDTXT[doBind],BINDMSG[doBind]],-1);
       sleep(10);
@@ -6139,7 +6140,7 @@ begin
   Terminate; // set Terminated := true for THttpServerResp.Execute
   if fThreadPool<>nil then
     fThreadPool.fTerminated := true; // notify background process
-  if not fExecuteFinished and (Sock<>nil) then begin
+  if (fExecuteState=esRunning) and (Sock<>nil) then begin
     Sock.Close; // shutdown the socket to unlock Accept() in Execute
     DirectShutdown(CallServer('127.0.0.1',Sock.Port,false,cslTCP,1));
   end;
@@ -6153,7 +6154,7 @@ begin
         DirectShutdown(resp.fServerSock.Sock,{rdwr=}true);
       end;
       repeat // wait for all THttpServerResp.Execute to be finished
-        if (fInternalHttpServerRespList.Count=0) and fExecuteFinished then
+        if (fInternalHttpServerRespList.Count=0) and (fExecuteState<>esRunning) then
           break;
         LeaveCriticalSection(fProcessCS);
         SleepHiRes(100);
@@ -6261,6 +6262,7 @@ var ClientSock: TSocket;
     {$endif}
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
+  fExecuteState := esRunning;
   NotifyThreadStart(self);
   // main server process loop
   if Sock.Sock>0 then
@@ -6311,7 +6313,7 @@ begin
       ; // any exception would break and release the thread
   end;
   EnterCriticalSection(fProcessCS);
-  fExecuteFinished := true;
+  fExecuteState := esFinished;
   LeaveCriticalSection(fProcessCS);
 end;
 
