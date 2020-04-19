@@ -796,12 +796,14 @@ begin
      [aClientsPort, aServerPort, BOOL_STR[aServerKey<>''], aServerJWT], self);
   fServerJWT := aServerJWT;
   fServer := TWebSocketServer.Create(aServerPort, nil, nil, 'relayserver');
+  fServer.WaitStarted;
   if fServerJWT <> nil then
     fServer.OnBeforeBody := OnServerBeforeBody;
   fServer.OnRequest := OnServerRequest;
   fServer.WebSocketProtocols.Add(TRelayServerProtocol.Create(self, aServerKey));
   fClients := TWebSocketServer.Create(aClientsPort, nil, nil, 'relayclients',
     aClientsThreadPoolCount, aClientsKeepAliveTimeOut);
+  fClients.WaitStarted;
   fClients.WebSocketProtocols.Add(TSynopseServerProtocol.Create(self));
   fClients.OnRequest := OnClientsRequest;
   if log<>nil then

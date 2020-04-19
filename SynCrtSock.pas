@@ -1841,16 +1841,17 @@ type
     fServerConnectionCount: integer;
     fServerConnectionActive: integer;
     fServerKeepAliveTimeOut: cardinal;
-    fTCPPrefix: SockString;
+    fSockPort, fTCPPrefix: SockString;
     fSock: TCrtSocket;
     fThreadRespClass: THttpServerRespClass;
     fOnSendFile: TOnHttpServerSendFile;
     fNginxSendFileFrom: array of TFileName;
     fHTTPQueueLength: cardinal;
-    fExecuteState: (esNotStarted, esRunning, esFinished);
+    fExecuteState: (esNotStarted, esBinding, esRunning, esFinished);
     fStats: array[THttpServerSocketGetRequestResult] of integer;
     fSocketClass: THttpServerSocketClass;
     fHeadersNotFiltered: boolean;
+    fExecuteMessage: string;
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
     function GetHTTPQueueLength: Cardinal; override;
     procedure SetHTTPQueueLength(aValue: Cardinal); override;
@@ -1871,7 +1872,7 @@ type
     procedure Process(ClientSock: THttpServerSocket;
       ConnectionID: THttpServerConnectionID; ConnectionThread: TSynThread); virtual;
   public
-    /// create a Server Thread, binded and listening on a port
+    /// create a Server Thread, ready to be bound and listening on a port
     // - this constructor will raise a EHttpServer exception if binding failed
     // - expects the port to be specified as string, e.g. '1234'; you can
     // optionally specify a server address to bind to, e.g. '1.2.3.4:1234'
@@ -1881,9 +1882,23 @@ type
     // and one thread will be created for any incoming connection
     // - you can also tune (or disable with 0) HTTP/1.1 keep alive delay and
     // how incoming request Headers[] are pushed to the processing method
+    // - this constructor won't actually do the port binding, which occurs in
+    // the background thread: caller should therefore call WaitStarted after
+    // THttpServer.Create()
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
       const ProcessName: SockString; ServerThreadPoolCount: integer=32;
       KeepAliveTimeOut: integer=30000; HeadersUnFiltered: boolean=false); reintroduce; virtual;
+    /// ensure the HTTP server thread is actually bound to the specified port
+    // - TCrtSocket.Bind() occurs in the background in the Execute method: you
+    // should call and check this method result just after THttpServer.Create
+    // - initial THttpServer design was to call Bind() within Create, which
+    // works fine on Delphi + Windows, but fails with a EThreadError on FPC/Linux
+    // - raise a ECrtSocket if binding failed within the specified period (if
+    // port is free, it would be almost immediate)
+    // - calling this method is optional, but if the background thread didn't
+    // actually bind the port, the server will be stopped and unresponsive with
+    // no explicit error message, until it is terminated
+    procedure WaitStarted(Seconds: integer = 30); virtual;
     /// enable NGINX X-Accel internal redirection for HTTP_RESP_STATICFILE
     // - will define internally a matching OnSendFile event handler
     // - generating "X-Accel-Redirect: " header, trimming any supplied left
@@ -1928,6 +1943,9 @@ type
     // - see THttpApiServer.SetTimeOutLimits(aIdleConnection) parameter
     property ServerKeepAliveTimeOut: cardinal
       read fServerKeepAliveTimeOut write fServerKeepAliveTimeOut;
+    /// the bound TCP port, as specified to Create() constructor
+    // - TCrtSocket.Bind() occurs in the Execute method
+    property SockPort: SockString read fSockPort;
     /// TCP/IP prefix to mask HTTP protocol
     // - if not set, will create full HTTP/1.0 or HTTP/1.1 compliant content
     // - in order to make the TCP/IP stream not HTTP compliant, you can specify
@@ -6106,9 +6124,9 @@ constructor THttpServer.Create(const aPort: SockString; OnStart,
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
   HeadersUnFiltered: boolean);
 begin
+  fSockPort := aPort;
   fInternalHttpServerRespList := {$ifdef FPC}TFPList{$else}TList{$endif}.Create;
   InitializeCriticalSection(fProcessCS);
-  fSock := TCrtSocket.Bind(aPort); // BIND + LISTEN
   fServerKeepAliveTimeOut := KeepAliveTimeOut; // 30 seconds by default
   if fThreadPool<>nil then
     fThreadPool.ContentionAbortDelay := 5000; // 5 seconds default
@@ -6250,6 +6268,24 @@ begin
   fOnSendFile := OnNginxAllowSend;
 end;
 
+procedure THttpServer.WaitStarted(Seconds: integer);
+var tix: Int64;
+    ok: boolean;
+begin
+  tix := GetTick64 + Seconds * 1000; // never wait forever
+  repeat
+    EnterCriticalSection(fProcessCS);
+    ok := Terminated or (fExecuteState in [esRunning, esFinished]);
+    LeaveCriticalSection(fProcessCS);
+    if ok then
+      exit;
+    Sleep(1);
+    if GetTick64 > tix then
+      raise ECrtSocket.CreateFmt('%s.WaitStarted failed after % seconds with %s',
+        [ClassName,Seconds,fExecuteMessage]);
+  until false;
+end;
+
 {.$define MONOTHREAD}
 // define this not to create a thread at every connection (not recommended)
 
@@ -6262,11 +6298,14 @@ var ClientSock: TSocket;
     {$endif}
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
-  fExecuteState := esRunning;
+  fExecuteState := esBinding;
   NotifyThreadStart(self);
   // main server process loop
-  if Sock.Sock>0 then
   try
+    fSock := TCrtSocket.Bind(fSockPort); // BIND + LISTEN
+    fExecuteState := esRunning;
+    if fSock.Sock<=0 then // paranoid (Bind would have raise an exception)
+      raise ECrtSocket.Create('THttpServer.Execute: TCrtSocket.Bind failed');
     while not Terminated do begin
       ClientSock := Accept(Sock.Sock,ClientSin);
       if ClientSock<=0 then
@@ -6309,8 +6348,8 @@ begin
       {$endif MONOTHREAD}
       end;
   except
-    on Exception do
-      ; // any exception would break and release the thread
+    on E: Exception do // any exception would break and release the thread
+      fExecuteMessage := E.ClassName+' ['+E.Message+']';
   end;
   EnterCriticalSection(fProcessCS);
   fExecuteState := esFinished;

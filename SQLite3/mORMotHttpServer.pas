@@ -659,6 +659,7 @@ begin
         fPort,HttpThreadStart,HttpThreadTerminate,GetDBServerNames) else
       fHttpServer := THttpServer.Create(fPort,HttpThreadStart,HttpThreadTerminate,
         GetDBServerNames,ServerThreadPoolCount,30000,aHeadersUnFiltered);
+    THttpServer(fHttpServer).WaitStarted;
     {$ifdef USETCPPREFIX}
     THttpServer(fHttpServer).TCPPrefix := 'magic';
     {$endif}
