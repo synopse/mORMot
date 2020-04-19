@@ -477,6 +477,9 @@ type
     procedure SetEchoToConsole(aEnabled: TSynLogInfos);
     procedure SetEchoCustom(const aEvent: TOnTextWriterEcho);
     function GetSynLogClassName: string;
+    function GetExceptionIgnoreCurrentThread: boolean;
+    procedure SetExceptionIgnoreCurrentThread(
+      aExceptionIgnoreCurrentThread: boolean);
   public
     /// intialize for a TSynLog class family
     // - add it in the global SynLogFileFamily[] list
@@ -516,7 +519,18 @@ type
     // - for instance, EConvertError may be added to the list, as such:
     // ! TSQLLog.Family.ExceptionIgnore.Add(EConvertError);
     // - you may also trigger ESynLogSilent exceptions for silent process
+    // - see also ExceptionIgnoreCurrentThread property, if you want a per-thread
+    // filtering of all exceptions
     property ExceptionIgnore: TList read fExceptionIgnore;
+    /// allow to (temporarly) ignore exceptions in the current thread
+    // - this property will affect all TSynLogFamily instances, for the
+    // current thread
+    // - may be used in a try...finally block e.g. when notifying the exception
+    // to a third-party service, or during a particular process
+    // - see also ExceptionIgnore property - which is also checked in addition
+    // to this flag
+    property ExceptionIgnoreCurrentThread: boolean
+      read GetExceptionIgnoreCurrentThread write SetExceptionIgnoreCurrentThread;
     /// you can let exceptions be ignored from a callback
     // - if set and returns true, the given exception won't be logged
     // - execution of this event handler is protected via the logs global lock
@@ -2318,6 +2332,9 @@ threadvar
   // - the current TSynLogFile instance of the living thread is
   // ! SynLogFileList[SynLogFileIndexThreadVar[TSynLogFamily.Ident]-1]
   SynLogFileIndexThreadVar: TSynLogFileIndex;
+  /// each thread can have exceptions interception disabled
+  // - as set by TSynLogFamily.ExceptionIgnoreCurrentThread property
+  ExceptionIgnorePerThread: boolean;
 
 /// if defined, will use AddVectoredExceptionHandler() API call
 // - this one does not produce accurate stack trace by now, and is supported
@@ -2601,6 +2618,8 @@ var log: TSynLog;
     {$ifdef FPC}i: PtrInt;{$endif}
 label adr,fin;
 begin
+  if ExceptionIgnorePerThread then
+    exit;
   {$ifdef CPU64DELPHI} // Delphi<XE6 in System.pas to retrieve x64 dll exit code
   {$ifndef ISDELPHIXE6}
   if (Ctxt.EInstance<>nil) and // Ctxt.EClass is EExternalException
@@ -3167,6 +3186,17 @@ begin
   fExceptionIgnore := TList.Create;
   fLevelStackTrace := [sllStackTrace,sllException,sllExceptionOS
     {$ifndef FPC},sllError,sllFail,sllLastError,sllDDDError{$endif}];
+end;
+
+function TSynLogFamily.GetExceptionIgnoreCurrentThread: boolean;
+begin
+  result := ExceptionIgnorePerThread;
+end;
+
+procedure TSynLogFamily.SetExceptionIgnoreCurrentThread(
+  aExceptionIgnoreCurrentThread: boolean);
+begin
+  ExceptionIgnorePerThread := aExceptionIgnoreCurrentThread;
 end;
 
 function TSynLogFamily.CreateSynLog: TSynLog;

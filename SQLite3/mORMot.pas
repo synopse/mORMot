@@ -20827,7 +20827,7 @@ begin
 end;
 
 function ObjectLoadVariant(var ObjectInstance; const aDocVariant: variant;
-  TObjectListItemClass: TClass=nil; Options: TJSONToObjectOptions=[]): boolean;
+  TObjectListItemClass: TClass; Options: TJSONToObjectOptions): boolean;
 var tmp: RawUTF8;
 begin
   result := false;
@@ -47886,7 +47886,8 @@ begin
   fSafe.Done;
 end;
 
-function TJSONSerializerRegisteredClass.Find(JSON: PUTF8Char; AndRegisterClass: boolean): TClass;
+function TJSONSerializerRegisteredClass.Find(JSON: PUTF8Char;
+  AndRegisterClass: boolean): TClass;
 var token: shortstring;
     ClassNameValue: PUTF8Char;
     ClassNameLen: integer;
@@ -47934,7 +47935,8 @@ begin
   end;
 end;
 
-function TJSONSerializerRegisteredClass.Find(aClassName: PUTF8Char; aClassNameLen: integer): TClass;
+function TJSONSerializerRegisteredClass.Find(aClassName: PUTF8Char;
+  aClassNameLen: integer): TClass;
 var i: integer;
 begin
   result := nil;
@@ -48104,7 +48106,7 @@ begin
 end;
 
 function JSONToNewObject(var From: PUTF8Char; var Valid: boolean;
-  Options: TJSONToObjectOptions=[]): TObject;
+  Options: TJSONToObjectOptions): TObject;
 var ItemClass: TClass;
     ItemInstance: TClassInstance;
 begin
