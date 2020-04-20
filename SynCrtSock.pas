@@ -8861,6 +8861,7 @@ begin
       CloseHandle(fReqQueue); // will break all THttpApiServer.Execute
     end;
     fReqQueue := 0;
+    sleep(1000);
     for i := 0 to length(fClones)-1 do
       fClones[i].Free;
     fClones := nil;
