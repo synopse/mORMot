@@ -1118,6 +1118,8 @@ type
     // use AES-CFB 256 bits encryption
     // - if aWebSocketsAJAX is TRUE, it will also register TWebSocketProtocolJSON
     // so that AJAX applications would be able to connect to this server
+    // - warning: WaitStarted should be called after Create() to check for
+    // for actual port binding in the background thread
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
       const aProcessName, aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8;
       aWebSocketsAJAX: boolean=false); reintroduce; overload;

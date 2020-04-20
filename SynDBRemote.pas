@@ -528,6 +528,7 @@ begin
   inherited;
   FormatUTF8('DBRemote %',[aDatabaseName],ident);
   fServer := THttpServer.Create(aPort,nil,nil,ident,fThreadPoolCount);
+  THttpServer(fServer).WaitStarted;
   fServer.OnRequest := Process;
 end;
 
