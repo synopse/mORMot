@@ -48197,8 +48197,7 @@ begin
 end;
 
 function JSONSettingsToObject(var InitialJsonContent: RawUTF8; Instance: TObject): boolean;
-var
-  tmp: TSynTempBuffer;
+var tmp: TSynTempBuffer;
 begin
   result := false;
   if InitialJsonContent='' then
@@ -48689,16 +48688,16 @@ begin
 end;
 
 function UrlDecodeObject(U: PUTF8Char; Upper: PAnsiChar; var ObjectInstance;
-  Next: PPUTF8Char=nil; Options: TJSONToObjectOptions=[]): boolean;
+  Next: PPUTF8Char; Options: TJSONToObjectOptions): boolean;
 var tmp: RawUTF8;
 begin
-  result := UrlDecodeValue(U, Upper, tmp, Next);
+  result := UrlDecodeValue(U,Upper,tmp,Next);
   if result then
     JSONToObject(ObjectInstance,Pointer(tmp),result,nil,Options);
 end;
 
 function JSONFileToObject(const JSONFile: TFileName; var ObjectInstance;
-  TObjectListItemClass: TClass=nil; Options: TJSONToObjectOptions=[]): boolean;
+  TObjectListItemClass: TClass; Options: TJSONToObjectOptions): boolean;
 var tmp: RawUTF8;
 begin
   tmp := AnyTextFileToRawUTF8(JSONFile,true);

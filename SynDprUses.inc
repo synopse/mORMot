@@ -38,8 +38,8 @@
   {$else}  // enable FastMM4 on older versions of Delphi
     {$IFDEF CONDITIONALEXPRESSIONS}
       {$if CompilerVersion <= 17} // Delphi 2006 (and up) have FastMM4 integrated
-      FastMM4Messages in '..\RTL7\FastMM4Messages.pas',
-      FastMM4 in '..\RTL7\FastMM4.pas',
+      FastMM4Messages,
+      FastMM4,
       {$ifend}
       {$ifdef UNICODE}
         {$WARN DUPLICATE_CTOR_DTOR OFF} // global at .dpr level - see QC 100815

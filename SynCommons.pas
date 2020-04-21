@@ -8403,7 +8403,7 @@ type
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
 
   /// callback used to echo each line of TTextWriter class
-  // - should return TRUE on sucess, FALSE if the log was not echoed: but
+  // - should return TRUE on success, FALSE if the log was not echoed: but
   // TSynLog will continue logging, even if this event returned FALSE
   TOnTextWriterEcho = function(Sender: TTextWriter; Level: TSynLogInfo;
     const Text: RawUTF8): boolean of object;
