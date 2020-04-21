@@ -1348,7 +1348,7 @@ type
     fRegisteredUnicodeUrl: array of SynUnicode;
     fServerSessionID: HTTP_SERVER_SESSION_ID;
     fUrlGroupID: HTTP_URL_GROUP_ID;
-    fExecuteFinished: boolean;
+    fExecuting: boolean;
     fLogData: pointer;
     fLogDataStorage: array of byte;
     fLoggingServiceName: SockString;
@@ -4705,13 +4705,14 @@ begin
   if doBind then begin
     // Socket should remain open for 5 seconds after a closesocket() call
     SetInt32Option(result,SO_LINGER,5);
-    // bind and listen to this port
+    // bind and listen to this port as server
     if (Bind(result,sin)<>0) or
        ((aLayer<>cslUDP) and (Listen(result,DefaultListenBacklog)<>0)) then begin
       CloseSocket(result);
       result := -1;
     end;
   end else begin
+    // open client connection
     if ConnectTimeout>0 then begin
       SetInt32Option(result,SO_RCVTIMEO,ConnectTimeout);
       SetInt32Option(result,SO_SNDTIMEO,ConnectTimeout);
@@ -4932,7 +4933,6 @@ begin
       if (fSock>0) then
         break;
       dec(retry);
-      // check WSAIsFatalError only if socket=-1 in other case we can got prev. application error there
       if WSAIsFatalError(WSAEADDRNOTAVAIL) or (retry<=0) then
         raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s) failed: %s',
           [aServer,fPort,BINDTXT[doBind],BINDMSG[doBind]],-1);
@@ -8839,7 +8839,7 @@ begin
 end;
 
 procedure THttpApiServer.DestroyMainThread;
-var i: integer;
+var i: PtrInt;
 begin
   if fReqQueue<>0 then begin
     for i := 0 to length(fClones)-1 do
@@ -8869,11 +8869,19 @@ begin
 end;
 
 destructor THttpApiServer.Destroy;
+var endtix: Int64;
+    alldone: boolean;
 begin
   Terminate; // for Execute to be notified about end of process
   try
     if (fOwner=nil) and (Http.Module<>0) then // fOwner<>nil for cloned threads
       DestroyMainThread;
+    if fExecuting then begin
+      endtix := GetTick64+5000; // never wait forever
+      repeat
+        sleep(1);
+      until not fExecuting or (GetTick64>endtix); // ensure Execute has ended
+    end;
   finally
     inherited Destroy;
   end;
@@ -9086,18 +9094,22 @@ var Req: PHTTP_REQUEST;
   end;
 
 begin
-  // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
-  NotifyThreadStart(self);
-  // reserve working buffers
-  SetLength(Heads,64);
-  SetLength(RespBuf,sizeof(Resp^));
-  Resp := pointer(RespBuf);
-  SetLength(ReqBuf,16384+sizeof(HTTP_REQUEST)); // space for Req^ + 16 KB of headers
-  Req := pointer(ReqBuf);
-  CurrentLog := pointer(fLogDataStorage);
-  Verbs := VERB_TEXT;
-  Context := THttpServerRequest.Create(self,0,self);
+  if Terminated then
+     exit;
+  fExecuting := true;
+  Context := nil;
   try
+    // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
+    NotifyThreadStart(self);
+    // reserve working buffers
+    SetLength(Heads,64);
+    SetLength(RespBuf,sizeof(Resp^));
+    Resp := pointer(RespBuf);
+    SetLength(ReqBuf,16384+sizeof(HTTP_REQUEST)); // space for Req^ + 16 KB of headers
+    Req := pointer(ReqBuf);
+    CurrentLog := pointer(fLogDataStorage);
+    Verbs := VERB_TEXT;
+    Context := THttpServerRequest.Create(self,0,self);
     // main loop reusing a single Context instance for this thread
     ReqID := 0;
     Context.fServer := self;
@@ -9262,7 +9274,7 @@ begin
     until Terminated;
   finally
     Context.Free;
-    fExecuteFinished := true;
+    fExecuting := false;
   end;
 end;
 
