@@ -8861,6 +8861,7 @@ begin
       CloseHandle(fReqQueue); // will break all THttpApiServer.Execute
     end;
     fReqQueue := 0;
+    sleep(1000);
     for i := 0 to length(fClones)-1 do
       fClones[i].Free;
     fClones := nil;
@@ -8869,19 +8870,19 @@ begin
 end;
 
 destructor THttpApiServer.Destroy;
-var endtix: Int64;
-    alldone: boolean;
+//var endtix: Int64;
+//    alldone: boolean;
 begin
   Terminate; // for Execute to be notified about end of process
   try
     if (fOwner=nil) and (Http.Module<>0) then // fOwner<>nil for cloned threads
       DestroyMainThread;
-    if fExecuting then begin
-      endtix := GetTick64+5000; // never wait forever
-      repeat
-        sleep(1);
-      until not fExecuting or (GetTick64>endtix); // ensure Execute has ended
-    end;
+    //if fExecuting then begin
+    //  endtix := GetTick64+5000; // never wait forever
+    //  repeat
+    //    sleep(1);
+    //  until not fExecuting or (GetTick64>endtix); // ensure Execute has ended
+    //end;
   finally
     inherited Destroy;
   end;
