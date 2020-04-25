@@ -224,10 +224,11 @@ type
   /// class of Exceptions raised by this unit
   ESynCrypto = class(ESynException);
 
-  PAESBlock = ^TAESBlock;
-
   /// 128 bits memory block for AES data cypher/uncypher
   TAESBlock = THash128;
+
+  /// points to a 128 bits memory block, as used for AES data cypher/uncypher
+  PAESBlock = ^TAESBlock;
 
   /// 256 bits memory block for maximum AES key storage
   TAESKey = THash256;

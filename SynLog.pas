@@ -3411,18 +3411,20 @@ procedure TSynLogFamily.SynLogFileListEcho(const aEvent: TOnTextWriterEcho;
   aEventAdd: boolean);
 var i: integer;
     files: TSynObjectListLocked;
+    f: TSynLog;
 begin
   if (self=nil) or (SynLogFileList.Count=0) or not Assigned(aEvent) then
     exit;
   files := SynLogFileList;
   files.Safe.Lock;
   try
-    for i := 0 to files.Count-1 do
-      if TSynLog(files.List[i]).fFamily=self then
-        with TSynLog(files.List[i]).fWriter do
-          if aEventAdd then
-            EchoAdd(aEvent) else
-            EchoRemove(aEvent);
+    for i := 0 to files.Count-1 do begin
+      f := files.List[i];
+      if f.fFamily=self then
+        if aEventAdd then
+          f.fWriter.EchoAdd(aEvent) else
+          f.fWriter.EchoRemove(aEvent);
+    end;
   finally
     files.Safe.UnLock;
   end;
@@ -3463,6 +3465,7 @@ begin
     except
       on Exception do ;
     end;
+  fEchoRemoteClient := nil;
   SynLogFileListEcho(fEchoRemoteEvent,false); // unsubscribe
   fEchoRemoteEvent := nil;
 end;
