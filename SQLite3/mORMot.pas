@@ -8465,13 +8465,20 @@ type
 
   /// how a TSQLModel stores a foreign link to be cascaded
   TSQLModelRecordReference = record
+    /// refers to the source TSQLRecordClass as model Tables[] index
     TableIndex: integer;
+    /// the property
     FieldType: TSQLPropInfo;
+    /// the target TSQLRecordClass of the field
     FieldTable: TSQLRecordClass;
+    /// the target TSQLRecordClass of the field, from its Tables[] index
     FieldTableIndex: integer;
+    /// TRUE if this field is a TRecordReferenceToBeDeleted
     CascadeDelete: boolean;
   end;
   PSQLModelRecordReference = ^TSQLModelRecordReference;
+
+  TSQLModelRecordReferenceDynArray = array of TSQLModelRecordReference;
 
   /// a Database Model (in a MVC-driven way), for storing some tables types
   // as TSQLRecord classes
@@ -8504,13 +8511,8 @@ type
     fSortedTablesNameIndex: TIntegerDynArray;
     /// will contain the registered virtual table modules
     fVirtualTableModule: array of TSQLVirtualTableClass;
-    /// this array contain all TRecordReference and TSQLRecord properties
-    // existing in the database model
-    // - used in TSQLRestServer.Delete() to enforce relational database coherency
-    // after deletion of a record: all other records pointing to it will be
-    // reset to 0 or deleted (if CascadeDelete is true) by
-    // TSQLRestServer.AfterDeleteForceCoherency
-    fRecordReferences: array of TSQLModelRecordReference;
+    /// all TRecordReference and TSQLRecord properties of the model
+    fRecordReferences: TSQLModelRecordReferenceDynArray;
     fIDGenerator: array of TSynUniqueIdentifierGenerator;
     procedure SetRoot(const aRoot: RawUTF8);
     procedure SetTableProps(aIndex: integer);
@@ -8773,6 +8775,12 @@ type
     /// for every table, contains a locked record list
     // - very fast, thanks to the use one TSQLLocks entry by table
     property Locks: TSQLLocksDynArray read fLocks;
+    /// this array contain all TRecordReference and TSQLRecord properties
+    // existing in the database model
+    // - used in TSQLRestServer.Delete() to enforce relational database coherency
+    // after deletion of a record: all other records pointing to it will be
+    // reset to 0 or deleted (if CascadeDelete is true)
+    property RecordReferences: TSQLModelRecordReferenceDynArray read fRecordReferences;
     {$ifndef LVCL}
     /// set a callback event to be executed in loop during client remote
     // blocking process, e.g. to refresh the UI during a somewhat long request
