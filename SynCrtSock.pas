@@ -8880,7 +8880,6 @@ end;
 
 destructor THttpApiServer.Destroy;
 var endtix: Int64;
-    alldone: boolean;
 begin
   Terminate; // for Execute to be notified about end of process
   try
