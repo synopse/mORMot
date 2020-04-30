@@ -49842,8 +49842,8 @@ begin
           AfterEach(P^);
         inc(P,ElemSize);
       end;
-  // check security checksum
-  if NoCheckHash or (Source=nil) or
+  // check security checksum (Hash[0]=0 from mORMot2 DynArraySave)
+  if NoCheckHash or (Source=nil) or (Hash[0]=0) or
      (Hash32(@Hash[1],Source-PAnsiChar(@Hash[1]))=Hash[0]) then
     result := Source;
 end;
