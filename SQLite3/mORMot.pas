@@ -40937,7 +40937,7 @@ begin
   if FileTime=0 then
     if Error404Redirect<>'' then
       Redirect(Error404Redirect) else
-      Error('',HTTP_NOTFOUND) else begin
+      Error('',HTTP_NOTFOUND,CacheControlMaxAge) else begin
     if not ExistsIniName(pointer(Call.OutHead),HEADER_CONTENT_TYPE_UPPER) then begin
       if Call.OutHead<>'' then
         Call.OutHead := Call.OutHead+#13#10;

@@ -3944,7 +3944,7 @@ function GetDiskInfo(var aDriveFolderOrFile: TFileName;
   {$ifdef MSWINDOWS}; aVolumeName: PFileName = nil{$endif}): boolean;
 
 
-{ ************ Markup (e.g. Emoji) process  ************************** }
+{ ************ Markup (e.g. HTML or Emoji) process ******************** }
 
 type
   /// tune AddHtmlEscapeWiki/AddHtmlEscapeMarkdown wrapper functions process

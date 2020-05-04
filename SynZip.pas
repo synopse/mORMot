@@ -513,7 +513,6 @@ function deflateInit2_(var strm: TZStream;
   version: PAnsiChar; stream_size: integer): integer; cdecl;
 function inflateInit2_(var strm: TZStream; windowBits: integer;
   version: PAnsiChar; stream_size: integer): integer; cdecl;
-function get_crc_table: pointer; cdecl;
 {$endif USEINLINEASM}
 {$endif USEPASZLIB}
 
@@ -1558,6 +1557,7 @@ end;
 const
   GZHEAD: array [0..2] of cardinal = ($088B1F,0,0);
   GZHEAD_SIZE = 10;
+
 type
   TGZFlags = set of (gzfText, gzfHCRC, gzfExtra, gzfName, gzfComment);
 
@@ -4613,7 +4613,6 @@ asm  pop ebp  // auto-generated push ebp; mov ebp,esp
         xor     eax, eax
         pop     esi
         ret     4
-
 @@195:  mov     eax, -2
         pop     esi
         ret     4
@@ -4635,25 +4634,20 @@ asm
 	jne       @31
 	mov       eax,1
 	jmp       @32
-@31:
-	test      ebp,ebp
+@31:    test      ebp,ebp
 	jbe       @34
-@33:
-	cmp       ebp,5552
+@33:    cmp       ebp,5552
 	jae        @35
 	mov       eax,ebp
 	jmp        @36
-  nop; nop
-@35:
-	mov       eax,5552
-@36:
-	sub       ebp,eax
+        nop; nop
+@35:    mov       eax,5552
+@36:    sub       ebp,eax
 	cmp       eax,16
 	jl        @38
 	xor       edx,edx
 	xor       ecx,ecx
-@39:
-	sub       eax,16
+@39:    sub       eax,16
 	mov       dl,[esi]
 	mov       cl,[esi+1]
 	add       ebx,edx
@@ -4705,19 +4699,16 @@ asm
 	lea       esi,[esi+16]
 	lea       edi,[edi+ebx]
 	jge       @39
-@38:
-	test      eax,eax
-	je         @42
-@43:
-	xor       edx,edx
+@38:    test      eax,eax
+	je        @42
+@43:    xor       edx,edx
 	mov       dl,[esi]
 	add       ebx,edx
 	dec       eax
 	lea       esi,[esi+1]
-  lea       edi,[edi+ebx]
+        lea       edi,[edi+ebx]
 	jg        @43
-@42:
-	mov       ecx,65521
+@42:    mov       ecx,65521
 	mov       eax,ebx
 	xor       edx,edx
 	div       ecx
@@ -4729,13 +4720,11 @@ asm
 	test      ebp,ebp
 	mov       edi,edx
 	ja        @33
-@34:
-	mov       eax,edi
+@34:    mov       eax,edi
 	shl       eax,16
 	or        eax,ebx
 @45:
-@32:
-	pop       ebp
+@32:    pop       ebp
 	pop       edi
 	pop       esi
 	pop       ebx
@@ -4995,7 +4984,6 @@ function deflateInit2_(var strm: TZStream;
   version: PAnsiChar; stream_size: integer): integer; cdecl; external;
 function inflateInit2_(var strm: TZStream; windowBits: integer;
   version: PAnsiChar; stream_size: integer): integer; cdecl; external;
-function get_crc_table: pointer; cdecl; external;
 
 {$endif FPC}
 
