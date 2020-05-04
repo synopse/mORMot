@@ -591,7 +591,8 @@ type
         [low(TMVCPublishOption)..high(TMVCPublishOption)]); reintroduce;
     /// define some content for a static file
     // - only used if cacheStatic has been defined
-    procedure AddStaticCache(const aFileName: TFileName; aFileContent: RawByteString);
+    function AddStaticCache(const aFileName: TFileName;
+      const aFileContent: RawByteString): RawByteString;
     /// current publishing options, as specify to the constructor
     property PublishOptions: TMVCPublishOptions read fPublishOptions write fPublishOptions;
     /// optional "Cache-Control: max-age=###" header value for static content
@@ -1831,26 +1832,26 @@ begin
   fApplication.SetSession(TMVCSessionWithRestServer.Create);
 end;
 
-procedure TMVCRunOnRestServer.AddStaticCache(const aFileName: TFileName;
-  aFileContent: RawByteString);
+function TMVCRunOnRestServer.AddStaticCache(const aFileName: TFileName;
+  const aFileContent: RawByteString): RawByteString;
 begin
   if aFileContent<>'' then // also cache content-type
-    aFileContent := GetMimeContentType(
-      pointer(aFileName),length(aFileName),aFileName)+#10+aFileContent;
-  fStaticCache.Add(StringToUTF8(aFileName),aFileContent);
+    result := GetMimeContentType(
+      pointer(aFileContent),length(aFileContent),aFileName)+#10+aFileContent else
+    result := '';
+  fStaticCache.Add(StringToUTF8(aFileName),result);
 end;
 
 procedure TMVCRunOnRestServer.InternalRunOnRestServer(
   Ctxt: TSQLRestServerURIContext; const MethodName: RawUTF8);
 var mvcinfo, inputContext: variant;
-    rawMethodName,rawFormat,static,body: RawUTF8;
+    rawMethodName,rawFormat,static,body,content: RawUTF8;
     staticFileName: TFileName;
     rendererClass: TMVCRendererReturningDataClass;
     renderer: TMVCRendererReturningData;
     methodIndex: integer;
     method: PServiceMethod;
     timer: TPrecisionTimer;
-    cache: TMVCRunCache;
 begin
   Split(MethodName,'/',rawMethodName,rawFormat);
   // 1. implement mvc-info endpoint
@@ -1879,25 +1880,22 @@ begin
           staticFileName := UTF8ToString(StringReplaceChars(rawFormat,'/',PathDelim));
           if cacheStatic in fPublishOptions then begin // retrieve and cache
             static := fViews.GetStaticFile(staticFileName);
-            AddStaticCache(staticFileName,static);
-          end else begin // prepare HTTP_NOT_FOUND or ReturnFile()
+            static := AddStaticCache(staticFileName,static);
+          end else begin // no cache
             staticFileName := fViews.ViewStaticFolder + staticFileName;
-            if FileExists(staticFileName) then
-              static := StringToUTF8(staticFileName) else
-              static := '';
+            Ctxt.ReturnFile(staticFileName,{handle304=}true,'','','',fStaticCacheControlMaxAge);
+            exit;
           end;
         end;
     finally
       fCacheLocker.Leave;
     end;
     if static='' then
-      Ctxt.Error('',HTTP_NOTFOUND,fStaticCacheControlMaxAge) else
-    if cacheStatic in fPublishOptions then begin
-      Split(static,#10,rawFormat,static);
-      Ctxt.Returns(static,HTTP_SUCCESS,HEADER_CONTENT_TYPE+rawFormat,
+      Ctxt.Error('',HTTP_NOTFOUND,fStaticCacheControlMaxAge) else begin
+      Split(static,#10,content,static);
+      Ctxt.Returns(static,HTTP_SUCCESS,HEADER_CONTENT_TYPE+content,
         {handle304=}true,false,fStaticCacheControlMaxAge);
-    end else
-      Ctxt.ReturnFile(UTF8ToString(static),{handle304=}true,'','','',fStaticCacheControlMaxAge);
+    end;
   end else begin
     // 3. render regular page using proper viewer
     timer.Start;
