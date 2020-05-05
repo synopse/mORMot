@@ -27338,7 +27338,7 @@ begin
 end;
 
 procedure TJSONObjectDecoder.Decode(const JSON: RawUTF8; const Fields: TRawUTF8DynArray;
-  Params: TJSONObjectDecoderParams; const RowID: TID=0; ReplaceRowIDWithID: Boolean=false);
+  Params: TJSONObjectDecoderParams; const RowID: TID; ReplaceRowIDWithID: Boolean);
 var tmp: TSynTempBuffer;
     P: PUTF8Char;
 begin

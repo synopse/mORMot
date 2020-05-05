@@ -163,6 +163,7 @@ uses
       SynDBODBC in '..\SynDBODBC.pas',
       // SynDBFirebird in '..\SynDBFirebird.pas',
       // SynDBDataSet in '..\SynDBDataSet.pas',
+      // SynDBFireDAC in '..\SynDBDataSet\SynDBFireDAC.pas',
       {$ifdef USEZEOS}
         SynDBZeos in '..\SynDBZeos.pas',
       {$endif}
