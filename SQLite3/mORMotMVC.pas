@@ -99,13 +99,16 @@ type
   protected
     fFactory: TInterfaceFactory;
     fLogClass: TSynLogClass;
-    fViewTemplateFolder,fViewStaticFolder: TFileName;
+    fViewTemplateFolder, fViewStaticFolder: TFileName;
     fFactoryErrorIndex: integer;
     fViewFlags: TMVCViewFlags;
     fViewGenerationTimeTag: RawUTF8;
     procedure SetViewTemplateFolder(const aFolder: TFileName);
     /// overriden implementations should return the rendered content
     procedure Render(methodIndex: Integer; const Context: variant; var View: TMVCView); virtual; abstract;
+    /// return the static file contents - from fViewStaticFolder by default
+    // - called if cacheStatic has been defined
+    function GetStaticFile(const aFileName: TFileName): RawByteString; virtual;
   public
     /// initialize the class
     constructor Create(aInterface: PTypeInfo; aLogClass: TSynLogClass);
@@ -586,6 +589,10 @@ type
       aRestServer: TSQLRestServer=nil; const aSubURI: RawUTF8='';
       aViews: TMVCViewsAbtract=nil; aPublishOptions: TMVCPublishOptions=
         [low(TMVCPublishOption)..high(TMVCPublishOption)]); reintroduce;
+    /// define some content for a static file
+    // - only used if cacheStatic has been defined
+    function AddStaticCache(const aFileName: TFileName;
+      const aFileContent: RawByteString): RawByteString;
     /// current publishing options, as specify to the constructor
     property PublishOptions: TMVCPublishOptions read fPublishOptions write fPublishOptions;
     /// optional "Cache-Control: max-age=###" header value for static content
@@ -736,6 +743,11 @@ procedure TMVCViewsAbtract.SetViewTemplateFolder(const aFolder: TFileName);
 begin
   fViewTemplateFolder := IncludeTrailingPathDelimiter(aFolder);
   fViewStaticFolder := IncludeTrailingPathDelimiter(fViewTemplateFolder+STATIC_URI);
+end;
+
+function TMVCViewsAbtract.GetStaticFile(const aFileName: TFileName): RawByteString;
+begin
+  result := StringFromFile(fViewStaticFolder + aFileName);
 end;
 
 
@@ -1816,14 +1828,24 @@ begin
   if (registerORMTableAsExpressions in fPublishOptions) and
      aViews.InheritsFrom(TMVCViewsMustache) then
     TMVCViewsMustache(aViews).RegisterExpressionHelpersForTables(fRestServer);
-  fStaticCache.Init(true);
+  fStaticCache.Init({casesensitive=}true);
   fApplication.SetSession(TMVCSessionWithRestServer.Create);
+end;
+
+function TMVCRunOnRestServer.AddStaticCache(const aFileName: TFileName;
+  const aFileContent: RawByteString): RawByteString;
+begin
+  if aFileContent<>'' then // also cache content-type
+    result := GetMimeContentType(
+      pointer(aFileContent),length(aFileContent),aFileName)+#10+aFileContent else
+    result := '';
+  fStaticCache.Add(StringToUTF8(aFileName),result);
 end;
 
 procedure TMVCRunOnRestServer.InternalRunOnRestServer(
   Ctxt: TSQLRestServerURIContext; const MethodName: RawUTF8);
 var mvcinfo, inputContext: variant;
-    rawMethodName,rawFormat,static,body: RawUTF8;
+    rawMethodName,rawFormat,static,body,content: RawUTF8;
     staticFileName: TFileName;
     rendererClass: TMVCRendererReturningDataClass;
     renderer: TMVCRendererReturningData;
@@ -1849,34 +1871,31 @@ begin
     // Ctxt.ReturnFileFromFolder(fViews.ViewStaticFolder);
     fCacheLocker.Enter;
     try
-      static := fStaticCache.Value(rawFormat,#0);
-      if static=#0 then begin // static='' means HTTP_NOTFOUND
+      if cacheStatic in fPublishOptions then
+        static := fStaticCache.Value(rawFormat,#0) else
+        static := #0;
+      if static=#0 then // static='' means HTTP_NOTFOUND
         if PosEx('..',rawFormat)>0 then // avoid injection
           static := '' else begin
-          static := ToUTF8(fViews.ViewStaticFolder)+StringReplaceChars(rawFormat,'/',PathDelim);
-          staticFileName := UTF8ToString(static);
-          if cacheStatic in fPublishOptions then begin
-            static := StringFromFile(staticFileName);
-            if static<>'' then
-              static := GetMimeContentType(
-                pointer(static),length(static),staticFileName)+#10+static;
-          end else
-            if not FileExists(staticFileName) then
-              static := '';
+          staticFileName := UTF8ToString(StringReplaceChars(rawFormat,'/',PathDelim));
+          if cacheStatic in fPublishOptions then begin // retrieve and cache
+            static := fViews.GetStaticFile(staticFileName);
+            static := AddStaticCache(staticFileName,static);
+          end else begin // no cache
+            staticFileName := fViews.ViewStaticFolder + staticFileName;
+            Ctxt.ReturnFile(staticFileName,{handle304=}true,'','','',fStaticCacheControlMaxAge);
+            exit;
+          end;
         end;
-        fStaticCache.Add(rawFormat,static);
-      end;
     finally
       fCacheLocker.Leave;
     end;
     if static='' then
-      Ctxt.Error('',HTTP_NOTFOUND,fStaticCacheControlMaxAge) else
-    if cacheStatic in fPublishOptions then begin
-      Split(static,#10,rawFormat,static);
-      Ctxt.Returns(static,HTTP_SUCCESS,HEADER_CONTENT_TYPE+rawFormat,
+      Ctxt.Error('',HTTP_NOTFOUND,fStaticCacheControlMaxAge) else begin
+      Split(static,#10,content,static);
+      Ctxt.Returns(static,HTTP_SUCCESS,HEADER_CONTENT_TYPE+content,
         {handle304=}true,false,fStaticCacheControlMaxAge);
-    end else
-      Ctxt.ReturnFile(UTF8ToString(static),{handle304=}true,'','','',fStaticCacheControlMaxAge);
+    end;
   end else begin
     // 3. render regular page using proper viewer
     timer.Start;

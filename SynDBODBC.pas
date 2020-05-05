@@ -1261,7 +1261,9 @@ begin
 end;
 
 procedure TODBCConnection.StartTransaction;
+var log: ISynLog;
 begin
+  log := SynDBLog.Enter(self,'StartTransaction');
   if TransactionCount>0 then
     raise EODBCException.CreateUTF8('% do not support nested transactions',[self]);
   inherited StartTransaction;

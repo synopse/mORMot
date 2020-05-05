@@ -2167,7 +2167,7 @@ type
     fReaderTemp: PRawByteString;
     fLoadFromLastUncompressed, fSaveToLastUncompressed: integer;
     fLoadFromLastAlgo: TAlgoCompress;
-    /// low-level virtual methods implementing the persistence reading
+    /// low-level virtual methods implementing the persistence
     procedure LoadFromReader; virtual;
     procedure SaveToWriter(aWriter: TFileBufferWriter); virtual;
   public
@@ -3944,7 +3944,7 @@ function GetDiskInfo(var aDriveFolderOrFile: TFileName;
   {$ifdef MSWINDOWS}; aVolumeName: PFileName = nil{$endif}): boolean;
 
 
-{ ************ Markup (e.g. Emoji) process  ************************** }
+{ ************ Markup (e.g. HTML or Emoji) process ******************** }
 
 type
   /// tune AddHtmlEscapeWiki/AddHtmlEscapeMarkdown wrapper functions process
@@ -13696,12 +13696,12 @@ end;
 
 procedure TSynAuthenticationAbstract.AuthenticateUser(const aName, aPassword: RawUTF8);
 begin
-  raise ESynException.CreateFmt('%.AuthenticateUser() is not implemented',[self]);
+  raise ESynException.CreateUTF8('%.AuthenticateUser() is not implemented',[self]);
 end;
 
 procedure TSynAuthenticationAbstract.DisauthenticateUser(const aName: RawUTF8);
 begin
-  raise ESynException.CreateFmt('%.DisauthenticateUser() is not implemented',[self]);
+  raise ESynException.CreateUTF8('%.DisauthenticateUser() is not implemented',[self]);
 end;
 
 function TSynAuthenticationAbstract.CheckCredentials(const UserName: RaWUTF8;

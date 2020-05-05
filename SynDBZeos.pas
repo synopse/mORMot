@@ -880,7 +880,9 @@ begin
 end;
 
 procedure TSQLDBZEOSConnection.StartTransaction;
+var log: ISynLog;
 begin
+  log := SynDBLog.Enter(self,'StartTransaction');
   inherited StartTransaction;
   {$IFDEF ZEOS73UP}
   fDatabase.StartTransaction; //returns the txn level

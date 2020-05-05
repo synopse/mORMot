@@ -8768,9 +8768,9 @@ type
     procedure AddCSVInteger(const Integers: array of Integer); overload;
     /// append an array of doubles as CSV
     procedure AddCSVDouble(const Doubles: array of double); overload;
-    /// append an array of RawUTF8 as CSV
+    /// append an array of RawUTF8 as CSV of JSON strings
     procedure AddCSVUTF8(const Values: array of RawUTF8); overload;
-    /// append an array of const as CSV
+    /// append an array of const as CSV of JSON values
     procedure AddCSVConst(const Values: array of const);
     /// write some data Base64 encoded
     // - if withMagic is TRUE, will write as '"\uFFF0base64encodedbinary"'
@@ -49842,8 +49842,8 @@ begin
           AfterEach(P^);
         inc(P,ElemSize);
       end;
-  // check security checksum
-  if NoCheckHash or (Source=nil) or
+  // check security checksum (Hash[0]=0 from mORMot2 DynArraySave)
+  if NoCheckHash or (Source=nil) or (Hash[0]=0) or
      (Hash32(@Hash[1],Source-PAnsiChar(@Hash[1]))=Hash[0]) then
     result := Source;
 end;
