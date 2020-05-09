@@ -403,8 +403,10 @@ function clock_getres(ID: cardinal; r: ptimespec): Integer;
 // is compiled without FPC_USE_LIBC defined and do a syscall each time
 //   GetTickCount64 fpc    2 494 563 op/sec
 //   GetTickCount64 libc 119 919 893 op/sec
+// note: for high-resolution QueryPerformanceMicroSeconds, calling the kernel
+// is also slower
 function clock_gettime(clk_id : clockid_t; tp: ptimespec) : cint;
-  cdecl; external name 'clock_gettime';
+  cdecl; external 'c' name 'clock_gettime';
 
 {$endif BSD}
 
@@ -432,14 +434,14 @@ end;
 procedure QueryPerformanceCounter(out Value: Int64);
 var r : TTimeSpec;
 begin
-  clock_gettime(CLOCK_MONOTONIC,@r);
+  clock_gettime(CLOCK_MONOTONIC, @r);
   value := r.tv_nsec+r.tv_sec*C_BILLION; // returns nanoseconds resolution
 end;
 
 procedure QueryPerformanceMicroSeconds(out Value: Int64);
 var r : TTimeSpec;
 begin
-  clock_gettime(CLOCK_MONOTONIC,@r);
+  clock_gettime(CLOCK_MONOTONIC, @r);
   value := PtrUInt(r.tv_nsec) div C_THOUSAND+r.tv_sec*C_MILLION; // as microseconds
 end;
 

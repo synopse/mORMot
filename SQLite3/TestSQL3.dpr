@@ -197,4 +197,7 @@ begin
     ['..\CrossPlatform\templates','..\..\CrossPlatform\templates'],
      '\..\..\SQlite3\TestSQL3FPCInterfaces.pas');
   {$endif}
+  {$ifdef FPC_X64MM}
+  WriteHeapStatus(#13#10'SynFPCx64MM Memory Usage Report:', 20);
+  {$endif FPC_X64MM}
 end.
