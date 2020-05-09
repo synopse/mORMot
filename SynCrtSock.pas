@@ -2640,7 +2640,8 @@ const
   /// HTTP Status Code for "HTTP Version Not Supported"
   STATUS_HTTPVERSIONNONSUPPORTED = 505;
 
-  {$ifdef MSWINDOWS}
+{$ifdef MSWINDOWS}
+
   /// can be used with THttpApiServer.AuthenticationSchemes to enable all schemes
   HTTPAPI_AUTH_ENABLE_ALL = [hraBasic..hraKerberos];
 
@@ -2689,7 +2690,7 @@ const
   /// The TLS handshake could not be completed
   WEB_SOCKET_SECURE_HANDSHAKE_ERROR_CLOSE_STATUS : WEB_SOCKET_CLOSE_STATUS = 1015;
 
-  {$endif}
+{$endif MSWINDOWS}
 
 /// retrieve the HTTP reason text from a code
 // - e.g. StatusCodeToReason(200)='OK'
@@ -3193,7 +3194,8 @@ type
   end;
   {$M-}
 
-  function SysErrorMessagePerModule(Code: DWORD; ModuleName: PChar): string;
+
+function SysErrorMessagePerModule(Code: DWORD; ModuleName: PChar): string;
 
 {$ifdef MSWINDOWS}
 /// is HTTP.SYS web socket API available on the target system Windows 8 and UP
@@ -12385,16 +12387,16 @@ function TPollSockets.Unsubscribe(socket: TSocket; tag: TPollSocketTag): boolean
 var p: integer;
 begin
   result := false;
+  EnterCriticalSection(fPendingLock);
+  try
+    for p := fPendingIndex to high(fPending) do
+      if fPending[p].tag=tag then
+        byte(fPending[p].events) := 0; // tag to be ignored in future GetOne
+  finally
+    LeaveCriticalSection(fPendingLock);
+  end;
   EnterCriticalSection(fPollLock);
   try
-    EnterCriticalSection(fPendingLock);
-    try
-      for p := fPendingIndex to high(fPending) do
-        if fPending[p].tag=tag then
-          byte(fPending[p].events) := 0; // tag to be ignored in future GetOne
-    finally
-      LeaveCriticalSection(fPendingLock);
-    end;
     for p := 0 to high(fPoll) do
       if fPoll[p].Unsubscribe(socket) then begin
         dec(fCount);
