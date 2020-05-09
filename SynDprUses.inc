@@ -4,7 +4,7 @@
       cthreads, // should be the very first unit - before FastMM4 e.g.
     {$endif Unix}
     {$ifdef FPC_X64MM}
-    SynFPCx64MM in '..\SynFPCx64MM.pas',
+    SynFPCx64MM,
     {$else}
       {$ifdef FPC_FASTMM4}
         fpcFastMM4Messages in '..\fpcfmm4\fpcFastMM4Messages.pas',

@@ -20670,6 +20670,96 @@ end;
 {$endif HASINLINE}
 {$endif HASDIRECTTYPEINFO}
 
+{$ifdef FPC_X64}
+
+procedure fpc_ansistr_decr_ref; external name 'FPC_ANSISTR_DECR_REF';
+procedure fpc_ansistr_incr_ref; external name 'FPC_ANSISTR_INCR_REF';
+procedure fpc_ansistr_assign; external name 'FPC_ANSISTR_ASSIGN';
+procedure fpc_freemem; external name 'FPC_FREEMEM';
+
+procedure _ansistr_decr_ref(var p: Pointer); nostackframe; assembler;
+asm
+        mov     rax, qword ptr[p]
+        test    rax, rax
+        jz      @z
+        mov     qword ptr[p], 0
+        mov     p, rax
+        cmp     qword ptr[rax - 16], 0
+        jl      @z
+lock    dec     qword ptr[rax - 16]
+        jbe     @free
+@z:     ret
+@free:  sub     p, SizeOf(TStrRec)
+        jmp     fpc_freemem
+end;
+
+procedure _ansistr_incr_ref(p: pointer); nostackframe; assembler;
+asm
+        test    p, p
+        jz      @z
+        cmp     qword ptr[p - 16], 0
+        jl      @z
+lock    inc     qword ptr[p - 16]
+@z:
+end;
+
+procedure _ansistr_assign(var d: pointer; s: pointer); nostackframe; assembler;
+asm
+        mov     rax, qword ptr[d]
+        cmp     rax, s
+        jz      @eq
+        test    s, s
+        jz      @ns
+        cmp     qword ptr[s - 16], 0
+        jl      @ns
+lock    inc     qword ptr[s - 16]
+@ns:    mov     qword ptr[d], s
+        test    rax, rax
+        jnz     @z
+@eq:    ret
+@z:     mov     d, rax
+        cmp     qword ptr[rax - 16], 0
+        jl      @n
+ lock   dec     qword ptr[rax - 16]
+        ja      @n
+@free:  sub     d, SizeOf(TStrRec)
+        jmp     fpc_freemem
+@n:
+end;
+
+procedure FastAssignNew(var d; s: pointer); nostackframe; assembler;
+asm
+        mov     rax, qword ptr[d]
+        mov     qword ptr[d], s
+        test    rax, rax
+        jz      @z
+        mov     d, rax
+        cmp     qword ptr[rax - 16], 0
+        jl      @z
+lock    dec     qword ptr[rax - 16]
+        jbe     @free
+@z:     ret
+@free:  sub     d, SizeOf(TStrRec)
+        jmp     fpc_freemem
+end;
+
+{$else}
+
+procedure FastAssignNew(var d; s: pointer);
+var
+  sr: PStrRec; // local copy to use register
+begin
+  sr := Pointer(d);
+  Pointer(d) := s;
+  if sr = nil then
+    exit;
+  dec(sr);
+  if (sr^.refcnt >= 0) and RefCntDecFree(sr^.refcnt) then
+    FreeMem(sr);
+end;
+
+{$endif FPC_X64}
+
 const
   /// codePage offset = string header size
   // - used to calc the beginning of memory allocation of a string
@@ -20694,8 +20784,7 @@ begin
     if p<>nil then
       MoveFast(p^,sr^,len);
   end;
-  {$ifdef FPC}Finalize(RawByteString(s)){$else}RawByteString(s) := ''{$endif};
-  pointer(s) := r;
+  FastAssignNew(s, r);
 end;
 
 procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
@@ -20716,8 +20805,7 @@ begin
     if p<>nil then
       MoveFast(p^,sr^,len);
   end;
-  {$ifdef FPC}Finalize(s){$else}s := ''{$endif};
-  pointer(s) := r;
+  FastAssignNew(s, r);
 end;
 {$else not HASCODEPAGE}
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
@@ -40414,7 +40502,7 @@ end;
 {$else}
 var PageSize: PtrUInt;
     AlignedAddr: pointer;
-    i: integer;
+    i: PtrInt;
     ProtectedResult: boolean;
     ProtectedMemory: boolean;
 begin
@@ -62257,7 +62345,18 @@ begin
   MoveFast := @System.Move;
   {$endif CPUX64}
   {$ifdef FPC}
-  {$ifndef CPUX64}
+  {$ifdef CPUX64}
+  {$ifndef ABSOLUTEPASCAL}
+  if @System.FillChar<>@FillCharFast then begin
+    // force to use our optimized x86_64 asm versions
+    RedirectCode(@System.FillChar,@FillcharFast);
+    RedirectCode(@System.Move,@MoveFast);
+    RedirectCode(@fpc_ansistr_decr_ref,@_ansistr_decr_ref);
+    RedirectCode(@fpc_ansistr_incr_ref,@_ansistr_incr_ref);
+    RedirectCode(@fpc_ansistr_assign,@_ansistr_assign);
+  end;
+  {$endif ABSOLUTEPASCAL}
+  {$else}
   FillCharFast := @System.FillChar; // fallback to FPC cross-platform RTL
   {$endif CPUX64}
   {$else Dephi: }

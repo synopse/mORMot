@@ -3040,7 +3040,6 @@ var buf: RawByteString;
 {$ifdef HASCPUIDX64} var cpu: TX64CpuFeatures; {$endif}
 begin
   SetLength(buf,16 shl 20); // 16MB
-  Validate({rtl=}true);
   {$ifdef HASCPUIDX64} // activate and validate SSE2 + AVX branches
   cpu := CPUIDX64;
   CPUIDX64 := []; // default SSE2 128-bit process
@@ -3053,8 +3052,12 @@ begin
   {$endif FPC}
   CPUIDX64 := cpu; // there is no AVX2 move/fillchar (still 256-bit wide)
   if (cpu<>[]) and (cpu<>[cpuAvx]) and (cpu<>[cpuAvx,cpuAvx2]) then
-  {$endif HASCPUIDX64}
     Validate;
+  // no Validate(true): RedirectCode(@System.FillChar,@FillcharFast)
+  {$else}
+  Validate({rtl=}true);
+  Validate(false);
+  {$endif HASCPUIDX64}
 end;
 {$endif CPUINTEL}
 
