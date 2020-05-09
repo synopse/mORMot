@@ -184,6 +184,8 @@ uses
   {$R ..\vista.RES} // includes Win10 manifest - use .RES for linux cross-compilation
 {$endif}
 
+
+
 begin
   {$ifdef ISDELPHI2007ANDUP}
   {$ifdef DEBUG}

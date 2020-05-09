@@ -20677,16 +20677,35 @@ procedure fpc_ansistr_incr_ref; external name 'FPC_ANSISTR_INCR_REF';
 procedure fpc_ansistr_assign; external name 'FPC_ANSISTR_ASSIGN';
 procedure fpc_freemem; external name 'FPC_FREEMEM';
 
+procedure PatchAnsi(old, new: PByteArray; size: PtrInt);
+var
+  rel: PCardinal;
+begin
+  PatchCode(old, new, size, nil, {unprotected=}true);
+  repeat // search and fix "jmp rel FPC_FREEMEM"
+    dec(size);
+    if size = 0 then
+      exit;
+    if old[size] <> $e9 then
+      continue;
+    rel := @old[size + 1];
+    if rel^ = cardinal(PtrUInt(@fpc_freemem) - PtrUInt(@new[size]) - 5) then
+      break;
+  until false;
+  rel^ := PtrUInt(@fpc_freemem) - PtrUInt(rel) - 4;
+end;
+
 procedure _ansistr_decr_ref(var p: Pointer); nostackframe; assembler;
 asm
         mov     rax, qword ptr[p]
+        xor     edx, edx
         test    rax, rax
         jz      @z
-        mov     qword ptr[p], 0
+        mov     qword ptr[p], rdx
         mov     p, rax
-        cmp     qword ptr[rax - 16], 0
+        cmp     qword ptr[rax - _STRREFCNT], rdx
         jl      @z
-lock    dec     qword ptr[rax - 16]
+lock    dec     qword ptr[rax - _STRREFCNT]
         jbe     @free
 @z:     ret
 @free:  sub     p, SizeOf(TStrRec)
@@ -20697,9 +20716,9 @@ procedure _ansistr_incr_ref(p: pointer); nostackframe; assembler;
 asm
         test    p, p
         jz      @z
-        cmp     qword ptr[p - 16], 0
+        cmp     qword ptr[p - _STRREFCNT], 0
         jl      @z
-lock    inc     qword ptr[p - 16]
+lock    inc     qword ptr[p - _STRREFCNT]
 @z:
 end;
 
@@ -20710,17 +20729,17 @@ asm
         jz      @eq
         test    s, s
         jz      @ns
-        cmp     qword ptr[s - 16], 0
+        cmp     qword ptr[s - _STRREFCNT], 0
         jl      @ns
-lock    inc     qword ptr[s - 16]
+lock    inc     qword ptr[s - _STRREFCNT]
 @ns:    mov     qword ptr[d], s
         test    rax, rax
         jnz     @z
 @eq:    ret
 @z:     mov     d, rax
-        cmp     qword ptr[rax - 16], 0
+        cmp     qword ptr[rax - _STRREFCNT], 0
         jl      @n
- lock   dec     qword ptr[rax - 16]
+ lock   dec     qword ptr[rax - _STRREFCNT]
         ja      @n
 @free:  sub     d, SizeOf(TStrRec)
         jmp     fpc_freemem
@@ -20745,7 +20764,7 @@ end;
 
 {$else}
 
-procedure FastAssignNew(var d; s: pointer);
+procedure FastAssignNew(var d; s: pointer); {$ifdef HASINLINE} inline; {$endif}
 var
   sr: PStrRec; // local copy to use register
 begin
@@ -62351,9 +62370,9 @@ begin
     // force to use our optimized x86_64 asm versions
     RedirectCode(@System.FillChar,@FillcharFast);
     RedirectCode(@System.Move,@MoveFast);
-    RedirectCode(@fpc_ansistr_decr_ref,@_ansistr_decr_ref);
-    RedirectCode(@fpc_ansistr_incr_ref,@_ansistr_incr_ref);
-    RedirectCode(@fpc_ansistr_assign,@_ansistr_assign);
+    PatchCode(@fpc_ansistr_incr_ref,@_ansistr_incr_ref,$17); // fpclen=$2f
+    PatchAnsi(@fpc_ansistr_decr_ref,@_ansistr_decr_ref,$27); // fpclen=$3f
+    PatchAnsi(@fpc_ansistr_assign,@_ansistr_assign,$3f);     // fpclen=$3f
   end;
   {$endif ABSOLUTEPASCAL}
   {$else}
