@@ -20675,24 +20675,29 @@ end;
 procedure fpc_ansistr_decr_ref; external name 'FPC_ANSISTR_DECR_REF';
 procedure fpc_ansistr_incr_ref; external name 'FPC_ANSISTR_INCR_REF';
 procedure fpc_ansistr_assign; external name 'FPC_ANSISTR_ASSIGN';
+procedure fpc_unicodestr_decr_ref; external name 'FPC_UNICODESTR_DECR_REF';
+procedure fpc_unicodestr_incr_ref; external name 'FPC_UNICODESTR_INCR_REF';
+procedure fpc_unicodestr_assign; external name 'FPC_UNICODESTR_ASSIGN';
+procedure fpc_dynarray_incr_ref; external name 'FPC_DYNARRAY_INCR_REF';
+procedure fpc_dynarray_decr_ref; external name 'FPC_DYNARRAY_DECR_REF';
+procedure fpc_dynarray_clear; external name 'FPC_DYNARRAY_CLEAR';
 procedure fpc_freemem; external name 'FPC_FREEMEM';
 
-procedure PatchAnsi(old, new: PByteArray; size: PtrInt);
+procedure PatchJmp(old, new: PByteArray; size: PtrInt; jmp: PtrUInt=0);
 var
   rel: PCardinal;
 begin
   PatchCode(old, new, size, nil, {unprotected=}true);
-  repeat // search and fix "jmp rel FPC_FREEMEM"
+  if jmp = 0 then
+    jmp := PtrUInt(@fpc_freemem);
+  repeat // search and fix "jmp rel fpc_freemem/_dynarray_decr_ref_free"
     dec(size);
     if size = 0 then
       exit;
-    if old[size] <> $e9 then
-      continue;
     rel := @old[size + 1];
-    if rel^ = cardinal(PtrUInt(@fpc_freemem) - PtrUInt(@new[size]) - 5) then
-      break;
-  until false;
-  rel^ := PtrUInt(@fpc_freemem) - PtrUInt(rel) - 4;
+  until (old[size] = $e9) and
+        (rel^ = cardinal(jmp - PtrUInt(@new[size]) - 5));
+  rel^ := jmp - PtrUInt(rel) - 4;
 end;
 
 procedure _ansistr_decr_ref(var p: Pointer); nostackframe; assembler;
@@ -20746,6 +20751,34 @@ lock    inc     qword ptr[s - _STRREFCNT]
 @n:
 end;
 
+procedure _dynarray_incr_ref(p: pointer); nostackframe; assembler;
+asm
+        test    p, p
+        jz      @z
+        cmp     qword ptr[p - _DAREFCNT], 0
+        jle     @z
+lock    inc     qword ptr[p - _DAREFCNT]
+@z:
+end;
+
+procedure _dynarray_decr_ref_free(p: PDynArrayRec; info: pointer); forward;
+
+procedure _dynarray_decr_ref(var p: Pointer; info: pointer); nostackframe; assembler;
+asm
+        mov     rax, qword ptr[p]
+        test    rax, rax
+        jz      @z
+        mov     qword ptr[p], 0
+        mov     p, rax
+        sub     p, SizeOf(TDynArrayRec)
+        cmp     qword ptr[rax - _DAREFCNT], 0
+        jle     @z
+lock    dec     qword ptr[p]
+        jbe     @free
+@z:     ret
+@free:  jmp     _dynarray_decr_ref_free
+end;
+
 procedure FastAssignNew(var d; s: pointer); nostackframe; assembler;
 asm
         mov     rax, qword ptr[d]
@@ -20753,9 +20786,9 @@ asm
         test    rax, rax
         jz      @z
         mov     d, rax
-        cmp     qword ptr[rax - 16], 0
+        cmp     qword ptr[rax - _STRREFCNT], 0
         jl      @z
-lock    dec     qword ptr[rax - 16]
+lock    dec     qword ptr[rax - _STRREFCNT]
         jbe     @free
 @z:     ret
 @free:  sub     d, SizeOf(TStrRec)
@@ -48877,6 +48910,16 @@ begin
   end;
 end;
 
+{$ifdef FPC_X64}
+procedure _dynarray_decr_ref_free(p: PDynArrayRec; info: pointer);
+begin
+  info := Deref(GetTypeInfo(info)^.elType);
+  if info <> nil then
+    FastFinalizeArray(pointer(PAnsiChar(p) + SizeOf(p^)), info, p^.length);
+  Freemem(p);
+end;
+{$endif FPC_X64}
+
 function SortDynArrayBoolean(const A,B): integer;
 begin
   if boolean(A) then // normalize (seldom used, anyway)
@@ -62371,8 +62414,14 @@ begin
     RedirectCode(@System.FillChar,@FillcharFast);
     RedirectCode(@System.Move,@MoveFast);
     PatchCode(@fpc_ansistr_incr_ref,@_ansistr_incr_ref,$17); // fpclen=$2f
-    PatchAnsi(@fpc_ansistr_decr_ref,@_ansistr_decr_ref,$27); // fpclen=$3f
-    PatchAnsi(@fpc_ansistr_assign,@_ansistr_assign,$3f);     // fpclen=$3f
+    PatchJmp(@fpc_ansistr_decr_ref,@_ansistr_decr_ref,$27);  // fpclen=$3f
+    PatchJmp(@fpc_ansistr_assign,@_ansistr_assign,$3f);      // fpclen=$3f
+    PatchCode(@fpc_unicodestr_incr_ref,@_ansistr_incr_ref,$17); // fpclen=$2f
+    PatchJmp(@fpc_unicodestr_decr_ref,@_ansistr_decr_ref,$27);  // fpclen=$3f
+    PatchJmp(@fpc_unicodestr_assign,@_ansistr_assign,$3f);      // fpclen=$3f
+    PatchCode(@fpc_dynarray_incr_ref,@_dynarray_incr_ref,$17);  // fpclen=$2f
+    PatchJmp(@fpc_dynarray_clear,@_dynarray_decr_ref,$2f,PtrUInt(@_dynarray_decr_ref_free));
+    RedirectCode(@fpc_dynarray_decr_ref,@fpc_dynarray_clear);
   end;
   {$endif ABSOLUTEPASCAL}
   {$else}
