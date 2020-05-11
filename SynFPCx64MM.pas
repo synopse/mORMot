@@ -704,6 +704,36 @@ asm
       mov [rdx + 176], rax
 end;
 
+procedure Move200; nostackframe; assembler;
+asm
+      movaps xmm0, oword ptr [rcx]
+      movaps xmm1, oword ptr [rcx + 16]
+      movaps xmm2, oword ptr [rcx + 32]
+      movaps xmm3, oword ptr [rcx + 48]
+      movaps xmm4, oword ptr [rcx + 64]
+      movaps xmm5, oword ptr [rcx + 80]
+      movaps xmm6, oword ptr [rcx + 96]
+      movaps xmm7, oword ptr [rcx + 112]
+      movaps xmm8, oword ptr [rcx + 128]
+      movaps xmm9, oword ptr [rcx + 144]
+      movaps xmm10, oword ptr [rcx + 160]
+      movaps xmm11, oword ptr [rcx + 176]
+      mov rax, [rcx + 192]
+      movaps oword ptr [rdx], xmm0
+      movaps oword ptr [rdx + 16], xmm1
+      movaps oword ptr [rdx + 32], xmm2
+      movaps oword ptr [rdx + 48], xmm3
+      movaps oword ptr [rdx + 64], xmm4
+      movaps oword ptr [rdx + 80], xmm5
+      movaps oword ptr [rdx + 96], xmm6
+      movaps oword ptr [rdx + 112], xmm7
+      movaps oword ptr [rdx + 128], xmm8
+      movaps oword ptr [rdx + 144], xmm9
+      movaps oword ptr [rdx + 160], xmm10
+      movaps oword ptr [rdx + 176], xmm11
+      mov [rdx + 192], rax
+end;
+
 {$endif MSWINDOWS}
 
 procedure MoveX16LP; nostackframe; assembler;
@@ -2495,9 +2525,9 @@ end;
 { ********* Initialization and Finalization }
 
 const
-  _MOVES: array[1..8 {$ifndef MSWINDOWS} + 4 {$endif}] of TMoveProc = (
+  _MOVES: array[1..8 {$ifndef MSWINDOWS} + 5 {$endif}] of TMoveProc = (
     Move8, Move24, Move40, Move56, Move72, Move88, Move104, Move120
-    {$ifndef MSWINDOWS} , Move136, Move152, Move168, Move184 {$endif});
+    {$ifndef MSWINDOWS} , Move136, Move152, Move168, Move184, Move200 {$endif});
 
 procedure InitializeMemoryManager;
 var
