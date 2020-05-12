@@ -6794,10 +6794,24 @@ begin
   {$I+}
 end;
 
+procedure GetTrimmed(P: PAnsiChar; out result: SockString);
+var B: PAnsiChar;
+begin
+  while (P^>#0) and (P^<=' ') do inc(P);
+  B := P;
+  while P^<>#0 do inc(P);
+  while (P>B) and (P[-1]<=' ') do dec(P);
+  SetString(result,B,P-B);
+end;
+
+var
+  JSON_CONTENT_TYPE_VAR: SockString;
+
 procedure THttpSocket.GetHeader(HeadersUnFiltered: boolean);
 var s,c: SockString;
-    i, n: integer;
+    i, n, err: integer;
     P: PAnsiChar;
+    line: array[0..4095] of AnsiChar; // avoid most memory allocation
 begin
   fHeaderText := '';
   HeaderFlags := [];
@@ -6810,22 +6824,38 @@ begin
   ServerInternalState := 0;
   n := 0;
   repeat
-    SockRecvLn(s);
-    if s='' then
-      break; // headers end with a void line
-    P := pointer(s); // set P=nil below to store in Headers[]
+    P := @line;
+    if (SockIn<>nil) and not HeadersUnFiltered then begin
+      {$I-}
+      readln(SockIn^,line);
+      err := ioresult;
+      if err<>0 then
+        raise ECrtSocket.CreateFmt('%s.GetHeader',[ClassName],err);
+      {$I+}
+      if line[0]=#0 then
+        break; // HTTP headers end with a void line
+    end else begin
+      SockRecvLn(s);
+      if s = '' then
+        break;
+      P := pointer(s); // set P=nil below to store in Headers[]
+    end;
     case IdemPCharArray(P,['CONTENT-', 'TRANSFER-ENCODING: CHUNKED', 'CONNECTION: ',
-      'ACCEPT-ENCODING:', 'UPGRADE:', 'SERVER-INTERNALSTATE:', 'X-POWERED-BY']) of
+      'ACCEPT-ENCODING:', 'UPGRADE:', 'SERVER-INTERNALSTATE:', 'X-POWERED-BY:']) of
     0: case IdemPCharArray(P+8,['LENGTH:', 'TYPE:', 'ENCODING:']) of
        0: ContentLength := GetCardinal(P+16);
        1: begin
-            trimcopy(s,14,255,ContentType);
-            if (ContentType<>'') and
-               not IdemPChar(pointer(ContentType),'APPLICATION/JSON') then
-              P := nil; // is searched by HEADER_CONTENT_TYPE_UPPER later on
+           inc(P,13);
+           while P^=' ' do inc(P);
+           if IdemPChar(P,'APPLICATION/JSON') then
+             ContentType := JSON_CONTENT_TYPE_VAR else begin
+             GetTrimmed(P,ContentType);
+             if ContentType<>'' then
+               P := nil; // is searched by HEADER_CONTENT_TYPE_UPPER later on
+           end;
           end;
        2: if fCompress<>nil then begin
-            trimcopy(s,18,255,c);
+            GetTrimmed(P+17,c);
             for i := 0 to high(fCompress) do
               if fCompress[i].Name=c then begin
                 fContentCompress := i;
@@ -6852,15 +6882,17 @@ begin
     3: if fCompress<>nil then
          fCompressAcceptHeader := ComputeContentEncoding(fCompress,P+16) else
          P := nil;
-    4: trimcopy(s,9,255,Upgrade);
+    4: GetTrimmed(P+8,Upgrade);
     5: ServerInternalState := GetCardinal(P+21);
-    6: XPoweredBy := s; // not in headers
+    6: GetTrimmed(P+13,XPoweredBy);
     else P := nil;
     end;
     if (P=nil) or HeadersUnFiltered then begin // only store meaningful headers
       if length(Headers)<=n then
-        SetLength(Headers,n+n shr 3+16);
-      Headers[n] := s;
+        SetLength(Headers,n+n shr 3+8);
+      if s='' then
+        SetString(Headers[n],line,StrLen(line)) else
+        Headers[n] := s;
       inc(n);
     end;
   until false;
@@ -12898,6 +12930,7 @@ begin
   for i := ord('a') to ord('z') do
     dec(NormToUpper[i],32);
   IP4local := '127.0.0.1'; // use var string with refcount=1 to avoid allocation
+  JSON_CONTENT_TYPE_VAR := 'application/json; charset=UTF-8';
   {$ifdef MSWINDOWS}
   Assert(
     {$ifdef CPU64}
