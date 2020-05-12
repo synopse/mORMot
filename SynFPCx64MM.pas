@@ -14,6 +14,7 @@ unit SynFPCx64MM;
     - huge asm refactoring for cross-platform, compactness and efficiency
     - detailed statistics gathering (also about threads contention)
     - mremap() makes large block ReallocMem a breeze on Linux :)
+    - inlined SSE2 movaps loop is more efficient that subfunction(s)
     - round-robin of tiny blocks (<=128 bytes) for better thread scaling
 
     Usage: include this unit as the very first in your FPC project uses clause
@@ -82,6 +83,10 @@ interface
 // if defined, won't check the IsMultiThread global but assume it is true
 // - should be enabled e.g. for a multi-threaded Server Daemon instance
 {.$define FPCMM_ASSUMEMULTITHREAD}
+
+// could be defined on AMD CPU, or oldest Intel before SkylakeX
+// - on SkylakeX (Intel 7th gen), "pause" opcode went from 10-20 to 140 cycles
+{.$define FPCMM_PAUSEMORE}
 
 // if defined, tiny blocks <= 128 bytes will have a bigger round-robin cycle
 // - try to enable it if unexpected SmallGetmemSleepCount/SmallFreememSleepCount
@@ -153,10 +158,10 @@ type
     {$endif FPCMM_DEBUG}
     /// how many times Getmem() did block and wait for a small block
     // - see also GetSmallBlockContention()
-    SmallGetmemSleepCount: PtrInt;
+    SmallGetmemSleepCount: PtrUInt;
     /// how many times Freemem() did block and wait for a small block
     // - see also GetSmallBlockContention()
-    SmallFreememSleepCount: PtrInt;
+    SmallFreememSleepCount: PtrUInt;
   end;
   PMMStatus = ^TMMStatus;
 
@@ -192,15 +197,14 @@ procedure FreeAllMemory;
 {$else}
 
   /// one GetSmallBlockContention info about unexpected multi-thread waiting
-  // - a single GetmemSleepCountSmallBlockSize or
-  // FreememSleepCountSmallBlockSize non 0 field is set
+  // - a single GetmemBlockSize or FreememBlockSize non 0 field is set
   TSmallBlockContention = packed record
-    /// the small block size on which Getmem() has been blocked - or 0
-    GetmemSleepCountSmallBlockSize: word;
-    /// the small block size on which Freemem() has been blocked - or 0
-    FreememSleepCountSmallBlockSize: word;
     /// how many times a small block getmem/freemem has been waiting for unlock
     SleepCount: cardinal;
+    /// the small block size on which Getmem() has been blocked - or 0
+    GetmemBlockSize: word;
+    /// the small block size on which Freemem() has been blocked - or 0
+    FreememBlockSize: word;
   end;
 
   /// small blocks detailed information as returned GetSmallBlockContention
@@ -344,7 +348,7 @@ end;
 procedure Free(ptr: pointer; Size: PtrInt); inline;
 begin
   Size := fpmunmap(ptr, Size);
-  //assert(Size = 0);
+  // assert(Size = 0);
 end;
 
 {$ifdef LINUX}
@@ -363,7 +367,7 @@ end;
 function ReallocLarge(ptr: pointer; OldSize, NewSize: PtrInt): pointer; inline;
 begin
   result := fpmremap(ptr, OldSize, NewSize, MREMAP_MAYMOVE);
-  //assert(result <> pointer(-1));
+  // assert(result <> pointer(-1));
 end;
 
 {$else}
@@ -486,274 +490,7 @@ lock inc  qword ptr[Arena].TMMStatusArena.CumulativeFree
      {$endif FPCMM_DEBUG}
 end;
 
-
-// Move## are called from asm with src=rcx dst=rdx len=r8 even on POSIX ABI
-
-{$WARN 7122 off : Check size of memory operand }
-
-procedure Move8; nostackframe; assembler;
-asm
-      mov rax, [rcx]
-      mov [rdx], rax
-end;
-
-procedure Move24; nostackframe; assembler;
-asm
-      movaps xmm0, oword ptr [rcx]
-      mov rax, [rcx + 16]
-      movaps oword ptr [rdx], xmm0
-      mov [rdx + 16], rax
-end;
-
-procedure Move40; nostackframe; assembler;
-asm
-      movaps xmm0, oword ptr [rcx]
-      movaps xmm1, oword ptr [rcx + 16]
-      mov rax, [rcx + 32]
-      movaps oword ptr [rdx], xmm0
-      movaps oword ptr [rdx + 16], xmm1
-      mov [rdx + 32], rax
-end;
-
-procedure Move56; nostackframe; assembler;
-asm
-      movaps xmm0, oword ptr [rcx]
-      movaps xmm1, oword ptr [rcx + 16]
-      movaps xmm2, oword ptr [rcx + 32]
-      mov rax, [rcx + 48]
-      movaps oword ptr [rdx], xmm0
-      movaps oword ptr [rdx + 16], xmm1
-      movaps oword ptr [rdx + 32], xmm2
-      mov [rdx + 48], rax
-end;
-
-procedure Move72; nostackframe; assembler;
-asm
-      movaps xmm0, oword ptr [rcx]
-      movaps xmm1, oword ptr [rcx + 16]
-      movaps xmm2, oword ptr [rcx + 32]
-      movaps xmm3, oword ptr [rcx + 48]
-      mov rax, [rcx + 64]
-      movaps oword ptr [rdx], xmm0
-      movaps oword ptr [rdx + 16], xmm1
-      movaps oword ptr [rdx + 32], xmm2
-      movaps oword ptr [rdx + 48], xmm3
-      mov [rdx + 64], rax
-end;
-
-procedure Move88; nostackframe; assembler;
-asm
-      movaps xmm0, oword ptr [rcx]
-      movaps xmm1, oword ptr [rcx + 16]
-      movaps xmm2, oword ptr [rcx + 32]
-      movaps xmm3, oword ptr [rcx + 48]
-      movaps xmm4, oword ptr [rcx + 64]
-      mov rax, [rcx + 80]
-      movaps oword ptr [rdx], xmm0
-      movaps oword ptr [rdx + 16], xmm1
-      movaps oword ptr [rdx + 32], xmm2
-      movaps oword ptr [rdx + 48], xmm3
-      movaps oword ptr [rdx + 64], xmm4
-      mov [rdx + 80], rax
-end;
-
-procedure Move104; nostackframe; assembler;
-asm
-      movaps xmm0, oword ptr [rcx]
-      movaps xmm1, oword ptr [rcx + 16]
-      movaps xmm2, oword ptr [rcx + 32]
-      movaps xmm3, oword ptr [rcx + 48]
-      movaps xmm4, oword ptr [rcx + 64]
-      movaps xmm5, oword ptr [rcx + 80]
-      mov rax, [rcx + 96]
-      movaps oword ptr [rdx], xmm0
-      movaps oword ptr [rdx + 16], xmm1
-      movaps oword ptr [rdx + 32], xmm2
-      movaps oword ptr [rdx + 48], xmm3
-      movaps oword ptr [rdx + 64], xmm4
-      movaps oword ptr [rdx + 80], xmm5
-      mov [rdx + 96], rax
-end;
-
-procedure Move120; nostackframe; assembler;
-asm
-      movaps xmm0, oword ptr [rcx]
-      movaps xmm1, oword ptr [rcx + 16]
-      movaps xmm2, oword ptr [rcx + 32]
-      movaps xmm3, oword ptr [rcx + 48]
-      movaps xmm4, oword ptr [rcx + 64]
-      movaps xmm5, oword ptr [rcx + 80]
-      {$ifndef MSWINDOWS}
-      movaps xmm6, oword ptr [rcx + 96] // xmm6 is non volatile on Windows
-      {$endif MSWINDOWS}
-      mov rax, [rcx + 112]
-      movaps oword ptr [rdx], xmm0
-      movaps oword ptr [rdx + 16], xmm1
-      movaps oword ptr [rdx + 32], xmm2
-      movaps oword ptr [rdx + 48], xmm3
-      movaps oword ptr [rdx + 64], xmm4
-      movaps oword ptr [rdx + 80], xmm5
-      {$ifdef MSWINDOWS}
-      movaps xmm0, oword ptr [rcx + 96]
-      movaps oword ptr [rdx + 96], xmm0
-      {$else}
-      movaps oword ptr [rdx + 96], xmm6
-      {$endif MSWINDOWS}
-      mov [rdx + 112], rax
-end;
-
-{$ifndef MSWINDOWS} // xmm6 and up are non volatile on Windows
-
-procedure Move136; nostackframe; assembler;
-asm
-      movaps xmm0, oword ptr [rcx]
-      movaps xmm1, oword ptr [rcx + 16]
-      movaps xmm2, oword ptr [rcx + 32]
-      movaps xmm3, oword ptr [rcx + 48]
-      movaps xmm4, oword ptr [rcx + 64]
-      movaps xmm5, oword ptr [rcx + 80]
-      movaps xmm6, oword ptr [rcx + 96]
-      movaps xmm7, oword ptr [rcx + 112]
-      mov rax, [rcx + 128]
-      movaps oword ptr [rdx], xmm0
-      movaps oword ptr [rdx + 16], xmm1
-      movaps oword ptr [rdx + 32], xmm2
-      movaps oword ptr [rdx + 48], xmm3
-      movaps oword ptr [rdx + 64], xmm4
-      movaps oword ptr [rdx + 80], xmm5
-      movaps oword ptr [rdx + 96], xmm6
-      movaps oword ptr [rdx + 112], xmm7
-      mov [rdx + 128], rax
-end;
-
-procedure Move152; nostackframe; assembler;
-asm
-      movaps xmm0, oword ptr [rcx]
-      movaps xmm1, oword ptr [rcx + 16]
-      movaps xmm2, oword ptr [rcx + 32]
-      movaps xmm3, oword ptr [rcx + 48]
-      movaps xmm4, oword ptr [rcx + 64]
-      movaps xmm5, oword ptr [rcx + 80]
-      movaps xmm6, oword ptr [rcx + 96]
-      movaps xmm7, oword ptr [rcx + 112]
-      movaps xmm8, oword ptr [rcx + 128]
-      mov rax, [rcx + 144]
-      movaps oword ptr [rdx], xmm0
-      movaps oword ptr [rdx + 16], xmm1
-      movaps oword ptr [rdx + 32], xmm2
-      movaps oword ptr [rdx + 48], xmm3
-      movaps oword ptr [rdx + 64], xmm4
-      movaps oword ptr [rdx + 80], xmm5
-      movaps oword ptr [rdx + 96], xmm6
-      movaps oword ptr [rdx + 112], xmm7
-      movaps oword ptr [rdx + 128], xmm8
-      mov [rdx + 144], rax
-end;
-
-procedure Move168; nostackframe; assembler;
-asm
-      movaps xmm0, oword ptr [rcx]
-      movaps xmm1, oword ptr [rcx + 16]
-      movaps xmm2, oword ptr [rcx + 32]
-      movaps xmm3, oword ptr [rcx + 48]
-      movaps xmm4, oword ptr [rcx + 64]
-      movaps xmm5, oword ptr [rcx + 80]
-      movaps xmm6, oword ptr [rcx + 96]
-      movaps xmm7, oword ptr [rcx + 112]
-      movaps xmm8, oword ptr [rcx + 128]
-      movaps xmm9, oword ptr [rcx + 144]
-      mov rax, [rcx + 160]
-      movaps oword ptr [rdx], xmm0
-      movaps oword ptr [rdx + 16], xmm1
-      movaps oword ptr [rdx + 32], xmm2
-      movaps oword ptr [rdx + 48], xmm3
-      movaps oword ptr [rdx + 64], xmm4
-      movaps oword ptr [rdx + 80], xmm5
-      movaps oword ptr [rdx + 96], xmm6
-      movaps oword ptr [rdx + 112], xmm7
-      movaps oword ptr [rdx + 128], xmm8
-      movaps oword ptr [rdx + 144], xmm9
-      mov [rdx + 160], rax
-end;
-
-procedure Move184; nostackframe; assembler;
-asm
-      movaps xmm0, oword ptr [rcx]
-      movaps xmm1, oword ptr [rcx + 16]
-      movaps xmm2, oword ptr [rcx + 32]
-      movaps xmm3, oword ptr [rcx + 48]
-      movaps xmm4, oword ptr [rcx + 64]
-      movaps xmm5, oword ptr [rcx + 80]
-      movaps xmm6, oword ptr [rcx + 96]
-      movaps xmm7, oword ptr [rcx + 112]
-      movaps xmm8, oword ptr [rcx + 128]
-      movaps xmm9, oword ptr [rcx + 144]
-      movaps xmm10, oword ptr [rcx + 160]
-      mov rax, [rcx + 176]
-      movaps oword ptr [rdx], xmm0
-      movaps oword ptr [rdx + 16], xmm1
-      movaps oword ptr [rdx + 32], xmm2
-      movaps oword ptr [rdx + 48], xmm3
-      movaps oword ptr [rdx + 64], xmm4
-      movaps oword ptr [rdx + 80], xmm5
-      movaps oword ptr [rdx + 96], xmm6
-      movaps oword ptr [rdx + 112], xmm7
-      movaps oword ptr [rdx + 128], xmm8
-      movaps oword ptr [rdx + 144], xmm9
-      movaps oword ptr [rdx + 160], xmm10
-      mov [rdx + 176], rax
-end;
-
-procedure Move200; nostackframe; assembler;
-asm
-      movaps xmm0, oword ptr [rcx]
-      movaps xmm1, oword ptr [rcx + 16]
-      movaps xmm2, oword ptr [rcx + 32]
-      movaps xmm3, oword ptr [rcx + 48]
-      movaps xmm4, oword ptr [rcx + 64]
-      movaps xmm5, oword ptr [rcx + 80]
-      movaps xmm6, oword ptr [rcx + 96]
-      movaps xmm7, oword ptr [rcx + 112]
-      movaps xmm8, oword ptr [rcx + 128]
-      movaps xmm9, oword ptr [rcx + 144]
-      movaps xmm10, oword ptr [rcx + 160]
-      movaps xmm11, oword ptr [rcx + 176]
-      mov rax, [rcx + 192]
-      movaps oword ptr [rdx], xmm0
-      movaps oword ptr [rdx + 16], xmm1
-      movaps oword ptr [rdx + 32], xmm2
-      movaps oword ptr [rdx + 48], xmm3
-      movaps oword ptr [rdx + 64], xmm4
-      movaps oword ptr [rdx + 80], xmm5
-      movaps oword ptr [rdx + 96], xmm6
-      movaps oword ptr [rdx + 112], xmm7
-      movaps oword ptr [rdx + 128], xmm8
-      movaps oword ptr [rdx + 144], xmm9
-      movaps oword ptr [rdx + 160], xmm10
-      movaps oword ptr [rdx + 176], xmm11
-      mov [rdx + 192], rax
-end;
-
-{$endif MSWINDOWS}
-
-procedure MoveX16LP; nostackframe; assembler;
-asm
-      sub r8, 8
-      add rcx, r8
-      add rdx, r8
-      neg r8
-      jns @z
-      align 16
-@s:   movaps xmm0, oword ptr [rcx + r8]
-      movaps oword ptr [rdx + r8], xmm0
-      add r8, 16
-      js @s
-@z:   mov rax, qword ptr [rcx + r8]
-      mov qword ptr [rdx + r8], rax
-end;
-
 // called from ReallocateLargeBlock with regular parameters
-
 procedure MoveLarge(src, dst: pointer; cnt: PtrInt); nostackframe; assembler;
 asm
       sub cnt, 8
@@ -774,8 +511,6 @@ end;
 
 
 { ********* Constants and Data Structures Definitions }
-
-{$WARN 3175 off : Some fields coming before "$1" were not initialized }
 
 const
   NumSmallBlockTypes = 46;
@@ -833,18 +568,24 @@ const
   DropMediumAndLargeFlagsMask = -16;
   ExtractMediumAndLargeFlagsMask = 15;
 
-  SpinSmallGetmemLockCount = 10;
-  SpinSmallFreememLockCount = 2; // _freemem has more collision -> no spining
-  SpinMediumLockCount = 500;
-  SpinLargeLockCount = 500;
+  // we use pause before ReleaseCore API call when spinning locks
+  {$ifdef FPCMM_PAUSEMORE}
+  // pause opcode latency is around 10 cycles on AMD or oldest Intel CPU
+  SpinFactor = 10;
+  {$else}
+  // pause is 140 cycles since SkylakeX - see http://tiny.cc/010ioz
+  SpinFactor = 1;
+  {$endif FPCMM_PAUSEMORE}
+  SpinSmallGetmemLockCount = 10 * SpinFactor;
+  SpinSmallFreememLockCount = 2 * SpinFactor; // _freemem has lots of collision
+  SpinMediumLockCount = 500 * SpinFactor;
+  SpinLargeLockCount = 500 * SpinFactor;
 
   SmallBlockDownsizeCheckAdder = 64;
   SmallBlockUpsizeAdder = 32;
   MediumInPlaceDownsizeLimit = MinimumMediumBlockSize div 4;
 
 type
-  TMoveProc = procedure; // with rcx/rdx/r8 ABI convention
-
   PSmallBlockPoolHeader = ^TSmallBlockPoolHeader;
 
   // information for each small block size - 64 bytes long = CPU cache line
@@ -859,10 +600,11 @@ type
     NextSequentialFeedBlockAddress: pointer;
     MaxSequentialFeedBlockAddress: pointer;
     CurrentSequentialFeedPool: PSmallBlockPoolHeader;
-    UpsizeMoveProcedure: TMoveProc;
+    GetmemCount: cardinal;
+    FreememCount: cardinal;
     {$ifdef CPU64}
-    GetmemSleepCount: integer;
-    FreememSleepCount: integer;
+    GetmemSleepCount: cardinal;
+    FreememSleepCount: cardinal;
     {$endif}
   end;
   PSmallBlockType = ^TSmallBlockType;
@@ -942,10 +684,6 @@ var
 
 { ********* Shared Routines }
 
-{ note: pause opcode latency was 10 cycles, but is 140 cycles since SkylakeX
-        see http://tiny.cc/010ioz
-  -> we use pause before ReleaseCore API call when spinning locks }
-
 procedure LockMediumBlocks; nostackframe; assembler;
 asm
      // on input: rcx=MediumBlockInfo.Locked on output: r10=MediumBlockInfo
@@ -975,40 +713,40 @@ end;
 
 procedure InsertMediumBlockIntoBin; nostackframe; assembler;
 asm
-  //rcx=MediumFreeBlock edx=MediumBlockSize r10=MediumBlockInfo - even on POSIX
+  // rcx=MediumFreeBlock edx=MediumBlockSize r10=MediumBlockInfo - even on POSIX
   mov rax, rcx
-  //Get the bin number for this block size
+  // Get the bin number for this block size
   sub edx, MinimumMediumBlockSize
   shr edx, 8
-  //Validate the bin number
+  // Validate the bin number
   sub edx, MediumBlockBinCount - 1
   sbb ecx, ecx
   and edx, ecx
   add edx, MediumBlockBinCount - 1
   mov r9, rdx
-  //Get the bin address in rcx
+  // Get the bin address in rcx
   shl edx, 4
   lea rcx, [r10 + rdx + TMediumBlockInfo.Bins]
-  //Bins are LIFO, se we insert this block as the first free block in the bin
+  // Bins are LIFO, se we insert this block as the first free block in the bin
   mov rdx, TMediumFreeBlock[rcx].NextFreeBlock
   mov TMediumFreeBlock[rax].PreviousFreeBlock, rcx
   mov TMediumFreeBlock[rax].NextFreeBlock, rdx
   mov TMediumFreeBlock[rdx].PreviousFreeBlock, rax
   mov TMediumFreeBlock[rcx].NextFreeBlock, rax
-  //Was this bin empty?
+  // Was this bin empty?
   cmp rdx, rcx
   jne @Done
-  //Get the bin number in ecx
+  // Get the bin number in ecx
   mov rcx, r9
-  //Get the group number in edx
+  // Get the group number in edx
   mov rdx, r9
   shr edx, 5
-  //Flag this bin as not empty
+  // Flag this bin as not empty
   mov eax, 1
   shl eax, cl
   lea r8, [r10 + TMediumBlockInfo.BinBitmaps]
   or dword ptr [r8 + rdx * 4], eax
-  //Flag the group as not empty
+  // Flag the group as not empty
   mov eax, 1
   mov ecx, edx
   shl eax, cl
@@ -1018,31 +756,31 @@ end;
 
 procedure RemoveMediumFreeBlock; nostackframe; assembler;
 asm
-  //rcx=MediumFreeBlock r10=MediumBlockInfo - even on POSIX
-  //Get the current previous and next blocks
+  // rcx=MediumFreeBlock r10=MediumBlockInfo - even on POSIX
+  // Get the current previous and next blocks
   mov rdx, TMediumFreeBlock[rcx].PreviousFreeBlock
   mov rcx, TMediumFreeBlock[rcx].NextFreeBlock
-  //Remove this block from the linked list
+  // Remove this block from the linked list
   mov TMediumFreeBlock[rcx].PreviousFreeBlock, rdx
   mov TMediumFreeBlock[rdx].NextFreeBlock, rcx
-  //Is this bin now empty? If the previous and next free block pointers are
-  //equal, they must point to the bin
+  // Is this bin now empty? If the previous and next free block pointers are
+  // equal, they must point to the bin
   cmp rcx, rdx
   jne @Done
-  //Get the bin number for this block size in rcx
+  // Get the bin number for this block size in rcx
   lea r8, [r10 + TMediumBlockInfo.Bins]
   sub rcx, r8
   mov edx, ecx
   shr ecx, 4
-  //Get the group number in edx
+  // Get the group number in edx
   shr edx, 9
-  //Flag this bin as empty
+  // Flag this bin as empty
   mov eax, -2
   rol eax, cl
   lea r8, [r10 + TMediumBlockInfo.BinBitmaps]
   and dword ptr [r8 + rdx * 4], eax
   jnz @Done
-  //Flag this group as empty
+  // Flag this group as empty
   mov eax, -2
   mov ecx, edx
   rol eax, cl
@@ -1052,52 +790,52 @@ end;
 
 procedure BinMediumSequentialFeedRemainder; nostackframe; assembler;
 asm
-  //r10=MediumBlockInfo - even on POSIX
+  // r10=MediumBlockInfo - even on POSIX
   mov eax, [r10 + TMediumBlockInfo.SequentialFeedBytesLeft]
   test eax, eax
   jz @Done
-  //Get a pointer to the last sequentially allocated medium block
+  // Get a pointer to the last sequentially allocated medium block
   mov rax, [r10 + TMediumBlockInfo.LastSequentiallyFed]
-  //Is the block that was last fed sequentially free?
+  // Is the block that was last fed sequentially free?
   test byte ptr [rax - BlockHeaderSize], IsFreeBlockFlag
   jnz @LastBlockFedIsFree
-  //Set the "previous block is free" flag in the last block fed
+  // Set the "previous block is free" flag in the last block fed
   or qword ptr [rax - BlockHeaderSize], PreviousMediumBlockIsFreeFlag
-  //Get the remainder in edx
+  // Get the remainder in edx
   mov edx, [r10 + TMediumBlockInfo.SequentialFeedBytesLeft]
-  //Point eax to the start of the remainder
+  // Point eax to the start of the remainder
   sub rax, rdx
 @BinTheRemainder:
-  //rax = start of remainder, edx = size of remainder
-  //Store the size of the block as well as the flags
+  // rax = start of remainder, edx = size of remainder
+  // Store the size of the block as well as the flags
   lea rcx, [rdx + IsMediumBlockFlag + IsFreeBlockFlag]
   mov [rax - BlockHeaderSize], rcx
-  //Store the trailing size marker
+  // Store the trailing size marker
   mov [rax + rdx - 16], rdx
-  //Bin this medium block
+  // Bin this medium block
   cmp edx, MinimumMediumBlockSize
   jb @Done
   mov rcx, rax
   call InsertMediumBlockIntoBin // rcx=APMediumFreeBlock, edx=AMediumBlockSize
   ret
 @LastBlockFedIsFree:
-  //Drop the flags
+  // Drop the flags
   mov rdx, DropMediumAndLargeFlagsMask
   and rdx, [rax - BlockHeaderSize]
-  //Free the last block fed
+  // Free the last block fed
   cmp edx, MinimumMediumBlockSize
   jb @DontRemoveLastFed
-  //Last fed block is free - remove it from its size bin
+  // Last fed block is free - remove it from its size bin
   mov rcx, rax
   call RemoveMediumFreeBlock // rcx = APMediumFreeBlock
-  //Re-read rax and rdx
+  // Re-read rax and rdx
   mov rax, [r10 + TMediumBlockInfo.LastSequentiallyFed]
   mov rdx, DropMediumAndLargeFlagsMask
   and rdx, [rax - BlockHeaderSize]
 @DontRemoveLastFed:
-  //Get the number of bytes left in ecx
+  // Get the number of bytes left in ecx
   mov ecx, [r10 + TMediumBlockInfo.SequentialFeedBytesLeft]
-  //rax = remainder start, rdx = remainder size
+  // rax = remainder start, rdx = remainder size
   sub rax, rcx
   add edx, ecx
   jmp @BinTheRemainder
@@ -1300,17 +1038,17 @@ asm
   push rdi
   {$endif MSWINDOWS}
   push rbx
-  //Since most allocations are for small blocks, determine the small block type
+  // Since most allocations are for small blocks, determine the small block type
   lea rbx, [rip + SmallBlockInfo]
   lea rdx, [size + BlockHeaderSize - 1]
   shr rdx, 4 // div SmallBlockGranularity
-  //Is it a tiny/small block?
+  // Is it a tiny/small block?
   cmp rcx, (MaximumSmallBlockSize - BlockHeaderSize)
   ja @NotTinySmallBlock
   {$ifndef FPCMM_ASSUMEMULTITHREAD}
   mov rax, qword ptr [rbx].TSmallBlockInfo.IsMultiThreadPtr
   {$endif FPCMM_ASSUMEMULTITHREAD}
-  //Get the tiny/small TSmallBlockType[] offset in rcx
+  // Get the tiny/small TSmallBlockType[] offset in rcx
   movzx ecx, byte ptr [rbx + rdx].TSmallBlockInfo.GetmemLookup
   mov r8, rbx
   shl ecx, 6 // *SizeOf(TSmallBlockType)
@@ -1322,12 +1060,12 @@ asm
   jmp @GotLockOnSmallBlockType
 @CheckTinySmallLock:
   {$endif FPCMM_ASSUMEMULTITHREAD}
-  //Can use one of the several arenas reserved for tiny blocks?
+  // Can use one of the several arenas reserved for tiny blocks?
   cmp ecx, SizeOf(TTinyBlockTypes)
   jae @NotTinyBlockType
   { ---------- TINY block allocation ---------- }
 @LockTinyBlockTypeLoop:
-  //Round-Robin trial of SmallBlockInfo.Tiny[] for size <= 128 bytes
+  // Round-Robin trial of SmallBlockInfo.Tiny[] for size <= 128 bytes
   mov edx, NumTinyBlockArenas
 @TinyBlockArenaLoop:
   mov eax, SizeOf(TTinyBlockTypes)
@@ -1343,12 +1081,12 @@ lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
 @NextTinyBlockArena:
   dec edx
   jnz @TinyBlockArenaLoop
-  //Also try the default SmallBlockInfo.Small[]
+  // Also try the default SmallBlockInfo.Small[]
   lea rbx, [r8 + rcx]
   mov eax, $100
 lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   je @GotLockOnSmallBlockType
-  //Thread Contention (occurs much less than during _Freemem)
+  // Thread Contention (occurs much less than during _Freemem)
   lock inc dword ptr [rbx].TSmallBlockType.GetmemSleepCount
   mov rbx, r8
   push rcx
@@ -1358,16 +1096,16 @@ lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   jmp @LockTinyBlockTypeLoop
   { ---------- SMALL block allocation ---------- }
 @NotTinyBlockType:
-  //Block size >= 128 bytes will use SmallBlockInfo.Small[]
+  // Block size >= 128 bytes will use SmallBlockInfo.Small[]
   lea rbx, [r8 + rcx]
 @LockBlockTypeLoopRetry:
   mov r9, SpinSmallGetmemLockCount
 @LockBlockTypeLoop:
-  //Grab the default block type
+  // Grab the default block type
   mov eax, $100
 lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   je @GotLockOnSmallBlockType
-  //Try up to two next sizes
+  // Try up to two next sizes
   add rbx, SizeOf(TSmallBlockType)
   mov eax, $100
 lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
@@ -1381,27 +1119,28 @@ lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   pause
   dec r9
   jnz @LockBlockTypeLoop
-   //Block type and two sizes larger are all locked - give up and sleep
+   // Block type and two sizes larger are all locked - give up and sleep
 lock inc dword ptr [rbx].TSmallBlockType.GetmemSleepCount
   call Releasecore
   jmp @LockBlockTypeLoopRetry
   { ---------- TINY/SMALL block registration ---------- }
 @GotLockOnSmallBlockType:
-  //Get rdx=NextPartiallyFreePool rax=FirstFreeBlock rcx=DropSmallFlagsMask
+  // Get rdx=NextPartiallyFreePool rax=FirstFreeBlock rcx=DropSmallFlagsMask
+  inc [rbx].TSmallBlockType.GetmemCount
   mov rdx, [rbx].TSmallBlockType.NextPartiallyFreePool
   mov rax, [rdx].TSmallBlockPoolHeader.FirstFreeBlock
   mov rcx, DropSmallFlagsMask
-  //Is there a pool with free blocks?
+  // Is there a pool with free blocks?
   cmp rdx, rbx
   je @TrySmallSequentialFeed
   add [rdx].TSmallBlockPoolHeader.BlocksInUse, 1
-  //Set the new first free block and the block header
+  // Set the new first free block and the block header
   and rcx, [rax - BlockHeaderSize]
   mov [rdx].TSmallBlockPoolHeader.FirstFreeBlock, rcx
   mov [rax - BlockHeaderSize], rdx
-  //Is the chunk now full?
+  // Is the chunk now full?
   jz @RemoveSmallPool
-  //Unlock the block type and leave
+  // Unlock the block type and leave
   mov [rbx].TSmallBlockType.BlockTypeLocked, False
   pop rbx
   {$ifdef MSWINDOWS}
@@ -1410,17 +1149,17 @@ lock inc dword ptr [rbx].TSmallBlockType.GetmemSleepCount
   {$endif MSWINDOWS}
   ret
 @TrySmallSequentialFeed:
-  //Feed a small block sequentially
+  // Feed a small block sequentially
   mov rdx, [rbx].TSmallBlockType.CurrentSequentialFeedPool
   movzx ecx, [rbx].TSmallBlockType.BlockSize
   add rcx, rax
-  //Can another block fit?
+  // Can another block fit?
   cmp rax, [rbx].TSmallBlockType.MaxSequentialFeedBlockAddress
   ja @AllocateSmallBlockPool
-  //Adjust number of used blocks and sequential feed pool
+  // Adjust number of used blocks and sequential feed pool
   add [rdx].TSmallBlockPoolHeader.BlocksInUse, 1
   mov [rbx].TSmallBlockType.NextSequentialFeedBlockAddress, rcx
-  //Unlock the block type, set the block header and leave
+  // Unlock the block type, set the block header and leave
   mov [rbx].TSmallBlockType.BlockTypeLocked, False
   mov [rax - BlockHeaderSize], rdx
   pop rbx
@@ -1430,11 +1169,11 @@ lock inc dword ptr [rbx].TSmallBlockType.GetmemSleepCount
   {$endif MSWINDOWS}
   ret
 @RemoveSmallPool:
-  //Pool is full - remove it from the partially free list
+  // Pool is full - remove it from the partially free list
   mov rcx, [rdx].TSmallBlockPoolHeader.NextPartiallyFreePool
   mov [rcx].TSmallBlockPoolHeader.PreviousPartiallyFreePool, rbx
   mov [rbx].TSmallBlockType.NextPartiallyFreePool, rcx
-  //Unlock the block type and leave
+  // Unlock the block type and leave
   mov [rbx].TSmallBlockType.BlockTypeLocked, False
   pop rbx
   {$ifdef MSWINDOWS}
@@ -1443,7 +1182,7 @@ lock inc dword ptr [rbx].TSmallBlockType.GetmemSleepCount
   {$endif MSWINDOWS}
   ret
 @AllocateSmallBlockPool:
-  //Access shared information about Medium blocks storage
+  // Access shared information about Medium blocks storage
   lea r10, [rip + MediumBlockInfo]
   mov eax, $100
   lea rcx, [r10 + TMediumBlockInfo.Locked]
@@ -1451,76 +1190,76 @@ lock cmpxchg byte ptr [rcx], ah
   je @MediumLocked1
   call LockMediumBlocks
 @MediumLocked1:
-  //Are there any available blocks of a suitable size?
+  // Are there any available blocks of a suitable size?
   movsx esi, [rbx].TSmallBlockType.AllowedGroupsForBlockPoolBitmap
   and esi, [r10 + TMediumBlockInfo.BinGroupBitmap]
   jz @NoSuitableMediumBlocks
-  //Compute rax = bin group number with free blocks, rcx = bin number
+  // Compute rax = bin group number with free blocks, rcx = bin number
   bsf eax, esi
   lea r8, [r10 + TMediumBlockInfo.BinBitmaps]
   lea r9, [rax * 4]
   mov rcx, [r8 + r9]
   bsf ecx, ecx
   lea rcx, [rcx + r9 * 8]
-  //Set rdi = @bin, rsi = free block
+  // Set rdi = @bin, rsi = free block
   lea rsi, [rcx * 8] // SizeOf(TMediumBlockBin) = 16
   lea rdi, [r10 + TMediumBlockInfo.Bins + rsi * 2]
   mov rsi, TMediumFreeBlock[rdi].NextFreeBlock
-  //Remove the first block from the linked list (LIFO)
+  // Remove the first block from the linked list (LIFO)
   mov rdx, TMediumFreeBlock[rsi].NextFreeBlock
   mov TMediumFreeBlock[rdi].NextFreeBlock, rdx
   mov TMediumFreeBlock[rdx].PreviousFreeBlock, rdi
-  //Is this bin now empty?
+  // Is this bin now empty?
   cmp rdi, rdx
   jne @MediumBinNotEmpty
-  //rbx = block type, r8 = @MediumBlockBinBitmaps, rax = bin group number,
-  //r9 = bin group number * 4, rcx = bin number, rdi = @bin, rsi = free block
-  //Flag this bin as empty
+  // rbx = block type, r8 = @MediumBlockBinBitmaps, rax = bin group number,
+  // r9 = bin group number * 4, rcx = bin number, rdi = @bin, rsi = free block
+  // Flag this bin as empty
   mov edx, -2
   rol edx, cl
   and [r8 + r9], edx
   jnz @MediumBinNotEmpty
-  //Flag the group as empty
+  // Flag the group as empty
   btr [r10 + TMediumBlockInfo.BinGroupBitmap], eax
 @MediumBinNotEmpty:
-  //rsi = free block, rbx = block type
-  //Get the size of the available medium block in edi
+  // rsi = free block, rbx = block type
+  // Get the size of the available medium block in edi
   mov rdi, DropMediumAndLargeFlagsMask
   and rdi, [rsi - BlockHeaderSize]
   cmp edi, MaximumSmallBlockPoolSize
   jb @UseWholeBlock
-  //Split the block: new block size is the optimal size
+  // Split the block: new block size is the optimal size
   mov edx, edi
   movzx edi, [rbx].TSmallBlockType.OptimalBlockPoolSize
   sub edx, edi
   lea rcx, [rsi + rdi]
   lea rax, [rdx + IsMediumBlockFlag + IsFreeBlockFlag]
   mov [rcx - BlockHeaderSize], rax
-  //Store the size of the second split as the second last pointer
+  // Store the size of the second split as the second last pointer
   mov [rcx + rdx - 16], rdx
-  //Put the remainder in a bin (it will be big enough)
+  // Put the remainder in a bin (it will be big enough)
   call InsertMediumBlockIntoBin // rcx=APMediumFreeBlock, edx=AMediumBlockSize
   jmp @GotMediumBlock
 @NoSuitableMediumBlocks:
-  //Check the sequential feed medium block pool for space
+  // Check the sequential feed medium block pool for space
   movzx ecx, [rbx].TSmallBlockType.MinimumBlockPoolSize
   mov edi, [r10 + TMediumBlockInfo.SequentialFeedBytesLeft]
   cmp edi, ecx
   jb @AllocateNewSequentialFeed
-  //Get the address of the last block that was fed
+  // Get the address of the last block that was fed
   mov rsi, [r10 + TMediumBlockInfo.LastSequentiallyFed]
-  //Enough sequential feed space: Will the remainder be usable?
+  // Enough sequential feed space: Will the remainder be usable?
   movzx ecx, [rbx].TSmallBlockType.OptimalBlockPoolSize
   lea rdx, [rcx + MinimumMediumBlockSize]
   cmp edi, edx
   cmovb edi, ecx
   sub rsi, rdi
-  //Update the sequential feed parameters
+  // Update the sequential feed parameters
   sub [r10 + TMediumBlockInfo.SequentialFeedBytesLeft], edi
   mov [r10 + TMediumBlockInfo.LastSequentiallyFed], rsi
   jmp @GotMediumBlock
 @AllocateNewSequentialFeed:
-  //Use the optimal size for allocating this small block pool
+  // Use the optimal size for allocating this small block pool
   movzx size, word ptr [rbx].TSmallBlockType.OptimalBlockPoolSize
   push size // use "size" variable = first argument in current ABI call
   call AllocNewSequentialFeedMediumPool
@@ -1533,22 +1272,22 @@ lock cmpxchg byte ptr [rcx], ah
   mov [rbx].TSmallBlockType.BlockTypeLocked, al
   jmp @Done
 @UseWholeBlock:
-  //rsi = free block, rbx = block type, edi = block size
-  //Mark this block as used in the block following it
+  // rsi = free block, rbx = block type, edi = block size
+  // Mark this block as used in the block following it
   and byte ptr [rsi + rdi - BlockHeaderSize], not PreviousMediumBlockIsFreeFlag
 @GotMediumBlock:
-  //rsi = free block, rbx = block type, edi = block size
-  //Set the size and flags for this block
+  // rsi = free block, rbx = block type, edi = block size
+  // Set the size and flags for this block
   lea rcx, [rdi + IsMediumBlockFlag + IsSmallBlockPoolInUseFlag]
   mov [rsi - BlockHeaderSize], rcx
-  //Unlock medium blocks and setup the block pool
+  // Unlock medium blocks and setup the block pool
   xor eax, eax
   mov [r10 + TMediumBlockInfo.Locked], al
   mov TSmallBlockPoolHeader[rsi].BlockType, rbx
   mov TSmallBlockPoolHeader[rsi].FirstFreeBlock, rax
   mov TSmallBlockPoolHeader[rsi].BlocksInUse, 1
   mov [rbx].TSmallBlockType.CurrentSequentialFeedPool, rsi
-  //Return the pointer to the first block, compute next/last block addresses
+  // Return the pointer to the first block, compute next/last block addresses
   lea rax, [rsi + SmallBlockPoolHeaderSize]
   movzx ecx, [rbx].TSmallBlockType.BlockSize
   lea rdx, [rax + rcx]
@@ -1556,7 +1295,7 @@ lock cmpxchg byte ptr [rcx], ah
   add rdi, rsi
   sub rdi, rcx
   mov [rbx].TSmallBlockType.MaxSequentialFeedBlockAddress, rdi
-  //Unlock the small block type, set header and leave
+  // Unlock the small block type, set header and leave
   mov [rbx].TSmallBlockType.BlockTypeLocked, False
   mov [rax - BlockHeaderSize], rsi
   pop rbx
@@ -1567,11 +1306,11 @@ lock cmpxchg byte ptr [rcx], ah
   ret
   { ---------- MEDIUM block allocation ---------- }
 @NotTinySmallBlock:
-  //Do we need a Large block?
+  // Do we need a Large block?
   lea r10, [rip + MediumBlockInfo]
   cmp rcx, (MaximumMediumBlockSize - BlockHeaderSize)
   ja @IsALargeBlockRequest
-  //Get the bin size for this block size (rounded up to the next bin size)
+  // Get the bin size for this block size (rounded up to the next bin size)
   lea rbx, [rcx + MediumBlockGranularity - 1 + BlockHeaderSize - MediumBlockSizeOffset]
   lea rcx, [r10 + TMediumBlockInfo.Locked]
   and ebx, -MediumBlockGranularity
@@ -1581,7 +1320,7 @@ lock cmpxchg byte ptr [rcx], ah
   je @MediumLocked2
   call LockMediumBlocks
 @MediumLocked2:
-  //Compute ecx = bin number in ecx and edx = group number
+  // Compute ecx = bin number in ecx and edx = group number
   lea rdx, [rbx - MinimumMediumBlockSize]
   mov ecx, edx
   shr edx, 8 + 5
@@ -1596,13 +1335,13 @@ lock cmpxchg byte ptr [rcx], ah
   or ecx, eax
   jmp @GotBinAndGroup
 @GroupIsEmpty:
-  //Try all groups greater than this group
+  // Try all groups greater than this group
   mov eax, -2
   mov ecx, edx
   shl eax, cl
   and eax, [r10 + TMediumBlockInfo.BinGroupBitmap]
   jz @TrySequentialFeedMedium
-  //There is a suitable group with enough space
+  // There is a suitable group with enough space
   bsf edx, eax
   mov eax, [r8 + rdx * 4]
   bsf ecx, eax
@@ -1612,10 +1351,10 @@ lock cmpxchg byte ptr [rcx], ah
   jmp @GotBinAndGroup
 @TrySequentialFeedMedium:
   mov ecx, [r10 + TMediumBlockInfo.SequentialFeedBytesLeft]
-  //Can block be fed sequentially?
+  // Can block be fed sequentially?
   sub ecx, ebx
   jc @AllocateNewSequentialFeedForMedium
-  //Get the block address, store remaining bytes, set the flags and unlock
+  // Get the block address, store remaining bytes, set the flags and unlock
   mov rax, [r10 + TMediumBlockInfo.LastSequentiallyFed]
   sub rax, rbx
   mov [r10 + TMediumBlockInfo.LastSequentiallyFed], rax
@@ -1630,52 +1369,52 @@ lock cmpxchg byte ptr [rcx], ah
   mov byte [rip + MediumBlockInfo.Locked], false // r10 has been overwritten
   jmp @Done
 @GotBinAndGroup:
-  //ebx = block size, ecx = bin number, edx = group number
-  //Compute rdi = @bin, rsi = free block
+  // ebx = block size, ecx = bin number, edx = group number
+  // Compute rdi = @bin, rsi = free block
   lea rax, [rcx + rcx]
   lea rdi, [r10 + TMediumBlockInfo.Bins + rax * 8]
   mov rsi, TMediumFreeBlock[rdi].NextFreeBlock
-  //Remove the first block from the linked list (LIFO)
+  // Remove the first block from the linked list (LIFO)
   mov rax, TMediumFreeBlock[rsi].NextFreeBlock
   mov TMediumFreeBlock[rdi].NextFreeBlock, rax
   mov TMediumFreeBlock[rax].PreviousFreeBlock, rdi
-  //Is this bin now empty?
+  // Is this bin now empty?
   cmp rdi, rax
   jne @MediumBinNotEmptyForMedium
-  //edx = bin group number, ecx = bin number, rdi = @bin, rsi = free block, ebx = block size
-  //Flag this bin and group as empty
+  // edx = bin group number, ecx = bin number, rdi = @bin, rsi = free block, ebx = block size
+  // Flag this bin and group as empty
   mov eax, -2
   rol eax, cl
   and [r10 + TMediumBlockInfo.BinBitmaps + rdx * 4], eax
   jnz @MediumBinNotEmptyForMedium
   btr [r10 + TMediumBlockInfo.BinGroupBitmap], edx
 @MediumBinNotEmptyForMedium:
-  //rsi = free block, ebx = block size
-  //Get rdi = size of the available medium block, rdx = second split size
+  // rsi = free block, ebx = block size
+  // Get rdi = size of the available medium block, rdx = second split size
   mov rdi, DropMediumAndLargeFlagsMask
   and rdi, [rsi - BlockHeaderSize]
   mov edx, edi
   sub edx, ebx
   jz @UseWholeBlockForMedium
-  //Split the block in two
+  // Split the block in two
   lea rcx, [rsi + rbx]
   lea rax, [rdx + IsMediumBlockFlag + IsFreeBlockFlag]
   mov [rcx - BlockHeaderSize], rax
-  //Store the size of the second split as the second last pointer
+  // Store the size of the second split as the second last pointer
   mov [rcx + rdx - 16], rdx
-  //Put the remainder in a bin
+  // Put the remainder in a bin
   cmp edx, MinimumMediumBlockSize
   jb @GotMediumBlockForMedium
   call InsertMediumBlockIntoBin // rcx=APMediumFreeBlock, edx=AMediumBlockSize
   jmp @GotMediumBlockForMedium
 @UseWholeBlockForMedium:
-  //Mark this block as used in the block following it
+  // Mark this block as used in the block following it
   and byte ptr [rsi + rdi - BlockHeaderSize], not PreviousMediumBlockIsFreeFlag
 @GotMediumBlockForMedium:
-  //Set the size and flags for this block
+  // Set the size and flags for this block
   lea rcx, [rbx + IsMediumBlockFlag]
   mov [rsi - BlockHeaderSize], rcx
-  //Unlock medium blocks and leave
+  // Unlock medium blocks and leave
   mov byte ptr[r10 + TMediumBlockInfo.Locked], false
   mov rax, rsi
   jmp @Done
@@ -1684,7 +1423,7 @@ lock cmpxchg byte ptr [rcx], ah
   xor rax, rax
   test rcx, rcx
   js @Done
-  //Note: size is still in the rcx/rdi first param register
+  // Note: size is still in the rcx/rdi first param register
   call AllocateLargeBlock
 @Done:
   pop rbx
@@ -1705,10 +1444,10 @@ asm
   test P, P
   jz @VoidPointer
   mov rdx, [P - BlockHeaderSize]
-  //Is it a small block in use?
+  // Is it a small block in use?
   test dl, IsFreeBlockFlag + IsMediumBlockFlag + IsLargeBlockFlag
   jnz @NotSmallBlockInUse
-  //Get the small block type in rbx and try to grab it
+  // Get the small block type in rbx and try to grab it
   mov rbx, [rdx].TSmallBlockPoolHeader.BlockType
   {$ifndef FPCMM_ASSUMEMULTITHREAD}
   mov rax, qword ptr [rip + SmallBlockInfo].TSmallBlockInfo.IsMultiThreadPtr
@@ -1722,20 +1461,20 @@ asm
   mov eax, $100
 lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   je @GotLockOnSmallBlockType
-  //Spin to grab the block type (don't try long due to contention)
+  // Spin to grab the block type (don't try too long due to contention)
   mov r8d, SpinSmallFreememLockCount
 @SpinLockBlockType:
   pause
   dec r8d
   jz @LockBlockTypeSleep
-  mov eax, $100
-  cmp [rbx].TSmallBlockType.BlockTypeLocked, ah
+  cmp byte ptr [rbx].TSmallBlockType.BlockTypeLocked, 1
   je @SpinLockBlockType
+  mov eax, $100
   lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   je @GotLockOnSmallBlockType
   jmp @SpinLockBlockType
 @LockBlockTypeSleep:
-  //Couldn't grab the block type - sleep and try again
+  // Couldn't grab the block type - sleep and try again
   lock inc dword ptr [rbx].TSmallBlockType.FreeMemSleepCount
   push rcx
   call Releasecore
@@ -1743,27 +1482,28 @@ lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   mov rdx, [rcx - BlockHeaderSize]
   jmp @LockBlockTypeLoop
 @GotLockOnSmallBlockType:
-  //rdx = @SmallBlockPoolHeader, rcx = APointer, rbx = @SmallBlockType
-  //Adjust number of blocks in use, set rax = old first free block
+  // rdx = @SmallBlockPoolHeader, rcx = P, rbx = @SmallBlockType
+  // Adjust number of blocks in use, set rax = old first free block
+  inc [rbx].TSmallBlockType.FreememCount
   mov rax, [rdx].TSmallBlockPoolHeader.FirstFreeBlock
   sub [rdx].TSmallBlockPoolHeader.BlocksInUse, 1
   jz @PoolIsNowEmpty
-  //Store this as the new first free block
+  // Store this as the new first free block
   mov [rdx].TSmallBlockPoolHeader.FirstFreeBlock, rcx
-  //Store the previous first free block as the block header
+  // Store the previous first free block as the block header
   lea r8, [rax + IsFreeBlockFlag]
   mov [rcx - BlockHeaderSize], r8
-  //Was the pool full?
+  // Was the pool full?
   test rax, rax
   jnz @SmallPoolWasNotFull
-  //Insert the pool back into the linked list if it was full
+  // Insert the pool back into the linked list if it was full
   mov rcx, [rbx].TSmallBlockType.NextPartiallyFreePool
   mov [rdx].TSmallBlockPoolHeader.PreviousPartiallyFreePool, rbx
   mov [rdx].TSmallBlockPoolHeader.NextPartiallyFreePool, rcx
   mov [rcx].TSmallBlockPoolHeader.PreviousPartiallyFreePool, rdx
   mov [rbx].TSmallBlockType.NextPartiallyFreePool, rdx
 @SmallPoolWasNotFull:
-  //Unlock the block type and leave
+  // Unlock the block type and leave
   mov [rbx].TSmallBlockType.BlockTypeLocked, 0
 @VoidPointer:
   xor eax, eax
@@ -1773,33 +1513,33 @@ lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   {$endif MSWINDOWS}
   ret
 @PoolIsNowEmpty:
-  //FirstFreeBlock=nil means it is the sequential feed pool with a single block
+  // FirstFreeBlock=nil means it is the sequential feed pool with a single block
   test rax, rax
   jz @IsSequentialFeedPool
-  //Pool is now empty: Remove it from the linked list and free it
+  // Pool is now empty: Remove it from the linked list and free it
   mov rax, [rdx].TSmallBlockPoolHeader.PreviousPartiallyFreePool
   mov rcx, [rdx].TSmallBlockPoolHeader.NextPartiallyFreePool
   mov TSmallBlockPoolHeader[rax].NextPartiallyFreePool, rcx
   mov [rcx].TSmallBlockPoolHeader.PreviousPartiallyFreePool, rax
   xor eax, eax
-  //Is this the sequential feed pool? If so, stop sequential feeding
+  // Is this the sequential feed pool? If so, stop sequential feeding
   cmp [rbx].TSmallBlockType.CurrentSequentialFeedPool, rdx
   jne @NotSequentialFeedPool
 @IsSequentialFeedPool:
   mov [rbx].TSmallBlockType.MaxSequentialFeedBlockAddress, rax
 @NotSequentialFeedPool:
-  //Unlock the small block type and release this pool
+  // Unlock the small block type and release this pool
   mov [rbx].TSmallBlockType.BlockTypeLocked, al
   mov rcx, rdx
   mov rdx, [rdx - BlockHeaderSize]
   jmp @FreeMediumBlock
   {---------------------Medium blocks------------------------------}
 @NotSmallBlockInUse:
-  //Not a small block in use: is it a medium or large block?
+  // Not a small block in use: is it a medium or large block?
   test dl, IsFreeBlockFlag + IsLargeBlockFlag
   jnz @NotASmallOrMediumBlock
 @FreeMediumBlock:
-  //Drop the flags, free rax=medium block, set rbx=block size
+  // Drop the flags, free rax=medium block, set rbx=block size
   lea r10, [rip + MediumBlockInfo]
   and rdx, DropMediumAndLargeFlagsMask
   mov rbx, rdx
@@ -1810,24 +1550,24 @@ lock cmpxchg byte ptr [rcx], ah
   je   @MediumBlocksLocked
   call LockMediumBlocks
 @MediumBlocksLocked:
-  //Get rcx = next block size and flags
+  // Get rcx = next block size and flags
   mov rcx, [rsi + rbx - BlockHeaderSize]
-  //Can we combine this block with the next free block?
+  // Can we combine this block with the next free block?
   test qword ptr [rsi + rbx - BlockHeaderSize], IsFreeBlockFlag
   jnz @NextBlockIsFree
-  //Set the "PreviousIsFree" flag in the next block
+  // Set the "PreviousIsFree" flag in the next block
   or rcx, PreviousMediumBlockIsFreeFlag
   mov [rsi + rbx - BlockHeaderSize], rcx
 @NextBlockChecked:
-  //Re-read the flags and try to combine with previous free block
+  // Re-read the flags and try to combine with previous free block
   test byte ptr [rsi - BlockHeaderSize], PreviousMediumBlockIsFreeFlag
   jnz @PreviousBlockIsFree
 @PreviousBlockChecked:
-  //Check if entire medium block pool is free
+  // Check if entire medium block pool is free
   cmp ebx, (MediumBlockPoolSize - MediumBlockPoolHeaderSize)
   je @EntireMediumPoolFree
 @BinFreeMediumBlock:
-  //Store size of the block, flags and trailing size marker and insert into bin
+  // Store size of the block, flags and trailing size marker and insert into bin
   lea rax, [rbx + IsMediumBlockFlag + IsFreeBlockFlag]
   mov [rsi - BlockHeaderSize], rax
   mov [rsi + rbx - 16], rbx
@@ -1835,7 +1575,7 @@ lock cmpxchg byte ptr [rcx], ah
   mov rdx, rbx
   call InsertMediumBlockIntoBin // rcx=APMediumFreeBlock, edx=AMediumBlockSize
   xor eax, eax
-  //Unlock medium blocks and leave
+  // Unlock medium blocks and leave
   mov [r10 + TMediumBlockInfo.Locked], al
   jmp @Done
 @NextBlockIsFree:
@@ -1843,44 +1583,44 @@ lock cmpxchg byte ptr [rcx], ah
   lea rax, [rsi + rbx]
   and rcx, DropMediumAndLargeFlagsMask
   add rbx, rcx
-  //Was the block binned?
+  // Was the block binned?
   cmp rcx, MinimumMediumBlockSize
   jb @NextBlockChecked
   mov rcx, rax
   call RemoveMediumFreeBlock // rcx = APMediumFreeBlock
   jmp @NextBlockChecked
 @PreviousBlockIsFree:
-  //Get rcx/rsi =  size/point of the previous free block, rbx = new block end
+  // Get rcx/rsi =  size/point of the previous free block, rbx = new block end
   mov rcx, [rsi - 16]
   sub rsi, rcx
   add rbx, rcx
-  //Remove the previous block from the linked list
+  // Remove the previous block from the linked list
   cmp ecx, MinimumMediumBlockSize
   jb @PreviousBlockChecked
   mov rcx, rsi
   call RemoveMediumFreeBlock // rcx = APMediumFreeBlock
   jmp @PreviousBlockChecked
 @EntireMediumPoolFree:
-  //Ensure current sequential feed pool is free
+  // Ensure current sequential feed pool is free
   cmp dword ptr [r10 + TMediumBlockInfo.SequentialFeedBytesLeft], MediumBlockPoolSize - MediumBlockPoolHeaderSize
   jne @MakeEmptyMediumPoolSequentialFeed
-  //Remove this medium block pool from the linked list stored in its header
+  // Remove this medium block pool from the linked list stored in its header
   sub rsi, MediumBlockPoolHeaderSize
   mov rax, TMediumBlockPoolHeader[rsi].PreviousMediumBlockPoolHeader
   mov rdx, TMediumBlockPoolHeader[rsi].NextMediumBlockPoolHeader
   mov TMediumBlockPoolHeader[rax].NextMediumBlockPoolHeader, rdx
   mov TMediumBlockPoolHeader[rdx].PreviousMediumBlockPoolHeader, rax
-  //Unlock medium blocks and free the block pool
+  // Unlock medium blocks and free the block pool
   mov [r10 + TMediumBlockInfo.Locked], false
   mov P, rsi
   call FreeMedium
   xor eax, eax // success
   jmp @Done
 @MakeEmptyMediumPoolSequentialFeed:
-  //Get rbx = end-marker block, and recycle the current sequential feed pool
+  // Get rbx = end-marker block, and recycle the current sequential feed pool
   lea rbx, [rsi + MediumBlockPoolSize - MediumBlockPoolHeaderSize]
   call BinMediumSequentialFeedRemainder
-  //Set this medium pool up as the new sequential feed pool, unlock and leave
+  // Set this medium pool up as the new sequential feed pool, unlock and leave
   mov qword ptr [rbx - BlockHeaderSize], IsMediumBlockFlag
   mov dword ptr [r10 + TMediumBlockInfo.SequentialFeedBytesLeft], MediumBlockPoolSize - MediumBlockPoolHeaderSize
   mov [r10 + TMediumBlockInfo.LastSequentiallyFed], rbx
@@ -1888,7 +1628,7 @@ lock cmpxchg byte ptr [rcx], ah
   mov [r10 + TMediumBlockInfo.Locked], al
   jmp @Done
 @NotASmallOrMediumBlock:
-  //If it is not an attempt to free a block twice, release as large block
+  // If it is not an attempt to free a block twice, release as large block
   mov eax, -1
   test dl, IsFreeBlockFlag + IsMediumBlockFlag
   jnz @Done
@@ -1903,138 +1643,150 @@ end;
 // warning: FPC signature is not the same than Delphi: requires "var P"
 function _ReallocMem(var P: pointer; Size: PtrInt): pointer; nostackframe; assembler;
 asm
-  //On entry: rcx = var P, rdx = Size
   mov rdx, Size
   {$ifdef MSWINDOWS}
   push rdi
+  push rsi
   {$endif MSWINDOWS}
   push rbx
   push r14
-  push r15
   push P // for assignement in @Done
   mov r14, qword ptr[P]
-  //Handle ReallocMem(r14=nil,Size) as GetMem(Size)
   test r14, r14
-  jz @PlainGetMem
+  jz @GetMemMoveFreeMem // ReallocMem(nil,Size)=GetMem(Size)
   mov rcx, [r14 - BlockHeaderSize]
   test cl, IsFreeBlockFlag + IsMediumBlockFlag + IsLargeBlockFlag
   jnz @NotASmallBlock
   { -------------- TINY/SMALL block ------------- }
-  //Get rbx = block type, rcx = available size
+  // Get rbx = block type, rcx = available size
   mov rbx, [rcx].TSmallBlockPoolHeader.BlockType
   movzx ecx, [rbx].TSmallBlockType.BlockSize
   sub ecx, BlockHeaderSize
   cmp rcx, rdx
   jb @SmallUpsize
-  //Downsize or small growup with enough space: reallocate only if need
+  // Downsize or small growup with enough space: reallocate only if need
   lea rbx, [rdx * 4 + SmallBlockDownsizeCheckAdder]
   cmp ebx, ecx
-  jb @NotSmallInPlaceDownsize
+  jb @GetMemMoveFreeMem // r14=P rdx=size
   mov rax, r14 // keep original pointer
-  pop P
-  pop r15
+  pop rcx
   pop r14
   pop rbx
   {$ifdef MSWINDOWS}
+  pop rsi
   pop rdi
   {$endif MSWINDOWS}
   ret
-@PlainGetMem:
-  mov P, rdx // P is the proper first argument register
-  call _GetMem
-  jmp @Done
-@NotSmallInPlaceDownsize:
-  //Downsize which needs to allocate a really smaller block and move data
+  align 8
+@GetMemMoveFreeMem:
+  // reallocate copy and free: r14=P rdx=size
   mov rbx, rdx
   mov P, rdx // P is the proper first argument register
   call _GetMem
   test rax, rax
   jz @Done
+  test r14, r14 // ReallocMem(nil,Size)=GetMem(Size)
+  jz @Done
+  sub rbx, 8
+@MoveFreeMem:
+  // copy and free: rax=New r14=P rbx=size-8
   push rax
-  mov r8, rbx
-  mov rdx, rax
-  mov rcx, r14
-  call MoveX16LP
+  lea rcx, [r14 + rbx]
+  lea rdx, [rax + rbx]
+  neg rbx
+  jns @MoveLast8
+  align 16
+@MoveBy16:
+  movaps xmm0, oword ptr [rcx + rbx]
+  movaps oword ptr [rdx + rbx], xmm0
+  add rbx, 16
+  js @MoveBy16
+@MoveLast8:
+  mov rax, qword ptr [rcx + rbx]
+  mov qword ptr [rdx + rbx], rax
   mov P, r14
   call _FreeMem
   pop rax
-  jmp @Done
+@Done:
+  pop rcx
+  pop r14
+  pop rbx
+  {$ifdef MSWINDOWS}
+  pop rsi
+  pop rdi
+  {$endif MSWINDOWS}
+  mov qword ptr[rcx], rax // store new pointer in var P
+  ret
+  align 8
 @SmallUpsize:
-  //State: r14=pointer, rdx=NewSize, rcx=CurrentBlockSize, rbx=CurrentBlockType
-  //Small blocks always grow with at least 100% + SmallBlockUpsizeAdder bytes
+  // State: r14=pointer, rdx=NewSize, rcx=CurrentBlockSize, rbx=CurrentBlockType
+  // Small blocks always grow with at least 100% + SmallBlockUpsizeAdder bytes
   lea P, qword ptr[rcx + rcx + SmallBlockUpsizeAdder]
-  //New allocated size is the maximum of the requested size and the minimum upsize
+  movzx ebx, [rbx].TSmallBlockType.BlockSize
+  sub ebx, BlockHeaderSize + 8
+  // r14=pointer, P=BlockSize, rdx=NewSize, rbx=OldSize-8
+@AdjustGetMemMoveFreeMem:
+  // New allocated size is the maximum of the requested size and the minimum upsize
   xor rax, rax
   sub P, rdx
   adc rax, -1
   and P, rax
   add P, rdx
-  mov r15, rdx
+  push rdx
   call _GetMem
-  mov rdx, r15
+  pop rdx
   test rax, rax
   jz @Done
   cmp rdx, MaximumMediumBlockSize - BlockHeaderSize
-  jbe @NotSmallUpsizeToLargeBlock
-  //Store the user requested size for large block
+  jbe @MoveFreeMem // rax=New r14=P rbx=size-8
+  // Store the user requested size for large block
   mov [rax - 16], rdx
-@NotSmallUpsizeToLargeBlock:
-  //Move existing data across new block and release the previous pointer
-  movzx r8d, [rbx].TSmallBlockType.BlockSize
-  sub r8d, BlockHeaderSize
-  mov r15, rax
-  mov rdx, rax
-  mov rcx, r14
-  call [rbx].TSmallBlockType.UpsizeMoveProcedure
-  mov P, r14
-  call _FreeMem
-  mov rax, r15
-  jmp @Done
+  jmp @MoveFreeMem // rax=New r14=P rbx=size-8
 @NotASmallBlock:
-  //Is this a medium block or a large block?
+  // Is this a medium block or a large block?
   test cl, IsFreeBlockFlag + IsLargeBlockFlag
   jnz @PossibleLargeBlock
   { -------------- MEDIUM block ------------- }
-  //rcx = Current Size + Flags, r14 = P, rdx = Requested Size, r10 = MediumBlockInfo
+  // rcx = Current Size + Flags, r14 = P, rdx = Requested Size, r10 = MediumBlockInfo
   lea r10, [rip + MediumBlockInfo]
   mov rbx, rcx
   and ecx, DropMediumAndLargeFlagsMask
   lea rdi, [r14 + rcx]
   sub ecx, BlockHeaderSize
   and ebx, ExtractMediumAndLargeFlagsMask
-  //Is it an upsize or a downsize?
+  // Is it an upsize or a downsize?
   cmp rdx, rcx
   ja @MediumBlockUpsize
   // rcx = Current Block Size - BlockHeaderSize, rbx = Current Block Flags,
-  // rdi = @Next Block, r14 = APointer, rdx = Requested Size
-  //Downsize relloacate and move data only if less than half the current size
-  lea r15, [rdx + rdx]
-  cmp r15, rcx
+  // rdi = @Next Block, r14 = P, rdx = Requested Size
+  // Downsize relloacate and move data only if less than half the current size
+  lea rsi, [rdx + rdx]
+  cmp rsi, rcx
   jb @MediumMustDownsize
 @MediumNoResize:
   mov rax, r14
   jmp @Done
 @MediumMustDownsize:
-  //In-place downsize? Ensure not smaller than MinimumMediumBlockSize
+  // In-place downsize? Ensure not smaller than MinimumMediumBlockSize
   cmp edx, MinimumMediumBlockSize - BlockHeaderSize
   jae @MediumBlockInPlaceDownsize
-  //Need to move to another Medium block pool, or into a Small block?
+  // Need to move to another Medium block pool, or into a Small block?
   cmp edx, MediumInPlaceDownsizeLimit
-  jb @MediumDownsizeRealloc
-  //No need to realloc: resize in-place (if not already at the minimum size)
+  jb @GetMemMoveFreeMem
+  // No need to realloc: resize in-place (if not already at the minimum size)
   mov edx, MinimumMediumBlockSize - BlockHeaderSize
   cmp ecx, edx
   jna @MediumNoResize
 @MediumBlockInPlaceDownsize:
-  //Round up to the next medium block size
-  lea r15, [rdx + BlockHeaderSize + MediumBlockGranularity - 1 - MediumBlockSizeOffset]
-  and r15, -MediumBlockGranularity
-  add r15, MediumBlockSizeOffset
-  //Get the size of the second split
+  // Round up to the next medium block size
+  lea rsi, [rdx + BlockHeaderSize + MediumBlockGranularity - 1 - MediumBlockSizeOffset]
+  and rsi, -MediumBlockGranularity
+  add rsi, MediumBlockSizeOffset
+  // Get the size of the second split
   add ecx, BlockHeaderSize
-  sub ecx, r15d
+  sub ecx, esi
   mov ebx, ecx
-  //Lock the medium blocks
+  // Lock the medium blocks
   lea rcx, [r10 + TMediumBlockInfo.Locked]
   mov eax, $100
 lock cmpxchg byte ptr [rcx], ah
@@ -2042,15 +1794,15 @@ lock cmpxchg byte ptr [rcx], ah
   call LockMediumBlocks
 @MediumBlocksLocked1:
   mov ecx, ebx
-  //Reread the flags - may have changed before medium blocks could be locked
+  // Reread the flags - may have changed before medium blocks could be locked
   mov rbx, ExtractMediumAndLargeFlagsMask
   and rbx, [r14 - BlockHeaderSize]
 @DoMediumInPlaceDownsize:
-  //Set the new size in header, and get rbx = second split size
-  or rbx, r15
+  // Set the new size in header, and get rbx = second split size
+  or rbx, rsi
   mov [r14 - BlockHeaderSize], rbx
   mov ebx, ecx
-  //If the next block is used, flag its previous block as free
+  // If the next block is used, flag its previous block as free
   mov rdx, [rdi - BlockHeaderSize]
   test dl, IsFreeBlockFlag
   jnz @MediumDownsizeNextBlockFree
@@ -2058,7 +1810,7 @@ lock cmpxchg byte ptr [rcx], ah
   mov [rdi - BlockHeaderSize], rdx
   jmp @MediumDownsizeDoSplit
 @MediumDownsizeNextBlockFree:
-  //If the next block is free, combine both
+  // If the next block is free, combine both
   mov rcx, rdi
   and rdx, DropMediumAndLargeFlagsMask
   add rbx, rdx
@@ -2067,60 +1819,44 @@ lock cmpxchg byte ptr [rcx], ah
   jb @MediumDownsizeDoSplit
   call RemoveMediumFreeBlock // rcx=APMediumFreeBlock
 @MediumDownsizeDoSplit:
-  //Store the trailing size field and free part header
+  // Store the trailing size field and free part header
   mov [rdi - 16], rbx
   lea rcx, [rbx + IsMediumBlockFlag + IsFreeBlockFlag];
-  mov [r14 + r15 - BlockHeaderSize], rcx
-  //Bin this free block (if worth it)
+  mov [r14 + rsi - BlockHeaderSize], rcx
+  // Bin this free block (if worth it)
   cmp rbx, MinimumMediumBlockSize
   jb @MediumBlockDownsizeDone
-  lea rcx, [r14 + r15]
+  lea rcx, [r14 + rsi]
   mov rdx, rbx
   call InsertMediumBlockIntoBin // rcx=APMediumFreeBlock, edx=AMediumBlockSize
 @MediumBlockDownsizeDone:
-  //Unlock the medium blocks, and leave with the new pointer
+  // Unlock the medium blocks, and leave with the new pointer
   mov byte ptr [r10 + TMediumBlockInfo.Locked], False
   mov rax, r14
   jmp @Done
-@MediumDownsizeRealloc:
-  //Downsize is worth full reallocation and data move
-  push rdx
-  mov P, rdx
-  call _GetMem
-  pop r8
-  test rax, rax
-  jz @Done
-  push rax
-  mov rdx, rax
-  mov rcx, r14
-  call MoveX16LP
-  mov P, r14
-  call _FreeMem
-  pop rax
-  jmp @Done
 @MediumBlockUpsize:
-  //ecx = Current Block Size - BlockHeaderSize, bl = Current Block Flags,
-  //rdi = @Next Block, r14 = APointer, rdx = Requested Size
-  //Try to make in-place upsize
+  // ecx = Current Block Size - BlockHeaderSize, bl = Current Block Flags,
+  // rdi = @Next Block, r14 = P, rdx = Requested Size
+  // Try to make in-place upsize
   mov rax, [rdi - BlockHeaderSize]
   test al, IsFreeBlockFlag
   jz @CannotUpsizeMediumBlockInPlace
-  //Get rax = available size, r15 = available size with the next block
+  // Get rax = available size, rsi = available size with the next block
   and rax, DropMediumAndLargeFlagsMask
-  lea r15, [rax + rcx]
-  cmp rdx, r15
+  lea rsi, [rax + rcx]
+  cmp rdx, rsi
   ja @CannotUpsizeMediumBlockInPlace
-  //Grow into the next block
+  // Grow into the next block
   mov rbx, rcx
   lea rcx, [r10 + TMediumBlockInfo.Locked]
   mov eax, $100
 lock cmpxchg byte ptr [rcx], ah
   je   @MediumBlocksLocked2
-  mov r15, rdx
+  mov rsi, rdx
   call LockMediumBlocks
-  mov rdx, r15
+  mov rdx, rsi
 @MediumBlocksLocked2:
-  //Re-read info once locked, and ensure next block is still free
+  // Re-read info once locked, and ensure next block is still free
   mov rcx, rbx
   mov rbx, ExtractMediumAndLargeFlagsMask
   and rbx, [r14 - BlockHeaderSize]
@@ -2128,11 +1864,11 @@ lock cmpxchg byte ptr [rcx], ah
   test al, IsFreeBlockFlag
   jz @NextMediumBlockChanged
   and eax, DropMediumAndLargeFlagsMask
-  lea r15, [rax + rcx]
-  cmp rdx, r15
+  lea rsi, [rax + rcx]
+  cmp rdx, rsi
   ja @NextMediumBlockChanged
 @DoMediumInPlaceUpsize:
-  //Bin next free block (if worth it)
+  // Bin next free block (if worth it)
   cmp eax, MinimumMediumBlockSize
   jb @MediumInPlaceNoNextRemove
   push rcx
@@ -2142,85 +1878,55 @@ lock cmpxchg byte ptr [rcx], ah
   pop rdx
   pop rcx
 @MediumInPlaceNoNextRemove:
-  //Medium blocks grow a minimum of 25% in in-place upsizes
+  // Medium blocks grow a minimum of 25% in in-place upsizes
   mov eax, ecx
   shr eax, 2
   add eax, ecx
-  //Get the maximum of the requested size and the minimum growth size
+  // Get the maximum of the requested size and the minimum growth size
   xor edi, edi
   sub eax, edx
   adc edi, -1
   and eax, edi
-  //Round up to the nearest block size granularity
+  // Round up to the nearest block size granularity
   lea rax, [rax + rdx + BlockHeaderSize + MediumBlockGranularity - 1 - MediumBlockSizeOffset]
   and eax, -MediumBlockGranularity
   add eax, MediumBlockSizeOffset
-  //Calculate the size of the second split and check if it fits
-  lea rdx, [r15 + BlockHeaderSize]
+  // Calculate the size of the second split and check if it fits
+  lea rdx, [rsi + BlockHeaderSize]
   sub edx, eax
   ja @MediumInPlaceUpsizeSplit
-  //Grab the whole block: Mark it as used in the next block, and adjust size
-  and qword ptr [r14 + r15], not PreviousMediumBlockIsFreeFlag
-  add r15, BlockHeaderSize
+  // Grab the whole block: Mark it as used in the next block, and adjust size
+  and qword ptr [r14 + rsi], not PreviousMediumBlockIsFreeFlag
+  add rsi, BlockHeaderSize
   jmp @MediumUpsizeInPlaceDone
 @MediumInPlaceUpsizeSplit:
-  //Store the size of the second split as the second last pointer
-  mov [r14 + r15 - BlockHeaderSize], rdx
-  //Set the second split header
+  // Store the size of the second split as the second last pointer
+  mov [r14 + rsi - BlockHeaderSize], rdx
+  // Set the second split header
   lea rdi, [rdx + IsMediumBlockFlag + IsFreeBlockFlag]
   mov [r14 + rax - BlockHeaderSize], rdi
-  mov r15, rax
+  mov rsi, rax
   cmp edx, MinimumMediumBlockSize
   jb @MediumUpsizeInPlaceDone
   lea rcx, [r14 + rax]
   call InsertMediumBlockIntoBin // rcx=APMediumFreeBlock, edx=AMediumBlockSize
 @MediumUpsizeInPlaceDone:
-  //No need to move data at upsize: set the size and flags for this block
-  or r15, rbx
-  mov [r14 - BlockHeaderSize], r15
+  // No need to move data at upsize: set the size and flags for this block
+  or rsi, rbx
+  mov [r14 - BlockHeaderSize], rsi
   mov byte ptr [r10 + TMediumBlockInfo.Locked], False
   mov rax, r14
   jmp @Done
 @NextMediumBlockChanged:
-  //The next block changed during lock: reallocate and move data
+  // The next block changed during lock: reallocate and move data
   mov byte ptr [r10 + TMediumBlockInfo.Locked], False
 @CannotUpsizeMediumBlockInPlace:
+  // rcx=OldSize-8, rdx=NewSize
+  mov rbx, rcx
   mov eax, ecx
   shr eax, 2
-  add eax, ecx
-  //Get the maximum of the requested size and the minimum growth size
-  xor rdi, rdi
-  sub rax, rdx
-  adc rdi, -1
-  and rax, rdi
-  add rax, rdx
-  mov r15, rax
-  mov edi, ecx
-  push rdx
-  push rdi
-  mov P, rax
-  call _GetMem
-  pop rdi
-  pop rdx
-  test eax, eax
-  jz @Done
-  //If it's a Large block - store the actual user requested size
-  cmp r15, MaximumMediumBlockSize - BlockHeaderSize
-  jbe @MediumUpsizeNotLarge
-  mov [rax - 16], rdx
-@MediumUpsizeNotLarge:
-  push rax
-  mov rdx, rax
-  mov rcx, r14
-  mov r8, rdi
-  call MoveX16LP
-  mov P, r14
-  call _FreeMem
-  pop rax
-  jmp @Done
-@Error:
-  xor eax, eax
-  jmp @Done
+  lea P, qword ptr [rcx + rax] // BlockSize = OldSize+25%
+  jmp @AdjustGetMemMoveFreeMem // P=BlockSize, rdx=NewSize, rbx=OldSize-8
 @PossibleLargeBlock:
   { -------------- LARGE block ------------- }
   test cl, IsFreeBlockFlag + IsMediumBlockFlag
@@ -2232,33 +1938,28 @@ lock cmpxchg byte ptr [rcx], ah
   mov rsi, rdx
   {$endif MSWINDOWS}
   call ReallocateLargeBlock // with restored proper registers
-@Done:
-  pop rcx
-  mov qword ptr[rcx], rax // store new pointer in var P
-  pop r15
-  pop r14
-  pop rbx
-  {$ifdef MSWINDOWS}
-  pop rdi
-  {$endif MSWINDOWS}
+  jmp @Done
+@Error:
+  xor eax, eax
+  jmp @Done
 end;
 
 function _AllocMem(Size: PtrInt): pointer; nostackframe; assembler;
 asm
   push rbx
-  //Get rbx = size rounded down to the previous multiple of SizeOf(pointer)
+  // Get rbx = size rounded down to the previous multiple of SizeOf(pointer)
   lea rbx, [Size - 1]
   and rbx, -8
   call _GetMem
-  //Could a block be allocated? rcx = 0 if yes, -1 if no
+  // Could a block be allocated? rcx = 0 if yes, -1 if no
   cmp rax, 1
   sbb rcx, rcx
-  //Point rdx to the last pointer
+  // Point rdx to the last pointer
   lea rdx, [rax + rbx]
-  //Compute Size (1..8 doesn't need to enter the SSE2 loop)
+  // Compute Size (1..8 doesn't need to enter the SSE2 loop)
   or rbx, rcx
   jz @ClearLastQWord
-  //Large blocks from mmap/VirtualAlloc are already zero filled
+  // Large blocks from mmap/VirtualAlloc are already zero filled
   cmp rbx, MaximumMediumBlockSize - BlockHeaderSize
   jae @Done
   neg rbx
@@ -2395,10 +2096,10 @@ begin
     for i := 0 to high(small) do
       with small[i] do
       begin
-        if GetmemSleepCountSmallBlockSize <> 0 then
-          write(' getmem(', GetmemSleepCountSmallBlockSize)
+        if GetmemBlockSize <> 0 then
+          write(' getmem(', GetmemBlockSize)
         else
-          write(' freemem(', FreememSleepCountSmallBlockSize);
+          write(' freemem(', FreememBlockSize);
         write(')=' , K(SleepCount));
         if i = smallblockcontentioncount then
           exit;
@@ -2488,7 +2189,7 @@ begin
       d^.SleepCount := p^.GetmemSleepCount;
       if GetMemTotal <> nil then
         inc(GetMemTotal^, p^.GetmemSleepCount);
-      d^.GetmemSleepCountSmallBlockSize := p^.BlockSize;
+      d^.GetmemBlockSize := p^.BlockSize;
       inc(d);
     end;
     if p^.FreememSleepCount <> 0 then
@@ -2496,7 +2197,7 @@ begin
       d^.SleepCount := p^.FreememSleepCount;
       if FreeMemTotal <> nil then
         inc(FreeMemTotal^, p^.FreeMemSleepCount);
-      d^.FreememSleepCountSmallBlockSize := p^.BlockSize;
+      d^.FreememBlockSize := p^.BlockSize;
       inc(d);
     end;
     inc(p);
@@ -2524,11 +2225,6 @@ end;
 
 { ********* Initialization and Finalization }
 
-const
-  _MOVES: array[1..8 {$ifndef MSWINDOWS} + 5 {$endif}] of TMoveProc = (
-    Move8, Move24, Move40, Move56, Move72, Move88, Move104, Move120
-    {$ifndef MSWINDOWS} , Move136, Move152, Move168, Move184, Move200 {$endif});
-
 procedure InitializeMemoryManager;
 var
   small: PSmallBlockType;
@@ -2545,11 +2241,6 @@ begin
       size := SmallBlockSizes[i];
       assert(size and 15 = 0);
       small^.BlockSize := size;
-      min := size shr 4;
-      if min <= high(_MOVES) then
-        small^.UpsizeMoveProcedure := _MOVES[min]
-      else
-        small^.UpsizeMoveProcedure := MoveX16LP;
       small^.PreviousPartiallyFreePool := pointer(small);
       small^.NextPartiallyFreePool := pointer(small);
       small^.MaxSequentialFeedBlockAddress := pointer(0);
