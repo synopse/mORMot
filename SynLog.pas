@@ -6003,4 +6003,7 @@ initialization
 finalization
   SynLogFileList.Free; // release in proper order: TSynLog then TSynLogFamily
   SynLogFamily.Free;
+  {$ifndef NOEXCEPTIONINTERCEPT}
+  GlobalCurrentHandleExceptionSynLog := nil; // paranoid
+  {$endif}
 end.

@@ -29,7 +29,7 @@ unit SynFPCx64MM;
     - It was so fun deeping into SSE2 x86_64 assembly and Pierre's insight
     - Resulting code is still easy to understand and maintain
 
-    IMPORTANT NOTICE: only tested on-site - feedback is (very) welcome!
+    IMPORTANT NOTICE: only fully tested on Linux - feedback is welcome!
 
   *****************************************************************************
 
@@ -87,7 +87,7 @@ unit SynFPCx64MM;
 // - should be enabled e.g. for a multi-threaded Server Daemon instance
 {.$define FPCMM_ASSUMEMULTITHREAD}
 
-// could be defined on AMD CPU, or oldest Intel before SkylakeX
+// on contention problems, try it on AMD CPU, or oldest Intel before SkylakeX
 // - on SkylakeX (Intel 7th gen), "pause" opcode went from 10-20 to 140 cycles
 {.$define FPCMM_PAUSEMORE}
 
@@ -132,7 +132,9 @@ interface
   {$endif FPCMM_BOOST}
 {$endif FPC}
 
+
 {$ifdef FPC_CPUX64}
+// this unit is available only for FPC + X86_64 CPU
 
 type
   /// Arena (middle/large) heap information as returned by CurrentHeapStatus
@@ -182,11 +184,6 @@ type
   PMMStatus = ^TMMStatus;
 
 
-{$ifdef FPCMM_STANDALONE}
-
-/// should be called before using any memory function
-procedure InitializeMemoryManager;
-
 /// allocate a new memory buffer
 function _GetMem(size: PtrInt): pointer;
 
@@ -200,10 +197,17 @@ function _FreeMem(P: pointer): PtrInt;
 function _ReallocMem(var P: pointer; Size: PtrInt): pointer;
 
 /// retrieve the maximum size (i.e. the allocated size) of a memory buffer
-function _MemSize(P: pointer): PtrUInt;
+function _MemSize(P: pointer): PtrUInt; inline;
 
 /// retrieve high-level statistics about the current memory manager state
+// - see also GetSmallBlockContention for detailed small blocks information
 function CurrentHeapStatus: TMMStatus;
+
+
+{$ifdef FPCMM_STANDALONE}
+
+/// should be called before using any memory function
+procedure InitializeMemoryManager;
 
 /// should be called to finalize this memory manager process and release all RAM
 procedure FreeAllMemory;
@@ -212,11 +216,12 @@ procedure FreeAllMemory;
 
 /// IsMultiThread global variable is not correct outside of the FPC RTL
 {$define FPCMM_ASSUMEMULTITHREAD}
-/// not supported to reduce dependencies
+/// not supported to reduce dependencies and console writing
 {$undef FPCMM_REPORTMEMORYLEAKS}
 
 {$else}
 
+type
   /// one GetSmallBlockContention info about unexpected multi-thread waiting
   // - a single GetmemBlockSize or FreememBlockSize non 0 field is set
   TSmallBlockContention = packed record
@@ -244,13 +249,7 @@ procedure FreeAllMemory;
   /// small blocks detailed information as returned GetSmallBlockStatus
   TSmallBlockStatusDynArray = array of TSmallBlockStatus;
 
-
-/// retrieve high-level statistics about the current memory manager state
-// - see also GetSmallBlockContention for detailed small blocks information
-function CurrentHeapStatus: TMMStatus;
-
-
-type
+  /// sort order of detailed information as returned GetSmallBlockStatus
   TSmallBlockOrderBy = (obTotal, obCurrent, obBlockSize);
 
 /// retrieve the use counts of allocated small blocks
@@ -324,14 +323,12 @@ const
 
 function VirtualAlloc(lpAddress: pointer;
    dwSize: PtrUInt; flAllocationType, flProtect: Cardinal): pointer; stdcall;
-  external kernel32 name 'VirtualAlloc';
+     external kernel32 name 'VirtualAlloc';
 function VirtualFree(lpAddress: pointer; dwSize: PtrUInt;
    dwFreeType: Cardinal): LongBool; stdcall;
-  external kernel32 name 'VirtualFree';
+     external kernel32 name 'VirtualFree';
 procedure SwitchToThread; stdcall;
-  external kernel32 name 'SwitchToThread';
-procedure SleepMS(dwMilliseconds: Cardinal); stdcall;
-  external kernel32 name 'Sleep';
+     external kernel32 name 'SwitchToThread';
 
 procedure ReleaseCore;
 begin
@@ -548,14 +545,7 @@ end;
 { ********* Constants and Data Structures Definitions }
 
 const
-  NumSmallBlockTypes = 46;
-  MaximumSmallBlockSize = 2608;
-  SmallBlockSizes: array[0..NumSmallBlockTypes - 1] of word = (
-   16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256,
-   272, 288, 304, 320, 352, 384, 416, 448, 480, 528, 576, 624, 672, 736, 800,
-   880, 960, 1056, 1152, 1264, 1376, 1504, 1648, 1808, 1984, 2176, 2384,
-   MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize);
-  {$ifdef FPCMM_BOOST} // try if the more arenas, the better multi-threadable
+  {$ifdef FPCMM_BOOST} // someimtes the more arenas, the better multi-threadable
   {$ifdef FPCMM_BOOSTER}
   NumTinyBlockTypesPO2 = 4;
   NumTinyBlockArenasPO2 = 5; // will probably end up with Medium lock contention
@@ -567,12 +557,22 @@ const
   NumTinyBlockTypesPO2 = 3;  // multiple arenas for tiny blocks <= 128 bytes
   NumTinyBlockArenasPO2 = 3; // 8 round-robin arenas + 1 main by default
   {$endif FPCMM_BOOST}
+
+  NumSmallBlockTypes = 46;
+  MaximumSmallBlockSize = 2608;
+  SmallBlockSizes: array[0..NumSmallBlockTypes - 1] of word = (
+   16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256,
+   272, 288, 304, 320, 352, 384, 416, 448, 480, 528, 576, 624, 672, 736, 800,
+   880, 960, 1056, 1152, 1264, 1376, 1504, 1648, 1808, 1984, 2176, 2384,
+   MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize);
   NumTinyBlockTypes = 1 shl NumTinyBlockTypesPO2;
   NumTinyBlockArenas = 1 shl NumTinyBlockArenasPO2;
   NumSmallInfoBlock = NumSmallBlockTypes + NumTinyBlockArenas * NumTinyBlockTypes;
   SmallBlockGranularity = 16;
   TargetSmallBlocksPerPool = 48;
   MinimumSmallBlocksPerPool = 12;
+  SmallBlockDownsizeCheckAdder = 64;
+  SmallBlockUpsizeAdder = 32;
 
   MediumBlockPoolSizeMem = 20 * 64 * 1024;
   MediumBlockPoolSize = MediumBlockPoolSizeMem - 16;
@@ -591,6 +591,7 @@ const
   MaximumSmallBlockPoolSize =
     OptimalSmallBlockPoolSizeUpperLimit + MinimumMediumBlockSize;
   LargeBlockGranularity = 65536;
+  MediumInPlaceDownsizeLimit = MinimumMediumBlockSize div 4;
 
   IsFreeBlockFlag = 1;
   IsMediumBlockFlag = 2;
@@ -615,10 +616,6 @@ const
   SpinSmallFreememLockCount = 2 * SpinFactor; // _freemem has lots of collision
   SpinMediumLockCount = 500 * SpinFactor;
   SpinLargeLockCount = 500 * SpinFactor;
-
-  SmallBlockDownsizeCheckAdder = 64;
-  SmallBlockUpsizeAdder = 32;
-  MediumInPlaceDownsizeLimit = MinimumMediumBlockSize div 4;
 
 type
   PSmallBlockPoolHeader = ^TSmallBlockPoolHeader;
@@ -994,13 +991,6 @@ begin
   FreeLarge(header, DropMediumAndLargeFlagsMask and header.BlockSizeAndFlags);
   result := 0; // assume success
 end;
-
-{$ifndef FPCMM_STANDALONE}
-
-function _GetMem(size: PtrInt): pointer; forward;
-function _FreeMem(P: pointer): PtrInt;   forward;
-
-{$endif FPCMM_STANDALONE}
 
 function ReallocateLargeBlock(p: pointer; size: PtrUInt): pointer;
 var
@@ -2049,8 +2039,8 @@ asm
   neg rbx
   pxor xmm0, xmm0
   align 16
-@FillLoop:
-  movaps oword ptr [rdx + rbx], xmm0 // non-temporal movntdq not needed (<256KB)
+@FillLoop: // non-temporal movntdq not needed when size <256KB (small/medium)
+  movaps oword ptr [rdx + rbx], xmm0
   add rbx, 16
   js @FillLoop
 @ClearLastQWord:
@@ -2108,6 +2098,133 @@ begin
   FillChar(result, sizeof(result), 0);
 end;
 
+type
+  // match both TSmallBlockStatus and TSmallBlockContention
+  TRes = array[0..2] of cardinal;
+  // details are allocated on the stack, not the heap
+  TResArray = array[0..(NumSmallInfoBlock * 2) - 1] of TRes;
+
+procedure QuickSortRes(var Res: TResArray; L, R, Level: PtrInt);
+var
+  I, J, P: PtrInt;
+  pivot: cardinal;
+  tmp: TRes;
+begin
+  if L < R then
+    repeat
+      I := L;
+      J := R;
+      P := (L + R) shr 1;
+      repeat
+        pivot := Res[P, Level];
+        while Res[I, Level] > pivot do
+          inc(I);
+        while Res[J, Level] < pivot do
+          dec(J);
+        if I <= J then
+        begin
+          tmp := Res[J];
+          Res[J] := Res[I];
+          Res[I] := tmp;
+          if P = I then
+            P := J
+          else if P = J then
+            P := I;
+          inc(I);
+          dec(J);
+        end;
+      until I > J;
+      if J - L < R - I then
+      begin // use recursion only for smaller range
+        if L < J then
+          QuickSortRes(Res, L, J, Level);
+        L := I;
+      end
+      else
+      begin
+        if I < R then
+          QuickSortRes(Res, I, R, Level);
+        R := J;
+      end;
+    until L >= R;
+end;
+
+procedure SetSmallBlockStatus(var res: TResArray);
+var
+  i, a: integer;
+  p: PSmallBlockType;
+  d: ^TSmallBlockStatus;
+begin
+  d := @res;
+  p := @SmallBlockInfo;
+  for i := 1 to NumSmallBlockTypes do
+  begin
+    d^.Total := p^.GetmemCount;
+    d^.Current := p^.GetmemCount - p^.FreememCount;
+    d^.BlockSize := p^.BlockSize;
+    inc(d);
+    inc(p);
+  end;
+  for a := 1 to NumTinyBlockArenas do
+  begin
+    d := @res; // aggregate counters
+    for i := 1 to NumTinyBlockTypes do
+    begin
+      inc(d^.Total, p^.GetmemCount);
+      inc(d^.Current, p^.GetmemCount - p^.FreememCount);
+      inc(d);
+      inc(p);
+    end;
+  end;
+  assert(p = @SmallBlockInfo.GetmemLookup);
+end;
+
+function SortSmallBlockStatus(var res: TResArray; maxcount, orderby: PtrInt): PtrInt;
+begin
+  QuickSortRes(res, 0, NumSmallBlockTypes - 1, orderby);
+  result := maxcount;
+  if result > NumSmallBlockTypes then
+    result := NumSmallBlockTypes;
+  while (result > 0) and (res[result - 1, orderby] = 0) do
+    dec(result);
+end;
+
+function SetSmallBlockContention(var res: TResArray; maxcount: integer): integer;
+var
+  i: integer;
+  p: PSmallBlockType;
+  d: ^TSmallBlockContention;
+begin
+  result := 0;
+  d := @res;
+  p := @SmallBlockInfo;
+  for i := 1 to NumSmallInfoBlock do
+  begin
+    if p^.GetmemSleepCount <> 0 then
+    begin
+      d^.SleepCount := p^.GetmemSleepCount;
+      d^.GetmemBlockSize := p^.BlockSize;
+      d^.FreememBlockSize := 0;
+      inc(d);
+      inc(result);
+    end;
+    if p^.FreememSleepCount <> 0 then
+    begin
+      d^.SleepCount := p^.FreememSleepCount;
+      d^.GetmemBlockSize := 0;
+      d^.FreememBlockSize := p^.BlockSize;
+      inc(d);
+      inc(result);
+    end;
+    inc(p);
+  end;
+  if result = 0 then
+    exit;
+  QuickSortRes(res, 0, result - 1, 0);
+  if result > maxcount then
+    result := maxcount;
+end;
+
 function K(i: PtrUInt): shortstring;
 var
   tmp: string[1];
@@ -2159,9 +2276,8 @@ end;
 procedure WriteHeapStatus(const context: shortstring;
   smallblockstatuscount, smallblockcontentioncount: integer);
 var
-  status: TSmallBlockStatusDynArray;
-  contention: TSmallBlockContentionDynArray;
-  i, smallcount: PtrInt;
+  res: TResArray; // no heap allocation involved
+  i, n, smallcount: PtrInt;
 begin
   if context[0] <> #0 then
     writeln(context);
@@ -2172,138 +2288,59 @@ begin
     WriteHeapStatusDetail(Medium, ' Medium: ');
     WriteHeapStatusDetail(Large,  ' Large:  ');
     if SleepCount <> 0 then
-      write(' Sleep:    count=', K(SleepCount)
+      writeln(' Total Sleep: count=', K(SleepCount)
         {$ifdef FPCMM_DEBUG} , ' microsec=', K(SleepTime) {$endif});
     smallcount := SmallGetmemSleepCount + SmallFreememSleepCount;
     if smallcount <> 0 then
-      write(' getmem=', K(SmallGetmemSleepCount), ' freemem=', K(SmallFreememSleepCount));
+      writeln(' Small Sleep: getmem=', K(SmallGetmemSleepCount),
+        ' freemem=', K(SmallFreememSleepCount));
   end;
   if (smallblockcontentioncount > 0) and (smallcount <> 0) then
   begin
-    writeln;
-    contention := GetSmallBlockContention;
-    for i := 0 to high(contention) do
-      with contention[i] do
+    n := SetSmallBlockContention(res, smallblockcontentioncount);
+    for i := 0 to n - 1 do
+      with TSmallBlockContention(res[i]) do
       begin
         if GetmemBlockSize <> 0 then
-          write(' getmem(', GetmemBlockSize)
+          write('  getmem(', GetmemBlockSize)
         else
-          write(' freemem(', FreememBlockSize);
+          write('  freemem(', FreememBlockSize);
         write(')=' , K(SleepCount));
-        if i = smallblockcontentioncount then
-          exit;
+        if (i and 3 = 3) or (i = n - 1) then
+          writeln;
       end;
   end;
   if smallblockstatuscount > 0 then
   begin
-   writeln;
-   writeln(' Small Blocks by total use:');
-   status := GetSmallBlockStatus(smallblockstatuscount, obTotal);
-   for i := 0 to high(status) do
-     with status[i] do
-       write(' ', BlockSize, '=', K(Total));
-   writeln;
-   writeln(' Small Blocks by current use:');
-   status := GetSmallBlockStatus(smallblockstatuscount, obCurrent);
-   for i := 0 to high(status) do
-     with status[i] do
-       write(' ', BlockSize, '=', K(Current));
-   writeln;
+    SetSmallBlockStatus(res);
+    writeln(' Small Blocks by total use:');
+    write(' ');
+    for i := 0 to SortSmallBlockStatus(res, smallblockstatuscount, ord(obTotal)) - 1 do
+      with TSmallBlockStatus(res[i]) do
+        write(' ', BlockSize, '=', K(Total));
+    writeln;
+    writeln(' Small Blocks by current use:');
+    write(' ');
+    for i := 0 to SortSmallBlockStatus(res, smallblockstatuscount, ord(obCurrent)) - 1 do
+      with TSmallBlockStatus(res[i]) do
+        write(' ', BlockSize, '=', K(Current));
+    writeln;
   end;
-  writeln;
 end;
 
 {$I+}
 
-type
-  // match both TSmallBlockStatus and TSmallBlockContention
-  TRes = array[0..2] of cardinal;
-  TResArray = array[0..(NumSmallInfoBlock * 2) - 1] of TRes;
-
-procedure QuickSortRes(var Res: TResArray; L, R, Level: PtrInt);
-var
-  I, J, P: PtrInt;
-  pivot: cardinal;
-  tmp: TRes;
-begin
-  if L < R then
-    repeat
-      I := L;
-      J := R;
-      P := (L + R) shr 1;
-      repeat
-        pivot := Res[P, Level];
-        while Res[I, Level] > pivot do
-          inc(I);
-        while Res[J, Level] < pivot do
-          dec(J);
-        if I <= J then
-        begin
-          tmp := Res[J];
-          Res[J] := Res[I];
-          Res[I] := tmp;
-          if P = I then
-            P := J
-          else if P = J then
-            P := I;
-          inc(I);
-          dec(J);
-        end;
-      until I > J;
-      if J - L < R - I then
-      begin // use recursion only for smaller range
-        if L < J then
-          QuickSortRes(Res, L, J, Level);
-        L := I;
-      end
-      else
-      begin
-        if I < R then
-          QuickSortRes(Res, I, R, Level);
-        R := J;
-      end;
-    until L >= R;
-end;
-
 function GetSmallBlockStatus(maxcount: integer;
   orderby: TSmallBlockOrderBy): TSmallBlockStatusDynArray;
 var
-  i, a: integer;
-  p: PSmallBlockType;
-  d: ^TSmallBlockStatus;
   res: TResArray;
 begin
   assert(SizeOf(TRes) = SizeOf(TSmallBlockStatus));
   result := nil;
   if maxcount <= 0 then
     exit;
-  d := @res;
-  p := @SmallBlockInfo;
-  for i := 1 to NumSmallBlockTypes do
-  begin
-    d^.Total := p^.GetmemCount;
-    d^.Current := p^.GetmemCount - p^.FreememCount;
-    d^.BlockSize := p^.BlockSize;
-    inc(d);
-    inc(p);
-  end;
-  for a := 1 to NumTinyBlockArenas do
-  begin
-    d := @res; // aggregate counters
-    for i := 1 to NumTinyBlockTypes do
-    begin
-      inc(d^.Total, p^.GetmemCount);
-      inc(d^.Current, p^.GetmemCount - p^.FreememCount);
-      inc(d);
-      inc(p);
-    end;
-  end;
-  assert(p = @SmallBlockInfo.GetmemLookup);
-  QuickSortRes(res, 0, NumSmallBlockTypes - 1, ord(orderby));
-  if maxcount > NumSmallBlockTypes then
-    maxcount := NumSmallBlockTypes;
-  while (maxcount > 0) and (res[maxcount - 1, ord(orderby)] = 0) do
-    dec(maxcount);
+  SetSmallBlockStatus(res);
+  maxcount := SortSmallBlockStatus(res, maxcount, ord(orderby));
   if maxcount = 0 then
     exit;
   SetLength(result, maxcount);
@@ -2312,43 +2349,15 @@ end;
 
 function GetSmallBlockContention(maxcount: integer): TSmallBlockContentionDynArray;
 var
-  i, n: integer;
-  p: PSmallBlockType;
-  d: ^TSmallBlockContention;
+  n: integer;
   res: TResArray;
 begin
-  assert(SizeOf(TRes) = SizeOf(TSmallBlockContention));
   result := nil;
   if maxcount <= 0 then
     exit;
-  n := 0;
-  d := @res;
-  p := @SmallBlockInfo;
-  for i := 1 to NumSmallInfoBlock do
-  begin
-    if p^.GetmemSleepCount <> 0 then
-    begin
-      d^.SleepCount := p^.GetmemSleepCount;
-      d^.GetmemBlockSize := p^.BlockSize;
-      d^.FreememBlockSize := 0;
-      inc(d);
-      inc(n);
-    end;
-    if p^.FreememSleepCount <> 0 then
-    begin
-      d^.SleepCount := p^.FreememSleepCount;
-      d^.GetmemBlockSize := 0;
-      d^.FreememBlockSize := p^.BlockSize;
-      inc(d);
-      inc(n);
-    end;
-    inc(p);
-  end;
+  n := SetSmallBlockContention(res, maxcount);
   if n = 0 then
     exit;
-  QuickSortRes(res, 0, n - 1, 0);
-  if n > maxcount then
-    n := maxcount;
   SetLength(result, n);
   Move(res[0], result[0], n * SizeOf(res[0]));
 end;
@@ -2387,7 +2396,7 @@ var
   medium: PMediumFreeBlock;
 begin
   small := @SmallBlockInfo;
-  assert(SizeOf(small^) = 64); // as expected above asm - match CPU cache line
+  assert(SizeOf(small^) = 64); // required by above asm - match CPU cache line
   for a := 0 to NumTinyBlockArenas do
     for i := 0 to NumSmallBlockTypes - 1 do
     begin
@@ -2467,20 +2476,32 @@ begin
   if MemoryLeakReported then
     exit;
   writeln;
-  writeln('WARNING! THIS PROGRAM LEAKS MEMORY!');
+  WriteHeapStatus('WARNING! THIS PROGRAM LEAKS MEMORY!'#13#10'Memory Status:');
+  writeln('Leaks Identified:');
   MemoryLeakReported := true;
 end;
 
-// experimental detection of object class - use at your own risk
-{.$define FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
+{$ifdef LINUX}
+  // experimental detection of object class - use at your own risk
+  {$define FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
+{$endif LINUX}
 
 procedure MediumMemoryLeakReport(p: PMediumBlockPoolHeader);
 var
   block: PByte;
   header, size: PtrUInt;
   {$ifdef FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
-  first, last, vmt: PByte;
+  first, last: PByte;
+  vmt: PAnsiChar;
   small: PSmallBlockPoolHeader;
+  function SeemsRealPointer(p: pointer): boolean;
+  begin
+    result := (PtrUInt(p) > 65535)
+      {$ifndef MSWINDOWS}
+      // let the GPF happen silently in the kernel
+      and (fpaccess(p, F_OK) <> 0) and (fpgeterrno <> ESysEFAULT)
+      {$endif MSWINDOWS};
+  end;
   {$endif FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
 begin
   with MediumBlockInfo do
@@ -2514,21 +2535,23 @@ begin
             last := Pointer(PByte(NextSequentialFeedBlockAddress) - 1);
           while first <= last do
           begin
-            if ((PPtrUInt(first - BlockHeaderSize)^ and IsFreeBlockFlag) = 0) and
-               (PPointer(first)^ <> nil) then
+            if ((PPtrUInt(first - BlockHeaderSize)^ and IsFreeBlockFlag) = 0) then
             begin
-              vmt := PPointer(first)^; // _FreeMem() would have made vmt=nil
-              try // try to access a TObject VMT
-                if (PPtrInt(vmt + vmtInstanceSize)^ > 0) and
+              vmt := PPointer(first)^; // _FreeMem() ensured vmt=nil
+              if (vmt <> nil) and SeemsRealPointer(vmt) then
+              try
+                // try to access the TObject VMT (seems to work on Linux)
+                if (PPtrInt(vmt + vmtInstanceSize)^ >= sizeof(vmt)) and
                    (PPtrInt(vmt + vmtInstanceSize)^ <=
                     PSmallBlockPoolHeader(block).BlockType.BlockSize) and
-                   (PPointer(vmt + vmtClassName)^ <> nil) then
+                   SeemsRealPointer(PPointer(vmt + vmtClassName)^) then
                 begin
                    StartReport;
-                   writeln('  potential leak of ', TObject(first).ClassName, ' (',
-                     PSmallBlockPoolHeader(block).BlockType.BlockSize, 'B)');
+                   writeln(' may be a ', PShortString(PPointer(vmt + vmtClassName)^)^,
+                     ' leak (', PSmallBlockPoolHeader(block).BlockType.BlockSize, 'B)');
                 end;
               except
+                // intercept any GPF
               end;
             end;
             inc(first, PSmallBlockPoolHeader(block).BlockType.BlockSize);
@@ -2568,7 +2591,7 @@ begin
     begin
       StartReport;
       writeln(' small block leak x', size, ' of size=', p^.BlockSize,
-        'B  (getmem=', p^.GetmemCount, ' freemem=', p^.FreememCount, ')');
+        '  (getmem=', p^.GetmemCount, ' freemem=', p^.FreememCount, ')');
     end;
     {$endif FPCMM_REPORTMEMORYLEAKS}
     inc(p);
