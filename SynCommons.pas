@@ -16831,6 +16831,13 @@ implementation
 
 {$ifdef FPC}
 uses
+  {$ifdef FPC_X64MM}
+  {$ifdef CPUX64}
+  SynFPCx64MM,
+  {$else}
+  {$undef FPC_X64MM}
+  {$endif CPUX64}
+  {$endif FPC_X64MM}
   {$ifdef LINUX}
   Unix,
   dynlibs,
@@ -20681,7 +20688,13 @@ procedure fpc_unicodestr_assign; external name 'FPC_UNICODESTR_ASSIGN';
 procedure fpc_dynarray_incr_ref; external name 'FPC_DYNARRAY_INCR_REF';
 procedure fpc_dynarray_decr_ref; external name 'FPC_DYNARRAY_DECR_REF';
 procedure fpc_dynarray_clear; external name 'FPC_DYNARRAY_CLEAR';
+{$ifdef FPC_X64MM}
+procedure fpc_getmem; external name 'FPC_GETMEM';
 procedure fpc_freemem; external name 'FPC_FREEMEM';
+{$else}
+procedure _Getmem; external name 'FPC_GETMEM';
+procedure _Freemem; external name 'FPC_FREEMEM';
+{$endif FPC_X64MM}
 
 procedure PatchJmp(old, new: PByteArray; size: PtrInt; jmp: PtrUInt=0);
 var
@@ -20689,7 +20702,7 @@ var
 begin
   PatchCode(old, new, size, nil, {unprotected=}true);
   if jmp = 0 then
-    jmp := PtrUInt(@fpc_freemem);
+    jmp := PtrUInt(@_Freemem);
   repeat // search and fix "jmp rel fpc_freemem/_dynarray_decr_ref_free"
     dec(size);
     if size = 0 then
@@ -20714,7 +20727,7 @@ lock    dec     qword ptr[rax - _STRREFCNT]
         jbe     @free
 @z:     ret
 @free:  sub     p, SizeOf(TStrRec)
-        jmp     fpc_freemem
+        jmp     _Freemem
 end;
 
 procedure _ansistr_incr_ref(p: pointer); nostackframe; assembler;
@@ -20747,7 +20760,7 @@ lock    inc     qword ptr[s - _STRREFCNT]
  lock   dec     qword ptr[rax - _STRREFCNT]
         ja      @n
 @free:  sub     d, SizeOf(TStrRec)
-        jmp     fpc_freemem
+        jmp     _Freemem
 @n:
 end;
 
@@ -20792,7 +20805,7 @@ lock    dec     qword ptr[rax - _STRREFCNT]
         jbe     @free
 @z:     ret
 @free:  sub     d, SizeOf(TStrRec)
-        jmp     fpc_freemem
+        jmp     _Freemem
 end;
 
 {$else}
@@ -20824,7 +20837,7 @@ var r: PAnsiChar; // s may = p -> stand-alone variable
 begin
   if len<=0 then
     r := nil else begin
-    GetMem(r,len+(STRRECSIZE+2));
+    {$ifdef FPC_X64MM}r := _Getmem({$else}GetMem(r,{$endif}len+(STRRECSIZE+2));
     sr := pointer(r);
     sr^.codePage := codepage;
     sr^.elemSize := 1;
@@ -20845,7 +20858,7 @@ var r: PAnsiChar;
 begin
   if len<=0 then
     r := nil else begin
-    GetMem(r,len+(STRRECSIZE+4));
+    {$ifdef FPC_X64MM}r := _Getmem({$else}GetMem(r,{$endif}len+(STRRECSIZE+4));
     sr := pointer(r);
     sr^.codePage := CP_UTF8;
     sr^.elemSize := 1;
@@ -53032,8 +53045,12 @@ end;
 {$ifdef FPC_OR_PUREPASCAL}
 class function TSynPersistent.NewInstance: TObject;
 begin // bypass vmtIntfTable and vmt^.vInitTable (FPC management operators)
+  {$ifdef FPC_X64MM}
+  result := _AllocMem(InstanceSize);
+  {$else}
   GetMem(pointer(result),InstanceSize); // InstanceSize is inlined
   FillCharFast(pointer(result)^,InstanceSize,0);
+  {$endif}
   PPointer(result)^ := pointer(self); // store VMT
 end; // no benefit of rewriting FreeInstance/CleanupInstance
 {$else}
@@ -62422,6 +62439,10 @@ begin
     PatchCode(@fpc_dynarray_incr_ref,@_dynarray_incr_ref,$17);  // fpclen=$2f
     PatchJmp(@fpc_dynarray_clear,@_dynarray_decr_ref,$2f,PtrUInt(@_dynarray_decr_ref_free));
     RedirectCode(@fpc_dynarray_decr_ref,@fpc_dynarray_clear);
+    {$ifdef FPC_X64MM}
+    RedirectCode(@fpc_getmem,@_Getmem);
+    RedirectCode(@fpc_freemem,@_Freemem);
+    {$endif FPC_X64MM}
   end;
   {$endif ABSOLUTEPASCAL}
   {$else}
@@ -62751,6 +62772,7 @@ initialization
   Assert(SizeOf(TFileTime)=SizeOf(Int64)); // see e.g. FileTimeToInt64
   {$endif CPU64}
   {$endif MSWINDOWS}
+
 
 finalization
   GarbageCollectorFree;
