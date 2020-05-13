@@ -3281,14 +3281,14 @@ begin
         raise ESQLDBOracle.CreateUTF8('%.Prepare should be called only once',[self]);
       // 1. process SQL
       inherited Prepare(aSQL,ExpectResults); // set fSQL + Connect if necessary
-      fPreparedParamsCount := ReplaceParamsByNumbers(aSQL,fSQLPrepared,':');
+      fPreparedParamsCount := ReplaceParamsByNumbers(aSQL,fSQLPrepared,':', true);
       L := Length(fSQLPrepared);
       while (L>0) and (fSQLPrepared[L] in [#1..' ',';']) do
       if (fSQLPrepared[L]=';') and (L>5) and IdemPChar(@fSQLPrepared[L-3],'END') then
         break else // allows 'END;' at the end of a statement
         dec(L);    // trim ' ' or ';' right (last ';' could be found incorrect)
       if L <> Length(fSQLPrepared) then
-        fSQLPrepared := copy(aSQL,1,L); // trim right ';' if any
+        fSQLPrepared := copy(fSQLPrepared,1,L); // trim right ';' if any
       // 2. prepare statement
       env := (Connection as TSQLDBOracleConnection).fEnv;
       with OCI do begin
