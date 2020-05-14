@@ -289,7 +289,8 @@ type
 /// retrieve the use counts of allocated small blocks
 // - returns maxcount biggest results, sorted by "orderby" field occurence
 function GetSmallBlockStatus(maxcount: integer = 10;
-  orderby: TSmallBlockOrderBy = obTotal): TSmallBlockStatusDynArray;
+  orderby: TSmallBlockOrderBy = obTotal; count: PPtrUInt = nil;
+  bytes: PPtrUInt = nil): TSmallBlockStatusDynArray;
 
 /// retrieve all small blocks which suffered from blocking during multi-thread
 // - returns maxcount biggest results, sorted by SleepCount occurence
@@ -300,7 +301,8 @@ function GetSmallBlockContention(maxcount: integer = 10): TSmallBlockContentionD
 // - if smallblockcontentioncount > 0, includes GetSmallBlockContention() info
 // up to the smallblockcontentioncount biggest occurences
 procedure WriteHeapStatus(const context: shortstring = '';
-  smallblockstatuscount: integer = 9; smallblockcontentioncount: integer = 8);
+  smallblockstatuscount: integer = 8; smallblockcontentioncount: integer = 8;
+  compilationflags: boolean = false);
 
 {$endif FPCMM_STANDALONE}
 
@@ -1207,8 +1209,8 @@ asm
   { ---------- TINY/SMALL block registration ---------- }
 @GotLockOnSmallBlockType:
   // Get rdx=NextPartiallyFreePool rax=FirstFreeBlock rcx=DropSmallFlagsMask
-  inc [rbx].TSmallBlockType.GetmemCount
   mov rdx, [rbx].TSmallBlockType.NextPartiallyFreePool
+  inc [rbx].TSmallBlockType.GetmemCount
   mov rax, [rdx].TSmallBlockPoolHeader.FirstFreeBlock
   mov rcx, DropSmallFlagsMask
   // Is there a pool with free blocks?
@@ -1245,15 +1247,15 @@ asm
   {$endif MSWINDOWS}
 @TrySmallSequentialFeed:
   // Feed a small block sequentially
-  mov rdx, [rbx].TSmallBlockType.CurrentSequentialFeedPool
   movzx ecx, [rbx].TSmallBlockType.BlockSize
+  mov rdx, [rbx].TSmallBlockType.CurrentSequentialFeedPool
   add rcx, rax
   // Can another block fit?
   cmp rax, [rbx].TSmallBlockType.MaxSequentialFeedBlockAddress
   ja @AllocateSmallBlockPool
   // Adjust number of used blocks and sequential feed pool
-  add [rdx].TSmallBlockPoolHeader.BlocksInUse, 1
   mov [rbx].TSmallBlockType.NextSequentialFeedBlockAddress, rcx
+  inc [rdx].TSmallBlockPoolHeader.BlocksInUse
   // Unlock the block type, set the block header and leave
   mov [rbx].TSmallBlockType.BlockTypeLocked, False
   mov [rax - BlockHeaderSize], rdx
@@ -1278,9 +1280,9 @@ asm
   ret
 @AllocateSmallBlockPool:
   // Access shared information about Medium blocks storage
-  lea r10, [rip + MediumBlockInfo]
+  lea rcx, [rip + MediumBlockInfo]
   mov eax, $100
-  lea rcx, [r10 + TMediumBlockInfo.Locked]
+  mov r10, rcx // TMediumBlockInfo.Locked = TMediumBlockInfo
 lock cmpxchg byte ptr [rcx], ah
   je @MediumLocked1
   call LockMediumBlocks
@@ -2296,9 +2298,24 @@ begin
   assert(p = @SmallBlockInfo.GetmemLookup);
 end;
 
-function SortSmallBlockStatus(var res: TResArray; maxcount, orderby: PtrInt): PtrInt;
+function SortSmallBlockStatus(var res: TResArray; maxcount, orderby: PtrInt;
+  count, bytes: PPtrUInt): PtrInt;
+var
+  i: PtrInt;
 begin
   QuickSortRes(res, 0, NumSmallBlockTypes - 1, orderby);
+  if count <> nil then
+  begin
+    count^ := 0;
+    for i := 0 to NumSmallBlockTypes - 1 do
+      inc(count^, res[i, orderby]);
+  end;
+  if bytes <> nil then
+  begin
+    bytes^ := 0;
+    for i := 0 to NumSmallBlockTypes - 1 do
+      inc(bytes^, res[i, orderby] * res[i, ord(obBlockSize)]);
+  end;
   result := maxcount;
   if result > NumSmallBlockTypes then
     result := NumSmallBlockTypes;
@@ -2387,17 +2404,28 @@ begin
     'B current=', K(arena.CumulativeAlloc - arena.CumulativeFree),
     ' alloc=', K(arena.CumulativeAlloc), ' free=', K(arena.CumulativeFree));
   {$endif FPCMM_DEBUG}
-  writeln(' sleep=', K(arena.SleepCount) {$ifdef FPCMM_BOOST} , ' boost=on' {$endif});
+  writeln(' sleep=', K(arena.SleepCount));
 end;
 
-procedure WriteHeapStatus(const context: shortstring;
-  smallblockstatuscount, smallblockcontentioncount: integer);
+procedure WriteHeapStatus(const context: shortstring; smallblockstatuscount,
+  smallblockcontentioncount: integer; compilationflags: boolean);
 var
   res: TResArray; // no heap allocation involved
   i, n, smallcount: PtrInt;
+  t, b: PtrUInt;
 begin
   if context[0] <> #0 then
     writeln(context);
+  if compilationflags then
+    writeln(' Flags: ' {$ifdef FPCMM_BOOSTER} + 'BOOSTER ' {$else}
+      {$ifdef FPCMM_BOOST} + 'BOOST ' {$endif}{$endif}
+      {$ifdef FPCMM_SERVER} + 'SERVER ' {$endif}
+      {$ifdef FPCMM_ASSUMEMULTITHREAD} + ' assumulthrd' {$endif}
+      {$ifdef FPCMM_LOCKLESSFREE} + ' lockless' {$endif}
+      {$ifdef FPCMM_PAUSEMORE}  + ' pausemore' {$endif}
+      {$ifdef FPCMM_NOMREMAP} + ' nomremap' {$endif}
+      {$ifdef FPCMM_DEBUG} + ' debug' {$endif}
+      {$ifdef FPCMM_REPORTMEMORYLEAKS}  + ' repmemleak' {$endif});
   with CurrentHeapStatus do
   begin
     writeln(' Small:  blocks=', K(SmallBlocks), ' size=', K(SmallBlocksSize),
@@ -2411,8 +2439,8 @@ begin
     if smallcount <> 0 then
       writeln(' Small Sleep: getmem=', K(SmallGetmemSleepCount),
         ' freemem=', K(SmallFreememSleepCount)
-        {$ifdef FPCMM_LOCKLESSFREE} {$ifdef FPCMM_DEBUG}
-        , '  freememspin=', K(SmallFreememLockLessSpin) {$endif} {$endif} );
+        {$ifdef FPCMM_LOCKLESSFREE} {$ifdef FPCMM_DEBUG} ,
+        '  locklessspin=', K(SmallFreememLockLessSpin) {$endif} {$endif} );
   end;
   if (smallblockcontentioncount > 0) and (smallcount <> 0) then
   begin
@@ -2432,25 +2460,31 @@ begin
   if smallblockstatuscount > 0 then
   begin
     SetSmallBlockStatus(res);
-    writeln(' Small Blocks by total use:');
-    write(' ');
-    for i := 0 to SortSmallBlockStatus(res, smallblockstatuscount, ord(obTotal)) - 1 do
+    n := SortSmallBlockStatus(res, smallblockstatuscount, ord(obTotal), @t, @b) - 1;
+    writeln(' Small Blocks since beginning: ', K(t), '/', K(b), 'B');
+    for i := 0 to n do
       with TSmallBlockStatus(res[i]) do
-        write(' ', BlockSize, '=', K(Total));
-    writeln;
-    writeln(' Small Blocks by current use:');
-    write(' ');
-    for i := 0 to SortSmallBlockStatus(res, smallblockstatuscount, ord(obCurrent)) - 1 do
+      begin
+        write('  ', BlockSize, '=', K(Total));
+        if (i and 7 = 7) or (i = n) then
+          writeln;
+      end;
+    n := SortSmallBlockStatus(res, smallblockstatuscount, ord(obCurrent), @t, @b) - 1;
+    writeln(' Small Blocks current: ', K(t), '/', K(b), 'B');
+    for i := 0 to n do
       with TSmallBlockStatus(res[i]) do
-        write(' ', BlockSize, '=', K(Current));
-    writeln;
+      begin
+        write('  ', BlockSize, '=', K(Current));
+        if (i and 7 = 7) or (i = n) then
+          writeln;
+      end;
   end;
 end;
 
 {$I+}
 
 function GetSmallBlockStatus(maxcount: integer;
-  orderby: TSmallBlockOrderBy): TSmallBlockStatusDynArray;
+  orderby: TSmallBlockOrderBy; count, bytes: PPtrUInt): TSmallBlockStatusDynArray;
 var
   res: TResArray;
 begin
@@ -2459,7 +2493,7 @@ begin
   if maxcount <= 0 then
     exit;
   SetSmallBlockStatus(res);
-  maxcount := SortSmallBlockStatus(res, maxcount, ord(orderby));
+  maxcount := SortSmallBlockStatus(res, maxcount, ord(orderby), count, bytes);
   if maxcount = 0 then
     exit;
   SetLength(result, maxcount);
