@@ -20399,7 +20399,6 @@ begin
   fId := aId;
   fIsError := false;
   fHttpClient := TDDDThreadsHttpClient.Create('127.0.0.1', HTTP_DEFAULTPORT);
-  fHttpClient.SetUser('Admin', 'synopse');
 end;
 
 destructor TDDDThreadsThread.Destroy;
@@ -20414,6 +20413,9 @@ var
   test: TDDDTest;
   success: boolean;
 begin
+  fHttpClient.SetUser('Admin', 'synopse');
+  for i := 1 to 500 do
+    fHttpClient.ServerTimestampSynchronize; // calls root/timestamp
   test := TDDDTest.Create;
   try
     success := true;
