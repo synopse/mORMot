@@ -138,10 +138,10 @@ interface
   {$mode Delphi}
   {$asmmode Intel}
   {$inline on}
-  {$R-} // disable Range checking in our code
-  {$S-} // disable Stack checking in our code
+  {$R-} // disable Range checking
+  {$S-} // disable Stack checking
   {$W-} // disable stack frame generation
-  {$Q-} // disable overflow checking in our code
+  {$Q-} // disable overflow checking
   {$B-} // expect short circuit boolean
   {$ifdef CPUX64}
     {$define FPC_CPUX64} // this unit is for FPC + x86_64 only
@@ -190,7 +190,7 @@ type
     /// how many tiny/small memory blocks (<=2600) are currently allocated
     SmallBlocks: PtrUInt;
     /// how many bytes of tiny/small memory blocks are currently allocated
-    // - this size is part of the Medium arena
+    // - this size is part of the Medium.CurrentBytes arena
     SmallBlocksSize: PtrUInt;
     /// contain blocks up to 256KB (small and medium blocks)
     Medium: TMMStatusArena;
@@ -1555,7 +1555,7 @@ procedure FreeMediumBlock(arg1: pointer); nostackframe; assembler;
 // rcx=P rdx=[P-BlockHeaderSize]
 asm
   push rbx
-  // Drop the flags, set r10=v r11=P rbx=blocksize
+  // Drop the flags, set r10=MediumBlockInfo r11=P rbx=blocksize
   lea r10, [rip + MediumBlockInfo]
   and rdx, DropMediumAndLargeFlagsMask
   mov rbx, rdx
@@ -1849,15 +1849,15 @@ asm
   test cl, IsFreeBlockFlag + IsMediumBlockFlag + IsLargeBlockFlag
   jnz @NotASmallBlock
   { -------------- TINY/SMALL block ------------- }
-  // Get rbx = block type, rcx = available size
+  // Get rbx=blocktype, rcx=available size, rax=inplaceresize
   mov rbx, [rcx].TSmallBlockPoolHeader.BlockType
+  lea rax, [rdx * 4 + SmallBlockDownsizeCheckAdder]
   movzx ecx, [rbx].TSmallBlockType.BlockSize
   sub ecx, BlockHeaderSize
   cmp rcx, rdx
   jb @SmallUpsize
   // Downsize or small growup with enough space: reallocate only if need
-  lea rbx, [rdx * 4 + SmallBlockDownsizeCheckAdder]
-  cmp ebx, ecx
+  cmp eax, ecx
   jb @GetMemMoveFreeMem // r14=P rdx=size
   mov rax, r14 // keep original pointer
   pop rcx
