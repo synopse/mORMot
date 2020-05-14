@@ -533,8 +533,6 @@ type
     fContentCompress: integer;
     /// to call GetBody only once
     fBodyRetrieved: boolean;
-    /// cache for HeaderGetText
-    fHeaderText: SockString;
     /// compress the data, adding corresponding headers via SockSend()
     // - always add a 'Content-Length: ' header entry (even if length=0)
     // - e.g. 'Content-Encoding: synlz' header if compressed using synlz
@@ -554,9 +552,9 @@ type
     // - 'GET /path HTTP/1.1' for a GET request with THttpServer, e.g.
     // - 'HTTP/1.0 200 OK' for a GET response after Get() e.g.
     Command: SockString;
-    /// will contain the header lines after a Request
+    /// will contain all header lines after a Request
     // - use HeaderGetValue() to get one HTTP header item value by name
-    Headers: TSockStringDynArray;
+    Headers: SockString;
     /// will contain the data retrieved from the server, after the Request
     Content: SockString;
     /// same as HeaderGetValue('CONTENT-LENGTH'), but retrieved during Request
@@ -572,14 +570,15 @@ type
     /// same as HeaderGetValue('X-POWERED-BY'), but retrieved during Request
     XPoweredBy: SockString;
     /// map the presence of some HTTP headers, but retrieved during Request
-    HeaderFlags: set of(transferChuked, connectionClose, connectionUpgrade, connectionKeepAlive);
+    HeaderFlags: set of(transferChuked, connectionClose, connectionUpgrade,
+      connectionKeepAlive, hasRemoteIP);
     /// retrieve the HTTP headers into Headers[] and fill most properties below
-    // - only relevant headers are indexed, unless HeadersUnFiltered is set
+    // - only relevant headers are retrieved, unless HeadersUnFiltered is set
     procedure GetHeader(HeadersUnFiltered: boolean=false);
     /// retrieve the HTTP body (after uncompression if necessary) into Content
     procedure GetBody;
-    /// add an header entry, returning the just entered entry index in Headers[]
-    function HeaderAdd(const aValue: SockString): integer;
+    /// add an header 'name: value' entry
+    procedure HeaderAdd(const aValue: SockString);
     /// set all Header values at once, from CRLF delimited text
     procedure HeaderSetText(const aText: SockString;
       const aForcedContentType: SockString='');
@@ -2556,7 +2555,8 @@ function AuthorizationBearer(const AuthToken: SockString): SockString;
 procedure IP4Text(const ip4addr; var result: SockString); overload;
 
 /// compute the text representation of a IP4/IP6 low-level connection
-procedure IPText(const sin: TVarSin; var result: SockString);
+procedure IPText(const sin: TVarSin; var result: SockString;
+  localasvoid: boolean=false);
 
 const
   /// the layout of TSMTPConnection.FromText method
@@ -3425,7 +3425,54 @@ end;
 const
   CRLF: array[0..1] of AnsiChar = (#13,#10);
 
-function StrLen(S: PAnsiChar): integer;
+function StrLen(S: PAnsiChar): PtrInt;
+{$ifdef CPUX64}
+{$ifdef FPC}nostackframe; assembler; asm {$else}
+asm .noframe // rcx=S (Linux: rdi)
+{$endif FPC} // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
+        {$ifdef win64}
+        mov     rax, rcx             // get pointer to string from rcx
+        mov     r8,  rcx             // copy pointer
+        test    rcx, rcx
+        {$else}
+        mov     rax, rdi
+        mov     ecx, edi
+        test    rdi, rdi
+        {$endif}
+        jz      @null                // returns 0 if S=nil
+        // rax=s,ecx=32-bit of s
+        pxor    xmm0, xmm0           // set to zero
+        and     ecx, 15              // lower 4 bits indicate misalignment
+        and     rax, -16             // align pointer by 16
+        // will never read outside a memory page boundary, so won't trigger GPF
+        movaps  xmm1, [rax]          // read from nearest preceding boundary
+        pcmpeqb xmm1, xmm0           // compare 16 bytes with zero
+        pmovmskb edx, xmm1           // get one bit for each byte result
+        shr     edx, cl              // shift out false bits
+        shl     edx, cl              // shift back again
+        bsf     edx, edx             // find first 1-bit
+        jnz     @L2                  // found
+        // Main loop, search 16 bytes at a time
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@L1:    add     rax, 10H             // increment pointer by 16
+        movaps  xmm1, [rax]          // read 16 bytes aligned
+        pcmpeqb xmm1, xmm0           // compare 16 bytes with zero
+        pmovmskb edx, xmm1           // get one bit for each byte result
+        bsf     edx, edx             // find first 1-bit
+        // (moving the bsf out of the loop and using test here would be faster
+        // for long strings on old processors, but we are assuming that most
+        // strings are short, and newer processors have higher priority)
+        jz      @L1                  // loop if not found
+@L2:    // Zero-byte found. Compute string length
+        {$ifdef win64}
+        sub     rax, r8              // subtract start address
+        {$else}
+        sub     rax, rdi
+        {$endif}
+        add     rax, rdx             // add byte index
+@null:
+end;
+{$else}
 begin
   result := 0;
   if S<>nil then
@@ -3448,6 +3495,7 @@ begin
     end else
       exit;
 end;
+{$endif CPUX64}
 
 type
   TNormToUpper = array[byte] of byte;
@@ -3497,57 +3545,6 @@ begin
         inc(up);
   end;
   result := -1;
-end;
-
-function FindHeader(H: PPByteArray; HCount: integer; const upper: SockString): PAnsiChar;
-{$ifdef CPUX86NOTPIC} // not enough registers
-var u: PByteArray absolute upper;
-{$else}
-var p,u,up: PByteArray;
-{$endif CPUX86NOTPIC}
-label found;
-begin
-  {$ifdef CPUX86NOTPIC}
-  if (u<>nil) and (HCount>0) then begin
-    repeat
-      if (NormToUpper[H^[0]]=u[0]) and (NormToUpper[H^[1]]=u[1]) and
-         IdemPCharUp(@H^[2],@u[2],@NormToUpper) then begin
-        result := pointer(@H^[length(upper)]);
-  {$else}
-  u := pointer(upper);
-  if (u<>nil) and (HCount>0) then begin
-    up := @NormToUpper;
-    if length(upper)>4 then // optimize most common case
-      repeat
-        p := H^;
-        if (up[p[0]]=u[0]) and (up[p[1]]=u[1]) and (up[p[2]]=u[2]) and
-           (up[p[3]]=u[3]) and (up[p[4]]=u[4]) and (up[p[5]]=u[5]) and
-           IdemPCharUp(@p[6],@u[6],up) then begin
-          result := pointer(@p[length(upper)]);
-          if result^=':' then
-            goto found;
-        end;
-        inc(H);
-        dec(HCount);
-      until HCount=0
-    else
-    repeat
-      p := H^;
-      if IdemPCharUp(p,pointer(u),up) then begin
-        result := pointer(@p[length(upper)]);
-  {$endif CPUX86NOTPIC}
-        if result^=':' then begin
-found:   repeat
-            inc(result);
-          until result^<>' ';
-          exit;
-        end;
-      end;
-      inc(H);
-      dec(HCount);
-    until HCount=0;
-  end;
-  result := nil;
 end;
 
 procedure GetNextItem(var P: PAnsiChar; Sep: AnsiChar; var result: SockString);
@@ -3694,11 +3691,57 @@ asm  // fast implementation by John O'Harrow
 end;
 {$endif}
 
-function GetHeaderValue(var headers: SockString; const upname: SockString;
-  deleteInHeaders: boolean): SockString;
+function ExistNameValue(p,up: PAnsiChar): PUTF8Char;
+var tab: PByteArray;
+begin
+  result := p;
+  if p=nil then
+    exit;
+  tab := @NormToUpper;
+  repeat
+    if IdemPCharUp(pointer(result),pointer(up),tab) then
+      exit;
+    while result^>#13 do
+      inc(result);
+    while result^<=#13 do
+      if result^=#0 then
+        exit else
+        inc(result);
+  until false;
+end;
+
+function FindHeaderValue(p: PAnsiChar; const up: SockString): PAnsiChar;
+begin
+  result := ExistNameValue(p,pointer(up));
+  if result=nil then
+    exit;
+  inc(result,length(up));
+  if result^<>':' then
+    result := nil else
+    repeat
+      inc(result);
+    until (result^>' ') or (result^=#0);
+end;
+
+procedure GetHeaderValue(const s, up: SockString; var res: SockString);
+var p: PAnsiChar;
+    L: PtrInt;
+begin
+  p := FindHeaderValue(pointer(s),up);
+  if (p=nil) or (p^=#0) then
+    exit;
+  L := 0;
+  while p[L]>#13 do
+    inc(L);
+  while p[L-1]=' ' do
+    dec(L);
+  SetString(res,p,L);
+end;
+
+procedure ExtractNameValue(var headers: SockString; const upname: SockString;
+  out res: SockString);
 var i,j,k: PtrInt;
 begin
-  {$ifdef FPC} Finalize(result); {$else} result := ''; {$endif}
   if (headers='') or (upname='') then
     exit;
   i := 1;
@@ -3709,17 +3752,15 @@ begin
         k := j;
         break;
       end;
-    if IdemPCharUp(@headers[i],pointer(upname),@NormToUpper) then begin
+    if IdemPCharUp(@PByteArray(headers)[i-1],pointer(upname),@NormToUpper) then begin
       j := i;
       inc(i,length(upname));
-      TrimCopy(headers,i,k-i,result);
-      if deleteInHeaders then begin
-        while true do // delete also ending #13#10
-          if (headers[k]=#0) or (headers[k]>=' ') then
-            break else
-            inc(k);
-        delete(headers,j,k-j);
-      end;
+      TrimCopy(headers,i,k-i,res);
+      while true do // delete also ending #13#10
+        if (headers[k]=#0) or (headers[k]>=' ') then
+          break else
+          inc(k);
+      delete(headers,j,k-j);
       exit;
     end;
     i := k;
@@ -4028,13 +4069,17 @@ begin
   end;
 end;
 
-procedure IPText(const sin: TVarSin; var result: SockString);
+procedure IPText(const sin: TVarSin; var result: SockString; localasvoid: boolean);
 begin
   if sin.sin_family=AF_INET then
-    IP4Text(sin.sin_addr,result) else begin
+    if localasvoid and (cardinal(sin.sin_addr)=$0100007f) then
+      result := '' else
+      IP4Text(sin.sin_addr,result) else begin
     result := GetSinIP(sin); // AF_INET6 may be optimized in a future revision
     if result='::1' then
-      result := IP4local; // IP6 localhost loopback benefits of matching IP4
+      if localasvoid then
+        result := '' else
+        result := IP4local; // IP6 localhost loopback benefits of matching IP4
   end;
 end;
 
@@ -4986,7 +5031,7 @@ procedure TCrtSocket.AcceptRequest(aClientSock: TSocket; aClientSin: PVarSin);
 begin
   {$ifdef LINUXNOTBSD}
   // on Linux fd returned from accept() inherits all parent fd options
-  // except O_NONBLOCK and O_ASYNC;
+  // except O_NONBLOCK and O_ASYNC
   fSock := aClientSock;
   {$else}
   // on other OS inheritance is undefined, so call OpenBind to set all fd options
@@ -4994,7 +5039,7 @@ begin
   Linger := 5; // should remain open for 5 seconds after a closesocket() call
   {$endif LINUXNOTBSD}
   if aClientSin<>nil then
-    IPText(aClientSin^,fRemoteIP);
+    IPText(aClientSin^,fRemoteIP,{localasvoid=}true);
 end;
 
 procedure TCrtSocket.SockSend(const Values: array of const);
@@ -5474,16 +5519,18 @@ procedure TCrtSocket.SockRecvLn(out Line: SockString; CROnly: boolean);
           inc(P);
     until false;
   end;
-var c: AnsiChar;
-   Error: integer;
+var c: byte;
+    L, Error: PtrInt;
 begin
   if CROnly then begin // slower but accurate version expecting #13 as line end
     // SockIn^ expect either #10, either #13#10 -> a dedicated version is needed
     repeat
       SockRecv(@c,1); // this is slow but works
-      if ord(c) in [0,13] then
+      if c in [0,13] then
         exit; // end of line
-      Line := Line+c; // will do the work anyway
+      L := length(Line);
+      SetLength(Line,L+1);
+      PByteArray(Line)[L] := c;
     until false;
   end else
   if SockIn<>nil then begin
@@ -6406,7 +6453,7 @@ var ctxt: THttpServerRequest;
     // handle case of direct sending of static file (as with http.sys)
     if (ctxt.OutContent<>'') and (ctxt.OutContentType=HTTP_RESP_STATICFILE) then
       try
-        ctxt.OutContentType := GetHeaderValue(ctxt.fOutCustomHeaders,'CONTENT-TYPE:',true);
+        ExtractNameValue(ctxt.fOutCustomHeaders,'CONTENT-TYPE:',ctxt.fOutContentType);
         fn := {$ifdef UNICODE}UTF8ToUnicodeString{$else}Utf8ToAnsi{$endif}(ctxt.OutContent);
         if not Assigned(fOnSendFile) or not fOnSendFile(ctxt,fn) then begin
           fs := TFileStream.Create(fn,fmOpenRead or fmShareDenyNone);
@@ -6427,7 +6474,7 @@ var ctxt: THttpServerRequest;
     if ctxt.OutContentType=HTTP_RESP_NORESPONSE then
       ctxt.OutContentType := ''; // true HTTP always expects a response
     // send response (multi-thread OK) at once
-    if (Code<STATUS_SUCCESS) or (ClientSock.Headers=nil) then
+    if (Code<STATUS_SUCCESS) or (ClientSock.Headers='') then
       Code := STATUS_NOTFOUND;
     reason := StatusCodeToReason(Code);
     if ErrorMsg<>'' then begin
@@ -6471,7 +6518,7 @@ var ctxt: THttpServerRequest;
   end;
 
 begin
-  if (ClientSock=nil) or (ClientSock.Headers=nil) then
+  if (ClientSock=nil) or (ClientSock.Headers='') then
     // we didn't get the request = socket read error
     exit; // -> send will probably fail -> nothing to send back
   if Terminated then
@@ -6809,11 +6856,11 @@ var
 
 procedure THttpSocket.GetHeader(HeadersUnFiltered: boolean);
 var s,c: SockString;
-    i, n, err: integer;
+    i, len: PtrInt;
+    err: integer;
     P: PAnsiChar;
     line: array[0..4095] of AnsiChar; // avoid most memory allocation
 begin
-  fHeaderText := '';
   HeaderFlags := [];
   fBodyRetrieved := false;
   fContentCompress := -1;
@@ -6822,7 +6869,7 @@ begin
   Upgrade := '';
   ContentLength := -1;
   ServerInternalState := 0;
-  n := 0;
+  fSndBufLen := 0; // SockSend() internal buffer is used when adding headers
   repeat
     P := @line;
     if (SockIn<>nil) and not HeadersUnFiltered then begin
@@ -6887,106 +6934,51 @@ begin
     6: GetTrimmed(P+13,XPoweredBy);
     else P := nil;
     end;
-    if (P=nil) or HeadersUnFiltered then begin // only store meaningful headers
-      if length(Headers)<=n then
-        SetLength(Headers,n+n shr 3+8);
-      if s='' then
-        SetString(Headers[n],line,StrLen(line)) else
-        Headers[n] := s;
-      inc(n);
-    end;
+    if (P=nil) or HeadersUnFiltered then // only store meaningful headers
+      if s='' then begin
+        len := StrLen(line);
+        if len>SizeOf(line)-2 then
+          break; // avoid buffer overflow
+        PWord(@line[len])^ := 13+10 shl 8; // CR + LF
+        SockSend(@line,len+2);
+      end else
+        SockSend(s);
   until false;
-  SetLength(Headers,n);
+  Headers := copy(fSndBuf, 1, fSndBufLen);
+  fSndBufLen := 0;
 end;
 
-function THttpSocket.HeaderAdd(const aValue: SockString): integer;
+procedure THttpSocket.HeaderAdd(const aValue: SockString);
 begin
-  fHeaderText := '';
-  result := length(Headers);
-  SetLength(Headers,result+1);
-  Headers[result] := aValue;
+  if aValue<>'' then
+    Headers := Headers+aValue+#13#10;
 end;
 
 procedure THttpSocket.HeaderSetText(const aText, aForcedContentType: SockString);
-var P, PDeb: PAnsiChar;
-    n: integer;
 begin
-  fHeaderText := '';
-  P := pointer(aText);
-  n := 0;
-  if P<>nil then
-    repeat
-      PDeb := P;
-      while P^>#13 do inc(P);
-      if PDeb<>P then begin // add any not void line
-        if length(Headers)<=n then
-          SetLength(Headers,n+n shr 3+16);
-        SetString(Headers[n],PDeb,P-PDeb);
-        inc(n);
-      end;
-      while (P^=#13) or (P^=#10) do inc(P);
-    until P^=#0;
-  if (aForcedContentType='') or
-     (FindHeader(pointer(Headers),length(Headers),'CONTENT-TYPE')<>nil) then begin
-    SetLength(Headers,n);
-    exit;
-  end;
-  SetLength(Headers,n+1);
-  Headers[n] := 'Content-Type: '+aForcedContentType;
+  if aText='' then
+    Headers := '' else
+    if aText[length(aText)-1]<>#10 then
+      Headers := aText+#13#10 else
+      Headers := aText;
+  if (aForcedContentType<>'') and
+     (ExistNameValue(pointer(aText),'CONTENT-TYPE:')=nil) then
+    Headers := Headers+'Content-Type: '+aForcedContentType+#13#10;
 end;
 
-const
-  REMOTEIP_HEADERLEN = 10;
-  REMOTEIP_HEADER: string[REMOTEIP_HEADERLEN] = 'RemoteIP: ';
-
 function THttpSocket.HeaderGetText(const aRemoteIP: SockString): SockString;
-var i,L,Lip,n: integer;
-    P: PAnsiChar;
-begin // faster than for .. do result := result+Headers[i]+#13#10
-  if fHeaderText='' then begin
-    n := length(Headers);
-    L := n*2; // #13#10 size
-    dec(n);
-    for i := 0 to n do
-      inc(L,length(Headers[i]));
-    Lip := length(aRemoteIP);
-    if Lip<>0 then
-      inc(L,(REMOTEIP_HEADERLEN+2)+Lip);
-    if L<>0 then begin
-      SetString(fHeaderText,nil,L);
-      P := pointer(fHeaderText);
-      for i := 0 to n do begin
-        L := length(Headers[i]);
-        if L>0 then begin
-          move(pointer(Headers[i])^,P^,L);
-          inc(P,L);
-        end;
-        PWord(P)^ := 13+10 shl 8;
-        inc(P,2);
-      end;
-      if Lip<>0 then begin
-        move(REMOTEIP_HEADER[1],P^,REMOTEIP_HEADERLEN);
-        inc(P,REMOTEIP_HEADERLEN);
-        move(pointer(aRemoteIP)^,P^,Lip);
-        inc(P,Lip);
-        PWord(P)^ := 13+10 shl 8;
-      end;
-    end;
+begin
+  if (aRemoteIP<>'') and not(hasRemoteIP in HeaderFlags) then begin
+    Headers := Headers+'RemoteIP: '+aRemoteIP+#13#10;
+    include(HeaderFlags,hasRemoteIP);
   end;
-  result := fHeaderText;
+  result := Headers;
 end;
 
 function THttpSocket.HeaderGetValue(const aUpperName: SockString): SockString;
-var P: PAnsiChar;
 begin
-  if Headers<>nil then begin
-    P := FindHeader(pointer(Headers),length(Headers),aUpperName);
-    if P<>nil then begin
-      result := P;
-      exit;
-    end;
-  end;
   result := '';
+  GetHeaderValue(Headers,aUpperName,result);
 end;
 
 function THttpSocket.RegisterCompress(aFunction: THttpSocketCompress;
@@ -7061,13 +7053,11 @@ begin
     // get headers and content
     GetHeader(noheaderfilter);
     if fServer<>nil then begin // nil from TRTSPOverHTTPServer
-      if fServer.fRemoteIPHeaderUpper<>'' then begin
-        P := FindHeader(pointer(Headers),length(Headers),fServer.fRemoteIPHeaderUpper);
-        if (P<>nil) and (P^<>#0) then
-          fRemoteIP := P; // real Internet IP (replace 127.0.0.1 from a proxy)
-      end;
+      if fServer.fRemoteIPHeaderUpper<>'' then
+        // real Internet IP (replace 127.0.0.1 from a proxy)
+        GetHeaderValue(Headers,fServer.fRemoteIPHeaderUpper,fRemoteIP);
       if fServer.fRemoteConnIDHeaderUpper<>'' then begin
-        P := FindHeader(pointer(Headers),length(Headers),fServer.fRemoteConnIDHeaderUpper);
+        P := FindHeaderValue(pointer(Headers),fServer.fRemoteConnIDHeaderUpper);
         if P<>nil then
           fRemoteConnectionID := GetNextItemUInt64(P);
       end;
@@ -8361,6 +8351,9 @@ const
     'If-None-Match','If-Range','If-Unmodified-Since','Max-Forwards',
     'Proxy-Authorization','Referer','Range','TE','Translate','User-Agent');
 
+  REMOTEIP_HEADERLEN = 10;
+  REMOTEIP_HEADER: string[REMOTEIP_HEADERLEN] = 'RemoteIP: ';
+
 function RetrieveHeaders(const Request: HTTP_REQUEST;
   const RemoteIPHeadUp: SockString; out RemoteIP: SockString): SockString;
 var i, L, Lip: integer;
@@ -8383,7 +8376,7 @@ begin
       inc(P);
   end;
   if (RemoteIP='') and (Request.Address.pRemoteAddress<>nil) then
-    IPText(PVarSin(Request.Address.pRemoteAddress)^,RemoteIP);
+    IPText(PVarSin(Request.Address.pRemoteAddress)^,RemoteIP,{localasvoid=}true);
   // compute headers length
   Lip := length(RemoteIP);
   if Lip<>0 then
