@@ -62772,6 +62772,9 @@ initialization
 
 
 finalization
+  {$ifndef NOVARIANTS}
+  DocVariantType.Free;
+  {$endif NOVARIANTS}
   GarbageCollectorFree;
   DeleteCriticalSection(GlobalCriticalSection);
   //writeln('TDynArrayHashedCollisionCount=',TDynArrayHashedCollisionCount); readln;
