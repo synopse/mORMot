@@ -74,9 +74,6 @@ unit SynCommons;
 interface
 
 uses
-{$ifdef WITH_FASTMM4STATS}
-  FastMM4,
-{$endif}
 {$ifdef MSWINDOWS}
   Windows,
   Messages,
@@ -115,11 +112,13 @@ const
   // - usefull for low-level debugging purpose
   SYNOPSE_FRAMEWORK_FULLVERSION  = SYNOPSE_FRAMEWORK_VERSION
     {$ifdef FPC}
+      {$ifdef FPC_X64MM}+' x64MM'{$ifdef FPCMM_BOOST}+'b'{$endif}
+        {$ifdef FPCMM_SERVER}+'s'{$endif}{$else}
       {$ifdef FPC_FASTMM4}+' FMM4'{$else}
-        {$ifdef FPC_SYNTBB}+' TBB'{$else}
-          {$ifdef FPC_SYNJEMALLOC}+' JM'{$else}
-            {$ifdef FPC_SYNCMEM}+' GM'{$else}
-              {$ifdef FPC_CMEM}+' CM'{$endif}{$endif}{$endif}{$endif}{$endif}
+      {$ifdef FPC_SYNTBB}+' TBB'{$else}
+      {$ifdef FPC_SYNJEMALLOC}+' JM'{$else}
+      {$ifdef FPC_SYNCMEM}+' CM'{$else}
+      {$ifdef FPC_CMEM}+' cM'{$endif}{$endif}{$endif}{$endif}{$endif}{$endif}
     {$else}
       {$ifdef LVCL}+' LVCL'{$else}
         {$ifdef ENHANCEDRTL}+' ERTL'{$endif}{$endif}
@@ -783,9 +782,9 @@ type
 
 
   /// implements a stack-based storage of some (UTF-8 or binary) text
+  // - avoid temporary memory allocation via the heap for up to 4KB of data
   // - could be used e.g. to make a temporary copy when JSON is parsed in-place
   // - call one of the Init() overloaded methods, then Done to release its memory
-  // - will avoid temporary memory allocation via the heap for up to 4KB of data
   // - all Init() methods will allocate 16 more bytes, for a trailing #0 and
   // to ensure our fast JSON parsing won't trigger any GPF (since it may read
   // up to 4 bytes ahead via its PInteger() trick) or any SSE4.2 function
@@ -987,11 +986,12 @@ function WideCharToWinAnsi(wc: cardinal): integer;
 /// return TRUE if the supplied buffer only contains 7-bits Ansi characters
 function IsAnsiCompatible(PC: PAnsiChar): boolean; overload;
 
-/// return TRUE if the supplied buffer only contains 7-bits Ansi characters
-function IsAnsiCompatible(PC: PAnsiChar; Len: PtrInt): boolean; overload;
-
 /// return TRUE if the supplied UTF-16 buffer only contains 7-bits Ansi characters
 function IsAnsiCompatibleW(PW: PWideChar): boolean; overload;
+
+/// return TRUE if the supplied buffer only contains 7-bits Ansi characters
+function IsAnsiCompatible(PC: PAnsiChar; Len: PtrUInt): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// return TRUE if the supplied text only contains 7-bits Ansi characters
 function IsAnsiCompatible(const Text: RawByteString): boolean; overload;
@@ -17222,7 +17222,7 @@ begin
 end;
 
 class function TSynAnsiConvert.Engine(aCodePage: cardinal): TSynAnsiConvert;
-var i: integer;
+var i: PtrInt;
 begin
   if SynAnsiConvertList=nil then begin
     GarbageCollectorFreeAndNil(SynAnsiConvertList,TSynObjectList.Create);
@@ -18094,18 +18094,24 @@ begin
   result := true;
 end;
 
-function IsAnsiCompatible(PC: PAnsiChar; Len: PtrInt): boolean;
-var i: PtrInt;
+function IsAnsiCompatible(PC: PAnsiChar; Len: PtrUInt): boolean;
 begin
-  result := false;
   if PC<>nil then begin
-    for i := 1 to Len shr 2 do
-      if PCardinal(PC)^ and $80808080<>0 then
-        exit else
+    result := false;
+    Len := PtrUInt(@PC[Len-4]);
+    if Len>=PtrUInt(PC) then
+      repeat
+        if PCardinal(PC)^ and $80808080<>0 then
+          exit;
         inc(PC,4);
-    for i := 0 to (Len and 3)-1 do
-      if PC[i]>=#127 then
-        exit;
+      until Len<PtrUInt(PC);
+    inc(Len,4);
+    if Len>PtrUInt(PC) then
+      repeat
+        if PC^>=#127 then
+          exit;
+        inc(PC);
+      until Len<=PtrUInt(PC);
   end;
   result := true;
 end;
@@ -20677,8 +20683,27 @@ end;
 {$endif HASINLINE}
 {$endif HASDIRECTTYPEINFO}
 
-{$ifdef FPC_X64}
+const
+  /// codePage offset = string header size
+  // - used to calc the beginning of memory allocation of a string
+  STRRECSIZE = SizeOf(TStrRec);
 
+{$ifdef HASCODEPAGE}
+function FastNewString(len, cp: PtrInt): PAnsiChar; inline;
+begin
+  if len>0 then begin
+    {$ifdef FPC_X64MM}result := _Getmem({$else}GetMem(result,{$endif}len+(STRRECSIZE+4));
+    PCardinal(@PStrRec(result)^.codePage)^ := cp or (1 shl 16); // also set elemSize:=1
+    PStrRec(result)^.refCnt := 1;
+    PStrRec(result)^.length := len;
+    inc(PStrRec(result));
+    PCardinal(result+len)^ := 0; // ensure ends with four #0
+  end else
+    result := nil;
+end;
+{$endif HASCODEPAGE}
+
+{$ifdef FPC_X64}
 procedure fpc_ansistr_decr_ref; external name 'FPC_ANSISTR_DECR_REF';
 procedure fpc_ansistr_incr_ref; external name 'FPC_ANSISTR_INCR_REF';
 procedure fpc_ansistr_assign; external name 'FPC_ANSISTR_ASSIGN';
@@ -20726,7 +20751,7 @@ asm
 lock    dec     qword ptr[rax - _STRREFCNT]
         jbe     @free
 @z:     ret
-@free:  sub     p, SizeOf(TStrRec)
+@free:  sub     p, STRRECSIZE
         jmp     _Freemem
 end;
 
@@ -20759,7 +20784,7 @@ lock    inc     qword ptr[s - _STRREFCNT]
         jl      @n
  lock   dec     qword ptr[rax - _STRREFCNT]
         ja      @n
-@free:  sub     d, SizeOf(TStrRec)
+@free:  sub     d, STRRECSIZE
         jmp     _Freemem
 @n:
 end;
@@ -20804,9 +20829,227 @@ asm
 lock    dec     qword ptr[rax - _STRREFCNT]
         jbe     @free
 @z:     ret
-@free:  sub     d, SizeOf(TStrRec)
+@free:  sub     d, STRRECSIZE
         jmp     _Freemem
 end;
+
+{$ifdef FPC_HAS_CPSTRING} // optimized for systemcodepage=CP_UTF8
+
+function ToTempUTF8(var temp: TSynTempBuffer; p: pointer; len, cp: cardinal): pointer;
+begin
+  if (len=0)  or (cp=CP_UTF8) or (cp>=CP_SQLRAWBLOB) or IsAnsiCompatible(p,len) then begin
+    temp.buf := nil;
+    temp.len := len;
+    result := p;
+  end else begin
+    temp.Init(len*3);
+    p := TSynAnsiConvert.Engine(cp).AnsiBufferToUTF8(temp.buf,p,len);
+    temp.len := PAnsiChar(p)-PAnsiChar(temp.buf);
+    result := temp.buf;
+  end;
+end;
+
+procedure _ansistr_concat_convert(var dest: RawByteString; const s1,s2: RawByteString;
+  cp,cp1,cp2: cardinal);
+var t1, t2, t: TSynTempBuffer; // avoid most memory allocation
+    p1, p2, p: PAnsiChar;
+    eng: TSynAnsiConvert;
+begin
+  p1 := ToTempUTF8(t1,pointer(s1),length(s1),cp1);
+  p2 := ToTempUTF8(t2,pointer(s2),length(s2),cp2);
+  if (cp=CP_UTF8) or (cp>=CP_SQLRAWBLOB) or ((t1.buf=nil) and (t2.buf=nil)) then begin
+    p := FastNewString(t1.len+t2.len,cp);
+    MoveFast(p1^,p[0],t1.len);
+    MoveFast(p2^,p[t1.len],t2.len);
+    FastAssignNew(dest,p);
+  end else begin
+    eng := TSynAnsiConvert.Engine(cp);
+    t.Init((t1.len+t2.len) shl eng.fAnsiCharShift);
+    p := eng.UTF8BufferToAnsi(eng.UTF8BufferToAnsi(t.buf,p1,t1.len),p2,t2.len);
+    FastSetStringCP(dest,t.buf,p-t.buf,cp);
+    t.Done;
+  end;
+  t2.Done;
+  t1.Done;
+end;
+
+function _lstrlen(const s: RawByteString): TStrLen; inline;
+begin
+  result := PStrLen(PtrUInt(s)-_STRLEN)^;
+end;
+
+procedure _ansistr_concat_direct(var dest: RawByteString;
+  const s1,s2: RawByteString; cp: cardinal);
+var new: PAnsiChar;
+    l1: PtrInt;
+begin
+  l1 := _lstrlen(s1);
+  if pointer(s1)=pointer(dest) then begin // dest := dest+s2 -> self-resize dest
+    SetLength(dest,l1+_lstrlen(s2));
+    PStrRec(PtrUInt(dest)-STRRECSIZE)^.codepage := cp;
+    MoveFast(pointer(s2)^,PByteArray(dest)[l1],_lstrlen(s2));
+  end else begin
+    new := FastNewString(l1+_lstrlen(s2),cp);
+    MoveFast(pointer(s1)^,new[0],l1);
+    MoveFast(pointer(s2)^,new[l1],_lstrlen(s2));
+    FastAssignNew(dest,new);
+  end;
+end;
+
+function _lstrcp(const s: RawByteString; cp: integer): integer; inline;
+begin
+  result := cp;
+  if s<>'' then begin
+    result := PStrRec(PtrUInt(s)-STRRECSIZE)^.codePage;
+    if result<=CP_OEMCP then
+      result := CP_UTF8;
+  end;
+end;
+
+procedure _ansistr_concat_utf8(var dest: RawByteString;
+  const s1,s2: RawByteString; cp: cardinal);
+var cp1, cp2: cardinal;
+begin
+  if cp<=CP_OEMCP then // TranslatePlaceholderCP logic
+    cp := CP_UTF8;
+  cp1 := _lstrcp(s1,cp);
+  cp2 := _lstrcp(s2,cp1);
+  if (cp1=cp2) and ((cp>=CP_SQLRAWBLOB) or (cp=cp1)) then
+    cp := cp1 else
+    if ((cp1<>cp) and (cp1<CP_SQLRAWBLOB)) or
+       ((cp2<>cp) and (cp2<CP_SQLRAWBLOB)) then begin
+      _ansistr_concat_convert(dest,s1,s2,cp,cp1,cp2);
+      exit;
+    end;
+  if s1='' then
+    dest := s2 else
+  if s2='' then
+    dest := s1 else
+    _ansistr_concat_direct(dest,s1,s2,cp);
+end;
+
+procedure _ansistr_concat_multi_convert(var dest: RawByteString;
+  const s: array of RawByteString; cp: cardinal);
+var t: TTextWriter;
+    i: PtrInt;
+    u: RawUTF8;
+    tmp: TTextWriterStackBuffer;
+begin
+  t := TTextWriter.CreateOwnedStream(tmp);
+  try
+    for i := 0 to high(s) do
+      if s[i]<>'' then
+        t.AddAnyAnsiBuffer(pointer(s[i]),_lstrlen(s[i]),twNone,_lstrcp(s[i],cp));
+    t.SetText(u);
+  finally
+    t.Free;
+  end;
+  if (cp=CP_UTF8) or (cp>=CP_SQLRAWBLOB) then
+    dest := u else
+    TSynAnsiConvert.Engine(cp).UTF8BufferToAnsi(pointer(u),length(u),dest);
+end;
+
+procedure _ansistr_concat_multi_direct(var dest: RawByteString;
+  const s: array of RawByteString; cp: cardinal; first, len: PtrInt);
+var p: pointer;
+    new: PAnsiChar;
+    l,i: TStrLen;
+begin
+  p := pointer(s[first]);
+  l := _lstrlen(RawByteString(p));
+  if p=pointer(dest) then begin // dest := dest+s... -> self-resize
+    SetLength(dest,len);
+    new := pointer(dest);
+    PStrRec(PtrUInt(dest)-STRRECSIZE)^.codepage := cp;
+    cp := 0;
+  end else begin
+    new := FastNewString(len,cp);
+    MoveFast(p^,new[0],l);
+  end;
+  for i := first+1 to high(s) do begin
+    p := pointer(s[i]);
+    if p<>nil then begin
+      MoveFast(p^,new[l],_lstrlen(RawByteString(p)));
+      inc(l,_lstrlen(RawByteString(p)));
+    end;
+  end;
+  if cp<>0 then
+    FastAssignNew(dest,new);
+end;
+
+procedure _ansistr_concat_multi_utf8(var dest: RawByteString;
+  const s: array of RawByteString; cp: cardinal);
+var first,len,i: TStrLen;
+    cpf,cpi: cardinal;
+    p: pointer;
+begin
+  if cp<=CP_OEMCP then
+    cp := CP_UTF8;
+  first := 0;
+  repeat
+    if first>high(s) then begin
+      _ansistr_decr_ref(pointer(dest));
+      exit;
+    end;
+    p := pointer(s[first]);
+    if p<>nil then
+      break;
+    inc(first);
+  until false;
+  len := _lstrlen(RawByteString(p));
+  cpf := _lstrcp(RawByteString(p),cp);
+  if (cpf<>cp) and (cpf<CP_SQLRAWBLOB) then
+    cpf := 0 else
+    for i := first+1 to high(s) do begin
+      p := pointer(s[i]);
+      if p<>nil then begin
+        inc(len,_lstrlen(RawByteString(p)));
+        cpi := PStrRec(PtrUInt(p)-STRRECSIZE)^.codePage;
+        if cpi<=CP_OEMCP then
+          cpi := CP_UTF8;
+        if (cpi<>cpf) and (cpi<CP_SQLRAWBLOB) then begin
+          cpf := 0;
+          break;
+        end;
+      end;
+    end;
+  if cpf=0 then
+    _ansistr_concat_multi_convert(dest,s,cp) else
+    _ansistr_concat_multi_direct(dest,s,cpf,first,len);
+end;
+
+procedure _fpc_ansistr_concat(var a: RawUTF8);
+begin
+  a := a+a; // to generate "call fpc_ansistr_concat" opcode
+end;
+
+procedure _fpc_ansistr_concat_multi(var a: RawUTF8);
+begin
+  a := a+a+a; // to generate "call fpc_ansistr_concat_multi" opcode
+end;
+
+procedure RedirectRtl(dummy, dest: PByteArray);
+begin
+  repeat
+    if (dummy[0]=$b9) and (PCardinal(@dummy[1])^=CP_UTF8) then
+      case dummy[5] of
+      $e8: begin
+        // found "mov ecx,65001; call fpc_ansistr_concat" opcodes
+        RedirectCode(@dummy[PInteger(@dummy[6])^+10],dest);
+        exit;
+      end;
+      $ba: if (PCardinal(@dummy[6])^=2) and (dummy[10]=$e8) then
+      begin
+        // found "mov ecx,65001; mov edx,2; call fpc_ansistr_concat_multi"
+        RedirectCode(@dummy[PInteger(@dummy[11])^+15],dest);
+        exit;
+      end;
+      end;
+    inc(PByte(dummy));
+  until PInt64(dummy)^=0;
+end;
+
+{$endif FPC_HAS_CPSTRING}
 
 {$else}
 
@@ -20822,55 +21065,25 @@ begin
   if (sr^.refcnt >= 0) and RefCntDecFree(sr^.refcnt) then
     FreeMem(sr);
 end;
-
 {$endif FPC_X64}
-
-const
-  /// codePage offset = string header size
-  // - used to calc the beginning of memory allocation of a string
-  STRRECSIZE = SizeOf(TStrRec);
 
 {$ifdef HASCODEPAGE}
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
-var r: PAnsiChar; // s may = p -> stand-alone variable
-    sr: PStrRec; // local copy of r, to use register
+var r: pointer;
 begin
-  if len<=0 then
-    r := nil else begin
-    {$ifdef FPC_X64MM}r := _Getmem({$else}GetMem(r,{$endif}len+(STRRECSIZE+2));
-    sr := pointer(r);
-    sr^.codePage := codepage;
-    sr^.elemSize := 1;
-    sr^.refCnt := 1;
-    sr^.length := len;
-    inc(PByte(sr),STRRECSIZE);
-    PWord(PAnsiChar(sr)+len)^ := 0; // ensure ends with two #0
-    r := pointer(sr);
-    if p<>nil then
-      MoveFast(p^,sr^,len);
-  end;
-  FastAssignNew(s, r);
+  r := FastNewString(len,codepage);
+  if p<>nil then
+    MoveFast(p^,r^,len);
+  FastAssignNew(s,r);
 end;
 
 procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
-var r: PAnsiChar;
-    sr: PStrRec;
+var r: pointer;
 begin
-  if len<=0 then
-    r := nil else begin
-    {$ifdef FPC_X64MM}r := _Getmem({$else}GetMem(r,{$endif}len+(STRRECSIZE+4));
-    sr := pointer(r);
-    sr^.codePage := CP_UTF8;
-    sr^.elemSize := 1;
-    sr^.refCnt := 1;
-    sr^.length := len;
-    inc(PByte(sr),STRRECSIZE);
-    PCardinal(PAnsiChar(sr)+len)^ := 0; // ensure ends with four #0
-    r := pointer(sr);
-    if p<>nil then
-      MoveFast(p^,sr^,len);
-  end;
-  FastAssignNew(s, r);
+  r := FastNewString(len,CP_UTF8);
+  if p<>nil then
+    MoveFast(p^,r^,len);
+  FastAssignNew(s,r);
 end;
 {$else not HASCODEPAGE}
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
@@ -32921,7 +33134,8 @@ end;
 
 function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
 {$ifndef CPU32DELPHI}
-var digit, frac, exp: PtrInt;
+var digit: byte;
+    frac, exp: PtrInt;
     c: AnsiChar;
     flags: set of (fNeg, fNegExp, fValid);
     v: Int64; // allows 64-bit resolution for the digits
@@ -54992,7 +55206,7 @@ begin
   end;
   if CodePage<0 then
     {$ifdef HASCODEPAGE}
-    CodePage := StringCodePage(s);
+    CodePage := PStrRec(PtrUInt(s)-STRRECSIZE)^.codePage;
     {$else}
     CodePage := 0; // TSynAnsiConvert.Engine(0)=CurrentAnsiConvert
     {$endif}
@@ -62436,6 +62650,12 @@ begin
     PatchCode(@fpc_dynarray_incr_ref,@_dynarray_incr_ref,$17);  // fpclen=$2f
     PatchJmp(@fpc_dynarray_clear,@_dynarray_decr_ref,$2f,PtrUInt(@_dynarray_decr_ref_free));
     RedirectCode(@fpc_dynarray_decr_ref,@fpc_dynarray_clear);
+    {$ifdef LINUX}
+    if DefaultSystemCodePage=CP_UTF8 then begin
+      RedirectRtl(@_fpc_ansistr_concat,@_ansistr_concat_utf8);
+      RedirectRtl(@_fpc_ansistr_concat_multi,@_ansistr_concat_multi_utf8);
+    end;
+    {$endif LINUX}
     {$ifdef FPC_X64MM}
     RedirectCode(@fpc_getmem,@_Getmem);
     RedirectCode(@fpc_freemem,@_Freemem);
