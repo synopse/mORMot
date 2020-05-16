@@ -7,17 +7,17 @@ unit SynFPCx64MM;
   *****************************************************************************
 
     A Multi-thread Friendly Memory Manager for FPC written in x86_64 assembly
-    - targetting Windows and Linux multi-threaded Services
-    - only for FPC on the x86_64 target - use the original heap on Delphi or ARM
+    - targetting Linux (and Windows) multi-threaded Services
+    - only for FPC on the x86_64 target - use the RTL MM on Delphi or ARM
     - based on FastMM4 proven algorithms by Pierre le Riche
     - code has been reduced to the only necessary featureset for production
-    - huge asm refactoring for cross-platform, compactness and efficiency
-    - report detailed statistics (with threads contention and memory leaks)
+    - deep asm refactoring for cross-platform, compactness and efficiency
+    - can report detailed statistics (with threads contention and memory leaks)
     - mremap() makes large block ReallocMem a breeze on Linux :)
     - inlined SSE2 movaps loop is more efficient that subfunction(s)
-    - round-robin of tiny blocks (<=128 bytes) for better thread scaling
-    - optional lock-less bin list of freemem() thread contention
-    - three app modes: default mono-threaded, FPCMM_SERVER or FPCMM_BOOST
+    - round-robin of tiny blocks (<=128/256 bytes) for better thread scaling
+    - optional lockless bin list to avoid freemem() thread contention
+    - three app modes: default mono-thread friendly, FPCMM_SERVER or FPCMM_BOOST
 
     Usage: include this unit as the very first in your FPC project uses clause
 
@@ -26,7 +26,7 @@ unit SynFPCx64MM;
       but its threadvar arena for small blocks tends to consume a lot of memory
       on multi-threaded servers, and has suboptimal allocation performance
     - C memory managers (glibc, Intel TBB, jemalloc) have a very high RAM
-      consumption (especially Intel TBB) and panic/SIGKILL on any GPF
+      consumption (especially Intel TBB) and do panic/SIGKILL on any GPF
     - Pascal alternatives (FastMM4,ScaleMM2,BrainMM) are Windows+Delphi specific
     - It was so fun deeping into SSE2 x86_64 assembly and Pierre's insight
     - Resulting code is still easy to understand and maintain
@@ -82,7 +82,7 @@ unit SynFPCx64MM;
 // by default, we target LCL/console mono-threaded apps to replace the RTL MM
 // - you may define FPCMM_SERVER or even FPCMM_BOOST for a service/daemon
 
-// if defined, set FPCMM_DEBUG, FPCMM_ASSUMEMULTITHREAD and FPCMM_LOCKLESSFREE
+// if defined, set FPCMM_DEBUG and FPCMM_ASSUMEMULTITHREAD
 // - those flags target well a multi-threaded service
 // - consider FPCMM_BOOST to try more aggressive settings
 {.$define FPCMM_SERVER}
@@ -100,33 +100,38 @@ unit SynFPCx64MM;
 
 { ---- Fine Grained Memory Manager Tuning }
 
-// if defined, includes more detailed information to WriteHeapStatus()
+// includes more detailed information to WriteHeapStatus()
 {.$define FPCMM_DEBUG}
 
-// if defined, leaks will be checked and written to the console at shutdown
-// - only basic information will be included: more debugging information may
-// be gathered using heaptrc or valgrid
+// checks leaks and write them to the console at process shutdown
+// - only basic information will be included: more debugging information (e.g.
+// call stack) may be gathered using heaptrc or valgrid
 {.$define FPCMM_REPORTMEMORYLEAKS}
 
-// if defined, won't check the IsMultiThread global but assume it is true
-// - should be enabled e.g. for a multi-threaded Server Daemon instance
+// won't check the IsMultiThread global, but assume it is true
+// - multi-threaded apps (e.g. a Server Daemon instance) will be faster with it
+// - mono-threaded (console/LCL) apps are faster without this conditional
 {.$define FPCMM_ASSUMEMULTITHREAD}
 
-// on contention problems, try it on AMD CPU, or oldest Intel before SkylakeX
-// - on SkylakeX (Intel 7th gen), "pause" opcode went from 10-20 to 140 cycles
-{.$define FPCMM_PAUSEMORE}
-
-// if defined, Freemem multi-thread contention will use a lockless array
-// - Freemem won't release the thread using an OS call, but try to fill
+// let Freemem multi-thread contention use a lockless algorithm
+// - on contention, Freemem won't yield the thread using an OS call, but fill
 // an internal Bin list which will be released when the lock becomes available
 {.$define FPCMM_LOCKLESSFREE}
 
-// if defined, won't use mremap but a regular getmem/move/freemem pattern
+// won't use mremap but a regular getmem/move/freemem pattern
 // - depending on the actual system (e.g. on a VM), mremap may be slower
 {.$define FPCMM_NOMREMAP}
 
+// on contention problem, execute "pause" opcode and spin retrying the lock
+// - you may try to define this - but it is not likely to perform better
+{.$define FPCMM_PAUSE}
 
-// if defined, will export libc-like functions, and not replace the FPC MM
+// on contention problems, try this on AMD CPU, or oldest Intel before SkylakeX
+// - on SkylakeX (Intel 7th gen), "pause" opcode went from 10-20 to 140 cycles
+{.$define FPCMM_PAUSEMORE}
+
+
+// will export libc-like functions, and not replace the FPC MM
 // - e.g. to use this unit as a stand-alone C memory allocator
 {.$define FPCMM_STANDALONE}
 
@@ -148,17 +153,15 @@ interface
   {$endif CPUX64}
   {$ifdef FPCMM_BOOSTER}
     {$define FPCMM_BOOST}
+    {$undef FPCMM_DEBUG} // when performance matters more than stats
   {$endif FPCMM_BOOSTER}
   {$ifdef FPCMM_BOOST}
-    {$undef FPCMM_DEBUG} // when performance matters more than stats
     {$undef FPCMM_SERVER}
     {$define FPCMM_ASSUMEMULTITHREAD}
-    {$define FPCMM_LOCKLESSFREE}
   {$endif FPCMM_BOOST}
   {$ifdef FPCMM_SERVER}
     {$define FPCMM_DEBUG}
     {$define FPCMM_ASSUMEMULTITHREAD}
-    {$define FPCMM_LOCKLESSFREE}
   {$endif FPCMM_SERVER}
 {$endif FPC}
 
@@ -369,7 +372,7 @@ procedure SwitchToThread; stdcall;
 
 procedure ReleaseCore;
 begin
-  SwitchToThread;
+  SwitchToThread; // yield to another pending thread
   inc(HeapStatus.SleepCount);
   {$ifdef FPCMM_DEBUG}
   inc(HeapStatus.SleepTime, 100); // wild guess to have some debug info
@@ -378,11 +381,13 @@ end;
 
 function AllocMedium(Size: PtrInt): pointer; inline;
 begin
+  // bottom-up allocation to reduce fragmentation
   result := VirtualAlloc(nil, Size, MEM_COMMIT, PAGE_READWRITE);
 end;
 
 function AllocLarge(Size: PtrInt): pointer; inline;
 begin
+  // top-down allocation to reduce fragmentation
   result := VirtualAlloc(nil, Size, MEM_COMMIT or MEM_TOP_DOWN, PAGE_READWRITE);
 end;
 
@@ -432,7 +437,7 @@ const
 {$ifndef FPCMM_NOMREMAP}
 
 const
-  syscall_nr_mremap = 25;
+  syscall_nr_mremap = 25; // valid on x86_64 Linux and Android
   MREMAP_MAYMOVE = 1;
 
 function fpmremap(addr: pointer; old_len, new_len: size_t; may_move: longint): pointer; inline;
@@ -559,7 +564,7 @@ lock inc  qword ptr[Arena].TMMStatusArena.CumulativeFree
      {$endif FPCMM_DEBUG}
 end;
 
-// called from ReallocateLargeBlock with regular parameters
+// faster than Move() as called from ReallocateLargeBlock
 procedure MoveLarge(src, dst: pointer; cnt: PtrInt); nostackframe; assembler;
 asm
       sub cnt, 8
@@ -568,7 +573,7 @@ asm
       neg cnt
       jns @z
       align 16
-@s:   movaps xmm0, oword ptr [src + cnt]
+@s:   movaps xmm0, oword ptr [src + cnt]  // AVX move is not really faster
       movntdq oword ptr [dst + cnt], xmm0 // non-temporal loop
       add cnt, 16
       js @s
@@ -647,6 +652,7 @@ const
   DropMediumAndLargeFlagsMask = -16;
   ExtractMediumAndLargeFlagsMask = 15;
 
+  {$ifdef FPCMM_PAUSE}
   // we use pause before ReleaseCore API call when spinning locks
   {$ifdef FPCMM_PAUSEMORE}
   // pause opcode latency is around 10 cycles on AMD or oldest Intel CPU
@@ -660,6 +666,10 @@ const
   SpinSmallFreememBinCount = 5 * SpinFactor;
   SpinMediumLockCount = 500 * SpinFactor;
   SpinLargeLockCount = 500 * SpinFactor;
+  {$else}
+  SpinMediumLockCount = 50;
+  SpinLargeLockCount = 50;
+  {$endif FPCMM_PAUSE}
 
 type
   PSmallBlockPoolHeader = ^TSmallBlockPoolHeader;
@@ -744,7 +754,7 @@ type
   TLargeBlockHeader = record
     PreviousLargeBlockHeader: PLargeBlockHeader;
     NextLargeBlockHeader: PLargeBlockHeader;
-    UserAllocatedSize: PtrUInt;
+    Reserved1: PtrUInt;
     BlockSizeAndFlags: PtrUInt;
   end;
 
@@ -787,8 +797,8 @@ lock cmpxchg byte ptr [rcx], ah
      pop  r10
      pop  rdi
      pop  rsi
-     lea  rax, [rip + HeapStatus] // simple inc within lock
-     inc  qword ptr [rax].TMMStatus.Medium.SleepCount
+     lea  rax, [rip + HeapStatus]
+lock inc  qword ptr [rax].TMMStatus.Medium.SleepCount
      lea  rcx, [r10].TMediumBlockInfo.Locked
      jmp @s
 @ok:
@@ -971,8 +981,8 @@ lock cmpxchg byte ptr [rcx], ah
      je   @ok
      jmp  @sp
 @rc: call ReleaseCore
-     lea  rax, [rip + HeapStatus] // simple inc within lock
-     inc  qword ptr [rax].TMMStatus.Large.SleepCount
+     lea  rax, [rip + HeapStatus]
+lock inc  qword ptr [rax].TMMStatus.Large.SleepCount
      jmp @s
 @ok:
 end;
@@ -998,7 +1008,6 @@ begin
     NotifyAlloc(HeapStatus.Large, blocksize);
     if existing <> nil then
       NotifyFree(HeapStatus.Large, oldsize);
-    header.UserAllocatedSize := size;
     header.BlockSizeAndFlags := blocksize or IsLargeBlockFlag;
     LockLargeBlocks;
     old := LargeBlocksCircularList.NextLargeBlockHeader;
@@ -1067,7 +1076,6 @@ begin
   begin
     // small size-up within current buffer -> no reallocate
     result := p;
-    header^.UserAllocatedSize := size;
     exit;
   end
   else
@@ -1077,11 +1085,7 @@ begin
   // no mremap(): reallocate a new block, copy the existing data, free old
   result := _GetMem(new);
   if result <> nil then
-  begin
-    if new > (MaximumMediumBlockSize - BlockHeaderSize) then
-      PLargeBlockHeader(PByte(result) - LargeBlockHeaderSize).UserAllocatedSize := size;
     MoveLarge(p, result, oldavail);
-  end;
   _FreeMem(p);
   {$else}
   // remove from current chain list
@@ -1143,7 +1147,9 @@ asm
 @NotTinyBlockType:
   lea rbx, [r8 + rcx].TSmallBlockInfo.Small
 @LockBlockTypeLoopRetry:
+  {$ifdef FPCMM_PAUSE}
   mov r9d, SpinSmallGetmemLockCount
+  {$endif FPCMM_PAUSE}
 @LockBlockTypeLoop:
   // Grab the default block type
   mov eax, $100
@@ -1163,9 +1169,11 @@ asm
   lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   je @GotLockOnSmallBlockType
   sub rbx, 2 * SizeOf(TSmallBlockType)
+  {$ifdef FPCMM_PAUSE}
   pause
   dec r9d
   jnz @LockBlockTypeLoop
+  {$endif FPCMM_PAUSE}
    // Block type and two sizes larger are all locked - give up and sleep
   lock inc dword ptr [rbx].TSmallBlockType.GetmemSleepCount
   call ReleaseCore
@@ -1204,7 +1212,6 @@ asm
   cmp byte ptr[rax], 0
   jne @CheckTinySmallLock
   add rbx, rcx
-  mov byte ptr [rbx].TSmallBlockType.BlockTypeLocked, true
   {$endif FPCMM_ASSUMEMULTITHREAD}
   { ---------- TINY/SMALL block registration ---------- }
 @GotLockOnSmallBlockType:
@@ -1410,7 +1417,7 @@ lock cmpxchg byte ptr [rcx], ah
 @NotTinySmallBlock:
   // Do we need a Large block?
   lea r10, [rip + MediumBlockInfo]
-  cmp rcx, (MaximumMediumBlockSize - BlockHeaderSize)
+  cmp rcx, MaximumMediumBlockSize - BlockHeaderSize
   ja @IsALargeBlockRequest
   // Get the bin size for this block size (rounded up to the next bin size)
   lea rbx, [rcx + MediumBlockGranularity - 1 + BlockHeaderSize - MediumBlockSizeOffset]
@@ -1752,8 +1759,7 @@ lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   jne @CheckTinySmallLock
   {$else}
   cmp byte ptr[rax], 0
-  jne @CheckTinySmallLock
-  mov byte ptr [rbx].TSmallBlockType.BlockTypeLocked, true
+  jne @TinySmallLockLoop
   {$endif FPCMM_ASSUMEMULTITHREAD}
 @FreeAndUnlock:
   call FreeSmallLocked
@@ -1765,33 +1771,35 @@ lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   test dl, IsFreeBlockFlag + IsLargeBlockFlag
   jz FreeMediumBlock
   jmp FreeLargeBlock // P is still in rcx/rdi first param register
-@CheckTinySmallLock:
-  {$ifndef FPCMM_ASSUMEMULTITHREAD}
+@TinySmallLockLoop:
   mov eax, $100
 lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   je @FreeAndUnlock
-  {$endif FPCMM_ASSUMEMULTITHREAD}
-  // Lock was not acquired: add to BinInstance or spin
+@CheckTinySmallLock:
   {$ifdef FPCMM_LOCKLESSFREE}
   // Try to put rcx=P in TSmallBlockType.BinInstance[]
-  mov r9d, SpinSmallFreememBinCount
   cmp byte ptr [rbx].TSmallBlockType.BinCount, SmallBlockBinCount
-  je @LockBlockTypeLoop
+  je @LockBlockTypeSleep
   mov eax, $100
   lock cmpxchg byte ptr [rbx].TSmallBlockType.BinLocked, ah
   je @BinLocked
   {$ifdef FPCMM_DEBUG}
   inc dword ptr [rbx].TSmallBlockType.BinSpinCount // no lock (informative only)
   {$endif FPCMM_DEBUG}
+  {$ifdef FPCMM_PAUSE}
+  mov r9d, SpinSmallFreememBinCount
 @SpinBinLock:
   pause
   dec r9d
-  jz @LockBlockTypeLoop
+  jz @LockBlockTypeSleep
   cmp byte ptr [rbx].TSmallBlockType.BinLocked, true
   je @SpinBinLock
   mov eax, $100
   lock cmpxchg byte ptr [rbx].TSmallBlockType.BinLocked, ah
   jne @SpinBinLock
+  {$else}
+  jmp @LockBlockTypeSleep
+  {$endif FPCMM_PAUSE}
 @BinLocked:
   movzx eax, byte ptr [rbx].TSmallBlockType.BinCount
   cmp al, SmallBlockBinCount
@@ -1803,39 +1811,43 @@ lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   pop rbx
   ret
 @LockBlockType:
-  // Fallback to regular spin if TSmallBlockType.BinInstance[] is full
+  // Fallback to main block lock if TSmallBlockType.BinInstance[] is full
   mov byte ptr [rbx].TSmallBlockType.BinLocked, false
   {$endif FPCMM_LOCKLESSFREE}
+@LockBlockTypeSleep:
+  {$ifdef FPCMM_PAUSE}
   // Spin to grab the block type (don't try too long due to contention)
-@LockBlockTypeLoop:
   mov r8d, SpinSmallFreememLockCount
 @SpinLockBlockType:
   pause
   dec r8d
-  jz @LockBlockTypeSleep
+  jz @LockBlockTypeReleaseCore
   cmp byte ptr [rbx].TSmallBlockType.BlockTypeLocked, 1
   je @SpinLockBlockType
   mov eax, $100
   lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   jne @SpinLockBlockType
-  mov rdx, [rcx - BlockHeaderSize] // restore rdx
   jmp @FreeAndUnlock
-@LockBlockTypeSleep:
+@LockBlockTypeReleaseCore:
+  {$endif FPCMM_PAUSE}
   // Couldn't grab the block type - sleep and try again
   lock inc dword ptr [rbx].TSmallBlockType.FreeMemSleepCount
+  push rdx
   push rcx
   call ReleaseCore
   pop rcx
-  jmp @LockBlockTypeLoop
+  pop rdx
+  jmp @TinySmallLockLoop
 end;
 
 // warning: FPC signature is not the same than Delphi: requires "var P"
 function _ReallocMem(var P: pointer; Size: PtrInt): pointer; nostackframe; assembler;
 asm
-  mov rdx, Size
   {$ifdef MSWINDOWS}
   push rdi
   push rsi
+  {$else}
+  mov rdx, Size
   {$endif MSWINDOWS}
   push rbx
   push r14
@@ -1874,26 +1886,19 @@ asm
 @SmallUpsize:
   // State: r14=pointer, rdx=NewSize, rcx=CurrentBlockSize, rbx=CurrentBlockType
   // Small blocks always grow with at least 100% + SmallBlockUpsizeAdder bytes
-  lea P, qword ptr[rcx + rcx + SmallBlockUpsizeAdder]
+  lea P, qword ptr[rcx * 2 + SmallBlockUpsizeAdder]
   movzx ebx, [rbx].TSmallBlockType.BlockSize
   sub ebx, BlockHeaderSize + 8
-  // r14=pointer, P=BlockSize, rdx=NewSize, rbx=OldSize-8
+  // r14=pointer, P=NextUpBlockSize, rdx=NewSize, rbx=OldSize-8
 @AdjustGetMemMoveFreeMem:
   // New allocated size is the maximum of the requested size and the minimum upsize
-  xor rax, rax
-  sub P, rdx
-  adc rax, -1
-  and P, rax
-  add P, rdx
+  cmp rdx, P
+  cmova P, rdx
   push rdx
   call _GetMem
   pop rdx
   test rax, rax
   jz @Done
-  cmp rdx, MaximumMediumBlockSize - BlockHeaderSize
-  jbe @MoveFreeMem // rax=New r14=P rbx=size-8
-  // Store the user requested size for large block
-  mov [rax - 16], rdx
   jmp @MoveFreeMem // rax=New r14=P rbx=size-8
 @GetMemMoveFreeMem:
   // reallocate copy and free: r14=P rdx=size
@@ -2118,7 +2123,7 @@ lock cmpxchg byte ptr [rcx], ah
   mov rbx, rcx
   mov eax, ecx
   shr eax, 2
-  lea P, qword ptr [rcx + rax] // BlockSize = OldSize+25%
+  lea P, qword ptr [rcx + rax] // NextUpBlockSize = OldSize+25%
   jmp @AdjustGetMemMoveFreeMem // P=BlockSize, rdx=NewSize, rbx=OldSize-8
 @PossibleLargeBlock:
   { -------------- LARGE block ------------- }
@@ -2422,7 +2427,8 @@ begin
       {$ifdef FPCMM_SERVER} + 'SERVER ' {$endif}
       {$ifdef FPCMM_ASSUMEMULTITHREAD} + ' assumulthrd' {$endif}
       {$ifdef FPCMM_LOCKLESSFREE} + ' lockless' {$endif}
-      {$ifdef FPCMM_PAUSEMORE}  + ' pausemore' {$endif}
+      {$ifdef FPCMM_PAUSE}  + ' pause'
+        {$ifdef FPCMM_PAUSEMORE}  + 'more' {$endif} {$endif}
       {$ifdef FPCMM_NOMREMAP} + ' nomremap' {$endif}
       {$ifdef FPCMM_DEBUG} + ' debug' {$endif}
       {$ifdef FPCMM_REPORTMEMORYLEAKS}  + ' repmemleak' {$endif});
