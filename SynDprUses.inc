@@ -7,8 +7,8 @@
     SynFPCx64MM,
     {$else}
       {$ifdef FPC_FASTMM4}
-        fpcFastMM4Messages in '..\fpcfmm4\fpcFastMM4Messages.pas',
-        fpcFastMM4 in '..\fpcfmm4\fpcFastMM4.pas',
+        FastMM4Messages in '..\RTL7\FastMM4Messages.pas',
+        FastMM4 in '..\RTL7\FastMM4.pas',
       {$else}
         {$ifdef FPC_SYNJEMALLOC}
           SynFPCCMemAligned, // after "apt-get install libjemalloc1"

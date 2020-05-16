@@ -3691,7 +3691,7 @@ asm  // fast implementation by John O'Harrow
 end;
 {$endif}
 
-function ExistNameValue(p,up: PAnsiChar): PUTF8Char;
+function ExistNameValue(p,up: PAnsiChar): PAnsiChar;
 var tab: PByteArray;
 begin
   result := p;
