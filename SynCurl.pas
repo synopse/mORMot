@@ -326,10 +326,10 @@ type
   {$endif LIBCURLMULTI}
 
   /// low-level version identifier of the libcurl library
-  TCurlVersion = (cvFirst,cvSecond,cvThird,cvFour);
+  TCurlVersion = (cvFirst,cvSecond,cvThird,cvFour,cvLast);
   /// low-level initialization option for libcurl library API
   // - currently, only giSSL is set, since giWin32 is redundant with WinHTTP
-  TCurlGlobalInit = set of (giSSL,giWin32);
+  TCurlGlobalInit = set of (giNone,giSSL,giWin32,giAll);
   /// low-level message state for libcurl library API
   TCurlMsg = (cmNone, cmDone);
 
@@ -482,7 +482,7 @@ var
 /// initialize the libcurl API, accessible via the curl global variable
 // - do nothing if the library has already been loaded
 // - will raise ECurl exception on any loading issue
-procedure LibCurlInitialize(engines: TCurlGlobalInit=[giSSL];
+procedure LibCurlInitialize(engines: TCurlGlobalInit=[giAll];
   const dllname: TFileName= LIBCURL_DLL);
 
 /// return TRUE if a curl library is available
@@ -498,8 +498,78 @@ function CurlIsAvailable: boolean;
 function CurlWriteRawByteString(buffer: PAnsiChar; size,nitems: integer;
   opaque: pointer): integer; cdecl;
 
-
 implementation
+
+{$ifdef LIBCURLSTATIC}
+
+{$ifdef FPC}
+  {$ifdef ANDROID}
+    {$ifdef CPUAARCH64}
+      {$L .\static\aarch64-android\libcurl.a}
+    {$endif CPUAARCH64}
+    {$ifdef CPUARM}
+      {$L .\static\arm-android\libcurl.a}
+    {$endif CPUARM}
+    {$linklib libz.so}
+  {$endif ANDROID}
+
+  function curl_global_init(flags: TCurlGlobalInit): TCurlResult; cdecl; external;
+  /// finalize the library
+  procedure curl_global_cleanup cdecl; external;
+  /// returns run-time libcurl version info
+  function curl_version_info(age: TCurlVersion): PCurlVersionInfo; cdecl; external;
+  // start a libcurl easy session
+  function curl_easy_init: pointer; cdecl; external;
+  /// set options for a curl easy handle
+  function curl_easy_setopt(curl: TCurl; option: TCurlOption): TCurlResult; cdecl varargs; external;
+  /// perform a blocking file transfer
+  function curl_easy_perform(curl: TCurl): TCurlResult; cdecl; external;
+  /// end a libcurl easy handle
+  procedure curl_easy_cleanup(curl: TCurl); cdecl; external;
+  /// extract information from a curl handle
+  function curl_easy_getinfo(curl: TCurl; info: TCurlInfo; out value): TCurlResult; cdecl; external;
+  /// clone a libcurl session handle
+  function curl_easy_duphandle(curl: TCurl): pointer; cdecl; external;
+  /// reset all options of a libcurl session handle
+  procedure curl_easy_reset(curl: TCurl); cdecl; external;
+  /// return string describing error code
+  function curl_easy_strerror(code: TCurlResult): PAnsiChar; cdecl; external;
+  /// add a string to an slist
+  function curl_slist_append(list: TCurlSList; s: PAnsiChar): TCurlSList; cdecl; external;
+  /// free an entire slist
+  procedure curl_slist_free_all(list: TCurlSList); cdecl; external;
+  {$ifdef LIBCURLMULTI}
+  /// add an easy handle to a multi session
+  function curl_multi_add_handle(mcurl: TCurlMulti; curl: TCurl): TCurlMultiCode; cdecl; external;
+  /// set data to associate with an internal socket
+  function curl_multi_assign(mcurl: TCurlMulti; socket: TCurlSocket; data: pointer): TCurlMultiCode; cdecl; external;
+  /// close down a multi session
+  function curl_multi_cleanup(mcurl: TCurlMulti): TCurlMultiCode; cdecl; external;
+  /// extracts file descriptor information from a multi handle
+  function curl_multi_fdset(mcurl: TCurlMulti; read, write, exec: PFDSet; out max: integer): TCurlMultiCode; cdecl; external;
+  /// read multi stack informationals
+  function curl_multi_info_read(mcurl: TCurlMulti; out msgsqueue: integer): PCurlMsgRec; cdecl; external;
+  /// create a multi handle
+  function curl_multi_init: TCurlMulti; cdecl; external;
+  /// reads/writes available data from each easy handle
+  function curl_multi_perform(mcurl: TCurlMulti; out runningh: integer): TCurlMultiCode; cdecl; external;
+  /// remove an easy handle from a multi session
+  function curl_multi_remove_handle(mcurl: TCurlMulti; curl: TCurl): TCurlMultiCode; cdecl; external;
+  /// set options for a curl multi handle
+  function curl_multi_setopt(mcurl: TCurlMulti; option: TCurlMultiOption): TCurlMultiCode; cdecl varargs; external;
+  /// reads/writes available data given an action
+  function curl_multi_socket_action(mcurl: TCurlMulti; socket: TCurlSocket; mask: Integer; out runningh: integer): TCurlMultiCode; cdecl; external;
+  /// reads/writes available data - deprecated call
+  function curl_multi_socket_all(mcurl: TCurlMulti; out runningh: integer): TCurlMultiCode; cdecl; external;
+  /// return string describing error code
+  function curl_multi_strerror(code: TCurlMultiCode): PAnsiChar; cdecl; external;
+  /// retrieve how long to wait for action before proceeding
+  function curl_multi_timeout(mcurl: TCurlMulti; out ms: integer): TCurlMultiCode; cdecl; external;
+  /// polls on all easy handles in a multi handle
+  function curl_multi_wait(mcurl: TCurlMulti; fds: PCurlWaitFD; fdscount: cardinal; ms: integer; out ret: integer): TCurlMultiCode; cdecl; external;
+  {$endif LIBCURLMULTI}
+{$endif FPC}
+{$endif LIBCURLSTATIC}
 
 type
   // some internal cross-compiler array of bytes string definition
@@ -523,16 +593,22 @@ end;
 
 function CurlIsAvailable: boolean;
 begin
- try
-   if curl.Module=0 then
-     LibCurlInitialize;
-   result := PtrInt(curl.Module)>0;
- except
-   result := false;
- end;
+  {$ifdef LIBCURLSTATIC}
+  LibCurlInitialize;
+  result:=true;
+  {$else}
+  try
+    if curl.Module=0 then
+      LibCurlInitialize;
+    result := PtrInt(curl.Module)>0;
+  except
+    result := false;
+  end;
+  {$endif}
 end;
 
 procedure LibCurlInitialize(engines: TCurlGlobalInit; const dllname: TFileName);
+{$ifndef LIBCURLSTATIC}
 var P: PPointer;
     api: integer;
     h: {$ifdef FPC}TLibHandle{$else}THandle{$endif FPC};
@@ -546,13 +622,50 @@ const NAMES: array[0..{$ifdef LIBCURLMULTI}26{$else}12{$endif}] of string = (
   'multi_setopt','multi_socket_action','multi_socket_all','multi_strerror',
   'multi_timeout','multi_wait'
   {$endif LIBCURLMULTI} );
+{$endif}
 begin
   EnterCriticalSection(SynSockCS);
   try
+    {$ifdef LIBCURLSTATIC}
+    curl.global_init:=@curl_global_init;
+    curl.global_cleanup:=@curl_global_cleanup;
+    curl.version_info:=@curl_version_info;
+    curl.easy_init:=@curl_easy_init;
+    curl.easy_setopt:=@curl_easy_setopt;
+    curl.easy_perform:=@curl_easy_perform;
+    curl.easy_cleanup:=@curl_easy_cleanup;
+    curl.easy_getinfo:=@curl_easy_getinfo;
+    curl.easy_duphandle:=@curl_easy_duphandle;
+    curl.easy_reset:=@curl_easy_reset;
+    curl.easy_strerror:=@curl_easy_strerror;
+    curl.slist_append:=@curl_slist_append;
+    curl.slist_free_all:=@curl_slist_free_all;
+    {$ifdef LIBCURLMULTI}
+    curl.multi_add_handle:=@curl_multi_add_handle;
+    curl.multi_assign:=@curl_multi_assign;
+    curl.multi_cleanup:=@curl_multi_cleanup;
+    curl.multi_fdset:=@curl_multi_fdset;
+    curl.multi_info_read:=@curl_multi_info_read;
+    curl.multi_init:=@curl_multi_init;
+    curl.multi_perform:=@curl_multi_perform;
+    curl.multi_remove_handle:=@curl_multi_remove_handle;
+    curl.multi_setopt:=@curl_multi_setopt;
+    curl.multi_socket_action:=@curl_multi_socket_action;
+    curl.multi_socket_all:=@curl_multi_socket_all;
+    curl.multi_strerror:=@curl_multi_strerror;
+    curl.multi_timeout:=@curl_multi_timeout;
+    curl.multi_wait:=@curl_multi_wait;
+    {$endif LIBCURLMULTI}
+    {$else}
     h := 0;
     if curl.Module=0 then // try to load libcurl once
     try
-      h := LoadLibrary({$ifdef MSWINDOWS}PChar{$endif}(dllname));
+      {$ifdef MSWINDOWS}
+      h := SafeLoadLibrary(dllname);
+      if h=0 then h := SafeLoadLibrary(ExeVersion.ProgramFilePath+dllname);
+      {$else}
+      h := LoadLibrary(dllname);
+      {$endif}
       {$ifdef Darwin} // another common names on MacOS
       if h=0 then
         h := LoadLibrary('libcurl.4.dylib');
@@ -582,13 +695,6 @@ begin
           raise ECurl.CreateFmt('Unable to find %s() in %s',[NAMES[api],LIBCURL_DLL]);
         inc(P);
       end;
-      curl.global_init(engines);
-      curl.info := curl.version_info(cvFour)^;
-      curl.infoText := format('%s version %s',[LIBCURL_DLL,curl.info.version]);
-      if curl.info.ssl_version<>nil then
-        curl.infoText := format('%s using %s',[curl.infoText,curl.info.ssl_version]);
-  //   api := 0; with curl.info do while protocols[api]<>nil do begin
-  //     write(protocols[api], ' '); inc(api); end; writeln(#13#10,curl.infoText);
       curl.Module := h;
     except
       on E: Exception do begin
@@ -598,6 +704,14 @@ begin
         raise;
       end;
     end;
+    {$endif}
+    curl.global_init(engines);
+    curl.info := curl.version_info(cvFour)^;
+    curl.infoText := format('%s version %s',[LIBCURL_DLL,curl.info.version]);
+    if curl.info.ssl_version<>nil then
+      curl.infoText := format('%s using %s',[curl.infoText,curl.info.ssl_version]);
+//   api := 0; with curl.info do while protocols[api]<>nil do begin
+//     write(protocols[api], ' '); inc(api); end; writeln(#13#10,curl.infoText);
   finally
     LeaveCriticalSection(SynSockCS);
   end;
@@ -605,6 +719,9 @@ end;
 
 
 initialization
+  {$ifdef LIBCURLSTATIC}
+  //LibCurlInitialize;
+  {$endif}
 
 finalization
   if PtrInt(curl.Module)>0 then begin

@@ -678,11 +678,12 @@
   {.$define USELIBCURL}        // for testing (no benefit vs WinHTTP)
 {$else}
   {$define ONLYUSEHTTPSOCKET}  // http.sys server is Windows-specific
-  {$ifndef ANDROID}
-    // cross-platform libcurl for https -> TCurlHttp and TSQLHttpClientCurl
-    {$define USELIBCURL}
+  // cross-platform libcurl for https -> TCurlHttp and TSQLHttpClientCurl
+  {$define USELIBCURL}
+  {$ifdef ANDROID}
     // for Android, consider using https://github.com/gcesarmza/curl-android-ios
     // static libraries and force USELIBCURL in the project conditionals
+    {$define LIBCURLSTATIC}
   {$endif ANDROID}
 {$endif MSWINDOWS}
 
