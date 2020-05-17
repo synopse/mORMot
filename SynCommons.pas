@@ -20689,15 +20689,15 @@ const
   STRRECSIZE = SizeOf(TStrRec);
 
 {$ifdef HASCODEPAGE}
-function FastNewString(len, cp: PtrInt): PAnsiChar; inline;
+function FastNewString(len: PtrInt; cp: cardinal): PAnsiChar; inline;
 begin
   if len>0 then begin
     {$ifdef FPC_X64MM}result := _Getmem({$else}GetMem(result,{$endif}len+(STRRECSIZE+4));
     PCardinal(@PStrRec(result)^.codePage)^ := cp or (1 shl 16); // also set elemSize:=1
     PStrRec(result)^.refCnt := 1;
     PStrRec(result)^.length := len;
+    PCardinal(result+len+STRRECSIZE)^ := 0; // ensure ends with four #0
     inc(PStrRec(result));
-    PCardinal(result+len)^ := 0; // ensure ends with four #0
   end else
     result := nil;
 end;
@@ -20707,6 +20707,7 @@ end;
 procedure fpc_ansistr_decr_ref; external name 'FPC_ANSISTR_DECR_REF';
 procedure fpc_ansistr_incr_ref; external name 'FPC_ANSISTR_INCR_REF';
 procedure fpc_ansistr_assign; external name 'FPC_ANSISTR_ASSIGN';
+procedure fpc_ansistr_setlength; external name 'FPC_ANSISTR_SETLENGTH';
 procedure fpc_unicodestr_decr_ref; external name 'FPC_UNICODESTR_DECR_REF';
 procedure fpc_unicodestr_incr_ref; external name 'FPC_UNICODESTR_INCR_REF';
 procedure fpc_unicodestr_assign; external name 'FPC_UNICODESTR_ASSIGN';
@@ -20833,7 +20834,50 @@ lock    dec     qword ptr[rax - _STRREFCNT]
         jmp     _Freemem
 end;
 
-{$ifdef FPC_HAS_CPSTRING} // optimized for systemcodepage=CP_UTF8
+{$ifdef FPC_HAS_CPSTRING}
+
+{$ifdef FPC_X64MM}
+procedure _ansistr_setlength_new(var s: RawByteString; len: PtrInt; cp: cardinal);
+var p, new: PAnsiChar;
+    l: PtrInt;
+begin
+  if cp<=CP_OEMCP then // TranslatePlaceholderCP logic
+    cp := DefaultSystemCodePage;
+  new := FastNewString(len,cp);
+  p := pointer(s);
+  if p<>nil then begin
+    l := PStrLen(p-_STRLEN)^+1;
+    if l>len then
+      l := len;
+    MoveFast(p^,new^,l);
+  end;
+  FastAssignNew(s,new);
+end;
+
+procedure _ansistr_setlength(var s: RawByteString; len: PtrInt; cp: cardinal);
+  nostackframe; assembler;
+asm
+        mov     rax, qword ptr[s]
+        test    len, len
+        jle     _ansistr_decr_ref
+        test    rax, rax
+        jz      _ansistr_setlength_new
+        cmp     qword ptr[rax - _STRREFCNT], 1
+        jne     _ansistr_setlength_new
+        push    len
+        push    s
+        sub     qword ptr[s], STRRECSIZE
+        add     len, STRRECSIZE + 1
+        call    _reallocmem // rely on MM in-place detection
+        pop     s
+        pop     len
+        add     qword ptr[s], STRRECSIZE
+        mov     qword ptr[rax].TStrRec.length, len
+        mov     byte ptr[rax + len + STRRECSIZE], 0
+end;
+{$endif FPC_X64MM}
+
+// _ansistr_concat_convert* optimized for systemcodepage=CP_UTF8
 
 function ToTempUTF8(var temp: TSynTempBuffer; p: pointer; len, cp: cardinal): pointer;
 begin
@@ -62650,12 +62694,17 @@ begin
     PatchCode(@fpc_dynarray_incr_ref,@_dynarray_incr_ref,$17);  // fpclen=$2f
     PatchJmp(@fpc_dynarray_clear,@_dynarray_decr_ref,$2f,PtrUInt(@_dynarray_decr_ref_free));
     RedirectCode(@fpc_dynarray_decr_ref,@fpc_dynarray_clear);
+    {$ifdef FPC_HAS_CPSTRING}
     {$ifdef LINUX}
     if DefaultSystemCodePage=CP_UTF8 then begin
       RedirectRtl(@_fpc_ansistr_concat,@_ansistr_concat_utf8);
       RedirectRtl(@_fpc_ansistr_concat_multi,@_ansistr_concat_multi_utf8);
     end;
     {$endif LINUX}
+    {$ifdef FPC_X64MM}
+    RedirectCode(@fpc_ansistr_setlength,@_ansistr_setlength);
+    {$endif FPC_X64MM}
+    {$endif FPC_HAS_CPSTRING}
     {$ifdef FPC_X64MM}
     RedirectCode(@fpc_getmem,@_Getmem);
     RedirectCode(@fpc_freemem,@_Freemem);

@@ -4514,6 +4514,11 @@ begin
   Check(u='40640.5028819444',u);
   e := 40640.5028819444;
   CheckSame(d,e,1e-11);
+  Check(IsAnsiCompatible('t'));
+  Check(IsAnsiCompatible('te'));
+  Check(IsAnsiCompatible('tes'));
+  Check(IsAnsiCompatible('test'));
+  Check(IsAnsiCompatible('teste'));
   CheckDoubleToShort(0,'0');
   CheckDoubleToShort(1,'1');
   CheckDoubleToShort(-1,'-1');
@@ -4679,6 +4684,7 @@ begin
     u := string(a);
     CheckEqual(TestAddFloatStr(s),s);
     Check(SysUtils.IntToStr(k)=u);
+    Check(IsAnsiCompatible(s));
     Check(Int64ToUtf8(k)=s);
     Check(IntToString(k)=u);
     Check(format('%d',[k])=u);
@@ -20414,7 +20420,7 @@ var
   success: boolean;
 begin
   fHttpClient.SetUser('Admin', 'synopse');
-  for i := 1 to 500 do
+  for i := 1 to 15000 do
     fHttpClient.ServerTimestampSynchronize; // calls root/timestamp
   test := TDDDTest.Create;
   try
