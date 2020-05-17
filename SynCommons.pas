@@ -59042,7 +59042,8 @@ begin
     {$elseif defined(VER310)}'Delphi 10.1 Berlin'
     {$elseif defined(VER320)}'Delphi 10.2 Tokyo'
     {$elseif defined(VER330)}'Delphi 10.3 Rio'
-    {$elseif defined(VER340)}'Delphi 10.4 Next'
+    {$elseif defined(VER340)}'Delphi 10.4 Sydney'
+    {$elseif defined(VER350)}'Delphi 10.5 Next'
     {$ifend}
   {$endif CONDITIONALEXPRESSIONS}
 {$endif FPC}
