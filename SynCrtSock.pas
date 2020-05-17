@@ -958,6 +958,7 @@ type
   protected
     fRemoteIP, fURL, fMethod, fInHeaders, fInContent, fInContentType,
     fAuthenticatedUser, fOutContent, fOutContentType, fOutCustomHeaders: SockString;
+    fFullURL: SockString;
     fServer: THttpServerGeneric;
     fRequestID: integer;
     fConnectionID: THttpServerConnectionID;
@@ -980,6 +981,8 @@ type
       aRemoteIP: SockString; aUseSSL: boolean=false);
     /// append some lines to the InHeaders input parameter
     procedure AddInHeader(additionalHeader: SockString);
+    /// input parameter containing the caller Full URL
+    property FullURL: SockString read fFullURL;
     /// input parameter containing the caller URI
     property URL: SockString read fURL;
     /// input parameter containing the caller method (GET/POST...)
@@ -992,7 +995,7 @@ type
     // input parameter defining the caller message body content type
     property InContentType: SockString read fInContentType;
     /// output parameter to be set to the response message body
-    property OutContent: SockString read fOutContent write fOutContent ;
+    property OutContent: SockString read fOutContent write fOutContent;
     /// output parameter to define the reponse message body content type
     // - if OutContentType is HTTP_RESP_STATICFILE (i.e. '!STATICFILE', defined
     // as STATICFILE_CONTENT_TYPE in mORMot.pas), then OutContent is the UTF-8
@@ -9167,6 +9170,7 @@ begin
         // parse method and headers
         Context.fConnectionID := Req^.ConnectionId;
         Context.fHttpApiRequest := Req;
+        Context.fFullURL := Req^.CookedUrl.pFullUrl;
         Context.fURL := Req^.pRawUrl;
         if Req^.Verb in [low(Verbs)..high(Verbs)] then
           Context.fMethod := Verbs[Req^.Verb] else
