@@ -346,11 +346,11 @@ type
   //   has been made much faster since Windows Vista/Seven)
   // - starting with Delphi 2009, it uses fastest UnicodeString type, which
   //   allow Copy On Write, Reference Counting and fast heap memory allocation
-  {$ifdef UNICODE}
+  {$ifdef HASVARUSTRING}
   SynUnicode = UnicodeString;
   {$else}
   SynUnicode = WideString;
-  {$endif}
+  {$endif HASVARUSTRING}
 
   PRawUnicode = ^RawUnicode;
   PRawJSON = ^RawJSON;

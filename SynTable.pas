@@ -6214,8 +6214,8 @@ var len: integer;
     PA: PAnsiChar absolute FieldBuffer;
     PU: PUTF8Char absolute FieldBuffer;
     tmp: RawByteString;
-    {$ifndef UNICODE}
-    WS: WideString;
+    {$ifndef HASVARUSTRING}
+    WS: SynUnicode;
     {$endif}
 begin
   case FieldType of
@@ -6250,7 +6250,7 @@ begin
   tftWinAnsi: begin
     len := FromVarUInt32(PB);
     if len>0 then
-      {$ifdef UNICODE}
+      {$ifdef HASVARUSTRING}
       result := WinAnsiToUnicodeString(PA,len)
       {$else}
       result := CurrentAnsiConvert.AnsiToAnsi(WinAnsiConvert,PA,len)
@@ -6260,7 +6260,7 @@ begin
   tftUTF8: begin
     len := FromVarUInt32(PB);
     if len>0 then
-      {$ifdef UNICODE}
+      {$ifdef HASVARUSTRING}
       result := UTF8DecodeToUnicodeString(PU,len)
       {$else} begin
         UTF8ToSynUnicode(PU,len,WS);

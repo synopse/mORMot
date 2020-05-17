@@ -167,26 +167,25 @@ var
   HTTP_DEFAULT_RECEIVETIMEOUT: integer = 30000;
 
 type
-{$ifdef UNICODE}
-  /// define the fastest Unicode string type of the compiler
-  SynUnicode = UnicodeString;
-  /// define a raw 8-bit storage string type, used for data buffer management
-  SockString = type RawByteString;
-{$else}
-  /// define the fastest 16-bit Unicode string type of the compiler
-  SynUnicode = WideString;
   {$ifdef HASCODEPAGE} // FPC may expect a CP, e.g. to compare two string constants
   SockString = type RawByteString;
   {$else}
   /// define a 8-bit raw storage string type, used for data buffer management
   SockString = type AnsiString;
   {$endif}
-{$endif}
+
   /// points to a 8-bit raw storage variable, used for data buffer management
   PSockString = ^SockString;
 
   /// defines a dynamic array of SockString
   TSockStringDynArray = array of SockString;
+
+  {$ifdef HASVARUSTRING}
+  SockUnicode = UnicodeString;
+  {$else}
+  /// define the fastest 16-bit Unicode string type of the compiler
+  SockUnicode = WideString;
+  {$endif}
 
 {$ifdef DELPHI5OROLDER}
   // not defined in Delphi 5 or older
@@ -958,7 +957,6 @@ type
   protected
     fRemoteIP, fURL, fMethod, fInHeaders, fInContent, fInContentType,
     fAuthenticatedUser, fOutContent, fOutContentType, fOutCustomHeaders: SockString;
-    fFullURL: SockString;
     fServer: THttpServerGeneric;
     fRequestID: integer;
     fConnectionID: THttpServerConnectionID;
@@ -967,6 +965,7 @@ type
     fAuthenticationStatus: THttpServerRequestAuthentication;
     {$ifdef MSWINDOWS}
     fHttpApiRequest: Pointer;
+    fFullURL: SockUnicode;
     {$endif}
   public
     /// low-level property which may be used during requests processing
@@ -981,8 +980,10 @@ type
       aRemoteIP: SockString; aUseSSL: boolean=false);
     /// append some lines to the InHeaders input parameter
     procedure AddInHeader(additionalHeader: SockString);
+    {$ifdef MSWINDOWS}
     /// input parameter containing the caller Full URL
-    property FullURL: SockString read fFullURL;
+    property FullURL: SockUnicode read fFullURL;
+    {$endif}
     /// input parameter containing the caller URI
     property URL: SockString read fURL;
     /// input parameter containing the caller method (GET/POST...)
@@ -1347,7 +1348,7 @@ type
     // if cloned, fOwner contains the main THttpApiServer instance
     fOwner: THttpApiServer;
     /// list of all registered URL
-    fRegisteredUnicodeUrl: array of SynUnicode;
+    fRegisteredUnicodeUrl: array of SockUnicode;
     fServerSessionID: HTTP_SERVER_SESSION_ID;
     fUrlGroupID: HTTP_URL_GROUP_ID;
     fExecuting: boolean;
@@ -1357,7 +1358,7 @@ type
     fAuthenticationSchemes: THttpApiRequestAuthentications;
     fReceiveBufferSize: cardinal;
     procedure SetReceiveBufferSize(Value: cardinal);
-    function GetRegisteredUrl: SynUnicode;
+    function GetRegisteredUrl: SockUnicode;
     function GetCloned: boolean;
     function GetHTTPQueueLength: Cardinal; override;
     procedure SetHTTPQueueLength(aValue: Cardinal); override;
@@ -1398,7 +1399,7 @@ type
     // - if you will call AddUrl() methods later, set CreateSuspended to TRUE,
     // then call explicitely the Resume method, after all AddUrl() calls, in
     // order to start the server
-    constructor Create(CreateSuspended: boolean; QueueName: SynUnicode='';
+    constructor Create(CreateSuspended: boolean; QueueName: SockUnicode='';
       OnStart: TNotifyThreadEvent=nil; OnStop: TNotifyThreadEvent=nil;
       const ProcessName: SockString=''); reintroduce;
     /// release all associated memory and handles
@@ -1519,7 +1520,7 @@ type
     // - optional Realm parameters can be used when haBasic scheme is defined
     // - optional DomainName and Realm parameters can be used for haDigest
     procedure SetAuthenticationSchemes(schemes: THttpApiRequestAuthentications;
-      const DomainName: SynUnicode=''; const Realm: SynUnicode='');
+      const DomainName: SockUnicode=''; const Realm: SockUnicode='');
     /// read-only access to HTTP API 2.0 server-side enabled authentication schemes
     property AuthenticationSchemes: THttpApiRequestAuthentications
       read fAuthenticationSchemes;
@@ -1546,7 +1547,7 @@ type
     /// TRUE if this instance is in fact a cloned instance for the thread pool
     property Cloned: boolean read GetCloned;
     /// return the list of registered URL on this server instance
-    property RegisteredUrl: SynUnicode read GetRegisteredUrl;
+    property RegisteredUrl: SockUnicode read GetRegisteredUrl;
     /// the maximum allowed bandwidth rate in bytes per second (via HTTP API 2.0)
     // - Setting this value to 0 allows an unlimited bandwidth
     // - by default Windows not limit bandwidth (actually limited to 4 Gbit/sec).
@@ -1739,7 +1740,7 @@ type
     // (e.g. before Windows 8) or if the request queue creation failed
     // - for aPingTimeout explanation see PingTimeout property documentation
     constructor Create(CreateSuspended: Boolean; aSocketThreadsCount: integer=1;
-      aPingTimeout: integer=0; QueueName: SynUnicode='';
+      aPingTimeout: integer=0; QueueName: SockUnicode='';
       aOnWSThreadStart: TNotifyThreadEvent=nil;
       aOnWSThreadTerminate: TNotifyThreadEvent=nil); reintroduce;
     /// prepare the process for a given THttpApiWebSocketServerProtocol
@@ -2038,8 +2039,8 @@ type
     // - Auth.Scheme and UserName/Password properties are handled
     // by the TWinHttp class only by now
     Auth: record
-      UserName: SynUnicode;
-      Password: SynUnicode;
+      UserName: SockUnicode;
+      Password: SockUnicode;
       Scheme: THttpRequestAuthentication;
     end;
     /// allow to customize the User-Agent header
@@ -2179,10 +2180,10 @@ type
     property AuthScheme: THttpRequestAuthentication
       read fExtendedOptions.Auth.Scheme write fExtendedOptions.Auth.Scheme;
     /// optional User Name for Authentication
-    property AuthUserName: SynUnicode
+    property AuthUserName: SockUnicode
       read fExtendedOptions.Auth.UserName write fExtendedOptions.Auth.UserName;
     /// optional Password for Authentication
-    property AuthPassword: SynUnicode
+    property AuthPassword: SockUnicode
       read fExtendedOptions.Auth.Password write fExtendedOptions.Auth.Password;
     /// custom HTTP "User Agent:" header value
     property UserAgent: SockString
@@ -4112,7 +4113,7 @@ end;
 const
   HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
 
-procedure BinToHexDisplayW(Bin: PByte; BinBytes: integer; var result: SynUnicode);
+procedure BinToHexDisplayW(Bin: PByte; BinBytes: integer; var result: SockUnicode);
 var j: PtrInt;
     P: PWideChar;
 begin
@@ -8633,7 +8634,7 @@ const
     );
 
 function RegURL(aRoot, aPort: SockString; Https: boolean;
-  aDomainName: SockString): SynUnicode;
+  aDomainName: SockString): SockUnicode;
 const Prefix: array[boolean] of SockString = ('http://','https://');
 begin
   if aPort='' then
@@ -8652,7 +8653,7 @@ begin
   end else
     aRoot := '/'; // allow for instance 'http://*:2869/'
   aRoot := Prefix[Https]+aDomainName+':'+aPort+aRoot;
-  result := SynUnicode(aRoot);
+  result := SockUnicode(aRoot);
 end;
 
 const
@@ -8722,7 +8723,7 @@ end;
 
 function THttpApiServer.AddUrl(const aRoot, aPort: SockString; Https: boolean;
   const aDomainName: SockString; aRegisterURI: boolean; aContext: Int64): integer;
-var uri: SynUnicode;
+var uri: SockUnicode;
     n: integer;
 begin
   result := -1;
@@ -8745,7 +8746,7 @@ end;
 
 function THttpApiServer.RemoveUrl(const aRoot, aPort: SockString; Https: boolean;
   const aDomainName: SockString): integer;
-var uri: SynUnicode;
+var uri: SockUnicode;
     i,j,n: integer;
 begin
   result := -1;
@@ -8776,7 +8777,7 @@ const
   // - 'GA' (GENERIC_ALL) to grant all access
   // - 'S-1-1-0'	defines a group that includes all users
   HTTPADDURLSECDESC: PWideChar = 'D:(A;;GA;;;S-1-1-0)';
-var prefix: SynUnicode;
+var prefix: SockUnicode;
     Error: HRESULT;
     Config: HTTP_SERVICE_CONFIG_URLACL_SET;
 begin
@@ -8831,7 +8832,7 @@ begin
   result := Format('HTTP API %d.%d',[Http.Version.MajorVersion,Http.Version.MinorVersion]);
 end;
 
-constructor THttpApiServer.Create(CreateSuspended: boolean; QueueName: SynUnicode;
+constructor THttpApiServer.Create(CreateSuspended: boolean; QueueName: SockUnicode;
   OnStart,OnStop: TNotifyThreadEvent; const ProcessName: SockString);
 var bindInfo: HTTP_BINDING_INFO;
 begin
@@ -8935,7 +8936,7 @@ var Buffer: array[0..511] of byte;
     BufferSize, UserSize, DomainSize: DWORD;
     UserInfo: PSIDAndAttributes;
     NameUse: {$ifdef FPC}SID_NAME_USE{$else}Cardinal{$endif};
-    tmp: SynUnicode;
+    tmp: SockUnicode;
     P: PWideChar;
 begin
    if not GetTokenInformation(UserToken,TokenUser,@Buffer,SizeOf(Buffer),BufferSize) then
@@ -9170,8 +9171,8 @@ begin
         // parse method and headers
         Context.fConnectionID := Req^.ConnectionId;
         Context.fHttpApiRequest := Req;
-        Context.fFullURL := Req^.CookedUrl.pFullUrl;
-        Context.fURL := Req^.pRawUrl;
+        SetString(Context.fFullURL,Req^.CookedUrl.pFullUrl,Req^.CookedUrl.FullUrlLength);
+        SetString(Context.fURL,Req^.pRawUrl,Req^.RawUrlLength);
         if Req^.Verb in [low(Verbs)..high(Verbs)] then
           Context.fMethod := Verbs[Req^.Verb] else
           SetString(Context.fMethod,Req^.pUnknownVerb,Req^.UnknownVerbLength);
@@ -9347,7 +9348,7 @@ begin
         @aValue, sizeof(aValue), 0, nil));
 end;
 
-function THttpApiServer.GetRegisteredUrl: SynUnicode;
+function THttpApiServer.GetRegisteredUrl: SockUnicode;
 var i: integer;
 begin
   if fRegisteredUnicodeUrl=nil then
@@ -9469,7 +9470,7 @@ procedure THttpApiServer.LogStart(const aLogFolder: TFileName;
   aRolloverType: THttpApiLoggingRollOver; aRolloverSize: cardinal;
   aLogFields: THttpApiLogFields; aFlags: THttpApiLoggingFlags);
 var logInfo : HTTP_LOGGING_INFO;
-    folder,software: SynUnicode;
+    folder,software: SockUnicode;
 begin
   if (self=nil) or (fOwner<>nil) then
     exit;
@@ -9484,8 +9485,8 @@ begin
   if length(aLogFolder)>212 then
     // http://msdn.microsoft.com/en-us/library/windows/desktop/aa364532
     raise EHttpApiServer.CreateFmt('aLogFolder is too long for LogStart(%s)',[aLogFolder]);
-  folder := SynUnicode(aLogFolder);
-  software := SynUnicode(aSoftwareName);
+  folder := SockUnicode(aLogFolder);
+  software := SockUnicode(aSoftwareName);
   logInfo.SoftwareNameLength := length(software)*2;
   logInfo.SoftwareName := pointer(software);
   logInfo.DirectoryNameLength := length(folder)*2;
@@ -9626,7 +9627,7 @@ begin
 end;
 
 procedure THttpApiServer.SetAuthenticationSchemes(schemes: THttpApiRequestAuthentications;
-  const DomainName, Realm: SynUnicode);
+  const DomainName, Realm: SockUnicode);
 var authInfo: HTTP_SERVER_AUTHENTICATION_INFO;
 begin
   if (self=nil) or (fOwner<>nil) then
@@ -10245,7 +10246,8 @@ begin
       fState := wsClosedByGuard;
       fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
       fBuffer := sCloseReason;
-      PostQueuedCompletionStatus(fProtocol.fServer.fThreadPoolServer.FRequestQueue, 0, 0, @fOverlapped);
+      PostQueuedCompletionStatus(
+        fProtocol.fServer.fThreadPoolServer.FRequestQueue, 0, 0, @fOverlapped);
     end else
       if elapsed>=fProtocol.fServer.PingTimeout * 1000 then
         Ping;
@@ -10272,21 +10274,25 @@ begin
   // if reading is in progress then try read messages else try receive new messages
   if fState in [wsOpen, wsClosing] then begin
     if Assigned(fLastActionContext) then begin
-      EWebSocketApi.RaiseOnError(hCompleteAction, WebSocketAPI.CompleteAction(fWSHandle, fLastActionContext, fOverlapped.InternalHigh));
+      EWebSocketApi.RaiseOnError(hCompleteAction, WebSocketAPI.CompleteAction(
+        fWSHandle, fLastActionContext, fOverlapped.InternalHigh));
       fLastActionContext := nil;
     end else
       EWebSocketApi.RaiseOnError(hReceive, WebSocketAPI.Receive(fWSHandle, nil, nil));
   end else
-    raise EWebSocketApi.CreateFmt('THttpApiWebSocketConnection.BeforeRead state is not wsOpen', []);
+    raise EWebSocketApi.CreateFmt(
+      'THttpApiWebSocketConnection.BeforeRead state is not wsOpen', []);
 end;
 
 const
   C_WEB_SOCKET_BUFFER_SIZE = 2;
 
 type
-  TWebSocketBufferDataArr = array [0 .. C_WEB_SOCKET_BUFFER_SIZE - 1] of WEB_SOCKET_BUFFER_DATA;
+  TWebSocketBufferDataArr =
+    array [0 .. C_WEB_SOCKET_BUFFER_SIZE - 1] of WEB_SOCKET_BUFFER_DATA;
 
-function THttpApiWebSocketConnection.ProcessActions(ActionQueue: WEB_SOCKET_ACTION_QUEUE): boolean;
+function THttpApiWebSocketConnection.ProcessActions(
+  ActionQueue: WEB_SOCKET_ACTION_QUEUE): boolean;
 var ulDataBufferCount: ULONG;
     Action: WEB_SOCKET_ACTION;
     BufferType: WEB_SOCKET_BUFFER_TYPE;
@@ -10303,7 +10309,8 @@ var ulDataBufferCount: ULONG;
     finally
       LeaveCriticalSection(fProtocol.fSafe);
     end;
-    EWebSocketApi.RaiseOnError(hCompleteAction, WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
+    EWebSocketApi.RaiseOnError(hCompleteAction, WebSocketAPI.CompleteAction(
+      fWSHandle, ActionContext, 0));
   end;
 begin
   result := true;
@@ -10350,15 +10357,18 @@ begin
           exit;
         end else if BufferType = WEB_SOCKET_PING_PONG_BUFFER_TYPE then begin
           // todo: may be answer to client's ping
-          EWebSocketApi.RaiseOnError(hCompleteAction, WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
+          EWebSocketApi.RaiseOnError(hCompleteAction, WebSocketAPI.CompleteAction(
+            fWSHandle, ActionContext, 0));
           exit;
         end else if BufferType = WEB_SOCKET_UNSOLICITED_PONG_BUFFER_TYPE then begin
           // todo: may be handle this situation
-          EWebSocketApi.RaiseOnError(hCompleteAction, WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
+          EWebSocketApi.RaiseOnError(hCompleteAction, WebSocketAPI.CompleteAction(
+            fWSHandle, ActionContext, 0));
           exit;
         end else begin
           DoOnMessage(BufferType, Buffer[0].pbBuffer, Buffer[0].ulBufferLength);
-          EWebSocketApi.RaiseOnError(hCompleteAction, WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
+          EWebSocketApi.RaiseOnError(hCompleteAction, WebSocketAPI.CompleteAction(
+            fWSHandle, ActionContext, 0));
           exit;
         end;
     end else
@@ -10373,11 +10383,13 @@ end;
 procedure THttpApiWebSocketConnection.InternalSend(aBufferType: WEB_SOCKET_BUFFER_TYPE;
   WebsocketBufferData: pointer);
 begin
-  EWebSocketApi.RaiseOnError(hSend, WebSocketAPI.Send(fWSHandle, aBufferType, WebsocketBufferData, nil));
+  EWebSocketApi.RaiseOnError(hSend, WebSocketAPI.Send(
+    fWSHandle, aBufferType, WebsocketBufferData, nil));
   ProcessActions(WEB_SOCKET_SEND_ACTION_QUEUE);
 end;
 
-procedure THttpApiWebSocketConnection.Send(aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: ULONG);
+procedure THttpApiWebSocketConnection.Send(aBufferType: WEB_SOCKET_BUFFER_TYPE;
+  aBuffer: Pointer; aBufferSize: ULONG);
 var wsSendBuf: WEB_SOCKET_BUFFER_DATA;
 begin
   if fState<>wsOpen then
@@ -10387,7 +10399,8 @@ begin
   InternalSend(aBufferType, @wsSendBuf);
 end;
 
-procedure THttpApiWebSocketConnection.Close(aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer; aBufferSize: ULONG);
+procedure THttpApiWebSocketConnection.Close(aStatus: WEB_SOCKET_CLOSE_STATUS;
+  aBuffer: Pointer; aBufferSize: ULONG);
 var wsSendBuf: WEB_SOCKET_BUFFER_DATA;
 begin
   if fState=wsOpen then
@@ -10407,9 +10420,8 @@ end;
 { THttpApiWebSocketServer }
 
 constructor THttpApiWebSocketServer.Create(CreateSuspended: Boolean;
-  aSocketThreadsCount: integer = 1; aPingTimeout: integer = 0;
-  QueueName: SynUnicode = ''; aOnWSThreadStart: TNotifyThreadEvent = nil;
-  aOnWSThreadTerminate: TNotifyThreadEvent = nil);
+  aSocketThreadsCount, aPingTimeout: integer; QueueName: SockUnicode;
+  aOnWSThreadStart: TNotifyThreadEvent; aOnWSThreadTerminate: TNotifyThreadEvent);
 begin
   inherited Create(CreateSuspended, QueueName);
   if not (WebSocketAPI.WebSocketEnabled) then
@@ -10434,7 +10446,7 @@ begin
 end;
 
 procedure THttpApiWebSocketServer.DestroyMainThread;
-var i: integer;
+var i: PtrInt;
 begin
   fGuard.Free;
   for i := 0 to Length(fRegisteredProtocols^) - 1 do
@@ -10872,27 +10884,35 @@ begin
 end;
 
 class function THttpRequest.Get(const aURI,aHeader: SockString;
-  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString; outStatus: PInteger): SockString;
+  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString;
+  outStatus: PInteger): SockString;
 begin
-  result := InternalREST(aURI,'GET','',aHeader,aIgnoreSSLCertificateErrors,outHeaders,outStatus);
+  result := InternalREST(aURI,'GET','',aHeader,
+    aIgnoreSSLCertificateErrors,outHeaders,outStatus);
 end;
 
 class function THttpRequest.Post(const aURI, aData, aHeader: SockString;
-  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString; outStatus: PInteger): SockString;
+  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString;
+  outStatus: PInteger): SockString;
 begin
-  result := InternalREST(aURI,'POST',aData,aHeader,aIgnoreSSLCertificateErrors,outHeaders,outStatus);
+  result := InternalREST(aURI,'POST',aData,aHeader,
+    aIgnoreSSLCertificateErrors,outHeaders,outStatus);
 end;
 
 class function THttpRequest.Put(const aURI, aData, aHeader: SockString;
-  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString; outStatus: PInteger): SockString;
+  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString;
+  outStatus: PInteger): SockString;
 begin
-  result := InternalREST(aURI,'PUT',aData,aHeader,aIgnoreSSLCertificateErrors,outHeaders,outStatus);
+  result := InternalREST(aURI,'PUT',aData,aHeader,
+    aIgnoreSSLCertificateErrors,outHeaders,outStatus);
 end;
 
 class function THttpRequest.Delete(const aURI, aHeader: SockString;
-  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString; outStatus: PInteger): SockString;
+  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString;
+  outStatus: PInteger): SockString;
 begin
-  result := InternalREST(aURI,'DELETE','',aHeader,aIgnoreSSLCertificateErrors,outHeaders,outStatus);
+  result := InternalREST(aURI,'DELETE','',aHeader,
+    aIgnoreSSLCertificateErrors,outHeaders,outStatus);
 end;
 
 function THttpRequest.Request(const url, method: SockString;
@@ -11127,7 +11147,8 @@ begin
     raise EWinINet.Create;
 end;
 
-function TWinINet.InternalReadData(var Data: SockString; Read: integer; Size: cardinal): cardinal;
+function TWinINet.InternalReadData(var Data: SockString; Read: integer;
+  Size: cardinal): cardinal;
 begin
   if not InternetReadFile(fRequest, @PByteArray(Data)[Read], Size, result) then
     raise EWinINet.Create;
@@ -11309,7 +11330,8 @@ type
     Open: function(pwszUserAgent: PWideChar; dwAccessType: DWORD;
       pwszProxyName, pwszProxyBypass: PWideChar; dwFlags: DWORD): HINTERNET; stdcall;
     /// Sets up a callback function that WinHTTP can call as progress is made during an operation.
-    SetStatusCallback: function(hSession: HINTERNET; lpfnInternetCallback: WINHTTP_STATUS_CALLBACK;
+    SetStatusCallback: function(hSession: HINTERNET;
+      lpfnInternetCallback: WINHTTP_STATUS_CALLBACK;
       dwNotificationFlags: DWORD; dwReserved: PDWORD): WINHTTP_STATUS_CALLBACK; stdcall;
     /// Specifies the initial target server of an HTTP request.
     Connect: function(hSession: HINTERNET; pswzServerName: PWideChar;
@@ -11321,12 +11343,12 @@ type
     /// Closes a single HINTERNET handle.
     CloseHandle: function(hInternet: HINTERNET): BOOL; stdcall;
     /// Adds one or more HTTP request headers to the HTTP request handle.
-    AddRequestHeaders: function(hRequest: HINTERNET; pwszHeaders: PWideChar; dwHeadersLength: DWORD;
-      dwModifiers: DWORD): BOOL; stdcall;
+    AddRequestHeaders: function(hRequest: HINTERNET; pwszHeaders: PWideChar;
+      dwHeadersLength: DWORD; dwModifiers: DWORD): BOOL; stdcall;
     /// Sends the specified request to the HTTP server.
     SendRequest: function(hRequest: HINTERNET; pwszHeaders: PWideChar;
-      dwHeadersLength: DWORD; lpOptional: Pointer; dwOptionalLength: DWORD; dwTotalLength: DWORD;
-      dwContext: DWORD): BOOL; stdcall;
+      dwHeadersLength: DWORD; lpOptional: Pointer; dwOptionalLength: DWORD;
+      dwTotalLength: DWORD; dwContext: DWORD): BOOL; stdcall;
     /// Ends an HTTP request that is initiated by WinHttpSendRequest.
     ReceiveResponse: function(hRequest: HINTERNET;
       lpReserved: Pointer): BOOL; stdcall;
@@ -11430,9 +11452,8 @@ end;
 
 procedure TWinHTTP.InternalAddHeader(const hdr: SockString);
 begin
-  if (hdr<>'') and
-    not WinHttpAPI.AddRequestHeaders(FRequest, Pointer(Ansi7ToUnicode(hdr)), length(hdr),
-      WINHTTP_ADDREQ_FLAG_COALESCE) then
+  if (hdr<>'') and not WinHttpAPI.AddRequestHeaders(
+     FRequest, Pointer(Ansi7ToUnicode(hdr)), length(hdr), WINHTTP_ADDREQ_FLAG_COALESCE) then
     RaiseLastModuleError(winhttpdll,EWinHTTP);
 end;
 
