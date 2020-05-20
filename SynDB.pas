@@ -419,6 +419,11 @@ type
     function ColumnBlob(Col: integer): RawByteString; overload;
     /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlobBytes(Col: integer): TBytes; overload;
+
+    procedure ColumnBlobToStream(Col: integer; Stream: TStream); overload;
+    procedure ColumnBlobWriteFromStream(Col: integer; Stream: TStream); overload;
+
+
     /// return a Column as a TSQLVar value, first Col is 0
     // - the specified Temp variable will be used for temporary storage of
     // svtUTF8/svtBlob values
@@ -2002,6 +2007,10 @@ type
     // - this function will return the BLOB content as a TBytes
     // - this default virtual method will call ColumnBlob()
     function ColumnBlobBytes(Col: integer): TBytes; overload; virtual;
+
+    procedure ColumnBlobToStream(Col: integer; Stream: TStream); overload; virtual; abstract;
+    procedure ColumnBlobWriteFromStream(Col: integer; Stream: TStream); overload; virtual; abstract;
+
     {$ifndef LVCL}
     /// return a Column as a variant, first Col is 0
     // - this default implementation will call ColumnToVariant() method
