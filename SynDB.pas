@@ -7547,7 +7547,7 @@ end;
 procedure TSQLDBStatement.Reset;
 begin
   fSQLWithInlinedParams := '';
-  // a do-nothing default method (used e.g. for OCI)
+  fSQLLogTimer.Init; // reset timer (for cached statement for example)
 end;
 
 procedure TSQLDBStatement.ReleaseRows;
