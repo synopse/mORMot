@@ -4386,6 +4386,8 @@ begin
   CheckEqual(TestAddFloatStr('12.3e 230'),'12.3e');
   CheckEqual(TestAddFloatStr('12.3f230'),'12.3');
   CheckEqual(TestAddFloatStr('12.3E23.0'),'12.3E23');
+  CheckEqual(TestAddFloatStr('-.01'),'-0.01'); // ODBC numeric output
+  CheckEqual(TestAddFloatStr('.0002'),'0.0002'); // ODBC numeric output
   CheckEqual(OctToBin(''),'');
   CheckEqual(OctToBin('123'),'123');
   CheckEqual(OctToBin('\\123'),'\123');
