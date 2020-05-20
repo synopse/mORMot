@@ -500,6 +500,11 @@ function CurlWriteRawByteString(buffer: PAnsiChar; size,nitems: integer;
 
 implementation
 
+{$ifdef WINDOWS}
+uses
+  SynCommons; // ExeVersion
+{$endif}
+
 {$ifdef LIBCURLSTATIC}
 
 {$ifdef FPC}
