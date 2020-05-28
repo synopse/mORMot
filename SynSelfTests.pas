@@ -20420,7 +20420,7 @@ var
   success: boolean;
 begin
   fHttpClient.SetUser('Admin', 'synopse');
-  for i := 1 to 15000 do
+  for i := 1 to 150 {15000} do
     fHttpClient.ServerTimestampSynchronize; // calls root/timestamp
   test := TDDDTest.Create;
   try
