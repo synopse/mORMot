@@ -37,6 +37,7 @@ unit SynDB;
   - Esteban Martin (EMartin)
   - Joe (at jokusoftware)
   - Maciej Izak (hnb)
+  - Ales Gregor (algalg)
 
 
   Alternatively, the contents of this file may be used under the terms of
@@ -8895,5 +8896,4 @@ initialization
   TTextWriter.RegisterCustomJSONSerializerFromText(
     TypeInfo(TSQLDBColumnDefine),__TSQLDBColumnDefine);
 end.
-
 
