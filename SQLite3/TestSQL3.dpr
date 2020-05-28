@@ -200,6 +200,6 @@ begin
      '\..\..\SQlite3\TestSQL3FPCInterfaces.pas');
   {$endif}
   {$ifdef FPC_X64MM}
-  WriteHeapStatus(#13#10'SynFPCx64MM Memory Usage Report:', 20);
+  WriteHeapStatus(#13#10'Memory Usage Report:', 16, 12, {flags=}true);
   {$endif FPC_X64MM}
 end.
