@@ -283,7 +283,7 @@ number of threads is the same or greater than the number of physical cores}
 Combine it with the two options below for further fine-tuning.}
 
 {$ifndef DisableMemoryLeakReporting}
-{$define EnableMemoryLeakReporting}
+{.$define EnableMemoryLeakReporting}
 {$endif}
 
   {Set this option to suppress the display and logging of expected memory leaks
