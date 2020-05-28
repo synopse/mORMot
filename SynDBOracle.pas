@@ -32,6 +32,7 @@ unit SynDBOracle;
   - Adam Siwon (asiwon)
   - richard6688
   - mpv
+  - Ales Gregor (algalg)
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -1506,7 +1507,8 @@ begin
     repeat
       Read := BlobLen;
       Status := LobRead(svchp,errhp,locp,Read,1,PBlobBuffer,BufferSize,nil,nil,csid,csfrm);
-      stream.Write(BlobBuffer, Read);
+      if stream.Write(BlobBuffer, Read) <> Read then
+        raise ESQLDBOracle.CreateUTF8('%.BlobReadToStream() failed to write to stream. ',[self]);
       inc(result,Read);
     until Status<>OCI_NEED_DATA;
     Check(nil,Stmt,Status,errhp);
@@ -2225,14 +2227,19 @@ var C: PSQLDBColumnProperty;
 begin
   V := GetCol(Col,C);
   if V<>nil then // column is NULL
+  begin
     if C^.ColumnType=ftBlob then
       if C^.ColumnValueInlined then
       begin
-        raise ESQLDBOracle.CreateUTF8('%.ColumnBlobFromStream() ColumnValueInlined not supported',[self]);
+        raise ESQLDBOracle.CreateUTF8('%.ColumnBlobWriteFromStream() ColumnValueInlined not supported',[self]);
       end else
         // conversion from POCILobLocator
         with TSQLDBOracleConnection(Connection) do
           OCI.BlobToDescriptorFromStream(self,fContext,fError,V^,stream);
+  end else
+  begin
+    raise ESQLDBOracle.CreateUTF8('%.ColumnBlobWriteFromStream() blob column is null, use EMPTY_BLOB() to initialize it',[self]);
+  end;
 
 end;
 
@@ -3514,4 +3521,3 @@ end;
 initialization
   TSQLDBOracleConnectionProperties.RegisterClassNameForDefinition;
 end.
-
