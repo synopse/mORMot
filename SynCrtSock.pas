@@ -2470,7 +2470,7 @@ type
   protected
     fHttp: THttpClientSocket;
     fHttps: THttpRequest;
-    fBody, fHeaders, fUserAgent: SockString;
+    fProxy, fBody, fHeaders, fUserAgent: SockString;
     fOnlyUseClientSocket, fIgnoreSSLCertificateErrors: boolean;
   public
     /// initialize the instance
@@ -2494,6 +2494,8 @@ type
     /// allows to customize HTTPS connection and allow weak certificates
     property IgnoreSSLCertificateErrors: boolean read fIgnoreSSLCertificateErrors
       write fIgnoreSSLCertificateErrors;
+    /// alows to customize the connection using a proxy
+    property Proxy: SockString read fProxy write fProxy;
   end;
 
 
@@ -11984,13 +11986,13 @@ function TSimpleHttpClient.RawRequest(const Uri: TURI; const Method, Header,
   Data, DataType: SockString; KeepAlive: cardinal): integer;
 begin
   result := 0;
-  if Uri.Https and not fOnlyUseClientSocket then
+  if (Uri.Https or (Proxy <> '')) and not fOnlyUseClientSocket then
     try
       if (fHttps = nil) or (fHttps.Server <> Uri.Server) or
          (integer(fHttps.Port) <> Uri.PortInt) then begin
         FreeAndNil(fHttp);
-        fHttps.Free; // need a new HTTPS connection
-        fHttps := MainHttpClass.Create(Uri.Server,Uri.Port,Uri.Https,'','',5000,5000,5000);
+        FreeAndNil(fHttps); // need a new HTTPS connection
+        fHttps := MainHttpClass.Create(Uri.Server,Uri.Port,Uri.Https,Proxy,'',5000,5000,5000);
         fHttps.IgnoreSSLCertificateErrors := fIgnoreSSLCertificateErrors;
         if fUserAgent<>'' then
           fHttps.UserAgent := fUserAgent;
@@ -12007,7 +12009,7 @@ begin
       if (fHttp = nil) or (fHttp.Server <> Uri.Server) or
          (fHttp.Port <> Uri.Port) then begin
         FreeAndNil(fHttps);
-        fHttp.Free; // need a new HTTP connection
+        FreeAndNil(fHttp); // need a new HTTP connection
         fHttp := THttpClientSocket.Open(Uri.Server,Uri.Port,cslTCP,5000,Uri.Https);
         if fUserAgent<>'' then
           fHttp.UserAgent := fUserAgent;
