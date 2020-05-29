@@ -47,7 +47,7 @@ unit mORMot;
     Ondrej
     Pavel Mashlyakovskii (mpv)
     Sabbiolina
-    Transmogrifix
+    Svetozar Belic (transmogrifix)
     Uian2000
     Vadim Orel
 
