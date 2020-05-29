@@ -33396,21 +33396,18 @@ function FloatStrCopy(s, d: PUTF8Char): PUTF8Char;
 var c: AnsiChar;
 begin
   while s^=' ' do inc(s);
-  if PWord(s)^=ord('-')+ord('.')shl 8 then begin
-    PCardinal(d)^ := ord('-')+ord('0')shl 8; // '-.3' -> '-0.3'
-    inc(d,2);
-    inc(s);
-  end;
   c := s^;
   if (c='+') or (c='-') then begin
     inc(s);
     d^ := c;
     inc(d);
     c := s^;
-  end else
+  end;
   if c='.' then begin
-    d^ := '0'; // '.5' -> '0.5'
-    inc(d);
+    PCardinal(d)^ := ord('0')+ord('.')shl 8; // '.5' -> '0.5'
+    inc(d,2);
+    inc(s);
+    c := s^;
   end;
   if (c>='0') and (c<='9') then
     repeat
