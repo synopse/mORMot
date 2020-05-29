@@ -1973,6 +1973,12 @@ var
   // settings, for the whole process
   EXTENDED_PRECISION: integer = 18;
 
+const
+  /// a typical error allowed when working with double floating-point values
+  // - 1E-12 is too small, and triggers sometimes some unexpected errors;
+  // FPC RTL uses 1E-4 so we are paranoid enough
+  DOUBLE_SAME = 1E-11;
+
 type
   {$ifdef TSYNEXTENDED80}
   /// the floating-point type to be used for best precision and speed
@@ -2019,14 +2025,14 @@ procedure Div100(Y: cardinal; var res: TDiv100Rec);
 // - the precision is calculated from the A and B value range
 // - faster equivalent than SameValue() in Math unit
 // - if you know the precision range of A and B, it's faster to check abs(A-B)<range
-function SameValue(const A, B: Double; DoublePrec: double = 1E-12): Boolean;
+function SameValue(const A, B: Double; DoublePrec: double = DOUBLE_SAME): Boolean;
 
 /// compare to floating point values, with IEEE 754 double precision
 // - use this function instead of raw = operator
 // - the precision is calculated from the A and B value range
 // - faster equivalent than SameValue() in Math unit
 // - if you know the precision range of A and B, it's faster to check abs(A-B)<range
-function SameValueFloat(const A, B: TSynExtended; DoublePrec: TSynExtended = 1E-12): Boolean;
+function SameValueFloat(const A, B: TSynExtended; DoublePrec: TSynExtended = DOUBLE_SAME): Boolean;
 
 /// a comparison function for sorting IEEE 754 double precision values
 function CompareFloat(const A, B: double): integer;
