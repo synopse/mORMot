@@ -7807,7 +7807,7 @@ begin
     fAscent := WidthArray^[0];
     fDescent := WidthArray^[1];
     // create "Width" table of the font  (256-32=224)
-    Data.AddItem('Widths',TPdfArray.Create(AXref, @WidthArray^[2], 224), true);
+    Data.AddItem('Widths', TPdfArray.Create(AXref, @WidthArray^[2], 224), true);
   end;
   // initialize char widths array by default value (if missing width parameter
   // is defined, use it as default value.)
@@ -7982,7 +7982,7 @@ begin
     FFontDescriptor.AddItem('Flags',Flags);
     with fOTM.otmrcFontBox do
       FFontDescriptor.AddItem('FontBBox',
-        TPdfArray.Create(fDoc.FXref,[Left,Bottom,Right,Top]));
+        TPdfArray.Create(fDoc.FXref, [Left,Bottom,Right,Top]));
     Data.AddItem('FontDescriptor',fFontDescriptor);
   end;
   fAscent := fOTM.otmAscent;
@@ -10533,7 +10533,7 @@ begin
     end;
     FAttributes.AddItem('Type','XObject');
     FAttributes.AddItem('Subtype','Form');
-    FAttributes.AddItem('BBox',TPdfArray.Create(nil,[0,0,H,W]));
+    FAttributes.AddItem('BBox',TPdfArray.Create(nil,[0,0,W,H]));
     FAttributes.AddItem('Matrix',TPdfRawText.Create('[1 0 0 1 0 0]'));
     FAttributes.AddItem('Resources',FResources);
   finally
@@ -10752,7 +10752,7 @@ begin
   FCanvas.FFactor := 1;
   FAttributes.AddItem('Type','XObject');
   FAttributes.AddItem('Subtype','Form');
-  FAttributes.AddItem('BBox',TPdfArray.Create(nil,[0,0,H,W]));
+  FAttributes.AddItem('BBox',TPdfArray.Create(nil,[0,0,W,H]));
   FAttributes.AddItem('Matrix',TPdfRawText.Create('[1 0 0 1 0 0]'));
   FAttributes.AddItem('Resources',FResources);
 end;
