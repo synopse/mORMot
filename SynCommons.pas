@@ -12767,8 +12767,8 @@ procedure DateToIso8601PChar(Date: TDateTime; P: PUTF8Char; Expanded: boolean); 
 // - if DT contains only a time, returns the time encoded as 'Thh:mm:ss'
 // - otherwise, returns the ISO-8601 date and time encoded as 'YYYY-MM-DDThh:mm:ss'
 // - if WithMS is TRUE, will append '.sss' for milliseconds resolution
-procedure DateTimeToIso8601ExpandedPChar(const Value: TDateTime; Dest: PUTF8Char;
-  FirstChar: AnsiChar='T'; WithMS: boolean=false);
+function DateTimeToIso8601ExpandedPChar(const Value: TDateTime; Dest: PUTF8Char;
+  FirstChar: AnsiChar='T'; WithMS: boolean=false): PUTF8Char;
 
 /// write a TDateTime into strict ISO-8601 date and/or time text
 // - if DT=0, returns ''
@@ -37787,8 +37787,8 @@ begin
   Ansi7ToString(Pointer(tmp),length(tmp),result);
 end;
 
-procedure DateTimeToIso8601ExpandedPChar(const Value: TDateTime; Dest: PUTF8Char;
-  FirstChar: AnsiChar; WithMS: boolean);
+function DateTimeToIso8601ExpandedPChar(const Value: TDateTime; Dest: PUTF8Char;
+  FirstChar: AnsiChar; WithMS: boolean): PUTF8Char;
 begin
   if Value<>0 then begin
     if trunc(Value)<>0 then begin
@@ -37801,6 +37801,7 @@ begin
     end;
   end;
   Dest^ := #0;
+  result := Dest;
 end;
 
 function Iso8601ToTimeLogPUTF8Char(P: PUTF8Char; L: integer; ContainsNoTime: PBoolean): TTimeLog;
