@@ -890,6 +890,7 @@ type
     fUseCache, fStoreVoidStringAsNull, fLogSQLStatementOnException,
     fRollbackOnDisconnect, fReconnectAfterConnectionError,
     fFilterTableViewSchemaName: boolean;
+    fDateTimeFirstChar: AnsiChar;
     {$ifndef UNICODE}
     fVariantWideString: boolean;
     {$endif}
@@ -1253,6 +1254,10 @@ type
     // 'YYYY-MM-DDTHH:MM:SS' (as expected by Microsoft SQL server e.g.)
     // - returns  to_date('....','YYYY-MM-DD HH24:MI:SS')  for Oracle
     function SQLIso8601ToDate(const Iso8601: RawUTF8): RawUTF8; virtual;
+    /// convert a TDateTime into a ISO-8601 encoded time and date, as expected
+    // by the database provider
+    // - e.g. SQLite3, DB2 and PostgreSQL will use non-standard ' ' instead of 'T'
+    function SQLDateToIso8601Quoted(DateTime: TDateTime): RawUTF8; virtual;
     /// split a table name to its OWNER.TABLE full name (if applying)
     // - will use ForcedSchemaName property (if applying), or the OWNER. already
     // available within the supplied table name
@@ -1442,6 +1447,11 @@ type
     // - but some DB engines (e.g. Jet or MS SQL) does not allow by default to
     // store '' values, but expect NULL to be stored instead
     property StoreVoidStringAsNull: Boolean read fStoreVoidStringAsNull write fStoreVoidStringAsNull;
+    /// customize the ISO-8601 text format expected by the database provider
+    // - is 'T' by default, as expected by the ISO-8601 standard
+    // - will be changed e.g. for PostgreSQL, which expects ' ' instead
+    // - as used by SQLDateToIso8601Quoted() and BindArray()
+    property DateTimeFirstChar: AnsiChar read fDateTimeFirstChar write fDateTimeFirstChar;
     {$ifndef UNICODE}
     /// set to true to force all variant conversion to WideString instead of
     // the default faster AnsiString, for pre-Unicode version of Delphi
@@ -4517,7 +4527,10 @@ begin
   fUseCache := true;
   fLoggedSQLMaxSize := 2048; // log up to 2KB of inlined SQL by default
   SetInternalProperties; // virtual method used to override default parameters
-  aDBMS := DBMS;
+  aDBMS := GetDBMS;
+  if aDBMS in [dSQLite, dDB2, dPostgreSQL] then // for SQLDateToIso8601Quoted()
+    fDateTimeFirstChar := ' ' else
+    fDateTimeFirstChar := 'T';
   if fForcedSchemaName='' then
     case aDBMS of // should make every one life's easier
     dMSSQL:      fForcedSchemaName := 'dbo';
@@ -5656,12 +5669,12 @@ begin
 end;
 
 function TSQLDBConnectionProperties.SQLIso8601ToDate(const Iso8601: RawUTF8): RawUTF8;
-function TrimTInIso: RawUTF8;
-begin
-  result := Iso8601;
-  if (length(result)>10) and (result[11]='T') then
-    result[11] := ' '; // 'T' -> ' '
-end;
+  function TrimTInIso: RawUTF8;
+  begin
+    result := Iso8601;
+    if (length(result)>10) and (result[11]='T') then
+      result[11] := ' '; // 'T' -> ' '
+  end;
 begin
   case DBMS of
   dSQLite: result := TrimTInIso;
@@ -5670,6 +5683,16 @@ begin
   dDB2: result := 'TIMESTAMP '''+TrimTInIso+'''';
   else  result := ''''+Iso8601+'''';
   end;
+end;
+
+function TSQLDBConnectionProperties.SQLDateToIso8601Quoted(DateTime: TDateTime): RawUTF8;
+var tmp: array[0..23] of AnsiChar;
+    P: PUTF8Char;
+begin
+  tmp[0] := '''';
+  P := DateTimeToIso8601ExpandedPChar(DateTime,@tmp[1],DateTimeFirstChar);
+  P^ := '''';
+  FastSetString(result,@tmp,PtrUInt(P)-PtrUInt(@tmp)+1);
 end;
 
 function TSQLDBConnectionProperties.SQLCreate(const aTableName: RawUTF8;
@@ -7726,10 +7749,19 @@ end;
 
 procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
   ParamType: TSQLDBFieldType; const Values: TRawUTF8DynArray; ValuesCount: integer);
+var i: integer;
+    ChangeFirstChar: AnsiChar;
 begin
   inherited; // raise an exception in case of invalid parameter
+  if fConnection=nil then
+    ChangeFirstChar := 'T' else
+    ChangeFirstChar := Connection.Properties.DateTimeFirstChar;
   with CheckParam(Param,ParamType,paramIn)^ do begin
     VArray := Values; // immediate COW reference-counted assignment
+    if (ParamType=ftDate) and (ChangeFirstChar<>'T') then
+      for i := 0 to ValuesCount-1 do // fix e.g. for PostgreSQL
+        if (length(Values[i])>11) and (Values[i][12]='T') then
+          Values[i][12] := ChangeFirstChar; // [12] since quoted 'dateTtime'
     VInt64 := ValuesCount;
   end;
   fParamsArrayCount := ValuesCount;
@@ -7764,7 +7796,7 @@ var i: integer;
 begin
   with CheckParam(Param,ftDate,paramIn,length(Values))^ do
     for i := 0 to high(Values) do
-      VArray[i] := ''''+DateTimeToIso8601Text(Values[i])+'''';
+      VArray[i] := Connection.Properties.SQLDateToIso8601Quoted(Values[i]);
 end;
 
 procedure TSQLDBStatementWithParams.BindArrayRowPrepare(
@@ -7789,7 +7821,7 @@ begin
       VInt64 := fParamsArrayCount;
       if (VType=ftDate) and (aValues[i].VType=vtExtended) then
         VArray[fParamsArrayCount] := // direct binding of TDateTime value
-          ''''+DateTimeToIso8601Text(aValues[i].VExtended^)+'''' else begin
+          Connection.Properties.SQLDateToIso8601Quoted(aValues[i].VExtended^) else begin
         VarRecToUTF8(aValues[i],VArray[fParamsArrayCount]);
         case VType of
         ftUTF8:
