@@ -37059,10 +37059,10 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         {$endif}
         imul    rax, r9  // broadcast value into all bytes of rax (in 1 cycle)
         cmp     cnt, 32
-        ja      @abv32  // >32
+        ja      @abv32  // >32 or <0
         sub     rdx, 8
-        jg      @sml    // 9..32
-        jmp     qword ptr[r10 + 64 + rdx*8] // small blocks
+        jg      @sml    // small 9..32
+        jmp     qword ptr[r10 + 64 + rdx*8] // tiny 0..8 bytes
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @jmptab:dq @00, @01, @02, @03, @04, @05, @06, @07, @08
 @sml:   cmp     dl, 8  // 9..32 bytes
@@ -37084,13 +37084,15 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
 @05:    mov     byte ptr[dst+4], al
 @04:    mov     dword ptr[dst], eax
         ret
-@abv32: movd    xmm0, eax
+@abv32: test    rdx, rdx
+        jle     @00  // < 0
+        movd    xmm0, eax
         lea     r8, [dst+cnt]  // r8 point to end
         pshufd  xmm0, xmm0, 0  // broadcast value into all bytes of xmm0
         mov     r10, rdx       // save rdx=cnt
         {$ifdef FPC} // Delphi doesn't support avx, and erms is slower
         cmp     rdx, 256
-        jae     @abv256  // try erms or avx if cnt>255 (vzeroupper penaly)
+        jae     @abv256  // try erms or avx if cnt>255 (vzeroupper penalty)
         {$endif FPC}
 @sse2:  movups  oword ptr[dst], xmm0  // first unaligned 16 bytes
         lea     rdx, [dst+rdx-1]
