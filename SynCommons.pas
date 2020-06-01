@@ -37074,6 +37074,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
 @05:    mov     byte ptr[dst+4], al
 @04:    mov     dword ptr[dst], eax
         ret
+{$ifdef FPC} align 8{$else} .align 8{$endif}
 @abv32: jng     @00  // < 0
         movd    xmm0, eax
         lea     r8, [dst+cnt]  // r8 point to end
@@ -37501,7 +37502,7 @@ begin
       if (M=0) or (M>12) then exit;
       if P[6] in ['-','/'] then begin inc(P); dec(L); end; // allow YYYY-MM-DD
       if L>=8 then begin // YYYYMMDD
-        if not(P[8] in [#0,' ','T']) then
+        if (L>8) and not(P[8] in [#0,' ','T']) then
           exit; // invalid date format
         D := ord(P[6])*10+ord(P[7])-(48+480);
         if (D=0) or (D>MonthDays[true][M]) then exit; // worse is leap year=true
