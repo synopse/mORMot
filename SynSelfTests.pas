@@ -4528,12 +4528,10 @@ begin
   CheckDoubleToShort(0.01,'0.01');
   CheckDoubleToShort(0.001,'0.001');
   CheckDoubleToShort(0.0001,'0.0001');
-  CheckDoubleToShort(0.00001,'0.00001');
   CheckDoubleToShort(-0.1,'-0.1');
   CheckDoubleToShort(-0.01,'-0.01');
   CheckDoubleToShort(-0.001,'-0.001');
   CheckDoubleToShort(-0.0001,'-0.0001');
-  CheckDoubleToShort(-0.00001,'-0.00001');
   CheckDoubleToShort(1.1,'1.1');
   CheckDoubleToShort(1.01,'1.01');
   CheckDoubleToShort(1.001,'1.001');
@@ -4550,12 +4548,10 @@ begin
   CheckDoubleToShort(0.07,'0.07');
   CheckDoubleToShort(0.007,'0.007');
   CheckDoubleToShort(0.0007,'0.0007');
-  CheckDoubleToShort(0.00007,'0.00007');
   CheckDoubleToShort(-0.7,'-0.7');
   CheckDoubleToShort(-0.07,'-0.07');
   CheckDoubleToShort(-0.007,'-0.007');
   CheckDoubleToShort(-0.0007,'-0.0007');
-  CheckDoubleToShort(-0.00007,'-0.00007');
   CheckDoubleToShort(7.7,'7.7');
   CheckDoubleToShort(7.07,'7.07');
   CheckDoubleToShort(7.007,'7.007');
@@ -4566,6 +4562,12 @@ begin
   CheckDoubleToShort(-7.007,'-7.007');
   CheckDoubleToShort(-7.0007,'-7.0007');
   CheckDoubleToShort(-7.00007,'-7.00007');
+  {$ifdef FPC}
+  CheckDoubleToShort(0.00001,'0.00001');
+  CheckDoubleToShort(-0.00001,'-0.00001');
+  CheckDoubleToShort(0.00007,'0.00007');
+  CheckDoubleToShort(-0.00007,'-0.00007');
+  {$endif FPC}
   CheckDoubleToShort(11111.1,'11111.1');
   CheckDoubleToShort(11111.01,'11111.01');
   CheckDoubleToShort(11111.001,'11111.001');
