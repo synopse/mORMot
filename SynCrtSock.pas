@@ -2564,6 +2564,13 @@ procedure IP4Text(const ip4addr; var result: SockString); overload;
 procedure IPText(const sin: TVarSin; var result: SockString;
   localasvoid: boolean=false);
 
+var
+  /// defines if a connection from the loopback should be reported as ''
+  // (no Remote-IP - which is the default) or as '127.0.0.1' (force to false)
+  // - used by both TCrtSock.AcceptRequest and THttpApiServer.Execute servers
+  RemoteIPLocalHostAsVoidInServers: boolean = true;
+
+
 const
   /// the layout of TSMTPConnection.FromText method
   SMTP_DEFAULT = 'user:password@smtpserver:port';
@@ -5045,7 +5052,7 @@ begin
   Linger := 5; // should remain open for 5 seconds after a closesocket() call
   {$endif LINUXNOTBSD}
   if aClientSin<>nil then
-    IPText(aClientSin^,fRemoteIP,{localasvoid=}true);
+    IPText(aClientSin^,fRemoteIP,RemoteIPLocalHostAsVoidInServers);
 end;
 
 procedure TCrtSocket.SockSend(const Values: array of const);
@@ -8381,7 +8388,7 @@ begin
       inc(P);
   end;
   if (RemoteIP='') and (Request.Address.pRemoteAddress<>nil) then
-    IPText(PVarSin(Request.Address.pRemoteAddress)^,RemoteIP,{localasvoid=}true);
+    IPText(PVarSin(Request.Address.pRemoteAddress)^,RemoteIP,RemoteIPLocalHostAsVoidInServers);
   // compute headers length
   Lip := length(RemoteIP);
   if Lip<>0 then
