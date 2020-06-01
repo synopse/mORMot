@@ -37831,7 +37831,7 @@ begin
       if P[6] in ['-','/'] then begin inc(P); dec(L); end; // allow YYYY-MM-DD
       if L>=8 then begin  // YYYYMMDD
         V := ord(P[6])*10+ord(P[7])-(48+480+1); // Day 1..31 -> 0..30
-        if (V<=30) and(P[8] in [#0,' ','T']) then
+        if (V<=30) and ((L=8) or (P[8] in [#0,' ','T'])) then
           inc(result,V shl 17) else begin
           result := 0;
           exit;
