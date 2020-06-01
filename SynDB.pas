@@ -37,7 +37,6 @@ unit SynDB;
   - Esteban Martin (EMartin)
   - Joe (at jokusoftware)
   - Maciej Izak (hnb)
-  - Ales Gregor (algalg)
 
 
   Alternatively, the contents of this file may be used under the terms of
@@ -420,8 +419,33 @@ type
     function ColumnBlob(Col: integer): RawByteString; overload;
     /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlobBytes(Col: integer): TBytes; overload;
-
+    /// read a blob Column into the Stream parameter
+    // var SQLDBRows: ISQLDBRows;
+    //     FileStrm : TFileStream;
+    // begin
+    //   SQLDBRows := FConnection.Execute('select a from T', []);
+    //   SQLDBRows.Step();
+    //   FileStrm := TFileStream.Create('c:\test.txt', fmCreate);
+    //   try
+    //     SQLDBRows.ColumnBlobToStream(0, FileStrm);
+    //   finally
+    //    FileStrm.Free;
+    //   end;
+    // end;
     procedure ColumnBlobToStream(Col: integer; Stream: TStream); overload;
+    /// write to a blob Column the data from the Stream parameter
+    // var SQLDBRows: ISQLDBRows;
+    //     FileStrm : TFileStream;
+    // begin
+    //   SQLDBRows := FConnection.Execute('select a from T for update', []);
+    //   SQLDBRows.Step();
+    //   FileStrm := TFileStream.Create('c:\test.txt', fmOpenRead or fmShareDenyNone);
+    //   try
+    //     SQLDBRows.ColumnBlobWriteFromStream(0, FileStrm);
+    //   finally
+    //     FileStrm.Free;
+    //   end;
+    //   SQLDBRows := nil;
     procedure ColumnBlobWriteFromStream(Col: integer; Stream: TStream); overload;
 
 
@@ -2008,9 +2032,34 @@ type
     // - this function will return the BLOB content as a TBytes
     // - this default virtual method will call ColumnBlob()
     function ColumnBlobBytes(Col: integer): TBytes; overload; virtual;
-
-    procedure ColumnBlobToStream(Col: integer; Stream: TStream); overload; virtual; abstract;
-    procedure ColumnBlobWriteFromStream(Col: integer; Stream: TStream); overload; virtual; abstract;
+    /// read a blob Column into the Stream parameter
+    // var SQLDBRows: ISQLDBRows;
+    //     FileStrm : TFileStream;
+    // begin
+    //   SQLDBRows := FConnection.Execute('select a from T', []);
+    //   SQLDBRows.Step();
+    //   FileStrm := TFileStream.Create('c:\test.txt', fmCreate);
+    //   try
+    //     SQLDBRows.ColumnBlobToStream(0, FileStrm);
+    //   finally
+    //    FileStrm.Free;
+    //   end;
+    // end;
+    procedure ColumnBlobToStream(Col: integer; Stream: TStream); overload; virtual;
+    /// write to a blob Column the data from the Stream parameter
+    // var SQLDBRows: ISQLDBRows;
+    //     FileStrm : TFileStream;
+    // begin
+    //   SQLDBRows := FConnection.Execute('select a from T for update', []);
+    //   SQLDBRows.Step();
+    //   FileStrm := TFileStream.Create('c:\test.txt', fmOpenRead or fmShareDenyNone);
+    //   try
+    //     SQLDBRows.ColumnBlobWriteFromStream(0, FileStrm);
+    //   finally
+    //     FileStrm.Free;
+    //   end;
+    //   SQLDBRows := nil;
+    procedure ColumnBlobWriteFromStream(Col: integer; Stream: TStream); overload; virtual;
 
     {$ifndef LVCL}
     /// return a Column as a variant, first Col is 0
@@ -6707,6 +6756,18 @@ end;
 function TSQLDBStatement.ColumnBlobBytes(Col: integer): TBytes;
 begin
   RawByteStringToBytes(ColumnBlob(Col),result);
+end;
+
+procedure TSQLDBStatement.ColumnBlobToStream(Col: integer; Stream: TStream);
+var BlobText: RawByteString;
+begin
+  BlobText := ColumnBlob(Col);
+  Stream.Write(BlobText, Length(BlobText));
+end;
+
+procedure TSQLDBStatement.ColumnBlobWriteFromStream(Col: integer; Stream: TStream);
+begin
+  raise ESQLDBException.CreateUTF8('%.ColumnBlobWriteFromStream not implemented',[self]);
 end;
 
 {$ifndef LVCL}
