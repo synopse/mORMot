@@ -5449,6 +5449,10 @@ procedure TTestLowLevelCommon.Iso8601DateAndTime;
     Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
     I.From(D);
     Check(Iso8601ToTimeLog(s)=I.Value);
+    t := s;
+    t[11] := ''''; // as in SynDB VArray[] quoted parameters
+    J.From(pointer(t),10);
+    Check(I.Value and not(1 shl (6+6+5)-1)=J.Value);
     I.From(s);
     t := I.Text(Expanded);
     if t<>s then // we allow error on time = 00:00:00 -> I.Text = just date
