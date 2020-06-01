@@ -4653,10 +4653,6 @@ begin
   Check(ident[2]='Ftiti');
   Check(ident[3]='Uboat');
   {$endif}
-  {$ifndef LVCL}
-  {$ifdef ISDELPHIXE}FormatSettings.{$endif}{$ifdef FPC}FormatSettings.{$endif}
-    DecimalSeparator := '.';
-  {$endif}
   Check(xxHash32(0,'A',1)=275094093);
   Check(xxHash32(0,'ABACK',5)=314231639);
   Check(xxHash32(0,'ABBREVIATIONS',13)=3058487595);
@@ -20517,6 +20513,10 @@ end;
 
 
 initialization
+  {$ifndef LVCL}
+  {$ifdef ISDELPHIXE}FormatSettings.{$endif}{$ifdef FPC}FormatSettings.{$endif}
+    DecimalSeparator := '.';
+  {$endif LVCL}
   _uE0 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[0],1);
   _uE7 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[1],1);
   _uE8 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[2],1);

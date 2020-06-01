@@ -20928,24 +20928,6 @@ begin
   result := PStrLen(PtrUInt(s)-_STRLEN)^;
 end;
 
-procedure _ansistr_concat_direct(var dest: RawByteString;
-  const s1,s2: RawByteString; cp: cardinal);
-var new: PAnsiChar;
-    l1: PtrInt;
-begin
-  l1 := _lstrlen(s1);
-  if pointer(s1)=pointer(dest) then begin // dest := dest+s2 -> self-resize dest
-    SetLength(dest,l1+_lstrlen(s2));
-    PStrRec(PtrUInt(dest)-STRRECSIZE)^.codepage := cp;
-    MoveFast(pointer(s2)^,PByteArray(dest)[l1],_lstrlen(s2));
-  end else begin
-    new := FastNewString(l1+_lstrlen(s2),cp);
-    MoveFast(pointer(s1)^,new[0],l1);
-    MoveFast(pointer(s2)^,new[l1],_lstrlen(s2));
-    FastAssignNew(dest,new);
-  end;
-end;
-
 function _lstrcp(const s: RawByteString; cp: integer): integer; inline;
 begin
   result := cp;
@@ -20959,6 +20941,8 @@ end;
 procedure _ansistr_concat_utf8(var dest: RawByteString;
   const s1,s2: RawByteString; cp: cardinal);
 var cp1, cp2: cardinal;
+    new: PAnsiChar;
+    l1: PtrInt;
 begin
   if cp<=CP_OEMCP then // TranslatePlaceholderCP logic
     cp := CP_UTF8;
@@ -20974,22 +20958,35 @@ begin
   if s1='' then
     dest := s2 else
   if s2='' then
-    dest := s1 else
-    _ansistr_concat_direct(dest,s1,s2,cp);
+    dest := s1 else begin
+    l1 := _lstrlen(s1);
+    if pointer(s1)=pointer(dest) then begin // dest := dest+s2 -> self-resize dest
+      SetLength(dest,l1+_lstrlen(s2));
+      PStrRec(PtrUInt(dest)-STRRECSIZE)^.codepage := cp;
+      MoveFast(pointer(s2)^,PByteArray(dest)[l1],_lstrlen(s2));
+    end else begin
+      new := FastNewString(l1+_lstrlen(s2),cp);
+      MoveFast(pointer(s1)^,new[0],l1);
+      MoveFast(pointer(s2)^,new[l1],_lstrlen(s2));
+      FastAssignNew(dest,new);
+    end;
+  end;
 end;
 
 procedure _ansistr_concat_multi_convert(var dest: RawByteString;
-  const s: array of RawByteString; cp: cardinal);
+  s: PRawByteString; scount, cp: cardinal);
 var t: TTextWriter;
-    i: PtrInt;
     u: RawUTF8;
     tmp: TTextWriterStackBuffer;
 begin
   t := TTextWriter.CreateOwnedStream(tmp);
   try
-    for i := 0 to high(s) do
-      if s[i]<>'' then
-        t.AddAnyAnsiBuffer(pointer(s[i]),_lstrlen(s[i]),twNone,_lstrcp(s[i],cp));
+    repeat
+      if s^<>'' then
+        t.AddAnyAnsiBuffer(pointer(s^),_lstrlen(s^),twNone,_lstrcp(s^,cp));
+      inc(s);
+      dec(scount);
+    until scount=0;
     t.SetText(u);
   finally
     t.Free;
@@ -20999,39 +20996,12 @@ begin
     TSynAnsiConvert.Engine(cp).UTF8BufferToAnsi(pointer(u),length(u),dest);
 end;
 
-procedure _ansistr_concat_multi_direct(var dest: RawByteString;
-  const s: array of RawByteString; cp: cardinal; first, len: PtrInt);
-var p: pointer;
-    new: PAnsiChar;
-    l,i: TStrLen;
-begin
-  p := pointer(s[first]);
-  l := _lstrlen(RawByteString(p));
-  if p=pointer(dest) then begin // dest := dest+s... -> self-resize
-    SetLength(dest,len);
-    new := pointer(dest);
-    PStrRec(PtrUInt(dest)-STRRECSIZE)^.codepage := cp;
-    cp := 0;
-  end else begin
-    new := FastNewString(len,cp);
-    MoveFast(p^,new[0],l);
-  end;
-  for i := first+1 to high(s) do begin
-    p := pointer(s[i]);
-    if p<>nil then begin
-      MoveFast(p^,new[l],_lstrlen(RawByteString(p)));
-      inc(l,_lstrlen(RawByteString(p)));
-    end;
-  end;
-  if cp<>0 then
-    FastAssignNew(dest,new);
-end;
-
 procedure _ansistr_concat_multi_utf8(var dest: RawByteString;
   const s: array of RawByteString; cp: cardinal);
-var first,len,i: TStrLen;
+var first,len,i,l: TStrLen;
     cpf,cpi: cardinal;
     p: pointer;
+    new: PAnsiChar;
 begin
   if cp<=CP_OEMCP then
     cp := CP_UTF8;
@@ -21064,8 +21034,28 @@ begin
       end;
     end;
   if cpf=0 then
-    _ansistr_concat_multi_convert(dest,s,cp) else
-    _ansistr_concat_multi_direct(dest,s,cpf,first,len);
+    _ansistr_concat_multi_convert(dest,@s[0],length(s),cp) else begin
+    p := pointer(s[first]);
+    l := _lstrlen(RawByteString(p));
+    if p=pointer(dest) then begin // dest := dest+s... -> self-resize
+      SetLength(dest,len);
+      new := pointer(dest);
+      PStrRec(PtrUInt(dest)-STRRECSIZE)^.codepage := cp;
+      cp := 0;
+    end else begin
+      new := FastNewString(len,cp);
+      MoveFast(p^,new[0],l);
+    end;
+    for i := first+1 to high(s) do begin
+      p := pointer(s[i]);
+      if p<>nil then begin
+        MoveFast(p^,new[l],_lstrlen(RawByteString(p)));
+        inc(l,_lstrlen(RawByteString(p)));
+      end;
+    end;
+    if cp<>0 then
+      FastAssignNew(dest,new);
+  end;
 end;
 
 procedure _fpc_ansistr_concat(var a: RawUTF8);
@@ -36832,7 +36822,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         cmp     src, dst
         je      @equal
         cmp     cnt, 32
-        ja      @lrg  // >32
+        ja      @lrg  // >32 or <0
         sub     rax, 8
         jg      @sml  // 9..32
         jmp     qword ptr[r10 + 64 + rax * 8]  // 0..8
@@ -37084,8 +37074,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
 @05:    mov     byte ptr[dst+4], al
 @04:    mov     dword ptr[dst], eax
         ret
-@abv32: test    rdx, rdx
-        jle     @00  // < 0
+@abv32: jng     @00  // < 0
         movd    xmm0, eax
         lea     r8, [dst+cnt]  // r8 point to end
         pshufd  xmm0, xmm0, 0  // broadcast value into all bytes of xmm0
