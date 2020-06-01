@@ -8225,12 +8225,12 @@ _dq:        dec(vl);
         inc(d);
       end
       else
-      repeat // regular content
-        d^ := s^;
-        inc(d);
-        inc(s);
-        dec(vl);
-      until vl = 0;
+        repeat // regular content
+          d^ := s^;
+          inc(d);
+          inc(s);
+          dec(vl);
+        until vl = 0;
     end;
     d^ := ',';
     inc(d);

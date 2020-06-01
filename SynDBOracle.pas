@@ -1530,11 +1530,11 @@ end;
 
 procedure TSQLDBOracleLib.BlobFromDescriptorToStream(Stmt: TSQLDBStatement;
   svchp: POCISvcCtx; errhp: POCIError; locp: POCIDescriptor; stream: TStream);
-var Len, Read: ub4;
+var Len: ub4;
 begin
   Len := BlobOpen(Stmt,svchp,errhp,locp);
   try
-    Read := BlobReadToStream(Stmt,svchp,errhp,locp,stream,Len);
+    BlobReadToStream(Stmt,svchp,errhp,locp,stream,Len);
   finally
     Check(nil,Stmt,LobClose(svchp,errhp,locp),errhp);
   end;
