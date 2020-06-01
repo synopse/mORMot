@@ -356,6 +356,9 @@ type
     function ColumnBlobBytes(Col: integer): TBytes; override;
     /// read a blob Column into the Stream parameter
     procedure ColumnBlobToStream(Col: integer; Stream: TStream); override;
+    /// write a blob Column into the Stream parameter
+    // - expected to be used with 'SELECT .. FOR UPDATE' locking statements
+    procedure ColumnBlobFromStream(Col: integer; Stream: TStream); override;
     /// return a Column as a variant
     // - this implementation will retrieve the data with no temporary variable
     // (since TQuery calls this method a lot, we tried to optimize it)
@@ -1280,6 +1283,9 @@ type
     function BlobReadToStream(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; stream: TStream; BlobLen: ub4;
       csid: ub2=0; csfrm: ub1=SQLCS_IMPLICIT): integer;
+    function BlobWriteFromStream(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+      errhp: POCIError; locp: POCIDescriptor; stream: TStream; BlobLen: ub4;
+      csid: ub2=0; csfrm: ub1=SQLCS_IMPLICIT): integer;
   public
     ClientVersion: function(var major_version, minor_version,
       update_num, patch_num, port_update_num: sword): sword; cdecl;
@@ -1407,7 +1413,10 @@ type
       errhp: POCIError; locp: POCIDescriptor; out result: TBytes); overload;
     /// retrieve some BLOB content, save it to the stream
     procedure BlobFromDescriptorToStream(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
-      errhp: POCIError; locp: POCIDescriptor; stream: TStream); overload;
+      errhp: POCIError; locp: POCIDescriptor; stream: TStream);
+    /// write some BLOB content, read it from the stream
+    procedure BlobToDescriptorFromStream(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+      errhp: POCIError; locp: POCIDescriptor; stream: TStream);
     /// retrieve some CLOB/NCLOB content as UTF-8 text
     function ClobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; ColumnDBForm: integer;
@@ -1529,6 +1538,31 @@ begin
   finally
     Check(nil,Stmt,LobClose(svchp,errhp,locp),errhp);
   end;
+end;
+
+procedure TSQLDBOracleLib.BlobToDescriptorFromStream(Stmt: TSQLDBStatement;
+  svchp: POCISvcCtx; errhp: POCIError; locp: POCIDescriptor; stream: TStream);
+begin
+  BlobWriteFromStream(Stmt,svchp,errhp,locp,stream,stream.Size);
+end;
+
+function TSQLDBOracleLib.BlobWriteFromStream(Stmt: TSQLDBStatement;
+  svchp: POCISvcCtx; errhp: POCIError; locp: POCIDescriptor; stream: TStream;
+  BlobLen: ub4; csid: ub2; csfrm: ub1): integer;
+var ChunkSize, l_Read, l_Write, l_Offset: Longint;
+    tmp: RawByteString;
+begin
+  Check(nil,Stmt,LobGetChunkSize(svchp,errhp,locp,ChunkSize),errhp);
+  SetLength(tmp,ChunkSize*SynDBOracleBlobChunksCount);
+  l_Offset := 1;
+  while stream.Position<stream.Size do begin
+    l_Read := stream.Read(pointer(tmp)^,length(tmp));
+    l_Write := l_Read;
+    Check(nil,Stmt,LobWrite(svchp,errhp,locp,l_Write,l_Offset,
+      pointer(tmp),l_Read,OCI_ONE_PIECE),errhp);
+    inc(l_Offset,l_Write);
+  end;
+  result := l_Offset;
 end;
 
 function TSQLDBOracleLib.ClobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
@@ -2171,6 +2205,24 @@ begin
         // conversion from POCILobLocator
         with TSQLDBOracleConnection(Connection) do
           OCI.BlobFromDescriptorToStream(self,fContext,fError,V^,stream);
+end;
+
+procedure TSQLDBOracleStatement.ColumnBlobFromStream(Col: integer; Stream: TStream);
+var C: PSQLDBColumnProperty;
+    V: PPOCIDescriptor;
+begin
+  V := GetCol(Col,C);
+  if V<>nil then begin // V=nil means column is NULL
+    if C^.ColumnType=ftBlob then
+      if C^.ColumnValueInlined then
+        raise ESQLDBOracle.CreateUTF8('%.ColumnBlobFromStream(ColumnValueInlined) '+
+          'not supported',[self]) else
+        // conversion from POCILobLocator
+        with TSQLDBOracleConnection(Connection) do
+          OCI.BlobToDescriptorFromStream(self,fContext,fError,V^,stream);
+  end else
+    raise ESQLDBOracle.CreateUTF8('Unexpected %.ColumnBlobFromStream(null): '+
+      'use EMPTY_BLOB() to initialize it',[self]);
 end;
 
 function TSQLDBOracleStatement.ColumnCurrency(Col: integer): currency;

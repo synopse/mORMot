@@ -421,6 +421,9 @@ type
     function ColumnBlobBytes(Col: integer): TBytes; overload;
     /// read a blob Column into the Stream parameter
     procedure ColumnBlobToStream(Col: integer; Stream: TStream); overload;
+    /// write a blob Column into the Stream parameter
+    // - expected to be used with 'SELECT .. FOR UPDATE' locking statements
+    procedure ColumnBlobFromStream(Col: integer; Stream: TStream); overload;
     /// return a Column as a TSQLVar value, first Col is 0
     // - the specified Temp variable will be used for temporary storage of
     // svtUTF8/svtBlob values
@@ -469,6 +472,8 @@ type
     function ColumnBlobBytes(const ColName: RawUTF8): TBytes; overload;
     /// read a blob Column into the Stream parameter
     procedure ColumnBlobToStream(const ColName: RawUTF8; Stream: TStream); overload;
+    /// write a blob Column into the Stream parameter
+    procedure ColumnBlobFromStream(const ColName: RawUTF8; Stream: TStream); overload;
     {$ifndef LVCL}
     /// return a Column as a variant, from a supplied column name
     function ColumnVariant(const ColName: RawUTF8): Variant; overload;
@@ -2020,6 +2025,11 @@ type
     // - default implementation will just call ColumnBlob(), whereas some
     // providers (like SynDBOracle) may implement direct support
     procedure ColumnBlobToStream(Col: integer; Stream: TStream); overload; virtual;
+    /// write a blob Column into the Stream parameter
+    // - expected to be used with 'SELECT .. FOR UPDATE' locking statements
+    // - default implementation will through an exception, since it is highly
+    // provider-specific; SynDBOracle e.g. implements it properly
+    procedure ColumnBlobFromStream(Col: integer; Stream: TStream); overload; virtual;
     {$ifndef LVCL}
     /// return a Column as a variant, first Col is 0
     // - this default implementation will call ColumnToVariant() method
@@ -2070,6 +2080,9 @@ type
     function ColumnBlobBytes(const ColName: RawUTF8): TBytes; overload;
     /// read a blob Column into the Stream parameter
     procedure ColumnBlobToStream(const ColName: RawUTF8; Stream: TStream); overload;
+    /// write a blob Column into the Stream parameter
+    // - expected to be used with 'SELECT .. FOR UPDATE' locking statements
+    procedure ColumnBlobFromStream(const ColName: RawUTF8; Stream: TStream); overload;
     {$ifndef LVCL}
     /// return a Column as a variant, from a supplied column name
     function ColumnVariant(const ColName: RawUTF8): Variant; overload;
@@ -6739,6 +6752,11 @@ begin
   Stream.WriteBuffer(pointer(tmp)^,Length(tmp));
 end;
 
+procedure TSQLDBStatement.ColumnBlobFromStream(Col: integer; Stream: TStream);
+begin
+  raise ESQLDBException.CreateUTF8('%.ColumnBlobFromStream not implemented',[self]);
+end;
+
 {$ifndef LVCL}
 function TSQLDBStatement.ColumnVariant(Col: integer): Variant;
 begin
@@ -7225,6 +7243,11 @@ end;
 procedure TSQLDBStatement.ColumnBlobToStream(const ColName: RawUTF8; Stream: TStream);
 begin
   ColumnBlobToStream(ColumnIndex(ColName),Stream);
+end;
+
+procedure TSQLDBStatement.ColumnBlobFromStream(const ColName: RawUTF8; Stream: TStream);
+begin
+  ColumnBlobFromStream(ColumnIndex(ColName),Stream);
 end;
 
 function TSQLDBStatement.ColumnCurrency(const ColName: RawUTF8): currency;
