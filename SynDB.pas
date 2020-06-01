@@ -420,35 +420,7 @@ type
     /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlobBytes(Col: integer): TBytes; overload;
     /// read a blob Column into the Stream parameter
-    // var SQLDBRows: ISQLDBRows;
-    //     FileStrm : TFileStream;
-    // begin
-    //   SQLDBRows := FConnection.Execute('select a from T', []);
-    //   SQLDBRows.Step();
-    //   FileStrm := TFileStream.Create('c:\test.txt', fmCreate);
-    //   try
-    //     SQLDBRows.ColumnBlobToStream(0, FileStrm);
-    //   finally
-    //    FileStrm.Free;
-    //   end;
-    // end;
     procedure ColumnBlobToStream(Col: integer; Stream: TStream); overload;
-    /// write to a blob Column the data from the Stream parameter
-    // var SQLDBRows: ISQLDBRows;
-    //     FileStrm : TFileStream;
-    // begin
-    //   SQLDBRows := FConnection.Execute('select a from T for update', []);
-    //   SQLDBRows.Step();
-    //   FileStrm := TFileStream.Create('c:\test.txt', fmOpenRead or fmShareDenyNone);
-    //   try
-    //     SQLDBRows.ColumnBlobWriteFromStream(0, FileStrm);
-    //   finally
-    //     FileStrm.Free;
-    //   end;
-    //   SQLDBRows := nil;
-    procedure ColumnBlobWriteFromStream(Col: integer; Stream: TStream); overload;
-
-
     /// return a Column as a TSQLVar value, first Col is 0
     // - the specified Temp variable will be used for temporary storage of
     // svtUTF8/svtBlob values
@@ -495,6 +467,8 @@ type
     function ColumnBlob(const ColName: RawUTF8): RawByteString; overload;
     /// return a Column as a blob value of the current Row, from a supplied column name
     function ColumnBlobBytes(const ColName: RawUTF8): TBytes; overload;
+    /// read a blob Column into the Stream parameter
+    procedure ColumnBlobToStream(const ColName: RawUTF8; Stream: TStream); overload;
     {$ifndef LVCL}
     /// return a Column as a variant, from a supplied column name
     function ColumnVariant(const ColName: RawUTF8): Variant; overload;
@@ -2043,34 +2017,9 @@ type
     // - this default virtual method will call ColumnBlob()
     function ColumnBlobBytes(Col: integer): TBytes; overload; virtual;
     /// read a blob Column into the Stream parameter
-    // var SQLDBRows: ISQLDBRows;
-    //     FileStrm : TFileStream;
-    // begin
-    //   SQLDBRows := FConnection.Execute('select a from T', []);
-    //   SQLDBRows.Step();
-    //   FileStrm := TFileStream.Create('c:\test.txt', fmCreate);
-    //   try
-    //     SQLDBRows.ColumnBlobToStream(0, FileStrm);
-    //   finally
-    //    FileStrm.Free;
-    //   end;
-    // end;
+    // - default implementation will just call ColumnBlob(), whereas some
+    // providers (like SynDBOracle) may implement direct support
     procedure ColumnBlobToStream(Col: integer; Stream: TStream); overload; virtual;
-    /// write to a blob Column the data from the Stream parameter
-    // var SQLDBRows: ISQLDBRows;
-    //     FileStrm : TFileStream;
-    // begin
-    //   SQLDBRows := FConnection.Execute('select a from T for update', []);
-    //   SQLDBRows.Step();
-    //   FileStrm := TFileStream.Create('c:\test.txt', fmOpenRead or fmShareDenyNone);
-    //   try
-    //     SQLDBRows.ColumnBlobWriteFromStream(0, FileStrm);
-    //   finally
-    //     FileStrm.Free;
-    //   end;
-    //   SQLDBRows := nil;
-    procedure ColumnBlobWriteFromStream(Col: integer; Stream: TStream); overload; virtual;
-
     {$ifndef LVCL}
     /// return a Column as a variant, first Col is 0
     // - this default implementation will call ColumnToVariant() method
@@ -2119,6 +2068,8 @@ type
     function ColumnBlob(const ColName: RawUTF8): RawByteString; overload;
     /// return a Column as a blob value of the current Row, from a supplied column name
     function ColumnBlobBytes(const ColName: RawUTF8): TBytes; overload;
+    /// read a blob Column into the Stream parameter
+    procedure ColumnBlobToStream(const ColName: RawUTF8; Stream: TStream); overload;
     {$ifndef LVCL}
     /// return a Column as a variant, from a supplied column name
     function ColumnVariant(const ColName: RawUTF8): Variant; overload;
@@ -6782,15 +6733,10 @@ begin
 end;
 
 procedure TSQLDBStatement.ColumnBlobToStream(Col: integer; Stream: TStream);
-var BlobText: RawByteString;
+var tmp: RawByteString;
 begin
-  BlobText := ColumnBlob(Col);
-  Stream.Write(BlobText, Length(BlobText));
-end;
-
-procedure TSQLDBStatement.ColumnBlobWriteFromStream(Col: integer; Stream: TStream);
-begin
-  raise ESQLDBException.CreateUTF8('%.ColumnBlobWriteFromStream not implemented',[self]);
+  tmp := ColumnBlob(Col); // default implementation
+  Stream.WriteBuffer(pointer(tmp)^,Length(tmp));
 end;
 
 {$ifndef LVCL}
@@ -7274,6 +7220,11 @@ end;
 function TSQLDBStatement.ColumnBlobBytes(const ColName: RawUTF8): TBytes;
 begin
   result := ColumnBlobBytes(ColumnIndex(ColName));
+end;
+
+procedure TSQLDBStatement.ColumnBlobToStream(const ColName: RawUTF8; Stream: TStream);
+begin
+  ColumnBlobToStream(ColumnIndex(ColName),Stream);
 end;
 
 function TSQLDBStatement.ColumnCurrency(const ColName: RawUTF8): currency;
