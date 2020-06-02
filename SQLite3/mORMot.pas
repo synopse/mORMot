@@ -20639,9 +20639,9 @@ function SQLFieldTypeToDBField(aSQLFieldType: TSQLFieldType; aTypeInfo: pointer)
 begin
   {$ifndef NOVARIANTS}
   if aSQLFieldType=sftNullable then
-    result := SQLFIELDTYPETODBFIELDTYPE[NullableTypeToSQLFieldType(aTypeInfo)] else
+    aSQLFieldType := NullableTypeToSQLFieldType(aTypeInfo);
   {$endif}
-    result := SQLFIELDTYPETODBFIELDTYPE[aSqlFieldType];
+  result := SQLFIELDTYPETODBFIELDTYPE[aSQLFieldType];
 end;
 
 constructor TSQLPropInfo.Create(const aName: RawUTF8; aSQLFieldType: TSQLFieldType;
@@ -22995,13 +22995,18 @@ var tmp: TSynTempBuffer;
     V: Variant;
 begin
   if ValueLen>0 then begin
-    if wasString and (GotoNextNotSpace(Value)^ in ['{','[']) then
-      wasString := false; // allow to create a TDocVariant stored as DB text
     tmp.Init(Value,ValueLen);
     try
       if fSQLFieldType=sftNullable then
-        GetVariantFromJSON(tmp.buf,wasString,V,nil) else
+        if fSQLDBFieldType=ftDate then begin // decode as date/time variant
+          TVarData(V).VType := varDate;
+          TVarData(V).VDate := Iso8601ToDateTimePUTF8Char(Value,ValueLen);
+        end else
+          GetVariantFromJSON(tmp.buf,wasString,V,nil) else begin
+        if wasString and (GotoNextNotSpace(Value)^ in ['{','[']) then
+          wasString := false; // allow to create a TDocVariant stored as DB text
         GetVariantFromJSON(tmp.buf,wasString,V,@DocVariantOptions);
+      end;
       fPropInfo.SetVariantProp(Instance,V);
     finally
       tmp.Done;
