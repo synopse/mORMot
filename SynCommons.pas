@@ -20714,6 +20714,8 @@ procedure fpc_ansistr_decr_ref; external name 'FPC_ANSISTR_DECR_REF';
 procedure fpc_ansistr_incr_ref; external name 'FPC_ANSISTR_INCR_REF';
 procedure fpc_ansistr_assign; external name 'FPC_ANSISTR_ASSIGN';
 procedure fpc_ansistr_setlength; external name 'FPC_ANSISTR_SETLENGTH';
+procedure fpc_ansistr_compare; external name 'FPC_ANSISTR_COMPARE';
+procedure fpc_ansistr_compare_equal; external name 'FPC_ANSISTR_COMPARE_EQUAL';
 procedure fpc_unicodestr_decr_ref; external name 'FPC_UNICODESTR_DECR_REF';
 procedure fpc_unicodestr_incr_ref; external name 'FPC_UNICODESTR_INCR_REF';
 procedure fpc_unicodestr_assign; external name 'FPC_UNICODESTR_ASSIGN';
@@ -20794,6 +20796,89 @@ lock    inc     qword ptr[s - _STRREFCNT]
 @free:  sub     d, STRRECSIZE
         jmp     _Freemem
 @n:
+end;
+
+{ note: fpc_ansistr_compare/_equal do check the codepage and make a UTF-8
+  conversion if necessary, whereas Delphi _LStrCmp/_LStrEqual don't;
+  involving codepage is safer, but paranoid, and 1. is (much) slower,
+  and 2. is not Delphi compatible -> we rather follow the Delphi's way }
+
+function _ansistr_compare(s1, s2: pointer): SizeInt; nostackframe; assembler;
+asm
+        xor     eax, eax
+        cmp     s1, s2
+        je      @0
+        test    s1, s2
+        jz      @maybe0
+@first: mov     al, byte ptr[s1] // we can check the first char (for quicksort)
+        sub     al, byte ptr[s2]
+        jne     @ne
+        mov     r8, qword ptr[s1 - _STRLEN]
+        mov     r11, r8
+        sub     r8, qword ptr[s2 - _STRLEN] // r8 = length(s1)-length(s2)
+        adc     rax, -1
+        and     rax, r8  // rax = -min(length(s1),length(s2))
+        sub     rax, r11
+        sub     s1, rax
+        sub     s2, rax
+        align   8
+@s:     mov     r10, qword ptr[s1 + rax] // compare by 8 bytes (may include len)
+        xor     r10, qword ptr[s2 + rax]
+        jnz     @d
+        add     rax, 8
+        js      @s
+@e:     mov     rax, r8 // all equal -> return difflen
+@0:     ret
+@ne:    movsx   rax, al
+        ret
+@d:     bsf     r10, r10 // compute s1^-s2^
+        shr     r10, 3
+        add     rax, r10
+        jns     @e
+        movzx   edx, byte ptr[s2 + rax]
+        movzx   eax, byte ptr[s1 + rax]
+        sub     rax, rdx
+        ret
+@maybe0:test    s2, s2
+        jz      @1
+        test    s1, s1
+        jnz     @first
+        dec     rax
+        ret
+@1:     inc     eax
+end;
+
+function _ansistr_compare_equal(s1, s2: pointer): SizeInt; nostackframe; assembler;
+asm
+        xor     eax, eax
+        cmp     s1, s2
+        je      @q
+        test    s1, s2
+        jz      @maybe0
+@ok:    mov     rax, qword ptr[s1 - _STRLEN] // len must match
+        cmp     rax, qword ptr[s2 - _STRLEN]
+        jne     @q
+        lea     s1, qword ptr[s1 + rax - 8]
+        lea     s2, qword ptr[s2 + rax - 8]
+        neg     rax
+        mov     r8, qword ptr[s1] // compare last 8 bytes (may include len)
+        cmp     r8, qword ptr[s2]
+        jne     @q
+        align 16
+@s:     add     rax, 8 // compare remaining 8 bytes per iteration
+        jns     @0
+        mov     r8, qword ptr[s1 + rax]
+        cmp     r8, qword ptr[s2 + rax]
+        je      @s
+        mov     eax, 1
+        ret
+@0:     xor     eax, eax
+@q:     ret
+@maybe0:test    s2, s2
+        jz      @1
+        test    s1, s1
+        jnz     @ok
+@1:     inc     eax // not zero is enough
 end;
 
 procedure _dynarray_incr_ref(p: pointer); nostackframe; assembler;
@@ -23408,8 +23493,8 @@ begin
          result := false;
     1:   result := true;
     2,3: result := P[6] in [#0..' ',';'];
-    4:   result := (P[4]<=' ') and not (ContainsUTF8(P+5,'INSERT') or
-           ContainsUTF8(P+5,'UPDATE') or ContainsUTF8(P+5,'DELETE'));
+    4:   result := (P[4]<=' ') and not (StrPosI('INSERT',P+5)<>nil) or
+           (StrPosI('UPDATE',P+5)<>nil) or (StrPosI('DELETE',P+5)<>nil);
     else result := false;
     end;
   end else
@@ -62686,6 +62771,8 @@ begin
     PatchCode(@fpc_ansistr_incr_ref,@_ansistr_incr_ref,$17); // fpclen=$2f
     PatchJmp(@fpc_ansistr_decr_ref,@_ansistr_decr_ref,$27);  // fpclen=$3f
     PatchJmp(@fpc_ansistr_assign,@_ansistr_assign,$3f);      // fpclen=$3f
+    PatchCode(@fpc_ansistr_compare,@_ansistr_compare,$77);   // fpclen=$12f
+    PatchCode(@fpc_ansistr_compare_equal,@_ansistr_compare_equal,$57); // =$cf
     PatchCode(@fpc_unicodestr_incr_ref,@_ansistr_incr_ref,$17); // fpclen=$2f
     PatchJmp(@fpc_unicodestr_decr_ref,@_ansistr_decr_ref,$27);  // fpclen=$3f
     PatchJmp(@fpc_unicodestr_assign,@_ansistr_assign,$3f);      // fpclen=$3f
