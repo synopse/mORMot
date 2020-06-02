@@ -40158,13 +40158,13 @@ begin
           // let SQLite3 do the sort and the paging (will be ignored by Static)
           SQLWhereCount := SQLWhere; // "select count(*)" won't expect any ORDER
           if (SQLSort<>'') and
-             not ContainsUTF8(pointer(SQLWhere),'ORDER BY') then begin
+             (StrPosI('ORDER BY ',pointer(SQLWhere))=nil) then begin
             if SameTextU(SQLDir,'DESC') then
               SQLSort := SQLSort+' DESC'; // allow DESC, default is ASC
             SQLWhere := SQLWhere+' ORDER BY '+SQLSort;
           end;
           SQLWhere := trim(SQLWhere);
-          if (SQLResults<>0) and not ContainsUTF8(pointer(SQLWhere),'LIMIT ') then begin
+          if (SQLResults<>0) and (StrPosI('LIMIT ',pointer(SQLWhere))=nil) then begin
             if (Server.URIPagingParameters.SendTotalRowsCountFmt<>'') then begin
               if SQLWhere=SQLWhereCount then begin
                 i := PosEx('ORDER BY ',UpperCase(SQLWhereCount));
