@@ -354,6 +354,11 @@ type
     // - this function will return the BLOB content as a TBytes
     // - this default virtual method will call ColumnBlob()
     function ColumnBlobBytes(Col: integer): TBytes; override;
+    /// read a blob Column into the Stream parameter
+    procedure ColumnBlobToStream(Col: integer; Stream: TStream); override;
+    /// write a blob Column into the Stream parameter
+    // - expected to be used with 'SELECT .. FOR UPDATE' locking statements
+    procedure ColumnBlobFromStream(Col: integer; Stream: TStream); override;
     /// return a Column as a variant
     // - this implementation will retrieve the data with no temporary variable
     // (since TQuery calls this method a lot, we tried to optimize it)
@@ -431,6 +436,8 @@ var
   /// the OCI charset used for WinAnsi encoding
   OCI_CHARSET_WIN1252: cardinal = OCI_WE8MSWIN1252;
 
+  /// how many blob chunks should be handled at once
+  SynDBOracleBlobChunksCount: integer = 250;
 
 implementation
 
@@ -1099,6 +1106,9 @@ const
   { LOB open modes }
   OCI_LOB_READONLY    = 1;    // readonly mode open for ILOB types
   OCI_LOB_READWRITE   = 2;    // read write mode open for ILOBs
+  { LOB types }
+  OCI_TEMP_BLOB       = 1;    // LOB type - BLOB
+  OCI_TEMP_CLOB       = 2;    // LOB type - CLOB
 
   { CHAR/NCHAR/VARCHAR2/NVARCHAR2/CLOB/NCLOB char set "form" information
     (used e.g. by OCI_ATTR_CHARSET_FORM attribute) }
@@ -1243,7 +1253,7 @@ type
 { TSQLDBOracleLib }
 
 const
-  OCI_ENTRIES: array[0..39] of PChar = (
+  OCI_ENTRIES: array[0..40] of PChar = (
     'OCIClientVersion', 'OCIEnvNlsCreate', 'OCIHandleAlloc', 'OCIHandleFree',
     'OCIServerAttach', 'OCIServerDetach', 'OCIAttrGet', 'OCIAttrSet',
     'OCISessionBegin', 'OCISessionEnd', 'OCIErrorGet', 'OCIStmtPrepare',
@@ -1251,7 +1261,8 @@ const
     'OCITransStart', 'OCITransRollback', 'OCITransCommit', 'OCIDescriptorAlloc',
     'OCIDescriptorFree', 'OCIDateTimeConstruct', 'OCIDateTimeGetDate',
     'OCIDefineByPos', 'OCILobGetLength', 'OCILobGetChunkSize', 'OCILobOpen',
-    'OCILobRead', 'OCILobClose', 'OCINlsCharSetNameToId', 'OCIStmtPrepare2',
+    'OCILobRead', 'OCILobClose', 'OCILobWrite',
+    'OCINlsCharSetNameToId', 'OCIStmtPrepare2',
     'OCIStmtRelease', 'OCITypeByName', 'OCIObjectNew', 'OCIObjectFree',
     'OCINumberFromInt','OCIStringAssignText', 'OCICollAppend', 'OCIBindObject',
     'OCIPasswordChange');
@@ -1268,6 +1279,12 @@ type
       errhp: POCIError; locp: POCIDescriptor): ub4;
     function BlobRead(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; Blob: PByte; BlobLen: ub4;
+      csid: ub2=0; csfrm: ub1=SQLCS_IMPLICIT): integer;
+    function BlobReadToStream(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+      errhp: POCIError; locp: POCIDescriptor; stream: TStream; BlobLen: ub4;
+      csid: ub2=0; csfrm: ub1=SQLCS_IMPLICIT): integer;
+    function BlobWriteFromStream(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+      errhp: POCIError; locp: POCIDescriptor; stream: TStream; BlobLen: ub4;
       csid: ub2=0; csfrm: ub1=SQLCS_IMPLICIT): integer;
   public
     ClientVersion: function(var major_version, minor_version,
@@ -1336,6 +1353,9 @@ type
       ctxp: Pointer=nil; cbfp: Pointer=nil; csid: ub2=0; csfrm: ub1=SQLCS_IMPLICIT): sword; cdecl;
     LobClose: function(svchp: POCISvcCtx; errhp: POCIError;
       locp: POCILobLocator): sword; cdecl;
+    LobWrite: function(svchp: POCISvcCtx; errhp: POCIError;
+      locp: POCILobLocator; var amtp: ub4; offset: ub4; bufp: Pointer; buflen: ub4;
+      piece: ub1; ctxp: Pointer=nil; cbfp: Pointer=nil; csid: ub2=0; csfrm: ub1=SQLCS_IMPLICIT): sword; cdecl;
     NlsCharSetNameToID: function(env: POCIEnv; name: PUTF8Char): sword; cdecl;
     StmtPrepare2: function(svchp: POCISvcCtx; var stmtp: POCIStmt; errhp: POCIError;
       stmt: text; stmt_len: ub4; key: text; key_len: ub4;
@@ -1391,6 +1411,12 @@ type
     /// retrieve some BLOB content
     procedure BlobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; out result: TBytes); overload;
+    /// retrieve some BLOB content, save it to the stream
+    procedure BlobFromDescriptorToStream(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+      errhp: POCIError; locp: POCIDescriptor; stream: TStream);
+    /// write some BLOB content, read it from the stream
+    procedure BlobToDescriptorFromStream(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+      errhp: POCIError; locp: POCIDescriptor; stream: TStream);
     /// retrieve some CLOB/NCLOB content as UTF-8 text
     function ClobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; ColumnDBForm: integer;
@@ -1444,6 +1470,34 @@ begin
     Check(nil,Stmt,LobRead(svchp,errhp,locp,result,1,Blob,result,nil,nil,csid,csfrm),errhp);
 end;
 
+function TSQLDBOracleLib.BlobReadToStream(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+  errhp: POCIError; locp: POCIDescriptor; stream: TStream; BlobLen: ub4;
+  csid: ub2; csfrm: ub1): integer;
+var Read, ChunkSize: ub4;
+    Status: sword;
+    tmp: RawByteString;
+begin
+  result := BlobLen;
+  if BlobLen=0 then
+    exit; // nothing to read
+  if UseLobChunks then begin
+    Check(nil,Stmt,LobGetChunkSize(svchp,errhp,locp,ChunkSize),errhp);
+    SetLength(tmp,ChunkSize*SynDBOracleBlobChunksCount);
+    result := 0;
+    repeat
+      Read := BlobLen;
+      Status := LobRead(svchp,errhp,locp,Read,1,pointer(tmp),length(tmp),nil,nil,csid,csfrm);
+      stream.WriteBuffer(tmp,Read);
+      inc(result,Read);
+    until Status<>OCI_NEED_DATA;
+    Check(nil,Stmt,Status,errhp);
+  end else begin
+    SetLength(tmp,BlobLen);
+    Check(nil,Stmt,LobRead(svchp,errhp,locp,result,1,pointer(tmp),result,nil,nil,csid,csfrm),errhp);
+    stream.WriteBuffer(tmp,result);
+  end;
+end;
+
 procedure TSQLDBOracleLib.BlobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
   errhp: POCIError; locp: POCIDescriptor; out result: RawByteString);
 var Len, Read: ub4;
@@ -1472,6 +1526,43 @@ begin
   finally
     Check(nil,Stmt,LobClose(svchp,errhp,locp),errhp);
   end;
+end;
+
+procedure TSQLDBOracleLib.BlobFromDescriptorToStream(Stmt: TSQLDBStatement;
+  svchp: POCISvcCtx; errhp: POCIError; locp: POCIDescriptor; stream: TStream);
+var Len: ub4;
+begin
+  Len := BlobOpen(Stmt,svchp,errhp,locp);
+  try
+    BlobReadToStream(Stmt,svchp,errhp,locp,stream,Len);
+  finally
+    Check(nil,Stmt,LobClose(svchp,errhp,locp),errhp);
+  end;
+end;
+
+procedure TSQLDBOracleLib.BlobToDescriptorFromStream(Stmt: TSQLDBStatement;
+  svchp: POCISvcCtx; errhp: POCIError; locp: POCIDescriptor; stream: TStream);
+begin
+  BlobWriteFromStream(Stmt,svchp,errhp,locp,stream,stream.Size);
+end;
+
+function TSQLDBOracleLib.BlobWriteFromStream(Stmt: TSQLDBStatement;
+  svchp: POCISvcCtx; errhp: POCIError; locp: POCIDescriptor; stream: TStream;
+  BlobLen: ub4; csid: ub2; csfrm: ub1): integer;
+var ChunkSize, l_Read, l_Write, l_Offset: Longint;
+    tmp: RawByteString;
+begin
+  Check(nil,Stmt,LobGetChunkSize(svchp,errhp,locp,ChunkSize),errhp);
+  SetLength(tmp,ChunkSize*SynDBOracleBlobChunksCount);
+  l_Offset := 1;
+  while stream.Position<stream.Size do begin
+    l_Read := stream.Read(pointer(tmp)^,length(tmp));
+    l_Write := l_Read;
+    Check(nil,Stmt,LobWrite(svchp,errhp,locp,l_Write,l_Offset,
+      pointer(tmp),l_Read,OCI_ONE_PIECE),errhp);
+    inc(l_Offset,l_Write);
+  end;
+  result := l_Offset;
 end;
 
 function TSQLDBOracleLib.ClobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
@@ -2100,6 +2191,38 @@ begin
           OCI.BlobFromDescriptor(self,fContext,fError,V^,result) else
       // need conversion to destination type
       result := inherited ColumnBlobBytes(Col);
+end;
+
+procedure TSQLDBOracleStatement.ColumnBlobToStream(Col: integer; Stream: TStream);
+var C: PSQLDBColumnProperty;
+    V: PPOCIDescriptor;
+begin
+  V := GetCol(Col,C);
+  if V<>nil then // column is NULL
+    if C^.ColumnType=ftBlob then
+      if C^.ColumnValueInlined then
+        Stream.WriteBuffer(V^,C^.ColumnValueDBSize) else
+        // conversion from POCILobLocator
+        with TSQLDBOracleConnection(Connection) do
+          OCI.BlobFromDescriptorToStream(self,fContext,fError,V^,stream);
+end;
+
+procedure TSQLDBOracleStatement.ColumnBlobFromStream(Col: integer; Stream: TStream);
+var C: PSQLDBColumnProperty;
+    V: PPOCIDescriptor;
+begin
+  V := GetCol(Col,C);
+  if V<>nil then begin // V=nil means column is NULL
+    if C^.ColumnType=ftBlob then
+      if C^.ColumnValueInlined then
+        raise ESQLDBOracle.CreateUTF8('%.ColumnBlobFromStream(ColumnValueInlined) '+
+          'not supported',[self]) else
+        // conversion from POCILobLocator
+        with TSQLDBOracleConnection(Connection) do
+          OCI.BlobToDescriptorFromStream(self,fContext,fError,V^,stream);
+  end else
+    raise ESQLDBOracle.CreateUTF8('Unexpected %.ColumnBlobFromStream(null): '+
+      'use EMPTY_BLOB() to initialize it',[self]);
 end;
 
 function TSQLDBOracleStatement.ColumnCurrency(Col: integer): currency;

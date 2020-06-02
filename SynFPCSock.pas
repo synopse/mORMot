@@ -988,8 +988,8 @@ begin
       Hints2.ai_family := AF_INET6;
       TwoPass := True;
     end else begin
-      Hints2.ai_family := AF_INET;
       Hints1.ai_family := AF_INET6;
+      Hints2.ai_family := AF_INET;
       TwoPass := True;
     end;
   end else
