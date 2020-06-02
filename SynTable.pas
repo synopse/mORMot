@@ -2921,9 +2921,6 @@ type
     function NextPendingTask: RawByteString; virtual;
     /// flush all pending tasks
     procedure Clear; virtual;
-    /// access to the locking methods of this instance
-    // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
-    property Safe: PSynlocker read fSafe;
     /// access to the internal TPendingTaskListItem.Timestamp stored value
     // - corresponding to the current time
     // - default implementation is to return GetTickCount64, with a 16 ms
@@ -5119,6 +5116,11 @@ procedure ToSBFStr(const Value: RawByteString; out Result: TSBFString);
 
 implementation
 
+{$ifdef WITH_FASTMM4STATS}
+uses
+  FastMM4; // override OS information by actual FastMM4 status
+{$endif WITH_FASTMM4STATS}
+
 {$ifdef FPCLINUX}
 uses
   termio,
@@ -6212,8 +6214,8 @@ var len: integer;
     PA: PAnsiChar absolute FieldBuffer;
     PU: PUTF8Char absolute FieldBuffer;
     tmp: RawByteString;
-    {$ifndef UNICODE}
-    WS: WideString;
+    {$ifndef HASVARUSTRING}
+    WS: SynUnicode;
     {$endif}
 begin
   case FieldType of
@@ -6248,7 +6250,7 @@ begin
   tftWinAnsi: begin
     len := FromVarUInt32(PB);
     if len>0 then
-      {$ifdef UNICODE}
+      {$ifdef HASVARUSTRING}
       result := WinAnsiToUnicodeString(PA,len)
       {$else}
       result := CurrentAnsiConvert.AnsiToAnsi(WinAnsiConvert,PA,len)
@@ -6258,7 +6260,7 @@ begin
   tftUTF8: begin
     len := FromVarUInt32(PB);
     if len>0 then
-      {$ifdef UNICODE}
+      {$ifdef HASVARUSTRING}
       result := UTF8DecodeToUnicodeString(PU,len)
       {$else} begin
         UTF8ToSynUnicode(PU,len,WS);

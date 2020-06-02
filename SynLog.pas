@@ -470,7 +470,7 @@ type
     fRotateFileSize: cardinal;
     fRotateFileAtHour: integer;
     function CreateSynLog: TSynLog;
-    procedure SetAutoFlush(TimeOut: cardinal);
+    procedure StartAutoFlush;
     procedure SetDestinationPath(const value: TFileName);
     procedure SetLevel(aLevel: TSynLogInfos);
     procedure SynLogFileListEcho(const aEvent: TOnTextWriterEcho; aEventAdd: boolean);
@@ -651,7 +651,7 @@ type
     // - in order not to loose any log, a background thread can be created
     // and will be responsible of flushing all pending log content every
     // period of time (e.g. every 10 seconds)
-    property AutoFlushTimeOut: cardinal read fAutoFlush write SetAutoFlush;
+    property AutoFlushTimeOut: cardinal read fAutoFlush write fAutoFlush;
     {$ifdef MSWINDOWS}
     /// force no environment variables to be written to the log file
     // - may be usefull if they contain some sensitive information
@@ -3252,7 +3252,6 @@ var
 
 constructor TAutoFlushThread.Create;
 begin
-  FreeOnTerminate := true;
   fEvent := TEvent.Create(nil,false,false,'');
   inherited Create(false);
 end;
@@ -3312,11 +3311,11 @@ begin
   end;
 end;
 
-procedure TSynLogFamily.SetAutoFlush(TimeOut: cardinal);
+procedure TSynLogFamily.StartAutoFlush;
 {$ifdef AUTOFLUSHRAWWIN}var ID: cardinal;{$endif}
 begin
-  fAutoFlush := TimeOut;
-  if (AutoFlushThread=nil) and (TimeOut<>0) {$ifndef FPC}and (DebugHook=0){$endif} then begin
+  if (AutoFlushThread=nil) and (fAutoFlush<>0)
+     {$ifndef FPC}and (DebugHook=0){$endif} then begin
     AutoFlushSecondElapsed := 0;
     {$ifdef AUTOFLUSHRAWWIN}
     AutoFlushThread := pointer(CreateThread(nil,0,@AutoFlushProc,nil,0,ID));
@@ -3336,11 +3335,13 @@ begin
   fDestroying := true;
   EchoRemoteStop;
   if AutoFlushThread<>nil then begin
-    {$ifndef AUTOFLUSHRAWWIN}
+    {$ifdef AUTOFLUSHRAWWIN}
+    AutoFlushThread := nil; // Terminated=true to avoid GPF in AutoFlushProc
+    {$else}
     AutoFlushThread.Terminate;
     AutoFlushThread.fEvent.SetEvent; // notify TAutoFlushThread.Execute
+    FreeAndNil(AutoFlushThread); // wait for the TThread to be terminated
     {$endif}
-    AutoFlushThread := nil; // Terminated=true to avoid GPF in AutoFlushProc
   end;
   ExceptionIgnore.Free;
   try
@@ -4691,6 +4692,8 @@ begin
     fWriter.EchoAdd(fFamily.EchoCustom);
   if Assigned(fFamily.fEchoRemoteClient) then
     fWriter.EchoAdd(fFamily.fEchoRemoteEvent);
+  if (AutoFlushThread=nil) and (fFamily.AutoFlushTimeOut<>0) then
+    fFamily.StartAutoFlush;
 end;
 
 function TSynLog.GetFileSize: Int64;
@@ -6001,4 +6004,7 @@ initialization
 finalization
   SynLogFileList.Free; // release in proper order: TSynLog then TSynLogFamily
   SynLogFamily.Free;
+  {$ifndef NOEXCEPTIONINTERCEPT}
+  GlobalCurrentHandleExceptionSynLog := nil; // paranoid
+  {$endif}
 end.

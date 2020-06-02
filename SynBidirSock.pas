@@ -3487,7 +3487,7 @@ begin
           block := wscNonBlockWithoutAnswer else
           block := wscBlockWithAnswer;
         result := fProcess.NotifyCallback(Ctxt,block);
-        if IdemPChar(pointer(Ctxt.OutContentType), JSON_CONTENT_TYPE_UPPER) then
+        if IdemPChar(pointer(Ctxt.OutContentType),JSON_CONTENT_TYPE_UPPER) then
           HeaderSetText(Ctxt.OutCustomHeaders) else
           HeaderSetText(Ctxt.OutCustomHeaders,Ctxt.OutContentType);
         Content := Ctxt.OutContent;
