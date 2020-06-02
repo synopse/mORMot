@@ -790,8 +790,10 @@ begin
         FillcharFast(Field,sizeof(Field),0);
         if PropInfoToExternalField(Fields.List[f],Field) then begin
           SQL := fProperties.SQLAddColumn(fTableName,Field);
-          if (SQL<>'') and (ExecuteDirect(pointer(SQL),[],[],false)<>nil) then
-            FieldAdded := true else
+          if (SQL<>'') and (ExecuteDirect(pointer(SQL),[],[],false)<>nil) then begin
+            FieldAdded := true;
+            aClass.InitializeTable(aServer, Field.Name, [])
+          end else
             raise EORMException.CreateUTF8('%.Create: %: unable to create external '+
               'missing field %.% - SQL="%"',
               [self,StoredClass,fTableName,Fields.List[f].Name,SQL]);
