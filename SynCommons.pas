@@ -51477,7 +51477,7 @@ end;
 
 { TDynArrayHasher }
 
-function HashFile(const FileName: TFileName; Hasher: THasher=nil): cardinal;
+function HashFile(const FileName: TFileName; Hasher: THasher): cardinal;
 var buf: array[word] of cardinal; // 256KB of buffer
     read: integer;
     f: THandle;
