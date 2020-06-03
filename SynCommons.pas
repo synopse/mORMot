@@ -70,6 +70,13 @@ unit SynCommons;
 
 
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
+{$ifdef FPC}
+  {$ifdef WINDOWS}
+     {$ifndef FPC_X64MM_WIN}
+       {$undef FPC_X64MM} // do not use SynFPCx64MM under windows while it's not stable
+     {$endif}
+  {$endif}
+{$endif}
 interface
 
 uses
