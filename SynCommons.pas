@@ -20800,8 +20800,8 @@ end;
 
 { note: fpc_ansistr_compare/_equal do check the codepage and make a UTF-8
   conversion if necessary, whereas Delphi _LStrCmp/_LStrEqual don't;
-  involving codepage is safer, but paranoid, and 1. is (much) slower,
-  and 2. is not Delphi compatible -> we rather follow the Delphi's way }
+  involving codepage is safer, but paranoid, and 1. is (much) slower, and
+  2. is not Delphi compatible -> we rather follow the Delphi/Lazy's way }
 
 function _ansistr_compare(s1, s2: pointer): SizeInt; nostackframe; assembler;
 asm
