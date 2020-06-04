@@ -48610,24 +48610,7 @@ begin
   result := true;
   Data := @V; // Data=V is const so should not be modified - but we need it
   case length(Arguments) of
-  0:if SameText(Name,'Clear') then begin
-      Data^.VCount := 0;
-      Data^.VOptions := Data^.VOptions-[dvoIsObject,dvoIsArray];
-      exit;
-    end;
-  1:if SameText(Name,'Add') then begin
-      ndx := Data^.InternalAdd('');
-      SetVariantByValue(variant(Arguments[0]),Data^.VValue[ndx]);
-      if dvoInternValues in Data^.VOptions then
-        DocVariantType.InternValues.UniqueVariant(Data^.VValue[ndx]);
-      exit;
-    end else
-    if SameText(Name,'Delete') then begin
-      SetTempFromFirstArgument;
-      Data^.Delete(Data^.GetValueIndex(temp));
-      exit;
-    end else
-    if SameText(Name,'Exists') then begin
+  1:if SameText(Name,'Exists') then begin
       SetTempFromFirstArgument;
       variant(Dest) := Data^.GetValueIndex(temp)>=0;
       exit;
@@ -48653,6 +48636,24 @@ begin
       Data^.RetrieveValueOrRaiseException(pointer(temp),length(temp),
         dvoNameCaseSensitive in Data^.VOptions,variant(Dest),true);
       exit;
+    end
+    {$ifndef FPC} else // Data=@V trick raises GPF on FPC -> read/only
+    if SameText(Name,'Add') then begin
+          ndx := Data^.InternalAdd('');
+          SetVariantByValue(variant(Arguments[0]),Data^.VValue[ndx]);
+          if dvoInternValues in Data^.VOptions then
+            DocVariantType.InternValues.UniqueVariant(Data^.VValue[ndx]);
+          exit;
+        end else
+        if SameText(Name,'Delete') then begin
+          SetTempFromFirstArgument;
+          Data^.Delete(Data^.GetValueIndex(temp));
+          exit;
+        end;
+  0:if SameText(Name,'Clear') then begin
+      Data^.VCount := 0;
+      Data^.VOptions := Data^.VOptions-[dvoIsObject,dvoIsArray];
+      exit;
     end;
   2:if SameText(Name,'Add') then begin
       SetTempFromFirstArgument;
@@ -48662,6 +48663,7 @@ begin
         DocVariantType.InternValues.UniqueVariant(Data^.VValue[ndx]);
       exit;
     end;
+    {$endif FPC}
   end;
   result := false;
 end;
@@ -51483,7 +51485,7 @@ end;
 
 { TDynArrayHasher }
 
-function HashFile(const FileName: TFileName; Hasher: THasher=nil): cardinal;
+function HashFile(const FileName: TFileName; Hasher: THasher): cardinal;
 var buf: array[word] of cardinal; // 256KB of buffer
     read: integer;
     f: THandle;
