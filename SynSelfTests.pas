@@ -10202,7 +10202,7 @@ begin
   end;
   for i := 0 to V._count-1 do
     Check(V._(i)=Doc.Values[i]);
-  V.Add(4);
+  {$ifdef FPC}TDocVariantData(V).AddItem{$else}V.Add{$endif}(4);
   Check(V._count=4);
   for i := 0 to 2 do
     Check(V._(i)=Doc.Values[i]);
@@ -10235,7 +10235,7 @@ begin
   _UniqueFast(V1);      // change options of V1 to be by-reference
   V2 := V1;
   Check(V1._(1){$ifdef FPC}._JSON{$endif}='{"name":"John","year":1972}');
-  V1._(1).name := 'Jim';
+  {$ifdef FPC}TDocVariantData(V1).Values[1]{$else}V1._(1){$endif}.name := 'Jim';
   Check(V1{$ifdef FPC}._JSON{$endif}='["root",{"name":"Jim","year":1972}]');
   Check(V2{$ifdef FPC}._JSON{$endif}='["root",{"name":"Jim","year":1972}]');
   _UniqueFast(V2); // now V1 modifications should not affect V2
@@ -10271,9 +10271,9 @@ begin
   Check(TDocVariantData(V1)._[1].I['year']=1972);
   {$ifdef FPC}_Safe(V1)^.AddItem{$else}V1.Add{$endif}(3.1415);
   Check(V1{$ifdef FPC}._JSON{$endif}='["root",{"name":"Jim","year":1972},3.1415]');
-  V1._(1).Delete('year');
+  {$ifdef FPC}TDocVariantData(V1)._[1]{$else}V1._(1){$endif}.Delete('year');
   Check(V1{$ifdef FPC}._JSON{$endif}='["root",{"name":"Jim"},3.1415]');
-  V1.Delete(1); //<--- here we get an error with FPC on win64 if optimization = -O1 !??? All ok with -O2
+  {$ifdef FPC}TDocVariantData(V1){$else}V1{$endif}.Delete(1);
   Check(V1{$ifdef FPC}._JSON{$endif}='["root",3.1415]');
   TDocVariantData(V2).DeleteByProp('name','JIM',true);
   Check(V2{$ifdef FPC}._JSON{$endif}='["root",{"name":"Jim","year":1972}]');
