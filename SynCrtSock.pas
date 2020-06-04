@@ -286,12 +286,12 @@ type
     // Windows by now, using the SChannel API)
     constructor Open(const aServer, aPort: SockString; aLayer: TCrtSocketLayer=cslTCP;
       aTimeOut: cardinal=10000; aTLS: boolean=false);
-    /// bind to a Port
-    // - expects the port to be specified as Ansi string, e.g. '1234'
-    // - you can optionally specify a server address to bind to, e.g.
-    // '1.2.3.4:1234'
-    // - for unix domain socket use unix:/path/to/file
-    constructor Bind(const aPort: SockString; aLayer: TCrtSocketLayer=cslTCP);
+    /// bind to an address. Expects the address to be specified as Ansi string as
+    // - '1234' - bind to a port on all interfaces, the same as '0.0.0.0:1234'
+    // - 'IP:port' - bind to specified interface only, e.g. '1.2.3.4:1234'
+    // - 'unix:/path/to/file' - bind to unix domain socket, e.g. 'unix:/run/mormot.sock'
+    // - '' - bind to systemd descriptor on linux. See http://0pointer.de/blog/projects/socket-activation.html
+    constructor Bind(const anAddr: SockString; aLayer: TCrtSocketLayer=cslTCP);
     /// low-level internal method called by Open() and Bind() constructors
     // - raise an ECrtSocket exception on error
     // - you may ask for a TLS secured client connection (only available under
@@ -361,7 +361,7 @@ type
     procedure SockSend(P: pointer; Len: integer); overload;
     /// flush all pending data to be sent, optionally with some body content
     // - raise ECrtSocket on error
-    procedure SockSendFlush(const aBody: SockString='');
+    procedure SockSendFlush(const aBody: SockString=''); virtual;
     /// flush all pending data to be sent
     // - returning true on success
     function TrySockSendFlush: boolean;
@@ -1879,6 +1879,10 @@ type
     // - this constructor will raise a EHttpServer exception if binding failed
     // - expects the port to be specified as string, e.g. '1234'; you can
     // optionally specify a server address to bind to, e.g. '1.2.3.4:1234'
+    // - can listed on UDS in case port is specified with 'unix:' prefix, e.g.
+    // 'unix:/run/myapp.sock'
+    // - on Linux in case aPort is empty string will check if external fd
+    // is passed by systemd and use it (so called systemd socked activation)
     // - you can specify a number of threads to be initialized to handle
     // incoming connections. Default is 32, which may be sufficient for most
     // cases, maximum is 256. If you set 0, the thread pool will be disabled
@@ -3227,6 +3231,11 @@ var
 
 
 implementation
+
+{$ifdef LINUXNOTBSD}
+uses
+  SynSystemd;
+{$endif}
 
 { ************ some shared helper functions and classes }
 
@@ -4920,13 +4929,30 @@ begin
   result := false;
 end;
 
-constructor TCrtSocket.Bind(const aPort: SockString; aLayer: TCrtSocketLayer);
+constructor TCrtSocket.Bind(const anAddr: SockString; aLayer: TCrtSocketLayer);
 var s,p: SockString;
+    aSock: integer;
+    {$ifdef LINUXNOTBSD}
+    n: integer;
+    {$endif}
 begin
   Create(10000);
-  if not Split(aPort,':',s,p) then begin
+  if anAddr = '' then begin // try systemd
+  {$ifdef LINUXNOTBSD}
+  if not SystemdIsAvailable then
+    raise ECrtSocket.Create('Systemd is not available but empty address is passed to bind');
+  n := sd.listen_fds(0);
+  if (n > 1) then
+    raise ECrtSocket.Create('Systemd activation fails - too many file descriptors received');
+  aSock := SD_LISTEN_FDS_START + 0;
+  {$else}
+  raise ECrtSocket.Create('Can''t bind to empty address');
+  {$endif}
+  end else begin
+    aSock := -1; // force OpenBind to create listening socket
+    if not Split(anAddr,':',s,p) then begin
     s := '0.0.0.0';
-    p := aPort;
+      p := anAddr;
   end;
   {$ifndef MSWINDOWS}
   if s='unix' then begin
@@ -4935,7 +4961,8 @@ begin
     p := '';
   end;
   {$endif}
-  OpenBind(s,p,{dobind=}true,-1,aLayer); // raise a ECrtSocket on error
+  end;
+  OpenBind(s,p,{dobind=}true,aSock,aLayer); // raise a ECrtSocket on error
 end;
 
 constructor TCrtSocket.Open(const aServer, aPort: SockString; aLayer: TCrtSocketLayer;
@@ -4966,6 +4993,12 @@ begin
   end;
   if fSock<=0 then
     exit; // no opened connection, or Close already executed
+  {$ifdef LINUXNOTBSD}
+  if (fWasBind and (fPort='')) then begin // bind on external socket
+    fSock := -1;
+    exit;
+  end;
+  {$endif}
   {$ifdef MSWINDOWS}
   if fSecure.Initialized then
     fSecure.BeforeDisconnection(fSock);
