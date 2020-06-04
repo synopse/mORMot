@@ -15,7 +15,7 @@ unit SynFPCx64MM;
     - can report detailed statistics (with threads contention and memory leaks)
     - mremap() makes large block ReallocMem a breeze on Linux :)
     - inlined SSE2 movaps loop is more efficient that subfunction(s)
-    - round-robin of tiny blocks (<=128/256 bytes) for better thread scaling
+    - lockless round-robin of tiny blocks (<=128/256 bytes) for better scaling
     - optional lockless bin list to avoid freemem() thread contention
     - three app modes: default mono-thread friendly, FPCMM_SERVER or FPCMM_BOOST
 
@@ -116,6 +116,7 @@ unit SynFPCx64MM;
 // let Freemem multi-thread contention use a lockless algorithm
 // - on contention, Freemem won't yield the thread using an OS call, but fill
 // an internal Bin list which will be released when the lock becomes available
+// - from our tests on Linux, this may be slower on high thread contention
 {.$define FPCMM_LOCKLESSFREE}
 
 // won't use mremap but a regular getmem/move/freemem pattern
@@ -123,13 +124,12 @@ unit SynFPCx64MM;
 {.$define FPCMM_NOMREMAP}
 
 // on contention problem, execute "pause" opcode and spin retrying the lock
-// - you may try to define this - but it is not likely to perform better
+// - you may try to define this if you have more than one core, to follow Intel
+// recommendation from https://software.intel.com/en-us/comment/1134767
+// - on SkylakeX (Intel 7th gen), "pause" opcode went from 10-20 to 140 cycles,
+// so we use rdtsc and a given number of cycles - see http://tiny.cc/toeaqz
+// - from our tests on Linux, spinning is slower on high thread contention
 {.$define FPCMM_PAUSE}
-
-// on contention problems, try this on AMD CPU, or oldest Intel before SkylakeX
-// - on SkylakeX (Intel 7th gen), "pause" opcode went from 10-20 to 140 cycles
-{.$define FPCMM_PAUSEMORE}
-
 
 // will export libc-like functions, and not replace the FPC MM
 // - e.g. to use this unit as a stand-alone C memory allocator
@@ -652,23 +652,20 @@ const
   DropMediumAndLargeFlagsMask = -16;
   ExtractMediumAndLargeFlagsMask = 15;
 
+  // use pause before ReleaseCore API call when spinning locks
+  // pause is 140 cycles since SkylakeX - see http://tiny.cc/010ioz -> use rdtsc
+  // which has 30 cycles latency; ring3 to ring 0 transition is 1000 cycles
   {$ifdef FPCMM_PAUSE}
-  // we use pause before ReleaseCore API call when spinning locks
-  {$ifdef FPCMM_PAUSEMORE}
-  // pause opcode latency is around 10 cycles on AMD or oldest Intel CPU
-  SpinFactor = 10;
+  SpinSmallGetmemLockTSC = 1000;
+  SpinSmallFreememLockTSC = 1000; // _freemem has more collisions
+  {$ifdef FPCMM_LOCKLESSFREE}
+  SpinSmallFreememBinTSC = 2000;
+  {$endif FPCMM_LOCKLESSFREE}
+  SpinMediumLockTSC = 2000;
+  SpinLargeLockTSC = 2000;
   {$else}
-  // pause is 140 cycles since SkylakeX - see http://tiny.cc/010ioz
-  SpinFactor = 1;
-  {$endif FPCMM_PAUSEMORE}
-  SpinSmallGetmemLockCount = 10 * SpinFactor;
-  SpinSmallFreememLockCount = 2 * SpinFactor; // _freemem has lots of collision
-  SpinSmallFreememBinCount = 5 * SpinFactor;
-  SpinMediumLockCount = 500 * SpinFactor;
-  SpinLargeLockCount = 500 * SpinFactor;
-  {$else}
-  SpinMediumLockCount = 50;
-  SpinLargeLockCount = 50;
+  SpinMediumLockTSC = 1000; // minimum spinning
+  SpinLargeLockTSC = 1000;
   {$endif FPCMM_PAUSE}
 
 type
@@ -745,10 +742,10 @@ type
     PoolsCircularList: TMediumBlockPoolHeader;
     LastSequentiallyFed: pointer;
     SequentialFeedBytesLeft: Cardinal;
+    BinGroupBitmap: Cardinal;
     {$ifndef FPCMM_ASSUMEMULTITHREAD}
     IsMultiThreadPtr: PBoolean; // safe access to IsMultiThread global variable
     {$endif FPCMM_ASSUMEMULTITHREAD}
-    BinGroupBitmap: Cardinal;
     BinBitmaps: array[0..MediumBlockBinGroupCount - 1] of Cardinal;
     Bins: array[0..MediumBlockBinCount - 1] of TMediumFreeBlock;
   end;
@@ -779,16 +776,21 @@ var
 
 procedure LockMediumBlocks; nostackframe; assembler;
 asm
-     // on input: rcx=MediumBlockInfo.Locked on output: r10=MediumBlockInfo
-@s:  mov  edx, SpinMediumLockCount
-     mov  r8d, $100
+     // on input/output: r10=MediumBlockInfo
+@s:  rdtsc // tsc in edx:eax
+     shl  rdx, 32
+     lea  r9, [rax + rdx + SpinMediumLockTSC] // r9 = endtsc
 @sp: pause
-     mov  eax, r8d
-     dec  edx
-     jz   @rc
-     cmp  byte ptr [rcx], ah // don't flush the CPU cache if Locked still true
+     rdtsc
+     shl  rdx, 32
+     or   rax, rdx
+     cmp  rax, r9
+     ja   @rc // timeout
+     mov  rcx, r10
+     mov  eax, $100
+     cmp  byte ptr [r10].TMediumBlockInfo.Locked, true
      je   @sp
-lock cmpxchg byte ptr [rcx], ah
+lock cmpxchg byte ptr [rcx].TMediumBlockInfo.Locked, ah
      je   @ok
      jmp  @sp
 @rc: push rsi // preserve POSIX ABI registers
@@ -802,7 +804,6 @@ lock cmpxchg byte ptr [rcx], ah
      pop  rsi
      lea  rax, [rip + HeapStatus]
 lock inc  qword ptr [rax].TMMStatus.Medium.SleepCount
-     lea  rcx, [r10].TMediumBlockInfo.Locked
      jmp @s
 @ok:
 end;
@@ -973,11 +974,16 @@ asm
      lea  rcx, [rip + LargeBlocksLocked]
 lock cmpxchg byte ptr [rcx], ah
      je   @ok
-     mov  edx, SpinLargeLockCount
+     rdtsc
+     shl  rdx, 32
+     lea  r9, [rax + rdx + SpinLargeLockTSC] // r9 = endtsc
 @sp: pause
+     rdtsc
+     shl  rdx, 32
+     or   rax, rdx
+     cmp  rax, r9
+     ja   @rc // timeout
      mov  eax, $100
-     dec  edx
-     jz   @rc
      cmp  byte ptr [rcx], ah // don't flush the CPU cache if Locked still true
      je   @sp
 lock cmpxchg byte ptr [rcx], ah
@@ -1152,7 +1158,9 @@ asm
   lea rbx, [r8 + rcx].TSmallBlockInfo.Small
 @LockBlockTypeLoopRetry:
   {$ifdef FPCMM_PAUSE}
-  mov r9d, SpinSmallGetmemLockCount
+  rdtsc
+  shl  rdx, 32
+  lea  r9, [rax + rdx + SpinSmallGetmemLockTSC] // r9 = endtsc
   {$endif FPCMM_PAUSE}
 @LockBlockTypeLoop:
   // Grab the default block type
@@ -1175,8 +1183,11 @@ asm
   sub rbx, 2 * SizeOf(TSmallBlockType)
   {$ifdef FPCMM_PAUSE}
   pause
-  dec r9d
-  jnz @LockBlockTypeLoop
+  rdtsc
+  shl  rdx, 32
+  or   rax, rdx
+  cmp  rax, r9
+  jb   @LockBlockTypeLoop // no timeout yet
   {$endif FPCMM_PAUSE}
    // Block type and two sizes larger are all locked - give up and sleep
   lock inc dword ptr [rbx].TSmallBlockType.GetmemSleepCount
@@ -1288,14 +1299,14 @@ asm
 @AllocateSmallBlockPool:
   // Access shared information about Medium blocks storage
   lea rcx, [rip + MediumBlockInfo]
-  mov r10, rcx // TMediumBlockInfo.Locked = TMediumBlockInfo
+  mov r10, rcx
   {$ifndef FPCMM_ASSUMEMULTITHREAD}
   mov rax, [rcx + TMediumBlockinfo.IsMultiThreadPtr]
   cmp byte ptr [rax], false
   je @MediumLocked1
   {$endif FPCMM_ASSUMEMULTITHREAD}
   mov eax, $100
-lock cmpxchg byte ptr [rcx], ah
+lock cmpxchg byte ptr [rcx].TMediumBlockInfo.Locked, ah
   je @MediumLocked1
   call LockMediumBlocks
 @MediumLocked1:
@@ -1426,7 +1437,7 @@ lock cmpxchg byte ptr [rcx], ah
   ja @IsALargeBlockRequest
   // Get the bin size for this block size (rounded up to the next bin size)
   lea rbx, [rcx + MediumBlockGranularity - 1 + BlockHeaderSize - MediumBlockSizeOffset]
-  lea rcx, [r10 + TMediumBlockInfo.Locked]
+  mov rcx, r10
   and ebx, -MediumBlockGranularity
   add ebx, MediumBlockSizeOffset
   {$ifndef FPCMM_ASSUMEMULTITHREAD}
@@ -1435,7 +1446,7 @@ lock cmpxchg byte ptr [rcx], ah
   je @MediumLocked2
   {$endif FPCMM_ASSUMEMULTITHREAD}
   mov eax, $100
-lock cmpxchg byte ptr [rcx], ah
+lock cmpxchg byte ptr [rcx].TMediumBlockInfo.Locked, ah
   je @MediumLocked2
   call LockMediumBlocks
 @MediumLocked2:
@@ -1578,14 +1589,14 @@ asm
   mov rbx, rdx
   mov r11, rcx
   // Lock the Medium blocks
-  lea rcx, [r10 + TMediumBlockInfo.Locked]
+  mov rcx, r10
   {$ifndef FPCMM_ASSUMEMULTITHREAD}
   mov rax, [r10 + TMediumBlockinfo.IsMultiThreadPtr]
   cmp byte ptr [rax], false
   je @MediumBlocksLocked
   {$endif FPCMM_ASSUMEMULTITHREAD}
   mov eax, $100
-  lock cmpxchg byte ptr [rcx], ah
+  lock cmpxchg byte ptr [rcx].TMediumBlockInfo.Locked, ah
   je @MediumBlocksLocked
   call LockMediumBlocks
 @MediumBlocksLocked:
@@ -1662,10 +1673,10 @@ asm
   lea rbx, [r11 + MediumBlockPoolSize - MediumBlockPoolHeaderSize]
   call BinMediumSequentialFeedRemainder
   // Set this medium pool up as the new sequential feed pool, unlock and leave
+  xor eax, eax
   mov qword ptr [rbx - BlockHeaderSize], IsMediumBlockFlag
   mov dword ptr [r10 + TMediumBlockInfo.SequentialFeedBytesLeft], MediumBlockPoolSize - MediumBlockPoolHeaderSize
   mov [r10 + TMediumBlockInfo.LastSequentiallyFed], rbx
-  xor eax, eax
   mov [r10 + TMediumBlockInfo.Locked], al
   pop rbx
 end;
@@ -1798,23 +1809,32 @@ lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   mov eax, $100
   lock cmpxchg byte ptr [rbx].TSmallBlockType.BinLocked, ah
   je @BinLocked
-  {$ifdef FPCMM_DEBUG}
-  inc dword ptr [rbx].TSmallBlockType.BinSpinCount // no lock (informative only)
-  {$endif FPCMM_DEBUG}
   {$ifdef FPCMM_PAUSE}
-  mov r9d, SpinSmallFreememBinCount
+  push rdx
+  rdtsc
+  shl rdx, 32
+  lea r9, [rax + rdx + SpinSmallFreememBinTSC] // r9 = endtsc
 @SpinBinLock:
   pause
-  dec r9d
-  jz @LockBlockTypeSleep
+  rdtsc
+  shl rdx, 32
+  or rax, rdx
+  cmp rax, r9
+  ja @SpinTimeout
   cmp byte ptr [rbx].TSmallBlockType.BinLocked, true
   je @SpinBinLock
   mov eax, $100
   lock cmpxchg byte ptr [rbx].TSmallBlockType.BinLocked, ah
   jne @SpinBinLock
-  {$else}
-  jmp @LockBlockTypeSleep
+  pop rdx
+  jmp @BinLocked
+@SpinTimeout:
+  pop rdx
   {$endif FPCMM_PAUSE}
+  {$ifdef FPCMM_DEBUG}
+  inc dword ptr [rbx].TSmallBlockType.BinSpinCount // no lock (informative only)
+  {$endif FPCMM_DEBUG}
+  jmp @LockBlockTypeSleep
 @BinLocked:
   movzx eax, byte ptr [rbx].TSmallBlockType.BinCount
   cmp al, SmallBlockBinCount
@@ -1832,18 +1852,26 @@ lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
 @LockBlockTypeSleep:
   {$ifdef FPCMM_PAUSE}
   // Spin to grab the block type (don't try too long due to contention)
-  mov r8d, SpinSmallFreememLockCount
+  push rdx
+  rdtsc
+  shl rdx, 32
+  lea r9, [rax + rdx + SpinSmallFreememLockTSC] // r9 = endtsc
 @SpinLockBlockType:
   pause
-  dec r8d
-  jz @LockBlockTypeReleaseCore
+  rdtsc
+  shl rdx, 32
+  or rax, rdx
+  cmp rax, r9
+  ja @LockBlockTypeReleaseCore
   cmp byte ptr [rbx].TSmallBlockType.BlockTypeLocked, 1
   je @SpinLockBlockType
   mov eax, $100
   lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   jne @SpinLockBlockType
+  pop rdx
   jmp @FreeAndUnlock
 @LockBlockTypeReleaseCore:
+  pop rdx
   {$endif FPCMM_PAUSE}
   // Couldn't grab the block type - sleep and try again
   lock inc dword ptr [rbx].TSmallBlockType.FreeMemSleepCount
@@ -1907,7 +1935,7 @@ asm
   sub ebx, BlockHeaderSize + 8
   // r14=pointer, P=NextUpBlockSize, rdx=NewSize, rbx=OldSize-8
 @AdjustGetMemMoveFreeMem:
-  // New allocated size is the maximum of the requested size and the minimum upsize
+  // New allocated size is the maximum of the requested size and minimum upsize
   cmp rdx, P
   cmova P, rdx
   push rdx
@@ -1929,8 +1957,8 @@ asm
 @MoveFreeMem:
   // copy and free: rax=New r14=P rbx=size-8
   push rax
-  lea rcx, qword ptr [r14 + rbx]
-  lea rdx, qword ptr [rax + rbx]
+  lea rcx, [r14 + rbx]
+  lea rdx, [rax + rbx]
   neg rbx
   jns @MoveLast8
   align 16
@@ -1997,15 +2025,15 @@ asm
   sub ecx, esi
   mov ebx, ecx
   // Lock the medium blocks
-  lea rcx, [r10 + TMediumBlockInfo.Locked]
+  mov rcx, r10
   {$ifndef FPCMM_ASSUMEMULTITHREAD}
   mov rax, [r10 + TMediumBlockinfo.IsMultiThreadPtr]
   cmp byte ptr [rax], false
   je @MediumBlocksLocked1
   {$endif FPCMM_ASSUMEMULTITHREAD}
   mov eax, $100
-lock cmpxchg byte ptr [rcx], ah
-  je   @MediumBlocksLocked1
+lock cmpxchg byte ptr [rcx].TMediumBlockInfo.Locked, ah
+  je @MediumBlocksLocked1
   call LockMediumBlocks
 @MediumBlocksLocked1:
   mov ecx, ebx
@@ -2063,14 +2091,14 @@ lock cmpxchg byte ptr [rcx], ah
   ja @CannotUpsizeMediumBlockInPlace
   // Grow into the next block
   mov rbx, rcx
-  lea rcx, [r10 + TMediumBlockInfo.Locked]
+  mov rcx, r10
   {$ifndef FPCMM_ASSUMEMULTITHREAD}
   mov rax, [r10 + TMediumBlockinfo.IsMultiThreadPtr]
   cmp byte ptr [rax], false
   je @MediumBlocksLocked2
   {$endif FPCMM_ASSUMEMULTITHREAD}
   mov eax, $100
-lock cmpxchg byte ptr [rcx], ah
+lock cmpxchg byte ptr [rcx].TMediumBlockInfo.Locked, ah
   je   @MediumBlocksLocked2
   mov rsi, rdx
   call LockMediumBlocks
@@ -2449,8 +2477,7 @@ begin
       {$ifdef FPCMM_SERVER} + 'SERVER ' {$endif}
       {$ifdef FPCMM_ASSUMEMULTITHREAD} + ' assumulthrd' {$endif}
       {$ifdef FPCMM_LOCKLESSFREE} + ' lockless' {$endif}
-      {$ifdef FPCMM_PAUSE}  + ' pause'
-        {$ifdef FPCMM_PAUSEMORE}  + 'more' {$endif} {$endif}
+      {$ifdef FPCMM_PAUSE}  + ' pause' {$endif}
       {$ifdef FPCMM_NOMREMAP} + ' nomremap' {$endif}
       {$ifdef FPCMM_DEBUG} + ' debug' {$endif}
       {$ifdef FPCMM_REPORTMEMORYLEAKS}  + ' repmemleak' {$endif});
