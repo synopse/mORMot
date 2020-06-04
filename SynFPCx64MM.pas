@@ -1361,7 +1361,7 @@ lock cmpxchg byte ptr [rcx], ah
   movzx ecx, [rbx].TSmallBlockType.OptimalBlockPoolSize
   lea rdx, [rcx + MinimumMediumBlockSize]
   cmp edi, edx
-  cmovb edi, ecx
+  cmovae edi, ecx
   sub rsi, rdi
   // Update the sequential feed parameters
   sub [r10 + TMediumBlockInfo.SequentialFeedBytesLeft], edi
