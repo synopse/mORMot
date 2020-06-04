@@ -2740,13 +2740,13 @@ begin
         begin
           first := PByte(block) + SmallBlockPoolHeaderSize;
           with PSmallBlockPoolHeader(block).BlockType^ do
-          if (CurrentSequentialFeedPool <> pointer(block)) or
-             (PtrUInt(NextSequentialFeedBlockAddress) >
-              PtrUInt(MaxSequentialFeedBlockAddress)) then
-            last := PByte(block) + (PPtrUInt(PByte(block) - BlockHeaderSize)^
-              and DropMediumAndLargeFlagsMask) - BlockSize
-          else
-            last := Pointer(PByte(NextSequentialFeedBlockAddress) - 1);
+            if (CurrentSequentialFeedPool <> pointer(block)) or
+               (PtrUInt(NextSequentialFeedBlockAddress) >
+                PtrUInt(MaxSequentialFeedBlockAddress)) then
+              last := PByte(block) + (PPtrUInt(PByte(block) - BlockHeaderSize)^
+                and DropMediumAndLargeFlagsMask) - BlockSize
+            else
+              last := Pointer(PByte(NextSequentialFeedBlockAddress) - 1);
           while first <= last do
           begin
             if ((PPtrUInt(first - BlockHeaderSize)^ and IsFreeBlockFlag) = 0) then
@@ -2807,7 +2807,7 @@ begin
     {$ifdef FPCMM_LOCKLESSFREE}
     for j := 0 to p^.BinCount - 1 do
       if p^.BinInstance[i] <> nil then
-        FreeMem(p^.BinInstance[i]); // release (unlikely) pending instances
+        _FreeMem(p^.BinInstance[i]); // release (unlikely) pending instances
     {$endif FPCMM_LOCKLESSFREE}
     p^.PreviousPartiallyFreePool := pointer(p);
     p^.NextPartiallyFreePool := pointer(p);
