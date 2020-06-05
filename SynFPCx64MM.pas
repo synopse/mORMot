@@ -28,6 +28,7 @@ unit SynFPCx64MM;
     - C memory managers (glibc, Intel TBB, jemalloc) have a very high RAM
       consumption (especially Intel TBB) and do panic/SIGKILL on any GPF
     - Pascal alternatives (FastMM4,ScaleMM2,BrainMM) are Windows+Delphi specific
+    - Our lockess round-robin of tiny blocks is a unique algorithm in MM AFAIK
     - It was so fun deeping into SSE2 x86_64 assembly and Pierre's insight
     - Resulting code is still easy to understand and maintain
 
@@ -89,7 +90,7 @@ unit SynFPCx64MM;
 
 // if defined, tiny blocks <= 256 bytes will have a bigger round-robin cycle
 // - try to enable it if unexpected SmallGetmemSleepCount/SmallFreememSleepCount
-// and SleepCount/SleepTime contentions are reported by CurrentHeapStatus
+// and SleepCount/SleepCycles contentions are reported by CurrentHeapStatus
 // - will also use 2x (FPCMM_BOOST) or 4x (FPCMM_BOOSTER) more tiny blocks
 // arenas to share among the threads - so process will consume slightly more RAM
 // - warning: depending on the workload and hardware, it may actually be slower;
@@ -200,9 +201,9 @@ type
     /// large blocks > 256KB which are directly handled by the Operating System
     Large: TMMStatusArena;
     {$ifdef FPCMM_DEBUG}
-    /// how much MicroSeconds was spend within Sleep/NanoSleep API calls
-    // - under Windows, is not an exact, but only indicative value
-    SleepTime: PtrUInt;
+    /// how much rdtsc cycles were spent within SwitchToThread/NanoSleep API
+    // - we rdtsc since it is an indicative but very fast way of timing
+    SleepCycles: PtrUInt;
     {$ifdef FPCMM_LOCKLESSFREE}
     /// how many types Freemem() did spin to acquire its lock-less bin list
     SmallFreememLockLessSpin: PtrUInt;
@@ -333,7 +334,7 @@ implementation
   About locking:
   - Tiny and Small blocks have their own per-size lock, in every arena
   - Medium and Large blocks have one giant lock each (seldom used)
-  - ThreadSwitch/FpNanoSleep OS call is done after initial spinning
+  - SwitchToThread/FpNanoSleep OS call is done after initial spinning
   - FPCMM_LOCKLESSFREE reduces OS sleep calls on Freemem() thread contention
   - FPCMM_DEBUG / WriteHeapStatus allows to identify the lock contention
 
@@ -369,15 +370,6 @@ function VirtualFree(lpAddress: pointer; dwSize: PtrUInt;
      external kernel32 name 'VirtualFree';
 procedure SwitchToThread; stdcall;
      external kernel32 name 'SwitchToThread';
-
-procedure ReleaseCore;
-begin
-  SwitchToThread; // yield to another pending thread
-  inc(HeapStatus.SleepCount);
-  {$ifdef FPCMM_DEBUG}
-  inc(HeapStatus.SleepTime, 100); // wild guess to have some debug info
-  {$endif FPCMM_DEBUG}
-end;
 
 function AllocMedium(Size: PtrInt): pointer; inline;
 begin
@@ -431,9 +423,6 @@ end;
 
 {$ifdef LINUX}
 
-const
-  CLOCK_MONOTONIC = 1;
-
 {$ifndef FPCMM_NOMREMAP}
 
 const
@@ -448,93 +437,52 @@ end;
 
 {$endif FPCMM_NOMREMAP}
 
-{$else}
+{$else BSD}
 
-const
-  {$ifdef OPENBSD}
-  CLOCK_MONOTONIC = 3;
-  {$else}
-  CLOCK_MONOTONIC = 4;
-  {$endif OPENBSD}
-
-{$define FPCMM_NOMREMAP}
+  {$define FPCMM_NOMREMAP} // mremap is a Linux-specific syscall
 
 {$endif LINUX}
 
-procedure NSleep(nsec: PtrInt); inline;
+procedure SwitchToThread; inline;
 var
   t: Ttimespec;
 begin
   // note: nanosleep() adds a few dozen of microsecs for context switching
   t.tv_sec := 0;
-  t.tv_nsec := nsec;
+  t.tv_nsec := 10; // empirically identified on a recent Linux Kernel
   fpnanosleep(@t, nil);
 end;
 
-{$ifdef DARWIN}
-
-function QueryPerformanceMicroSeconds: Int64; inline;
-begin
-  result := 0;
-end;
-
-{$else}
-
-function clock_gettime(clk_id: integer; tp: ptimespec): integer; inline;
-begin
-  // calling the libc may be slightly faster thanks to vDSO but not here
-  result := do_SysCall(syscall_nr_clock_gettime, tsysparam(clk_id), tsysparam(tp));
-end;
-
-function QueryPerformanceMicroSeconds: PtrUInt; inline;
-var
-  r : TTimeSpec;
-begin
-  if clock_gettime(CLOCK_MONOTONIC, @r) = 0 then
-    result := PtrUInt(r.tv_nsec) div 1000 + PtrUInt(r.tv_sec) * 1000000
-  else
-    result := 0;
-end;
-
-{$endif DARWIN}
-
-const
-  // empirically identified as a convenient value with a recent Linux Kernel
-  NANOSLEEP = 10;
+{$endif MSWINDOWS}
 
 {$ifdef FPCMM_DEBUG}
 
-procedure SleepSetTime(start: QWord); nostackframe; assembler;
+procedure ReleaseCore; nostackframe; assembler;
 asm
-  push start
-  call QueryPerformanceMicroSeconds
-  pop rcx
-  lea rdx, [rip + HeapStatus]
-  sub rax, rcx
-lock xadd qword ptr [rdx + TMMStatus.SleepTime], rax
+     rdtsc
+     shl  rdx, 32
+     or   rax, rdx
+     push rax
+     call SwitchToThread
+     pop  rcx
+     rdtsc
+     shl  rdx, 32
+     or   rax, rdx
+     lea  rdx, [rip + HeapStatus]
+     sub  rax, rcx
+lock xadd qword ptr [rdx + TMMStatus.SleepCycles], rax
 lock inc  qword ptr [rdx + TMMStatus.SleepCount]
-end;
-
-procedure ReleaseCore;
-var
-  start: QWord;
-begin
-  start := QueryPerformanceMicroSeconds; // is part of the wait
-  NSleep(NANOSLEEP); // similar to ThreadSwitch()
-  SleepSetTime(start);
 end;
 
 {$else}
 
 procedure ReleaseCore;
 begin
-  NSleep(NANOSLEEP); // similar to ThreadSwitch()
+  SwitchToThread;
   inc(HeapStatus.SleepCount); // indicative counter
 end;
 
 {$endif FPCMM_DEBUG}
-
-{$endif MSWINDOWS}
 
 
 { ********* Some Assembly Helpers }
@@ -2489,7 +2437,7 @@ begin
     WriteHeapStatusDetail(Large,  ' Large:  ');
     if SleepCount <> 0 then
       writeln(' Total Sleep: count=', K(SleepCount)
-        {$ifdef FPCMM_DEBUG} , ' microsec=', K(SleepTime) {$endif});
+        {$ifdef FPCMM_DEBUG} , ' rdtsc=', K(SleepCycles) {$endif});
     smallcount := SmallGetmemSleepCount + SmallFreememSleepCount;
     if smallcount <> 0 then
       writeln(' Small Sleep: getmem=', K(SmallGetmemSleepCount),
@@ -2704,10 +2652,12 @@ procedure MediumMemoryLeakReport(p: PMediumBlockPoolHeader);
 var
   block: PByte;
   header, size: PtrUInt;
+
   {$ifdef FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
   first, last: PByte;
   vmt: PAnsiChar;
   small: PSmallBlockPoolHeader;
+
   function SeemsRealPointer(p: pointer): boolean;
   begin
     result := (PtrUInt(p) > 65535)
@@ -2717,13 +2667,13 @@ var
       {$endif MSWINDOWS}
   end;
   {$endif FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
+
 begin
   with MediumBlockInfo do
   if (SequentialFeedBytesLeft = 0) or (PtrUInt(LastSequentiallyFed) < PtrUInt(p)) or
      (PtrUInt(LastSequentiallyFed) > PtrUInt(p) + MediumBlockPoolSize) then
     block := Pointer(PByte(p) + MediumBlockPoolHeaderSize)
-  else
-    if SequentialFeedBytesLeft <> MediumBlockPoolSize - MediumBlockPoolHeaderSize then
+  else if SequentialFeedBytesLeft <> MediumBlockPoolSize - MediumBlockPoolHeaderSize then
       block := LastSequentiallyFed
     else
       exit;
