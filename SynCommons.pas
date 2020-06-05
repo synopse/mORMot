@@ -6227,6 +6227,9 @@ type
   // - warning: the IObjectDynArray MUST be defined in the stack, class or
   // record BEFORE the dynamic array it is wrapping, otherwise you may leak
   // memory, and TObjectDynArrayWrapper.Destroy will raise an ESynException
+  // - warning: issues with Delphi 10.4 Sydney were reported, which seemed to
+  // change the order of fields finalization, so the whole purpose of this
+  // wrapper may have become incompatible with Delphi 10.4 and up
   // - a sample usage may be:
   // !var DA: IObjectDynArray; // defined BEFORE the dynamic array itself
   // !    A: array of TMyObject;

@@ -246,7 +246,6 @@ type
   TTestLowLevelCommon = class(TSynTestCase)
   protected
     {$ifndef DELPHI5OROLDER}
-    da: IObjectDynArray; // force the interface to be defined BEFORE the array
     a: array of TSQLRecordPeople;
     {$endif}
     fAdd,fDel: RawUTF8;
@@ -7001,6 +7000,7 @@ procedure TTestLowLevelCommon._TObjectDynArrayWrapper;
 const MAX = 10000;
 var i,j: integer;
     s: RawUTF8;
+    da: IObjectDynArray; // force the interface to be defined BEFORE the array
 procedure CheckItem(p: TSQLRecordPeople; i: integer);
 var s: RawUTF8;
 begin
