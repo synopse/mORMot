@@ -453,7 +453,7 @@ begin
     if Cent<=100 then // avoid TDateTime values < 0 (generates wrong DecodeTime)
       result := 0 else
       result := EncodeDate((Cent-100)*100+Year-100,Month,Day);
-    if (Hour<>0) or (Min<>0) or (Sec<>0) then
+    if (Hour>1) or (Min>1) or (Sec>1) then
       result := result+EncodeTime(Hour-1,Min-1,Sec-1,0);
   end;
 end;
@@ -465,7 +465,7 @@ begin
     // Cent=Year=Month=Day=Hour=Main=Sec=0 -> stored as ""
     aIso8601 := '' else begin
     DateToIso8601PChar(tmp,true,(Cent-100)*100+Year-100,Month,Day);
-    if (Hour<>0) or (Min<>0) or (Sec<>0) then begin
+    if (Hour>1) or (Min>1) or (Sec>1) then begin
       TimeToIso8601PChar(@tmp[10],true,Hour-1,Min-1,Sec-1,0,'T');
       SetString(aIso8601,tmp,19); // we use 'T' as TTextWriter.AddDateTime
     end else
@@ -484,7 +484,7 @@ begin
     if Y>9999 then // avoid integer overflow -> stored as ""
       result := 2 else begin
       DateToIso8601PChar(Dest+1,true,Y,Month,Day);
-      if (Hour<>0) or (Min<>0) or (Sec<>0) then begin
+      if (Hour>1) or (Min>1) or (Sec>1) then begin
         TimeToIso8601PChar(Dest+11,true,Hour-1,Min-1,Sec-1,0,'T');
         result := 21; // we use 'T' as TTextWriter.AddDateTime
       end else
@@ -497,9 +497,9 @@ end;
 procedure TOracleDate.From(const aValue: TDateTime);
 var T: TSynSystemTime;
 begin
-  PInteger(PtrUInt(@self)+3)^ := 0; // set Day=Hour=Min=Sec to 0
   if aValue<=0 then begin
     PInteger(@self)^ := 0;
+    PInteger(PtrUInt(@self)+3)^ := 0; // set Day=Hour=Min=Sec to 0
     exit; // supplied TDateTime value = 0 -> store as null date
   end;
   T.FromDateTime(aValue);
@@ -511,7 +511,11 @@ begin
     Hour := T.Hour+1;
     Min := T.Minute+1;
     Sec := T.Second+1;
-  end ;
+  end else begin
+    Hour := 1;
+    Min := 1;
+    Sec := 1;
+  end;
 end;
 
 procedure TOracleDate.From(const aIso8601: RawUTF8);
@@ -525,10 +529,10 @@ var Value: QWord;
     Y: cardinal;
     NoTime: boolean;
 begin
-  PInteger(PtrUInt(@self)+3)^ := 0; // set Day=Hour=Min=Sec to 0
   Value := Iso8601ToTimeLogPUTF8Char(aIso8601,Length,@NoTime);
   if Value=0 then begin
     PInteger(@self)^ := 0;
+    PInteger(PtrUInt(@self)+3)^ := 0;  // set Day=Hour=Min=Sec to 0
     exit; // invalid ISO-8601 text -> store as null date
   end;
   Y := Value shr (6+6+5+5+4);
@@ -536,8 +540,12 @@ begin
   Year := (Y mod 100)+100;
   Month := ((Value32 shr (6+6+5+5)) and 15)+1;
   Day := ((Value32 shr (6+6+5)) and 31)+1;
-  if NoTime then
+  if NoTime then begin
+    Hour := 1;
+    Min := 1;
+    Sec := 1;
     exit;
+  end;
   Hour := ((Value32 shr (6+6)) and 31)+1;
   Min := ((Value32 shr 6) and 63)+1;
   Sec := (Value32 and 63)+1;
