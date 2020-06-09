@@ -14020,6 +14020,7 @@ begin
     DeleteFile(TempFileName); // use a temporary file
     {$ifndef NOSQLITE3ENCRYPT}
     if ClassType<>TTestFileBasedMemoryMap then
+      // memory map is not compatible with our encryption
       password := 'password1';
     {$endif}
   end;
@@ -14116,7 +14117,7 @@ begin
     check(not IsOldSQLEncryptTable(TempFileName));
     Demo := TSQLDataBase.Create(TempFileName,'NewPass'); // reuse the temporary file
     Demo.Synchronous := smOff;
-    Demo.LockingMode := lmExclusive;
+    Demo.LockingMode := lmExclusive; 
     Demo.UseCache := true; // use the cache for the JSON requests
     Demo.WALMode := InheritsFrom(TTestFileBasedWAL); // test Write-Ahead Logging
     Check(Demo.WALMode=InheritsFrom(TTestFileBasedWAL));

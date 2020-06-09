@@ -397,6 +397,7 @@
 
   {$define DELPHI_OR_FPC_OLDRTTI}
   {$define USE_VTYPE_STATIC} // "and VTYPE_STATIC" test before VarClear()
+  {$undef FPC_X64MM} // this is a FPC-specific memory manager
 
   {$ifdef LVCL}
     {$define OWNNORMTOUPPER} // NormToUpper[] exists only in our enhanced RTL
@@ -661,6 +662,7 @@
   {$ifdef CPUX64}
     {$if CompilerVersion = 25.0} // exactly XE4
       {$define NOSQLITE3STATIC}
+      // :( to avoid "Fatal: F2084 Internal Error: AV004A7B1F-R03BDA7B0-0"
     {$ifend}
   {$endif} // other Win32/Win64 Delphi platforms should work as expected
 {$endif FPC}

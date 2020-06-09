@@ -2715,8 +2715,8 @@ begin
                    SeemsRealPointer(PPointer(vmt + vmtClassName)^) then
                 begin
                    StartReport;
-                   writeln(' may be a ', PShortString(PPointer(vmt + vmtClassName)^)^,
-                     ' leak (', PSmallBlockPoolHeader(block).BlockType.BlockSize, 'B)');
+                   writeln(' probable ', PShortString(PPointer(vmt + vmtClassName)^)^,
+                     ' leak (', PSmallBlockPoolHeader(block).BlockType.BlockSize, ' bytes)');
                 end;
               except
                 // intercept any GPF

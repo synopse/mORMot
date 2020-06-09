@@ -529,6 +529,8 @@ var JSONCached: RawUTF8;
     R: TSQLRequest;
     n: PtrInt;
 begin
+  if aDB=nil then
+    exit;
   JSONCached := aDB.LockJSON(aSQL,@n);
   if JSONCached='' then // not retrieved from cache -> call SQLite3 engine
     try // faster than sqlite3_get_table(): memory is allocated as a whole
