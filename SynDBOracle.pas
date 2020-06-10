@@ -1495,14 +1495,14 @@ begin
     repeat
       Read := BlobLen;
       Status := LobRead(svchp,errhp,locp,Read,1,pointer(tmp),length(tmp),nil,nil,csid,csfrm);
-      stream.WriteBuffer(tmp,Read);
+      stream.WriteBuffer(pointer(tmp)^,Read);
       inc(result,Read);
     until Status<>OCI_NEED_DATA;
     Check(nil,Stmt,Status,errhp);
   end else begin
     SetLength(tmp,BlobLen);
     Check(nil,Stmt,LobRead(svchp,errhp,locp,result,1,pointer(tmp),result,nil,nil,csid,csfrm),errhp);
-    stream.WriteBuffer(tmp,result);
+    stream.WriteBuffer(pointer(tmp)^,result);
   end;
 end;
 
