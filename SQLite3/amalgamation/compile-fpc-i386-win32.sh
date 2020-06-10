@@ -7,6 +7,8 @@ DST=../../static/$ARCH/sqlite3.o
 rm $DST
 rm sqlite3-$ARCH.o
 
+echo
+echo ---------------------------------------------------
 echo Compiling for FPC on $ARCH using $GCC
 $GCC -O2 -m32 -DWIN32 -DNDEBUG -D_WINDOWS -c sqlite3mc.c -o sqlite3-$ARCH.o
 cp sqlite3-$ARCH.o $DST

@@ -256,28 +256,19 @@ SQLITE_PRIVATE void sqlite3mcSetCodec(sqlite3* db, const char* zFileName, Codec*
 
   if (pDbMain)
   {
-#if 1
     if (pDbMain->codec)
     {
       sqlite3mcCodecFree(pDbMain->codec);
     }
     pDbMain->codec = codec;
-#else
-    if (pDbMain->codec == 0)
-    {
-      pDbMain->codec = codec;
-    }
-    else
-    {
-      int cmp = sqlite3mcCodecCompare(pDbMain->codec, codec);
-      if (!cmp)
-      {
-        int x = 5;
-        int cmp = sqlite3mcCodecCompare(pDbMain->codec, codec);
-      }
-      sqlite3mcCodecFree(codec);
-    }
-#endif
+  }
+  else
+  {
+    /*
+    ** No main database file handle found (e.g. vaccum or attached
+    ** from memory db): free codec
+    */
+    sqlite3mcCodecFree(codec);
   }
 }
 

@@ -59,35 +59,12 @@ unit SynSQLite3Static;
   corresponding .o) under other platforms, this unit will just do nothing
   (but compile).
 
-  To compile our patched SQlite3.c version, available in this source folder:
-  - Run c.bat to compile the sqlite3.obj for Win32/Delphi
-  - Run c64.bat to compile the sqlite3.o for Win64/Delphi
-  - Run c-fpcmingw.bat to compile sqlite3.o for Win32/FPC
-  - Run c-fpcmingw64.bat to compile sqlite3.o and sqlite3-64.dll for Win64 (Delphi/FPC)
-  - Run c-fpcgcclin.sh to compile sqlite3.o for Linux32/FPC
+  To patch and compile the official SQlite3 amalgamation file, follow the
+  instruction from SQLite3\amalgamation\ReadMe.md
 
   Uses TSQLite3LibraryDynamic to access external library (e.g. sqlite3.dll/.so)
 
-  To retrieve and install the latest sqlite3 debian package on Ubuntu:
-  - retrieve latest .deb from https://launchpad.net/ubuntu/...
-  - for a 32 bit system, install e.g. as
-    sudo dpkg -i libsqlite3-0_3.8.7.4-1_i386.deb
-  - for a 64 bit system, you need to download and install both packages, e.g.
-    sudo dpkg -i libsqlite3-0_3.8.2-1ubuntu2_amd64.deb libsqlite3-0_3.8.2-1ubuntu2_i386.deb
 }
-
-(* WARNING: with current 3.29+ version, the following sqlite3.c patch is needed:
-
-SQLITE_PRIVATE int sqlite3RealSameAsInt(double r1, sqlite3_int64 i){
-  double r2 = (double)i;
-#if defined(__BORLANDC__) // avoid weird Borland C++ compiler limitation
-  return r1==r2; // safe and fast with x87 FPU
-#else // faster version without any memcmp() call (not an intrinsic on GCC)
-  return *( sqlite3_int64* )(&r1) == *( sqlite3_int64* )(&r2)
-          && i >= -2251799813685248LL && i < 2251799813685248LL;
-#endif
-}
-*)
 
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 

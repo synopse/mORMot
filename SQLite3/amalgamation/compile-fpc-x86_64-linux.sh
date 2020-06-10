@@ -7,7 +7,9 @@ DST=../../static/$FPCARCH/sqlite3.o
 rm $DST
 rm sqlite3-$FPCARCH.o
 
+echo
+echo ---------------------------------------------------
 echo Compiling for FPC on $FPCARCH using $GCC
-$GCC -static -Wall -fno-pic -fno-stack-protector -O2 -m64 -DNDEBUG -DNO_TCL -D_CRT_SECURE_NO_DEPRECATE -c sqlite3mc.c -o sqlite3-$FPCARCH.o
+$GCC -static -fno-pic -fno-stack-protector -O2 -m64 -DNDEBUG -DNO_TCL -D_CRT_SECURE_NO_DEPRECATE -c sqlite3mc.c -o sqlite3-$FPCARCH.o
 cp sqlite3-$FPCARCH.o $DST
 

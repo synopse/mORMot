@@ -2,13 +2,15 @@
 
 ## How To Compile The SQlite3 Engine
 
-1. Copy here the latest amalgamation file from  https://www.sqlite.org/download.html
+1. Copy here the latest amalgamation files from  https://www.sqlite.org/download.html
 
-2. Run `./patch.sh` to generate expected sqlite3patched.c
+2. Run the `patch-and-compile.sh` script to patch main `sqlite3.c` and cross-compile it for FPC
 
-3. Compile using the proper `c*.bat` or `*.sh` files
+3. Run `c*.bat` to generate the `sqlite3.o` and `sqlite3.obj` for Delphi Win32/Win64
 
 4. Don't forget to tune the expected *SQLite3* version text in `SynSQLite3Static.pas`
+
+## Reference Only - Do Not Use
 
 This source code is included as reference.
 
@@ -22,6 +24,22 @@ We supply and validate the proper static `.o` `.obj` files within our https://gi
 Scripts are supplied to cross-compile from Linux to other systems.
 
 It will use either the cross-compiler as installed by `fpcupdeluxe` or you should manually add some packages.
+
+Here are some instructions for Debian/Ubuntu.
+
+### Cross-Compile to Linux i386 from Linux x86_64
+
+Install the following package:
+
+    sudo apt install libc6-dev:i386
+
+granted the following has been run beforehand:
+
+    dpkg --add-architecture i386
+
+Note that `gcc-multilib` is not compatible with the arm/aarch64 cross-compilers.
+
+This is a known debian/ubuntu bug from https://bugs.launchpad.net/ubuntu/+source/gcc-defaults/+bug/1300211
 
 ### Cross-Compile To Win32 And Win64
 

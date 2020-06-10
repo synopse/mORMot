@@ -266,7 +266,7 @@ sqlite3_rekey_v2(sqlite3 *db, const char *zDbName, const void *zKey, int nKey)
       CodecGenerateWriteKey(codec, (char*) zKey, nKey);
       CodecSetDb(codec, db);
       CodecSetBtree(codec, pBt);
-  	  sqlite3mcSetCodec(db, zDbName, codec);
+  	  sqlite3mcSetCodec(db, dbFileName, codec);
     }
     else
     {
