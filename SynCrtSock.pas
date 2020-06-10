@@ -7887,6 +7887,12 @@ type
   HTTP_REQUEST_INFOS = array[0..1000] of HTTP_REQUEST_INFO;
   PHTTP_REQUEST_INFOS = ^HTTP_REQUEST_INFOS;
 
+  /// v2 trailing structure used to handle extended info about a specific request
+  HTTP_REQUEST_V2 = record
+    RequestInfoCount: word;
+    pRequestInfo: PHTTP_REQUEST_INFOS;
+  end;
+
   /// structure used to handle data associated with a specific request
   HTTP_REQUEST = record
     // either 0 (Only Header), either HTTP_RECEIVE_REQUEST_FLAG_COPY_BODY
@@ -7926,9 +7932,7 @@ type
     // SSL connection information
     pSslInfo: PHTTP_SSL_INFO;
     // beginning of HTTP_REQUEST_V2 structure
-    xxxPadding: DWORD;
-    RequestInfoCount: word;
-    pRequestInfo: PHTTP_REQUEST_INFOS;
+    V2: HTTP_REQUEST_V2;
   end;
   PHTTP_REQUEST = ^HTTP_REQUEST;
 
@@ -9208,9 +9212,9 @@ begin
         end;
         // retrieve any SetAuthenticationSchemes() information
         if byte(fAuthenticationSchemes)<>0 then // set only with HTTP API 2.0
-          for i := 0 to Req^.RequestInfoCount-1 do
-          if Req^.pRequestInfo^[i].InfoType=HttpRequestInfoTypeAuth then
-            with PHTTP_REQUEST_AUTH_INFO(Req^.pRequestInfo^[i].pInfo)^ do
+          for i := 0 to Req^.V2.RequestInfoCount-1 do
+          if Req^.V2.pRequestInfo^[i].InfoType=HttpRequestInfoTypeAuth then
+            with PHTTP_REQUEST_AUTH_INFO(Req^.V2.pRequestInfo^[i].pInfo)^ do
             case AuthStatus of
             HttpAuthStatusSuccess:
             if AuthType>HttpRequestAuthTypeNone then begin
@@ -12332,7 +12336,7 @@ begin
   if (self=nil) or (socket=0) or (socket=fEPFD) or
      (byte(events)=0) or (fCount=fMaxSockets) then
     exit;
-  e.data.u64 := tag;
+  e.data.ptr := pointer(tag);
   if pseRead in events then
     e.events := EPOLLIN else
     e.events := 0;
