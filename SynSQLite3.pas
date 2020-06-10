@@ -5407,10 +5407,8 @@ end;
 
 function ErrorCodeToText(err: TSQLite3ErrorCode): RawUTF8;
 begin
-  if err=secUnknown then
-    result := 'unknown SQLITE_*' else
-    result := 'SQLITE_'+Copy(ShortStringToUTF8(GetEnumName(
-      TypeInfo(TSQLite3ErrorCode),ord(err))^),4,100);
+  result := 'SQLITE_'+TrimLeftLowerCaseShort(GetEnumName(
+    TypeInfo(TSQLite3ErrorCode),ord(err)));
 end;
 
 function sqlite3_resultToErrorText(aResult: integer): RawUTF8;

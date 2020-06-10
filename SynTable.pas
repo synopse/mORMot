@@ -5214,7 +5214,7 @@ end;
 { TSynTable }
 
 {$ifdef CPUX86}
-function SortQWord(const A,B: QWord): integer;
+function SortQWord(const A,B: QWord): integer; {$ifdef FPC} nostackframe; assembler; {$endif}
 asm // Delphi x86 compiler is not efficient, and oldest even incorrect
         mov     ecx, [eax]
         mov     eax, [eax + 4]
@@ -5230,7 +5230,7 @@ asm // Delphi x86 compiler is not efficient, and oldest even incorrect
 @p:     mov     eax, 1
 end;
 
-function SortInt64(const A,B: Int64): integer;
+function SortInt64(const A,B: Int64): integer; {$ifdef FPC} nostackframe; assembler; {$endif}
 asm // Delphi x86 compiler is not efficient at compiling below code
         mov     ecx, [eax]
         mov     eax, [eax + 4]
@@ -10142,7 +10142,7 @@ end;
 
 {$ifdef CPUINTEL} // crc32c SSE4.2 hardware accellerated dword hash
 function crc32csse42(buf: pointer): cardinal;
-{$ifdef CPUX86}
+{$ifdef CPUX86} {$ifdef FPC} nostackframe; assembler; {$endif}
 asm
         mov     edx, eax
         xor     eax, eax
