@@ -1414,7 +1414,9 @@ begin
          'X-POWERED', 'USER-AGENT', 'REMOTEIP:', 'HOST:', 'ACCEPT:']) < 0 then begin
         if W = nil then
           W := TTextWriter.CreateOwnedStream(tmp);
-        W.AddNoJSONEscape(P, next - P);
+        if next=nil then
+          W.AddNoJSONEscape(P) else
+          W.AddNoJSONEscape(P, next - P);
       end;
       P := next;
     end;
@@ -3731,12 +3733,19 @@ end;
 
 function TAsynchConnectionsSockets.SlotFromConnection(connection: TObject): PPollSocketsSlot;
 begin
-  if not connection.InheritsFrom(TAsynchConnection) or
-     (TAsynchConnection(connection).Handle=0) then begin
-    fOwner.fLog.Add.Log(sllStackTrace,'SlotFromConnection() with dangling pointer',self);
+  try
+    if (connection=nil) or not connection.InheritsFrom(TAsynchConnection) or
+       (TAsynchConnection(connection).Handle=0) then begin
+      fOwner.fLog.Add.Log(sllStackTrace,'SlotFromConnection() with dangling pointer %',
+        [connection],self);
+      result := nil;
+    end else
+      result := @TAsynchConnection(connection).fSlot;
+  except
+    fOwner.fLog.Add.Log(sllError,'SlotFromConnection() with dangling pointer %',
+     [pointer(connection)],self);
     result := nil;
-  end else
-    result := @TAsynchConnection(connection).fSlot;
+  end;
 end;
 
 function TAsynchConnectionsSockets.Write(connection: TObject;
