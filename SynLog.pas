@@ -3252,7 +3252,6 @@ var
 
 constructor TAutoFlushThread.Create;
 begin
-  FreeOnTerminate := true;
   fEvent := TEvent.Create(nil,false,false,'');
   inherited Create(false);
 end;
@@ -3336,11 +3335,13 @@ begin
   fDestroying := true;
   EchoRemoteStop;
   if AutoFlushThread<>nil then begin
-    {$ifndef AUTOFLUSHRAWWIN}
+    {$ifdef AUTOFLUSHRAWWIN}
+    AutoFlushThread := nil; // Terminated=true to avoid GPF in AutoFlushProc
+    {$else}
     AutoFlushThread.Terminate;
     AutoFlushThread.fEvent.SetEvent; // notify TAutoFlushThread.Execute
+    FreeAndNil(AutoFlushThread); // wait for the TThread to be terminated
     {$endif}
-    AutoFlushThread := nil; // Terminated=true to avoid GPF in AutoFlushProc
   end;
   ExceptionIgnore.Free;
   try

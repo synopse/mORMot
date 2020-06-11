@@ -199,6 +199,7 @@ end;
 // using direct x86 jmp also circumvents Internal Error C11715 for Delphi 5
 {$ifdef CPUX86}
 function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+  {$ifdef FPC} nostackframe; assembler; {$endif}
 asm
         push    ebp
         push    ebx
@@ -737,6 +738,7 @@ end;
 {$ifdef CPUX86}
 // using direct x86 jmp also circumvents Internal Error C11715 for Delphi 5
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+  {$ifdef FPC} nostackframe; assembler; {$endif}
 asm
         push    ebp
         push    ebx

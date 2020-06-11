@@ -167,17 +167,11 @@ function lzopas_decompressfilecheck(const srcFile: AnsiString): boolean;
 
 implementation
 
-{$ifndef CPUARM}
-{$ifndef CPUX64}
-{$ifndef CPU64}
-{$ifndef BSD}
+{$ifdef CPU32DELPHI}
   {$define USEASM}
   // if defined, a hand-tuned asm compression code (derivating from one generated
   //   by Delphi 2009) will be used instead of the slower Delphi3-2007 code
-{$endif}
-{$endif}
-{$endif}
-{$endif}
+{$endif CPU32DELPHI}
 
 {$ifdef MSWINDOWS}
 uses

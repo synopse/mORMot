@@ -2765,6 +2765,9 @@ begin
     FCellRect.Width := Max(1, Size.cx);
     FCellRect.Height := Max(1, Size.cy);
     EditorClient.Canvas.Font := Font;
+    Size := EditorClient.Canvas.TextExtent(BiggestSymbol);
+    if FCellRect.Width <> Max(1, Size.cx) then
+      raise EMemoExError.CreateFmt('Font %s has inconsistent width vs style', [Font.Name]);
     FDrawBitmap.Canvas.Font.Assign(Font);
     FDrawBitmap.Canvas.Brush.Assign(EditorClient.Canvas.Brush);
     FDrawBitmap.Width := Width;
@@ -5945,7 +5948,7 @@ begin
   Add2(ecGotoBookmark8, ord('Q'), [ssCtrl], ord('8'), [ssCtrl]);
   Add2(ecGotoBookmark9, ord('Q'), [ssCtrl], ord('9'), []);
   Add2(ecGotoBookmark9, ord('Q'), [ssCtrl], ord('9'), [ssCtrl]);
-
+{
   Add2(ecInsertMacro0, ord('S'), [ssCtrl], ord('0'), [ssCtrl]);
   Add2(ecInsertMacro0, ord('S'), [ssCtrl], ord('0'), []);
   Add2(ecInsertMacro1, ord('S'), [ssCtrl], ord('1'), [ssCtrl]);
@@ -6018,7 +6021,7 @@ begin
   Add2(ecInsertMacroY, ord('S'), [ssCtrl], ord('Y'), []);
   Add2(ecInsertMacroZ, ord('S'), [ssCtrl], ord('Z'), [ssCtrl]);
   Add2(ecInsertMacroZ, ord('S'), [ssCtrl], ord('Z'), []);
-
+}
   {$IFDEF MEMOEX_UNDO}
   Add(ecUndo, ord('Z'), [ssCtrl]);
   Add(ecUndo, VK_BACK, [ssAlt]);
@@ -6056,7 +6059,7 @@ begin
 
   Add(ecRecordMacro, ord('R'), [ssCtrl, ssShift]);
   Add(ecPlayMacro, ord('P'), [ssCtrl]);
-
+{
   Add2(ecBlockOpA, ord('B'), [ssCtrl], ord('A'), [ssCtrl]);
   Add2(ecBlockOpA, ord('B'), [ssCtrl], ord('A'), []);
   Add2(ecBlockOpB, ord('B'), [ssCtrl], ord('B'), [ssCtrl]);
@@ -6109,6 +6112,7 @@ begin
   Add2(ecBlockOpY, ord('B'), [ssCtrl], ord('Y'), []);
   Add2(ecBlockOpZ, ord('B'), [ssCtrl], ord('Z'), [ssCtrl]);
   Add2(ecBlockOpZ, ord('B'), [ssCtrl], ord('Z'), []);
+}
 end;
 {$ENDIF MEMOEX_DEFLAYOUT}
 
@@ -7217,7 +7221,7 @@ end;
 
 procedure TCustomMemoEx.FontChanged(Sender: TObject);
 begin
-  UpdateEditorSize;
+  UpdateEditorSize({fullupdate=}true);
   Invalidate;
 end;
 

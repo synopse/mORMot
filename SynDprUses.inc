@@ -3,30 +3,38 @@
     {$ifdef Unix} // we may also be on Darwin / OSX
       cthreads, // should be the very first unit - before FastMM4 e.g.
     {$endif Unix}
-    {$ifdef FPC_X64MM}
-    SynFPCx64MM,
+    {$ifdef FPC_X64MM_WIN} // SynFPCx64MM is not fully validated on Windows yet
+      {$ifdef MSWINDOWS}
+      SynFPCx64MM,
+      {$endif MSWINDOWS}
     {$else}
-      {$ifdef FPC_FASTMM4}
-        FastMM4Messages in '..\RTL7\FastMM4Messages.pas',
-        FastMM4 in '..\RTL7\FastMM4.pas',
+      {$ifdef FPC_X64MM}
+        {$ifndef MSWINDOWS}
+        SynFPCx64MM,
+        {$endif MSWINDOWS}
       {$else}
-        {$ifdef FPC_SYNJEMALLOC}
-          SynFPCCMemAligned, // after "apt-get install libjemalloc1"
+        {$ifdef FPC_FASTMM4}
+          FastMM4Messages in '..\RTL7\FastMM4Messages.pas',
+          FastMM4 in '..\RTL7\FastMM4.pas',
         {$else}
-          {$ifdef FPC_SYNTBB}
-            SynFPCCMemAligned, // after "apt-get install libtbb2"
+          {$ifdef FPC_SYNJEMALLOC}
+            SynFPCCMemAligned, // after "apt-get install libjemalloc1"
           {$else}
-            {$ifdef FPC_SYNCMEM}
-              SynFPCCMemAligned, // you may also set FPC_NO_DEFAULT_MEMORYMANAGER
+            {$ifdef FPC_SYNTBB}
+              SynFPCCMemAligned, // after "apt-get install libtbb2"
             {$else}
-              {$ifdef FPC_CMEM}
-                cmem, // you may also set FPC_NO_DEFAULT_MEMORYMANAGER
-              {$endif FPC_CMEM}
-            {$endif FPC_SYNCMEM}
-          {$endif FPC_SYNTBB}
-        {$endif FPC_SYNJEMALLOC}
-      {$endif FPC_FASTMM4}
-    {$endif FPC_X64MM}
+              {$ifdef FPC_SYNCMEM}
+                SynFPCCMemAligned, // you may also set FPC_NO_DEFAULT_MEMORYMANAGER
+              {$else}
+                {$ifdef FPC_CMEM}
+                  cmem, // you may also set FPC_NO_DEFAULT_MEMORYMANAGER
+                {$endif FPC_CMEM}
+              {$endif FPC_SYNCMEM}
+            {$endif FPC_SYNTBB}
+          {$endif FPC_SYNJEMALLOC}
+        {$endif FPC_FASTMM4}
+      {$endif FPC_X64MM}
+    {$endif FPC_X64MM_WIN}
     {$ifdef Unix} // we may also be on Darwin / OSX
       {$ifdef Darwin}
         iosxwstr, // optional WideString manager for Mac, but won't hurt

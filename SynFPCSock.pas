@@ -578,7 +578,7 @@ type
   PEPollData = ^TEPollData;
 
   /// epoll descriptor data structure
-  TEPollEvent = {$ifdef CPUX64}packed{$endif} record
+  TEPollEvent = packed record
     events: cardinal;
     data: TEpollData;
   end;

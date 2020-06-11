@@ -2470,7 +2470,7 @@ type
   protected
     fHttp: THttpClientSocket;
     fHttps: THttpRequest;
-    fBody, fHeaders, fUserAgent: SockString;
+    fProxy, fBody, fHeaders, fUserAgent: SockString;
     fOnlyUseClientSocket, fIgnoreSSLCertificateErrors: boolean;
   public
     /// initialize the instance
@@ -2494,6 +2494,8 @@ type
     /// allows to customize HTTPS connection and allow weak certificates
     property IgnoreSSLCertificateErrors: boolean read fIgnoreSSLCertificateErrors
       write fIgnoreSSLCertificateErrors;
+    /// alows to customize the connection using a proxy
+    property Proxy: SockString read fProxy write fProxy;
   end;
 
 
@@ -2561,6 +2563,13 @@ procedure IP4Text(const ip4addr; var result: SockString); overload;
 /// compute the text representation of a IP4/IP6 low-level connection
 procedure IPText(const sin: TVarSin; var result: SockString;
   localasvoid: boolean=false);
+
+var
+  /// defines if a connection from the loopback should be reported as ''
+  // (no Remote-IP - which is the default) or as '127.0.0.1' (force to false)
+  // - used by both TCrtSock.AcceptRequest and THttpApiServer.Execute servers
+  RemoteIPLocalHostAsVoidInServers: boolean = true;
+
 
 const
   /// the layout of TSMTPConnection.FromText method
@@ -5043,7 +5052,7 @@ begin
   Linger := 5; // should remain open for 5 seconds after a closesocket() call
   {$endif LINUXNOTBSD}
   if aClientSin<>nil then
-    IPText(aClientSin^,fRemoteIP,{localasvoid=}true);
+    IPText(aClientSin^,fRemoteIP,RemoteIPLocalHostAsVoidInServers);
 end;
 
 procedure TCrtSocket.SockSend(const Values: array of const);
@@ -5135,12 +5144,12 @@ end;
 
 function TCrtSocket.TrySndLow(P: pointer; Len: integer): boolean;
 var sent: integer;
-    endtix: Int64;
+    now, start: Int64;
 begin
   result := Len=0;
   if (self=nil) or (fSock<=0) or (Len<=0) or (P=nil) then
     exit;
-  endtix := {$ifdef MSWINDOWS}GetTick64{$else}0{$endif};
+  start := {$ifdef MSWINDOWS}GetTick64{$else}0{$endif};
   repeat
     {$ifdef MSWINDOWS}
     if fSecure.Initialized then
@@ -5155,11 +5164,10 @@ begin
       inc(PByte(P),sent);
     end else if WSAIsFatalError then
       exit; // fatal socket error
-    {$ifndef MSWINDOWS}
-    if endtix=0 then // measure time elapsed only if write was not finished
-      endtix := GetTick64+TimeOut else
-    {$endif}
-      if GetTick64>endtix then
+    now := GetTick64; 
+    if (start=0) or (sent>0) then
+      start := now else // measure timeout since nothing written
+      if now-start>TimeOut then
         exit; // identify timeout as error
     SleepHiRes(1);
   until false;
@@ -5373,13 +5381,13 @@ const
 function TCrtSocket.TrySockRecv(Buffer: pointer; var Length: integer;
   StopBeforeLength: boolean): boolean;
 var expected,read: PtrInt;
-    start, diff: Int64;
+    now, last, diff: Int64;
 begin
   result := false;
   if (self<>nil) and (fSock>0) and (Buffer<>nil) and (Length>0) then begin
     expected := Length;
     Length := 0;
-    start := {$ifdef MSWINDOWS}GetTick64{$else}0{$endif};
+    last := {$ifdef MSWINDOWS}GetTick64{$else}0{$endif};
     repeat
       read := expected-Length;
       {$ifdef MSWINDOWS}
@@ -5405,10 +5413,10 @@ begin
           break; // good enough for now
         inc(PByte(Buffer),read);
       end;
-      {$ifndef MSWINDOWS}
-      if start=0 then // measure time elapsed only if read was not finished
-        start := GetTick64 else {$endif} begin
-        diff := GetTick64-start;
+      now := GetTick64;
+      if (last=0) or (read>0) then // check timeout from unfinished read 
+        last := now else begin
+        diff := now-last;
         if diff>=TimeOut then begin
           {$ifdef SYNCRTDEBUGLOW}
           TSynLog.Add.Log(sllCustom2, 'TrySockRecv: timeout (diff=%>%)',[diff,TimeOut],self);
@@ -7879,6 +7887,12 @@ type
   HTTP_REQUEST_INFOS = array[0..1000] of HTTP_REQUEST_INFO;
   PHTTP_REQUEST_INFOS = ^HTTP_REQUEST_INFOS;
 
+  /// v2 trailing structure used to handle extended info about a specific request
+  HTTP_REQUEST_V2 = record
+    RequestInfoCount: word;
+    pRequestInfo: PHTTP_REQUEST_INFOS;
+  end;
+
   /// structure used to handle data associated with a specific request
   HTTP_REQUEST = record
     // either 0 (Only Header), either HTTP_RECEIVE_REQUEST_FLAG_COPY_BODY
@@ -7918,9 +7932,7 @@ type
     // SSL connection information
     pSslInfo: PHTTP_SSL_INFO;
     // beginning of HTTP_REQUEST_V2 structure
-    xxxPadding: DWORD;
-    RequestInfoCount: word;
-    pRequestInfo: PHTTP_REQUEST_INFOS;
+    V2: HTTP_REQUEST_V2;
   end;
   PHTTP_REQUEST = ^HTTP_REQUEST;
 
@@ -8380,7 +8392,7 @@ begin
       inc(P);
   end;
   if (RemoteIP='') and (Request.Address.pRemoteAddress<>nil) then
-    IPText(PVarSin(Request.Address.pRemoteAddress)^,RemoteIP,{localasvoid=}true);
+    IPText(PVarSin(Request.Address.pRemoteAddress)^,RemoteIP,RemoteIPLocalHostAsVoidInServers);
   // compute headers length
   Lip := length(RemoteIP);
   if Lip<>0 then
@@ -9200,9 +9212,9 @@ begin
         end;
         // retrieve any SetAuthenticationSchemes() information
         if byte(fAuthenticationSchemes)<>0 then // set only with HTTP API 2.0
-          for i := 0 to Req^.RequestInfoCount-1 do
-          if Req^.pRequestInfo^[i].InfoType=HttpRequestInfoTypeAuth then
-            with PHTTP_REQUEST_AUTH_INFO(Req^.pRequestInfo^[i].pInfo)^ do
+          for i := 0 to Req^.V2.RequestInfoCount-1 do
+          if Req^.V2.pRequestInfo^[i].InfoType=HttpRequestInfoTypeAuth then
+            with PHTTP_REQUEST_AUTH_INFO(Req^.V2.pRequestInfo^[i].pInfo)^ do
             case AuthStatus of
             HttpAuthStatusSuccess:
             if AuthType>HttpRequestAuthTypeNone then begin
@@ -11984,13 +11996,13 @@ function TSimpleHttpClient.RawRequest(const Uri: TURI; const Method, Header,
   Data, DataType: SockString; KeepAlive: cardinal): integer;
 begin
   result := 0;
-  if Uri.Https and not fOnlyUseClientSocket then
+  if (Uri.Https or (Proxy <> '')) and not fOnlyUseClientSocket then
     try
       if (fHttps = nil) or (fHttps.Server <> Uri.Server) or
          (integer(fHttps.Port) <> Uri.PortInt) then begin
         FreeAndNil(fHttp);
-        fHttps.Free; // need a new HTTPS connection
-        fHttps := MainHttpClass.Create(Uri.Server,Uri.Port,Uri.Https,'','',5000,5000,5000);
+        FreeAndNil(fHttps); // need a new HTTPS connection
+        fHttps := MainHttpClass.Create(Uri.Server,Uri.Port,Uri.Https,Proxy,'',5000,5000,5000);
         fHttps.IgnoreSSLCertificateErrors := fIgnoreSSLCertificateErrors;
         if fUserAgent<>'' then
           fHttps.UserAgent := fUserAgent;
@@ -12007,7 +12019,7 @@ begin
       if (fHttp = nil) or (fHttp.Server <> Uri.Server) or
          (fHttp.Port <> Uri.Port) then begin
         FreeAndNil(fHttps);
-        fHttp.Free; // need a new HTTP connection
+        FreeAndNil(fHttp); // need a new HTTP connection
         fHttp := THttpClientSocket.Open(Uri.Server,Uri.Port,cslTCP,5000,Uri.Https);
         if fUserAgent<>'' then
           fHttp.UserAgent := fUserAgent;
@@ -12324,7 +12336,7 @@ begin
   if (self=nil) or (socket=0) or (socket=fEPFD) or
      (byte(events)=0) or (fCount=fMaxSockets) then
     exit;
-  e.data.u64 := tag;
+  e.data.ptr := pointer(tag);
   if pseRead in events then
     e.events := EPOLLIN else
     e.events := 0;

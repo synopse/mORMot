@@ -78,9 +78,8 @@
 // - shall be set at the package options level, and left untouched by default
 
 {.$define DOPATCHTRTL}
-// if defined, the low-level patches made to RecordCopy() low-level function
-// as defined in SynCommons.pas will be applied (if applicable to your Delphi
-// version) - you should better use it, but we have unset it by default
+// if defined, some low-level patches are applied to Delphi or FPC RTL
+// - you should better use it, but we have unset it by default
 
 {.$define NEWRTTINOTUSED}
 // if defined, the new RTTI (available since Delphi 2010) won't be linked to
@@ -168,7 +167,6 @@
   {$CODEPAGE UTF8} // otherwise unexpected behavior occurs in most cases
 
   {$undef ENHANCEDRTL}    // there is no version of our Enhanced RTL for FPC
-  {$undef DOPATCHTRTL}
   {$define HASINLINE}
   {$define HASUINT64}
   {$define HASINLINENOTX86}
@@ -399,6 +397,7 @@
 
   {$define DELPHI_OR_FPC_OLDRTTI}
   {$define USE_VTYPE_STATIC} // "and VTYPE_STATIC" test before VarClear()
+  {$undef FPC_X64MM} // this is a FPC-specific memory manager
 
   {$ifdef LVCL}
     {$define OWNNORMTOUPPER} // NormToUpper[] exists only in our enhanced RTL
@@ -663,6 +662,7 @@
   {$ifdef CPUX64}
     {$if CompilerVersion = 25.0} // exactly XE4
       {$define NOSQLITE3STATIC}
+      // :( to avoid "Fatal: F2084 Internal Error: AV004A7B1F-R03BDA7B0-0"
     {$ifend}
   {$endif} // other Win32/Win64 Delphi platforms should work as expected
 {$endif FPC}

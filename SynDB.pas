@@ -419,6 +419,11 @@ type
     function ColumnBlob(Col: integer): RawByteString; overload;
     /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlobBytes(Col: integer): TBytes; overload;
+    /// read a blob Column into the Stream parameter
+    procedure ColumnBlobToStream(Col: integer; Stream: TStream); overload;
+    /// write a blob Column into the Stream parameter
+    // - expected to be used with 'SELECT .. FOR UPDATE' locking statements
+    procedure ColumnBlobFromStream(Col: integer; Stream: TStream); overload;
     /// return a Column as a TSQLVar value, first Col is 0
     // - the specified Temp variable will be used for temporary storage of
     // svtUTF8/svtBlob values
@@ -465,6 +470,10 @@ type
     function ColumnBlob(const ColName: RawUTF8): RawByteString; overload;
     /// return a Column as a blob value of the current Row, from a supplied column name
     function ColumnBlobBytes(const ColName: RawUTF8): TBytes; overload;
+    /// read a blob Column into the Stream parameter
+    procedure ColumnBlobToStream(const ColName: RawUTF8; Stream: TStream); overload;
+    /// write a blob Column into the Stream parameter
+    procedure ColumnBlobFromStream(const ColName: RawUTF8; Stream: TStream); overload;
     {$ifndef LVCL}
     /// return a Column as a variant, from a supplied column name
     function ColumnVariant(const ColName: RawUTF8): Variant; overload;
@@ -890,6 +899,7 @@ type
     fUseCache, fStoreVoidStringAsNull, fLogSQLStatementOnException,
     fRollbackOnDisconnect, fReconnectAfterConnectionError,
     fFilterTableViewSchemaName: boolean;
+    fDateTimeFirstChar: AnsiChar;
     {$ifndef UNICODE}
     fVariantWideString: boolean;
     {$endif}
@@ -1253,6 +1263,10 @@ type
     // 'YYYY-MM-DDTHH:MM:SS' (as expected by Microsoft SQL server e.g.)
     // - returns  to_date('....','YYYY-MM-DD HH24:MI:SS')  for Oracle
     function SQLIso8601ToDate(const Iso8601: RawUTF8): RawUTF8; virtual;
+    /// convert a TDateTime into a ISO-8601 encoded time and date, as expected
+    // by the database provider
+    // - e.g. SQLite3, DB2 and PostgreSQL will use non-standard ' ' instead of 'T'
+    function SQLDateToIso8601Quoted(DateTime: TDateTime): RawUTF8; virtual;
     /// split a table name to its OWNER.TABLE full name (if applying)
     // - will use ForcedSchemaName property (if applying), or the OWNER. already
     // available within the supplied table name
@@ -1442,6 +1456,11 @@ type
     // - but some DB engines (e.g. Jet or MS SQL) does not allow by default to
     // store '' values, but expect NULL to be stored instead
     property StoreVoidStringAsNull: Boolean read fStoreVoidStringAsNull write fStoreVoidStringAsNull;
+    /// customize the ISO-8601 text format expected by the database provider
+    // - is 'T' by default, as expected by the ISO-8601 standard
+    // - will be changed e.g. for PostgreSQL, which expects ' ' instead
+    // - as used by SQLDateToIso8601Quoted() and BindArray()
+    property DateTimeFirstChar: AnsiChar read fDateTimeFirstChar write fDateTimeFirstChar;
     {$ifndef UNICODE}
     /// set to true to force all variant conversion to WideString instead of
     // the default faster AnsiString, for pre-Unicode version of Delphi
@@ -2002,6 +2021,15 @@ type
     // - this function will return the BLOB content as a TBytes
     // - this default virtual method will call ColumnBlob()
     function ColumnBlobBytes(Col: integer): TBytes; overload; virtual;
+    /// read a blob Column into the Stream parameter
+    // - default implementation will just call ColumnBlob(), whereas some
+    // providers (like SynDBOracle) may implement direct support
+    procedure ColumnBlobToStream(Col: integer; Stream: TStream); overload; virtual;
+    /// write a blob Column into the Stream parameter
+    // - expected to be used with 'SELECT .. FOR UPDATE' locking statements
+    // - default implementation will through an exception, since it is highly
+    // provider-specific; SynDBOracle e.g. implements it properly
+    procedure ColumnBlobFromStream(Col: integer; Stream: TStream); overload; virtual;
     {$ifndef LVCL}
     /// return a Column as a variant, first Col is 0
     // - this default implementation will call ColumnToVariant() method
@@ -2050,6 +2078,11 @@ type
     function ColumnBlob(const ColName: RawUTF8): RawByteString; overload;
     /// return a Column as a blob value of the current Row, from a supplied column name
     function ColumnBlobBytes(const ColName: RawUTF8): TBytes; overload;
+    /// read a blob Column into the Stream parameter
+    procedure ColumnBlobToStream(const ColName: RawUTF8; Stream: TStream); overload;
+    /// write a blob Column into the Stream parameter
+    // - expected to be used with 'SELECT .. FOR UPDATE' locking statements
+    procedure ColumnBlobFromStream(const ColName: RawUTF8; Stream: TStream); overload;
     {$ifndef LVCL}
     /// return a Column as a variant, from a supplied column name
     function ColumnVariant(const ColName: RawUTF8): Variant; overload;
@@ -4517,7 +4550,10 @@ begin
   fUseCache := true;
   fLoggedSQLMaxSize := 2048; // log up to 2KB of inlined SQL by default
   SetInternalProperties; // virtual method used to override default parameters
-  aDBMS := DBMS;
+  aDBMS := GetDBMS;
+  if aDBMS in [dSQLite, dDB2, dPostgreSQL] then // for SQLDateToIso8601Quoted()
+    fDateTimeFirstChar := ' ' else
+    fDateTimeFirstChar := 'T';
   if fForcedSchemaName='' then
     case aDBMS of // should make every one life's easier
     dMSSQL:      fForcedSchemaName := 'dbo';
@@ -5656,12 +5692,12 @@ begin
 end;
 
 function TSQLDBConnectionProperties.SQLIso8601ToDate(const Iso8601: RawUTF8): RawUTF8;
-function TrimTInIso: RawUTF8;
-begin
-  result := Iso8601;
-  if (length(result)>10) and (result[11]='T') then
-    result[11] := ' '; // 'T' -> ' '
-end;
+  function TrimTInIso: RawUTF8;
+  begin
+    result := Iso8601;
+    if (length(result)>10) and (result[11]='T') then
+      result[11] := ' '; // 'T' -> ' '
+  end;
 begin
   case DBMS of
   dSQLite: result := TrimTInIso;
@@ -5670,6 +5706,16 @@ begin
   dDB2: result := 'TIMESTAMP '''+TrimTInIso+'''';
   else  result := ''''+Iso8601+'''';
   end;
+end;
+
+function TSQLDBConnectionProperties.SQLDateToIso8601Quoted(DateTime: TDateTime): RawUTF8;
+var tmp: array[0..23] of AnsiChar;
+    P: PUTF8Char;
+begin
+  tmp[0] := '''';
+  P := DateTimeToIso8601ExpandedPChar(DateTime,@tmp[1],DateTimeFirstChar);
+  P^ := '''';
+  FastSetString(result,@tmp,PtrUInt(P)-PtrUInt(@tmp)+1);
 end;
 
 function TSQLDBConnectionProperties.SQLCreate(const aTableName: RawUTF8;
@@ -6699,6 +6745,18 @@ begin
   RawByteStringToBytes(ColumnBlob(Col),result);
 end;
 
+procedure TSQLDBStatement.ColumnBlobToStream(Col: integer; Stream: TStream);
+var tmp: RawByteString;
+begin
+  tmp := ColumnBlob(Col); // default implementation
+  Stream.WriteBuffer(pointer(tmp)^,Length(tmp));
+end;
+
+procedure TSQLDBStatement.ColumnBlobFromStream(Col: integer; Stream: TStream);
+begin
+  raise ESQLDBException.CreateUTF8('%.ColumnBlobFromStream not implemented',[self]);
+end;
+
 {$ifndef LVCL}
 function TSQLDBStatement.ColumnVariant(Col: integer): Variant;
 begin
@@ -7180,6 +7238,16 @@ end;
 function TSQLDBStatement.ColumnBlobBytes(const ColName: RawUTF8): TBytes;
 begin
   result := ColumnBlobBytes(ColumnIndex(ColName));
+end;
+
+procedure TSQLDBStatement.ColumnBlobToStream(const ColName: RawUTF8; Stream: TStream);
+begin
+  ColumnBlobToStream(ColumnIndex(ColName),Stream);
+end;
+
+procedure TSQLDBStatement.ColumnBlobFromStream(const ColName: RawUTF8; Stream: TStream);
+begin
+  ColumnBlobFromStream(ColumnIndex(ColName),Stream);
 end;
 
 function TSQLDBStatement.ColumnCurrency(const ColName: RawUTF8): currency;
@@ -7726,10 +7794,19 @@ end;
 
 procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
   ParamType: TSQLDBFieldType; const Values: TRawUTF8DynArray; ValuesCount: integer);
+var i: integer;
+    ChangeFirstChar: AnsiChar;
 begin
   inherited; // raise an exception in case of invalid parameter
+  if fConnection=nil then
+    ChangeFirstChar := 'T' else
+    ChangeFirstChar := Connection.Properties.DateTimeFirstChar;
   with CheckParam(Param,ParamType,paramIn)^ do begin
     VArray := Values; // immediate COW reference-counted assignment
+    if (ParamType=ftDate) and (ChangeFirstChar<>'T') then
+      for i := 0 to ValuesCount-1 do // fix e.g. for PostgreSQL
+        if (length(Values[i])>11) and (Values[i][12]='T') then
+          Values[i][12] := ChangeFirstChar; // [12] since quoted 'dateTtime'
     VInt64 := ValuesCount;
   end;
   fParamsArrayCount := ValuesCount;
@@ -7764,7 +7841,7 @@ var i: integer;
 begin
   with CheckParam(Param,ftDate,paramIn,length(Values))^ do
     for i := 0 to high(Values) do
-      VArray[i] := ''''+DateTimeToIso8601Text(Values[i])+'''';
+      VArray[i] := Connection.Properties.SQLDateToIso8601Quoted(Values[i]);
 end;
 
 procedure TSQLDBStatementWithParams.BindArrayRowPrepare(
@@ -7789,7 +7866,7 @@ begin
       VInt64 := fParamsArrayCount;
       if (VType=ftDate) and (aValues[i].VType=vtExtended) then
         VArray[fParamsArrayCount] := // direct binding of TDateTime value
-          ''''+DateTimeToIso8601Text(aValues[i].VExtended^)+'''' else begin
+          Connection.Properties.SQLDateToIso8601Quoted(aValues[i].VExtended^) else begin
         VarRecToUTF8(aValues[i],VArray[fParamsArrayCount]);
         case VType of
         ftUTF8:
@@ -8148,12 +8225,12 @@ _dq:        dec(vl);
         inc(d);
       end
       else
-      repeat // regular content
-        d^ := s^;
-        inc(d);
-        inc(s);
-        dec(vl);
-      until vl = 0;
+        repeat // regular content
+          d^ := s^;
+          inc(d);
+          inc(s);
+          dec(vl);
+        until vl = 0;
     end;
     d^ := ',';
     inc(d);
@@ -8886,5 +8963,4 @@ initialization
   TTextWriter.RegisterCustomJSONSerializerFromText(
     TypeInfo(TSQLDBColumnDefine),__TSQLDBColumnDefine);
 end.
-
 

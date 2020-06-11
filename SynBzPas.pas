@@ -52,6 +52,11 @@ unit SynBzPas;
        - bug in main loop -> use it at once, TBZDecompressor is buggy
        - use UnCompressBzMem() global function
 
+      HUGE WARNING / BIG DISCLOSURE / PLEASE README :
+       - we discovered that this unit doesn't properly uncompress some big
+         content, so you should rather not trust this unit - consider it
+         as a proof-of-concept, not to be used on production
+
       initial release (c)2002 by Daniel Mantione
       modifications and speed-up by Arnaud Bouchez (c)2008 http://bouchez.info
 
@@ -65,11 +70,16 @@ uses
   Classes,
   SysUtils;
 
-function UnCompressBzMem(Source: pointer; SourceSize, DestSize: integer): TMemoryStream; overload;
+{$ifndef FPC_OR_UNICODE}
+type
+  RawByteString = AnsiString;
+{$endif}
+
+function UnCompressBzMem(Source: pointer; SourceSize, DestSize: integer;
+  error: PInteger = nil): TMemoryStream;
 // result=nil if error decompressing
 
-function UnCompressBzMem(Source: pointer; SourceSize, DestSize: integer):
-  {$ifdef FPC_OR_UNICODE}RawByteString{$else}AnsiString{$endif}; overload;
+function UnCompressBzMemToString(Source: pointer; SourceSize, DestSize: integer): RawByteString;
 
 
 implementation
@@ -190,6 +200,7 @@ end;
 procedure TBZip2_decode_stream.Open(bz2source: pointer);
 begin
   fillchar(self,256{sizeof(self)},0); // 256 is enough for reset
+  error := 0;
   readstream := bz2source;
   {Read the magic.}
   if PCardinal(readstream)^ and $00ffffff<>ord('B')+ord('Z')shl 8+ord('h')shl 16 then begin
@@ -579,7 +590,7 @@ begin // efficient code on FPC x86-64
     inc(a,256);
   until p=pend;
 end;
-{$else}
+{$else} {$ifdef FPC} nostackframe; assembler; {$endif}
 asm
       mov ecx,[eax+TBZip2_decode_stream.tt_count]
       jcxz @a2
@@ -794,7 +805,8 @@ begin
 end;
 *)
 
-function UnCompressBzMem(Source: pointer; SourceSize, DestSize: integer): TMemoryStream;
+function UnCompressBzMem(Source: pointer; SourceSize, DestSize: integer;
+  error: PInteger): TMemoryStream;
 var BZ: PBZip2_decode_stream;
 begin
   result := TMemoryStream.Create;
@@ -808,16 +820,16 @@ begin
     BZ^.Close;
     if BZ^.error<>BZip2_endoffile then
       FreeAndNil(result); // result=nil if error decompressing
+    if error <> nil then
+      error^ := BZ^.error;
   finally
     Freemem(BZ);
   end;
 end;
 
-function UnCompressBzMem(Source: pointer; SourceSize, DestSize: integer):
-  {$ifdef FPC_OR_UNICODE}RawByteString{$else}AnsiString{$endif};
+function UnCompressBzMemToString(Source: pointer; SourceSize, DestSize: integer): RawByteString;
 var BZ: PBZip2_decode_stream;
 begin
-  result := '';
   if DestSize<=0 then exit;
   SetLength(result,DestSize);
   Getmem(BZ,sizeof(TBZip2_decode_stream));

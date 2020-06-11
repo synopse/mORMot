@@ -569,6 +569,8 @@ implementation
   function curl_multi_wait(mcurl: TCurlMulti; fds: PCurlWaitFD; fdscount: cardinal; ms: integer; out ret: integer): TCurlMultiCode; cdecl; external;
   {$endif LIBCURLMULTI}
 {$endif FPC}
+var
+  curl_static_initialized: boolean;
 {$endif LIBCURLSTATIC}
 
 type
@@ -594,8 +596,9 @@ end;
 function CurlIsAvailable: boolean;
 begin
   {$ifdef LIBCURLSTATIC}
-  LibCurlInitialize;
-  result:=true;
+  if not curl_static_initialized then
+    LibCurlInitialize;
+  result := true;
   {$else}
   try
     if curl.Module=0 then
@@ -604,7 +607,7 @@ begin
   except
     result := false;
   end;
-  {$endif}
+  {$endif LIBCURLSTATIC}
 end;
 
 procedure LibCurlInitialize(engines: TCurlGlobalInit; const dllname: TFileName);
@@ -627,42 +630,43 @@ begin
   EnterCriticalSection(SynSockCS);
   try
     {$ifdef LIBCURLSTATIC}
-    curl.global_init:=@curl_global_init;
-    curl.global_cleanup:=@curl_global_cleanup;
-    curl.version_info:=@curl_version_info;
-    curl.easy_init:=@curl_easy_init;
-    curl.easy_setopt:=@curl_easy_setopt;
-    curl.easy_perform:=@curl_easy_perform;
-    curl.easy_cleanup:=@curl_easy_cleanup;
-    curl.easy_getinfo:=@curl_easy_getinfo;
-    curl.easy_duphandle:=@curl_easy_duphandle;
-    curl.easy_reset:=@curl_easy_reset;
-    curl.easy_strerror:=@curl_easy_strerror;
-    curl.slist_append:=@curl_slist_append;
-    curl.slist_free_all:=@curl_slist_free_all;
+    curl_static_initialized := true;
+    curl.global_init := @curl_global_init;
+    curl.global_cleanup := @curl_global_cleanup;
+    curl.version_info := @curl_version_info;
+    curl.easy_init := @curl_easy_init;
+    curl.easy_setopt := @curl_easy_setopt;
+    curl.easy_perform := @curl_easy_perform;
+    curl.easy_cleanup := @curl_easy_cleanup;
+    curl.easy_getinfo := @curl_easy_getinfo;
+    curl.easy_duphandle := @curl_easy_duphandle;
+    curl.easy_reset := @curl_easy_reset;
+    curl.easy_strerror := @curl_easy_strerror;
+    curl.slist_append := @curl_slist_append;
+    curl.slist_free_all := @curl_slist_free_all;
     {$ifdef LIBCURLMULTI}
-    curl.multi_add_handle:=@curl_multi_add_handle;
-    curl.multi_assign:=@curl_multi_assign;
-    curl.multi_cleanup:=@curl_multi_cleanup;
-    curl.multi_fdset:=@curl_multi_fdset;
-    curl.multi_info_read:=@curl_multi_info_read;
-    curl.multi_init:=@curl_multi_init;
-    curl.multi_perform:=@curl_multi_perform;
-    curl.multi_remove_handle:=@curl_multi_remove_handle;
-    curl.multi_setopt:=@curl_multi_setopt;
-    curl.multi_socket_action:=@curl_multi_socket_action;
-    curl.multi_socket_all:=@curl_multi_socket_all;
-    curl.multi_strerror:=@curl_multi_strerror;
-    curl.multi_timeout:=@curl_multi_timeout;
-    curl.multi_wait:=@curl_multi_wait;
+    curl.multi_add_handle := @curl_multi_add_handle;
+    curl.multi_assign := @curl_multi_assign;
+    curl.multi_cleanup := @curl_multi_cleanup;
+    curl.multi_fdset := @curl_multi_fdset;
+    curl.multi_info_read := @curl_multi_info_read;
+    curl.multi_init := @curl_multi_init;
+    curl.multi_perform := @curl_multi_perform;
+    curl.multi_remove_handle := @curl_multi_remove_handle;
+    curl.multi_setopt := @curl_multi_setopt;
+    curl.multi_socket_action := @curl_multi_socket_action;
+    curl.multi_socket_all := @curl_multi_socket_all;
+    curl.multi_strerror := @curl_multi_strerror;
+    curl.multi_timeout := @curl_multi_timeout;
+    curl.multi_wait := @curl_multi_wait;
     {$endif LIBCURLMULTI}
     {$else}
     h := 0;
     if curl.Module=0 then // try to load libcurl once
     try
       {$ifdef MSWINDOWS}
-      h := SafeLoadLibrary(dllname);
-      if h=0 then h := SafeLoadLibrary(ExeVersion.ProgramFilePath+dllname);
+      h := SafeLoadLibrary(ExtractFilePath(paramstr(0))+dllname);
+      if h=0 then h := SafeLoadLibrary(dllname);
       {$else}
       h := LoadLibrary(dllname);
       {$endif}
@@ -704,7 +708,7 @@ begin
         raise;
       end;
     end;
-    {$endif}
+    {$endif LIBCURLSTATIC}
     curl.global_init(engines);
     curl.info := curl.version_info(cvFour)^;
     curl.infoText := format('%s version %s',[LIBCURL_DLL,curl.info.version]);
@@ -721,12 +725,17 @@ end;
 initialization
   {$ifdef LIBCURLSTATIC}
   //LibCurlInitialize;
-  {$endif}
+  {$endif LIBCURLSTATIC}
 
 finalization
+  {$ifdef LIBCURLSTATIC}
+  if curl_static_initialized then
+    curl.global_cleanup;
+  {$else}
   if PtrInt(curl.Module)>0 then begin
     curl.global_cleanup;
     FreeLibrary(curl.Module);
   end;
+  {$endif LIBCURLSTATIC}
 
 end.
