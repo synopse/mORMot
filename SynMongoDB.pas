@@ -6024,10 +6024,14 @@ end;
 function TMongoDatabase.CreateUser(const UserName,Password: RawUTF8;
   const roles: variant): RawUTF8;
 var res: variant;
+    usr: TDocVariantData;
 begin
-  result := RunCommand(BSONVariant(
-    ['createUser',UserName,'pwd',PasswordDigest(UserName,Password),
-     'digestPassword',false,'roles',roles]),res);
+  usr.InitObject(['createUser',UserName,'pwd',PasswordDigest(UserName,Password),
+     'digestPassword',false,'roles',roles],JSON_OPTIONS_FAST);
+  if Client.ServerBuildInfoNumber>=4000000 then
+    usr.AddValue('mechanisms',_ArrFast(['SCRAM-SHA-1']));
+    // note: passwordDigestor:"client" fails
+  result := RunCommand(variant(usr),res);
 end;
 
 function TMongoDatabase.CreateUserForThisDatabase(const UserName,Password: RawUTF8;
