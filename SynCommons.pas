@@ -20935,8 +20935,11 @@ procedure _ansistr_setlength_new(var s: RawByteString; len: PtrInt; cp: cardinal
 var p, new: PAnsiChar;
     l: PtrInt;
 begin
-  if cp<=CP_OEMCP then // TranslatePlaceholderCP logic
+  if cp<=CP_OEMCP then begin // TranslatePlaceholderCP logic
     cp := DefaultSystemCodePage;
+    if cp=0 then
+      cp := CP_NONE;
+  end;
   new := FastNewString(len,cp);
   p := pointer(s);
   if p<>nil then begin
@@ -21086,7 +21089,7 @@ end;
 
 procedure _ansistr_concat_multi_utf8(var dest: RawByteString;
   const s: array of RawByteString; cp: cardinal);
-var first,len,i,l: TStrLen;
+var first,len,i,l: integer; // should NOT be PtrInt/SizeInt to avoid FPC bug with high(s) :(
     cpf,cpi: cardinal;
     p: pointer;
     new: PAnsiChar;
@@ -40642,7 +40645,8 @@ begin
   end;
   {$else MSWINDOWS}
   {$ifdef FPCUSEVERSIONINFO} // FPC 3.0+ if enabled in Synopse.inc / project options
-  if aFileName<>'' then begin
+  if aFileName<>'' then
+  try
     VI := TVersionInfo.Create;
     try
       if (aFileName<>ExeVersion.ProgramFileName) and (aFileName<>ParamStr(0)) then
@@ -40686,6 +40690,8 @@ begin
     finally
       VI.Free;
     end;
+  except
+    // just ignore if version information resource is missing
   end;
   {$endif FPCUSEVERSIONINFO}
   {$endif MSWINDOWS}
@@ -62808,7 +62814,7 @@ begin
     RedirectCode(@fpc_dynarray_decr_ref,@fpc_dynarray_clear);
     {$ifdef FPC_HAS_CPSTRING}
     {$ifdef LINUX}
-    if DefaultSystemCodePage=CP_UTF8 then begin
+    if (DefaultSystemCodePage=CP_UTF8) or (DefaultSystemCodePage=0) then begin
       RedirectRtl(@_fpc_ansistr_concat,@_ansistr_concat_utf8);
       RedirectRtl(@_fpc_ansistr_concat_multi,@_ansistr_concat_multi_utf8);
     end;
