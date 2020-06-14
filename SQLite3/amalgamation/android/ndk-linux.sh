@@ -2,8 +2,8 @@
 
 ndk=/home/superdad/Public/android-ndk-r21d
 
-# $ndk/ndk-build clean
-# $ndk/ndk-build all
+$ndk/ndk-build clean
+$ndk/ndk-build all
 
 bindir=./obj/local
 

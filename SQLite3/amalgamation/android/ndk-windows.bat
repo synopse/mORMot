@@ -23,8 +23,8 @@ set path=%ndk%;%path%
 
 @rem echo path
 
-@rem call %ndk%\ndk-build.cmd clean
-@rem call %ndk%\ndk-build.cmd all
+call %ndk%\ndk-build.cmd clean
+call %ndk%\ndk-build.cmd all
 
 set bindir=.\obj\local
 
