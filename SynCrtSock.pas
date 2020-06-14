@@ -7841,7 +7841,16 @@ type
   end;
 
   HTTP_REQUEST_INFO_TYPE = (
-    HttpRequestInfoTypeAuth
+    HttpRequestInfoTypeAuth,
+    HttpRequestInfoTypeChannelBind,
+    HttpRequestInfoTypeSslProtocol,
+    HttpRequestInfoTypeSslTokenBindingDraft,
+    HttpRequestInfoTypeSslTokenBinding,
+    HttpRequestInfoTypeRequestTiming,
+    HttpRequestInfoTypeTcpInfoV0,
+    HttpRequestInfoTypeRequestSizing,
+    HttpRequestInfoTypeQuicStats,
+    HttpRequestInfoTypeTcpInfoV1
     );
 
   // about Authentication in HTTP Version 2.0
@@ -7875,7 +7884,9 @@ type
     PackedContextType: ULONG;
     PackedContext: pointer;
     MutualAuthDataLength: ULONG;
-    pMutualAuthData: PCHAR;
+    pMutualAuthData: PAnsiChar;
+    PackageNameLength: USHORT;
+    pPackageName: LPWSTR;
   end;
   PHTTP_REQUEST_AUTH_INFO = ^HTTP_REQUEST_AUTH_INFO;
 

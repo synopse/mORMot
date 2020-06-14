@@ -1174,15 +1174,17 @@ type
 
   /// the available MongoDB driver Request Opcodes
   // - opReply: database reply to a client request - ResponseTo shall be set
-  // - opMsg: generic msg command followed by a string (deprecated)
+  // - opMsgOld: generic msg command followed by a string (deprecated)
   // - opUpdate: update document
   // - opInsert: insert new document
   // - opQuery: query a collection
   // - opGetMore: get more data from a previous query
   // - opDelete: delete documents
   // - opKillCursors: notify database client is done with a cursor
+  // - opMsg: new OP_MSG layout introduced in MongoDB 3.6
   TMongoOperation = (
-    opReply, opMsg, opUpdate, opInsert, opQuery, opGetMore, opDelete, opKillCursors);
+    opReply, opMsgOld, opUpdate, opInsert, opQuery, opGetMore, opDelete,
+    opKillCursors, opMsg);
 
   /// define how an opUpdate operation will behave
   // - if mufUpsert is set, the database will insert the supplied object into
@@ -1475,9 +1477,8 @@ type
   /// define a TMongoReplyCursor message execution content
   TMongoReplyCursorFlags = set of TMongoReplyCursorFlag;
 
-  /// internal low-level binary structure mapping the TMongoReply header
-  // - used e.g. by TMongoReplyCursor and TMongoConnection.GetReply()
-  TMongoReplyHeader = packed record
+  /// internal low-level binary structure mapping all message headers
+  TMongoWireHeader = packed record
     /// total message length, including the header
     MessageLength: integer;
     /// identifier of this message
@@ -1485,7 +1486,16 @@ type
     /// retrieve the RequestID from the original request
     ResponseTo: integer;
     /// low-level code of the message
+    // - GetReply() will map it to a high-level TMongoOperation
     OpCode: integer;
+  end;
+  PMongoWireHeader = ^TMongoWireHeader;
+
+  /// internal low-level binary structure mapping the TMongoReply header
+  // - used e.g. by TMongoReplyCursor and TMongoConnection.GetReply()
+  TMongoReplyHeader = packed record
+    /// standard message header
+    Header: TMongoWireHeader;
     /// response flags
     ResponseFlags: integer;
     /// cursor identifier if the client may need to perform further opGetMore
@@ -2001,7 +2011,7 @@ type
     // - default is wcAcknowledged, i.e. to acknowledge all write operations
     property WriteConcern: TMongoClientWriteConcern
       read fWriteConcern write fWriteConcern;
-    /// the connection time out, in milli seconds
+    /// the connection time out, in milliseconds
     // - default value is 30000, i.e. 30 seconds
     property ConnectionTimeOut: Cardinal read fConnectionTimeOut write fConnectionTimeOut;
     /// if the socket connection is secured over TLS
@@ -4701,7 +4711,7 @@ end;
 
 const
   WIRE_OPCODES: array[TMongoOperation] of integer = (
-   1, 1000, 2001, 2002, 2004, 2005, 2006, 2007);
+   1, 1000, 2001, 2002, 2004, 2005, 2006, 2007, 2013);
   CLIENT_OPCODES = [opUpdate,opInsert,opQuery,opGetMore,opDelete,opKillCursors];
 
 var
@@ -4952,11 +4962,11 @@ var Len: integer;
 begin
   Len := length(ReplyMessage);
   with PMongoReplyHeader(ReplyMessage)^ do begin
-    if (Len<sizeof(TMongoReplyHeader)) or (MessageLength<>Len) or
+    if (Len<sizeof(TMongoReplyHeader)) or (Header.MessageLength<>Len) or
        (sizeof(TMongoReplyHeader)+NumberReturned*5>Len) then
       raise EMongoException.CreateUTF8('TMongoReplyCursor.Init(len=%)',[len]);
-    if OpCode<>WIRE_OPCODES[opReply] then
-      raise EMongoException.CreateUTF8('TMongoReplyCursor.Init(OpCode=%)',[OpCode]);
+    if Header.OpCode<>WIRE_OPCODES[opReply] then
+      raise EMongoException.CreateUTF8('TMongoReplyCursor.Init(OpCode=%)',[Header.OpCode]);
     fRequestID := RequestID;
     fResponseTo := ResponseTo;
     byte(fResponseFlags) := ResponseFlags;
@@ -5423,46 +5433,57 @@ begin
     raise EMongoRequestException.Create('Query failure',self,Request,Result);
 end;
 
+const
+  RECV_ERROR = '%.GetReply(%): Server response timeout or connection broken, '+
+    'probably due to a bad formatted BSON request -> close socket';
+
 procedure TMongoConnection.GetReply(Request: TMongoRequest; out result: TMongoReply);
-var Header: TMongoReplyHeader;
+var Header: TMongoWireHeader;
     HeaderLen, DataLen: integer;
 begin
   if self=nil then
     raise EMongoRequestException.Create('Connection=nil',self,Request);
   FillCharFast(Header,sizeof(Header),0);
-  HeaderLen := SizeOf(Header);
   try
     Lock;
-    if Send(Request) then
-      while true do
-      if fSocket.TrySockRecv(@Header,HeaderLen) then begin
-        if (Header.MessageLength<SizeOf(Header)) or
-           (Header.MessageLength>MONGODB_MAXMESSAGESIZE) then
-          raise EMongoRequestException.CreateUTF8('%.GetReply: MessageLength=%',
-            [self,Header.MessageLength],self,Request);
-        SetLength(result,Header.MessageLength);
-        PMongoReplyHeader(result)^ := Header;
-        DataLen := Header.MessageLength-sizeof(Header);
-        if fSocket.TrySockRecv(@PByteArray(result)[sizeof(Header)],DataLen) then
-          if Header.ResponseTo=Request.MongoRequestID then // success
-            exit else
-          if Header.OpCode=ord(opMsg) then begin
-            if Client.Log<>nil then
-              Client.Log.Log(sllWarning,'Msg from MongoDB: %',
-                [BSONToJSON(@PByteArray(result)[sizeof(Header)],betDoc,DataLen,modMongoShell)],Request);
-          end else
-            raise EMongoRequestException.CreateUTF8(
-              '%.GetReply: ResponseTo=% Expected:% in current blocking mode',
-              [self,Header.ResponseTo,Request.MongoRequestID],self,Request);
-      end else
+    if Send(Request) then begin
+      HeaderLen := SizeOf(Header);
+      if not fSocket.TrySockRecv(@Header,HeaderLen) then
         try
           Close;
         finally
-          raise EMongoRequestException.Create('Server did reset the connection: '+
-            'probably due to a bad formatted BSON request -> close socket',self,Request);
+          raise EMongoRequestException.CreateUTF8(RECV_ERROR,[self,'hdr'],self,Request);
         end;
-    // if we reached here, this is due to a socket error
-    raise EMongoRequestOSException.Create('GetReply',self,Request);
+      if Header.MessageLength>MONGODB_MAXMESSAGESIZE then
+         raise EMongoRequestException.CreateUTF8('%.GetReply: MessageLength=%',
+           [self,Header.MessageLength],self,Request);
+      SetLength(result,Header.MessageLength);
+      PMongoWireHeader(result)^ := Header;
+      DataLen := Header.MessageLength-sizeof(Header);
+      if not fSocket.TrySockRecv(@PByteArray(result)[sizeof(Header)],DataLen) then
+        try
+          Close;
+        finally
+          raise EMongoRequestException.CreateUTF8(RECV_ERROR,[self,'msg'],self,Request);
+        end;
+      if Header.ResponseTo=Request.MongoRequestID then
+        exit; // success
+      case Header.OpCode of
+      ord(opMsgOld):
+        if Client.Log<>nil then
+          Client.Log.Log(sllWarning,'Msg (deprecated) from MongoDB: %',
+            [BSONToJSON(@PByteArray(result)[sizeof(Header)],betDoc,DataLen,modMongoShell)],Request);
+      ord(opMsg):
+        // TODO: parse https://docs.mongodb.com/manual/reference/mongodb-wire-protocol/#op-msg
+        if Client.Log<>nil then
+          Client.Log.Log(sllWarning,'Msg from MongoDB: %',[EscapeToShort(
+            @PByteArray(result)[sizeof(Header)],DataLen)],Request);
+      end;
+    end;
+    // if we reached here, this is due to a socket error or an unexpeted opcode
+    raise EMongoRequestException.CreateUTF8(
+      '%.GetReply: OpCode=% and ResponseTo=% (expected:%)',
+      [self,Header.OpCode,Header.ResponseTo,Request.MongoRequestID],self,Request);
   finally
     UnLock;
   end;
@@ -6003,10 +6024,14 @@ end;
 function TMongoDatabase.CreateUser(const UserName,Password: RawUTF8;
   const roles: variant): RawUTF8;
 var res: variant;
+    usr: TDocVariantData;
 begin
-  result := RunCommand(BSONVariant(
-    ['createUser',UserName,'pwd',PasswordDigest(UserName,Password),
-     'digestPassword',false,'roles',roles]),res);
+  usr.InitObject(['createUser',UserName,'pwd',PasswordDigest(UserName,Password),
+     'digestPassword',false,'roles',roles],JSON_OPTIONS_FAST);
+  if Client.ServerBuildInfoNumber>=4000000 then
+    usr.AddValue('mechanisms',_ArrFast(['SCRAM-SHA-1']));
+    // note: passwordDigestor:"client" fails
+  result := RunCommand(variant(usr),res);
 end;
 
 function TMongoDatabase.CreateUserForThisDatabase(const UserName,Password: RawUTF8;
@@ -6109,7 +6134,7 @@ begin // see http://docs.mongodb.org/manual/reference/command/aggregate
     raise EMongoException.Create('Aggregation needs MongoDB 2.2 or later');
   if fDatabase.Client.ServerBuildInfoNumber>=3060000 then begin
     // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}],cursor:{}})
-    Database.RunCommand(BSONVariant(['aggregate',name,'pipeline',pipelineArray,'cursor','{}']),reply);
+    Database.RunCommand(BSONVariant(['aggregate',name,'pipeline',pipelineArray,'cursor','{','}']),reply);
     // {"cursor":{"firstBatch":[{"_id":null,"max":1510}],"id":0,"ns":"db.test"},"ok":1}
     res := reply.cursor;
     if not VarIsNull(res) then
