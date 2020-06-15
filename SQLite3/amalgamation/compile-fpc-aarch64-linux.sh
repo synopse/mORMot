@@ -1,7 +1,9 @@
 #!/bin/sh
 
 ARCH=aarch64-linux
-GCC=aarch64-linux-gnu-gcc
+
+CROSS=/home/ab/fpcup/cross/bin/$ARCH
+GCC=$CROSS/$ARCH-gcc
 DST=../../static/$ARCH/sqlite3.o
 
 rm $DST
