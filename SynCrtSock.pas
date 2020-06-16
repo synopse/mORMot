@@ -1894,7 +1894,8 @@ type
     // THttpServer.Create()
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
       const ProcessName: SockString; ServerThreadPoolCount: integer=32;
-      KeepAliveTimeOut: integer=30000; HeadersUnFiltered: boolean=false); reintroduce; virtual;
+      KeepAliveTimeOut: integer=30000; HeadersUnFiltered: boolean=false;
+      CreateSuspended: boolean = false); reintroduce; virtual;
     /// ensure the HTTP server thread is actually bound to the specified port
     // - TCrtSocket.Bind() occurs in the background in the Execute method: you
     // should call and check this method result just after THttpServer.Create
@@ -6229,7 +6230,7 @@ end;
 constructor THttpServer.Create(const aPort: SockString; OnStart,
   OnStop: TNotifyThreadEvent; const ProcessName: SockString;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
-  HeadersUnFiltered: boolean);
+  HeadersUnFiltered: boolean; CreateSuspended: boolean);
 begin
   fSockPort := aPort;
   fInternalHttpServerRespList := {$ifdef FPC}TFPList{$else}TList{$endif}.Create;
@@ -6249,7 +6250,7 @@ begin
     fHTTPQueueLength := 1000;
   end;
   fHeadersNotFiltered := HeadersUnFiltered;
-  inherited Create(false,OnStart,OnStop,ProcessName);
+  inherited Create(CreateSuspended,OnStart,OnStop,ProcessName);
 end;
 
 function THttpServer.GetAPIVersion: string;
