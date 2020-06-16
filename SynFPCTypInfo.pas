@@ -53,6 +53,10 @@ unit SynFPCTypInfo;
 
 interface
 
+{$ifndef FPC}
+  'this unit is for FPC only - do not include it in any Delphi project!'
+{$endif FPC}
+
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 uses

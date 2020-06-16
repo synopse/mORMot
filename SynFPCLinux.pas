@@ -51,6 +51,12 @@ unit SynFPCLinux;
 
 interface
 
+
+{$ifndef FPC}
+  'this unit is for FPC only - do not include it in any Delphi project!'
+{$endif FPC}
+
+
 {$I Synopse.inc} // set proper flags, and define LINUX for BSD and ANDROID
 
 uses
