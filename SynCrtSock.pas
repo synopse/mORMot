@@ -7885,7 +7885,7 @@ type
     PackedContext: pointer;
     MutualAuthDataLength: ULONG;
     pMutualAuthData: PAnsiChar;
-    PackageNameLength: USHORT;
+    PackageNameLength: word;
     pPackageName: LPWSTR;
   end;
   PHTTP_REQUEST_AUTH_INFO = ^HTTP_REQUEST_AUTH_INFO;
