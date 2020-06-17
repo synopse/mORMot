@@ -55,6 +55,9 @@ var
     {$endif FPC}
     listen_fds: function(unset_environment: integer): integer; cdecl;
     is_socket_unix: function(fd, typr, listening: integer; var path: TFileName; pathLength: PtrUInt): integer; cdecl;
+    /// submit simple, plain text log entries to the system journal
+    // priority can be obtained using longint(LOG_TO_SYSLOG[logLevel])
+    journal_print: function(priority: longint; args: array of const): longint; cdecl;
   end;
 
 /// return TRUE if a systemd library is available
@@ -87,8 +90,8 @@ procedure LibSystemdInitialize(const libname: TFileName);
 var P: PPointer;
     api: integer;
     h: {$ifdef FPC}TLibHandle{$else}THandle{$endif FPC};
-const NAMES: array[0..1] of string = (
-  'sd_listen_fds','sd_is_socket_unix');
+const NAMES: array[0..2] of string = (
+  'sd_listen_fds', 'sd_is_socket_unix', 'sd_journal_print');
 begin
   EnterCriticalSection(SynSockCS);
   try
