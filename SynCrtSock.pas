@@ -3236,6 +3236,7 @@ implementation
 {$ifdef LINUXNOTBSD}
 uses
   SynSystemd;
+
 {$endif}
 
 { ************ some shared helper functions and classes }
@@ -4939,16 +4940,16 @@ var s,p: SockString;
 begin
   Create(10000);
   if anAddr = '' then begin // try systemd
-  {$ifdef LINUXNOTBSD}
-  if not SystemdIsAvailable then
-    raise ECrtSocket.Create('Systemd is not available but empty address is passed to bind');
-  n := sd.listen_fds(0);
-  if (n > 1) then
-    raise ECrtSocket.Create('Systemd activation fails - too many file descriptors received');
-  aSock := SD_LISTEN_FDS_START + 0;
-  {$else}
-  raise ECrtSocket.Create('Can''t bind to empty address');
-  {$endif}
+    {$ifdef LINUXNOTBSD}
+    if not SystemdIsAvailable then
+      raise ECrtSocket.Create('Systemd is not available but empty address is passed to bind');
+    n := sd.listen_fds(0);
+    if (n > 1) then
+      raise ECrtSocket.Create('Systemd activation fails - too many file descriptors received');
+    aSock := SD_LISTEN_FDS_START + 0;
+    {$else}
+    raise ECrtSocket.Create('Can''t bind to empty address');
+    {$endif}
   end else begin
     aSock := -1; // force OpenBind to create listening socket
     if not Split(anAddr,':',s,p) then begin
@@ -5052,8 +5053,10 @@ begin
     SendTimeout := TimeOut;
   end;
   if aLayer=cslTCP then begin
-    TCPNoDelay := 1; // disable Nagle algorithm since we use our own buffers
-    KeepAlive := 1; // enable TCP keepalive (even if we rely on transport layer)
+    if (aSock<0) or ((aSock>0) and not doBind) then begin // do not touch externally created socket
+      TCPNoDelay := 1; // disable Nagle algorithm since we use our own buffers
+      KeepAlive := 1; // enable TCP keepalive (even if we rely on transport layer)
+    end;
     if aTLS and (aSock<=0) and not doBind then
       try
         {$ifdef MSWINDOWS}
