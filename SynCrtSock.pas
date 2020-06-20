@@ -6413,6 +6413,13 @@ begin
   // main server process loop
   try
     fSock := TCrtSocket.Bind(fSockPort); // BIND + LISTEN
+    {$ifdef LINUXNOTBSD}
+    // in case we started by systemd, listening socket is created by another process
+    // and do not interrupt while process got a signal. So we need to set a timeout to
+    // unblock accept() periodically and check we need terminations
+    if fSockPort = '' then // external socket
+      fSock.ReceiveTimeout := 1000; // unblock accept every second
+    {$endif}
     fExecuteState := esRunning;
     if fSock.Sock<=0 then // paranoid (Bind would have raise an exception)
       raise ECrtSocket.Create('THttpServer.Execute: TCrtSocket.Bind failed');

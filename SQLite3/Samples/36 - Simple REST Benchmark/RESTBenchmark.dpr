@@ -143,8 +143,7 @@ begin
         {$ifdef LINUX}
         SynDaemonIntercept(nil);
         writeln('Press [Ctrl+C] or send SIGINT/SIGTERM to close the server.');
-        while SynDaemonTerminated = 0 do
-          fpPause;
+        fpPause;
         {$else}
         write('Press [Enter] to close the server.');
         readln;
@@ -169,13 +168,16 @@ function inactivityWatchdog(p: pointer): ptrint;
 var currentRC: TSynMonitorCount64;
 begin
   repeat
+    sleep(10000); /// once per 10 second
+    if aRestServer = nil then // not initialized
+      continue;
     currentRC := aRestServer.Stats.Read;
     if (currentRC - lastReadCount) <= 0 then begin
+      SQLite3Log.Add.Log(sllServer, 'Terminating due to inactivity..');
       FpKill(GetProcessID, SIGTERM);
       break;
     end;
     lastReadCount := currentRC;
-    sleep(10000); /// once per 10 second
   until false;
   Result := 0;
 end;

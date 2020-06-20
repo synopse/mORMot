@@ -39,7 +39,7 @@ in RESTBEnchmark by passing `false` to then second parameter
 
 ### How to run
 
- - compile program and run with `unix` parameter
+ - compile a program and run with `unix` parameter
 ```
 ./RESTBenchmark unix
 ```
@@ -70,7 +70,8 @@ wrk http://localhost:8888/root/abc
  - journald logging
  - auto shutdown on inactivity
 
-Once - add our service to systemd
+Add our service to systemd (should be executed once).
+This command activate `rest_benchmark` socket on port 8889
 ```
 sudo ./installSystemSocket.sh
 ```
@@ -80,21 +81,20 @@ Kill possible instances of RESTBenchmark program
 killall -TERM RESTBenchmark
 ```
 
-Now program is **NOT running**, lets send an HTTP request
+Now program is **NOT running**, lets send an HTTP request to a port configured in `rest_benchmark.socket` unit.
 ```
-curl  http://localhost:8888/root/abc
+curl  http://localhost:8889/root/xyz
 ```
+Magic - we got a response :) This is how systemd socket activation works.
 
-Magik!! We got a response :) This is how systemd socket activation works.
+In case our program is activated by systemd it's designed to 
+ - log all activity into journald (see EchoToConsoleUseJournal)
+ - stop after 10 seconds without GET requests (see inactivityWatchdog in RESTBenchmark.dpr)
 
-In case program activated by systemd it's designed to 
- - log all activity into journald
- - stop after 10 secong without GET requests
-
-Open new termonal window and run a comand to see all new logs for our service
-````
+Open new terminal window and run a command to watch logs from `rest_benchmark` services 
+```
 journalctl -u rest_benchmark.service -f
 ```
 
-and wait for 10 second
+Now wait for 10 second - service should shut down itself. 
 
