@@ -7885,7 +7885,7 @@ type
     PackedContext: pointer;
     MutualAuthDataLength: ULONG;
     pMutualAuthData: PAnsiChar;
-    PackageNameLength: USHORT;
+    PackageNameLength: word;
     pPackageName: LPWSTR;
   end;
   PHTTP_REQUEST_AUTH_INFO = ^HTTP_REQUEST_AUTH_INFO;
@@ -7897,12 +7897,6 @@ type
   end;
   HTTP_REQUEST_INFOS = array[0..1000] of HTTP_REQUEST_INFO;
   PHTTP_REQUEST_INFOS = ^HTTP_REQUEST_INFOS;
-
-  /// v2 trailing structure used to handle extended info about a specific request
-  HTTP_REQUEST_V2 = record
-    RequestInfoCount: word;
-    pRequestInfo: PHTTP_REQUEST_INFOS;
-  end;
 
   /// structure used to handle data associated with a specific request
   HTTP_REQUEST = record
@@ -7942,8 +7936,14 @@ type
     RawConnectionId: HTTP_RAW_CONNECTION_ID;
     // SSL connection information
     pSslInfo: PHTTP_SSL_INFO;
-    // beginning of HTTP_REQUEST_V2 structure
-    V2: HTTP_REQUEST_V2;
+    { beginning of HTTP_REQUEST_V2 structure - manual padding is needed :( }
+    {$ifdef CPU32}
+    padding: dword;
+    {$endif CPU32}
+    /// how many extended info about a specific request is available in v2
+    RequestInfoCount: word;
+    /// v2 trailing structure used to handle extended info about a specific request
+    pRequestInfo: PHTTP_REQUEST_INFOS;
   end;
   PHTTP_REQUEST = ^HTTP_REQUEST;
 
@@ -9223,9 +9223,9 @@ begin
         end;
         // retrieve any SetAuthenticationSchemes() information
         if byte(fAuthenticationSchemes)<>0 then // set only with HTTP API 2.0
-          for i := 0 to Req^.V2.RequestInfoCount-1 do
-          if Req^.V2.pRequestInfo^[i].InfoType=HttpRequestInfoTypeAuth then
-            with PHTTP_REQUEST_AUTH_INFO(Req^.V2.pRequestInfo^[i].pInfo)^ do
+          for i := 0 to Req^.RequestInfoCount-1 do
+          if Req^.pRequestInfo^[i].InfoType=HttpRequestInfoTypeAuth then
+            with PHTTP_REQUEST_AUTH_INFO(Req^.pRequestInfo^[i].pInfo)^ do
             case AuthStatus of
             HttpAuthStatusSuccess:
             if AuthType>HttpRequestAuthTypeNone then begin

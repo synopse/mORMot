@@ -179,10 +179,16 @@ type
     function FindLocation(aAddressAbsolute: PtrUInt): RawUTF8; overload;
     /// return the symbol location according to the supplied ESynException
     // - i.e. unit name, symbol name and line number (if any), as plain text
+    // - under FPC, currently calls BacktraceStrFunc() which may be very slow
     class function FindLocation(exc: ESynException): RawUTF8; overload;
+    /// return the low-level stack trace exception information into human-friendly text
+    class function FindStackTrace(const Ctxt: TSynLogExceptionContext): TRawUTF8DynArray;
     /// returns the file name of
     // - if unitname = '', returns the main file name of the current executable
     class function FindFileName(const unitname: RawUTF8): TFileName;
+    /// returns the global TSynMapFile instance associated with the current
+    // executable
+    class function FromCurrentExecutable: TSynMapFile;
     /// all symbols associated to the executable
     property Symbols: TSynMapSymbolDynArray read fSymbol;
     /// all units, including line numbers, associated to the executable
@@ -1541,7 +1547,6 @@ function GetLastExceptions(Depth: integer=0): variant; overload;
 /// convert low-level exception information into some human-friendly text
 function ToText(var info: TSynLogExceptionInfo): RawUTF8; overload;
 
-
 /// a TSynLogArchiveEvent handler which will delete older .log files
 function EventArchiveDelete(const aOldLogFileName, aDestinationPath: TFileName): boolean;
 
@@ -2257,14 +2262,20 @@ begin
     PointerToHex(pointer(aAddressAbsolute),result);
     exit;
   end;
-  result := '';
   offset := AbsoluteToOffset(aAddressAbsolute);
   s := FindSymbol(offset);
   u := FindUnit(offset,Line);
-  if (s<0) and (u<0) then
+  if (s<0) and (u<0) then begin
+    {$ifdef FPC} // note: BackTraceStrFunc is much slower than TSynMapFile.Log
+    if @BackTraceStrFunc=@SysBackTraceStr then // has debug information?
+      PointerToHex(pointer(aAddressAbsolute),result) else
+      ShortStringToAnsi7String(BackTraceStrFunc(pointer(aAddressAbsolute)),result);
+    {$endif FPC}
     exit;
+  end;
+  result := result+' ';
   if u>=0 then begin
-    result := Units[u].Symbol.Name;
+    result := result+Units[u].Symbol.Name;
     if s>=0 then
       if Symbols[s].Name=result then
         s := -1 else
@@ -2281,6 +2292,19 @@ begin
   if (exc=nil) or (exc.RaisedAt=nil) then
     result := '' else
     result := GetInstanceMapFile.FindLocation(PtrUInt(exc.RaisedAt));
+end;
+
+class function TSynMapFile.FindStackTrace(
+  const Ctxt: TSynLogExceptionContext): TRawUTF8DynArray;
+var i: PtrInt;
+    exe: TSynMapFile;
+begin
+  result := nil;
+  exe := GetInstanceMapFile;
+  AddRawUTF8(result,exe.FindLocation(Ctxt.EAddr));
+  for i := 0 to Ctxt.EStackCount-1 do
+    if (i=0) or (PPtrUIntArray(Ctxt.EStack)[i]<>PPtrUIntArray(Ctxt.EStack)[i-1]) then
+      AddRawUTF8(result,exe.FindLocation(PPtrUIntArray(Ctxt.EStack)[i]));
 end;
 
 function TSynMapFile.FindUnit(const aUnitName: RawUTF8): integer;
@@ -2307,6 +2331,11 @@ begin
   u := map.FindUnit(name);
   if u>=0 then
     result := UTF8ToString(map.fUnit[u].FileName);
+end;
+
+class function TSynMapFile.FromCurrentExecutable: TSynMapFile;
+begin
+  result := GetInstanceMapFile;
 end;
 
 
@@ -2670,7 +2699,7 @@ begin
          DefaultSynLogExceptionToStr(log.fWriter,Ctxt) then
         goto fin;
 adr:  log.fWriter.Add(' [%] at ',[log.fThreadContext^.ThreadName],twOnSameLine);
-      {$ifdef FPC} // note: BackTraceStrFunc is slower than TSynMapFile.Log
+      {$ifdef FPC} // note: BackTraceStrFunc is much slower than TSynMapFile.Log
       with log.fWriter do
       if @BackTraceStrFunc=@SysBackTraceStr then begin // no debug information
         AddPointer(Ctxt.EAddr); // write addresses as hexa

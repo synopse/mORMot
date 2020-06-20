@@ -13,6 +13,7 @@ Contributors
   AlexPirate
   Alfred Glaenzer (alf)
   Andre Heider (dhewg)
+  Antoine Simard (AntoineGS)
   Arnaud Bouchez
   ASiwon
   Aweste
