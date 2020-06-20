@@ -9183,6 +9183,9 @@ begin
     repeat
       Context.fInContent := ''; // release input/output body buffers ASAP
       Context.fOutContent := '';
+      // Reset AuthenticationStatus & user between requests
+      Context.fAuthenticationStatus := hraNone; 
+      Context.fAuthenticatedUser := '';
       // retrieve next pending request, and read its headers
       fillchar(Req^,sizeof(HTTP_REQUEST),0);
       Err := Http.ReceiveHttpRequest(fReqQueue,ReqID,0,Req^,length(ReqBuf),bytesRead);
@@ -9230,8 +9233,12 @@ begin
             HttpAuthStatusSuccess:
             if AuthType>HttpRequestAuthTypeNone then begin
               byte(Context.fAuthenticationStatus) := ord(AuthType)+1;
-              if AccessToken<>0 then
+              if AccessToken<>0 then begin
                 GetDomainUserNameFromToken(AccessToken,Context.fAuthenticatedUser);
+                // Per spec https://docs.microsoft.com/en-us/windows/win32/http/authentication-in-http-version-2-0
+                // AccessToken lifecycle is application responsability and should be closed after use 
+                CloseHandle(AccessToken);
+              end;
             end;
             HttpAuthStatusFailure:
               Context.fAuthenticationStatus := hraFailed;
