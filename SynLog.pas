@@ -577,7 +577,7 @@ type
     // into journald service.
     // - such logs can exported in format what can be viewed by LogView tool using
     // a command (raplace UNIT with your unit name and PROCESS with executable name):
-    // "journalctl -u UNIT --no-hostname -o short-iso-precise --since today | grep "PROCESS\[.*\]:   . " > todaysLog.log"
+    // "journalctl -u UNIT --no-hostname -o short-iso-precise --since today | grep "PROCESS\[.*\]:  . " > todaysLog.log"
     property EchoToConsoleUseJournal: boolean read fEchoToConsoleUseJournal
       write SetEchoToConsoleUseJournal;
     /// can be set to a callback which will be called for each log line
@@ -5417,7 +5417,7 @@ begin
       p := PosChar(LineBeg, ']'); //time proc[pid]:
       if p = nil then
         exit; // not a log
-      fLineLevelOffset := (p - LineBeg) + 5; // ":   " for :
+      fLineLevelOffset := (p - LineBeg) + 4; // ":  "
       fDayCurrent := PInt64(LineBeg+dcOffset)^;
     end else if LineBeg[8]=' ' then begin
       // YYYYMMDD HHMMSS is one char bigger than Timestamp

@@ -67,22 +67,22 @@ wrk http://localhost:8888/root/abc
 ### systemd integration
 
  - socket activation
- - journald logging
+ - journald logging (can be exported for LogView program)
  - auto shutdown on inactivity
 
 Add our service to systemd (should be executed once).
 This command activate `rest_benchmark` socket on port 8889
-```
+```bash
 sudo ./installSystemSocket.sh
 ```
 
 Kill possible instances of RESTBenchmark program
-```
+```bash
 killall -TERM RESTBenchmark
 ```
 
 Now program is **NOT running**, lets send an HTTP request to a port configured in `rest_benchmark.socket` unit.
-```
+```bash
 curl  http://localhost:8889/root/xyz
 ```
 Magic - we got a response :) This is how systemd socket activation works.
@@ -92,9 +92,16 @@ In case our program is activated by systemd it's designed to
  - stop after 10 seconds without GET requests (see inactivityWatchdog in RESTBenchmark.dpr)
 
 Open new terminal window and run a command to watch logs from `rest_benchmark` services 
-```
+```bash
 journalctl -u rest_benchmark.service -f
 ```
 
-Now wait for 10 second - service should shut down itself. 
+Now wait for 10 second - service should shut down itself.
 
+### journald and LogView (Samples/11 - Exception logging) 
+
+Logs from journald can be exported to format LogView understand. Example:
+```bash
+journalctl -u rest_benchmark.service --no-hostname -o short-iso-precise --since today | grep "RESTBenchmark\[.*\]:  . " > todaysLog.log
+``` 
+better to grep by program PID `"RESTBenchmark\[12345]:  . "` to include only one start/stop circle (on 2020-06 LogView do not allow to filter on PIDs)
