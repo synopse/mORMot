@@ -62,3 +62,39 @@ sudo nginx -s reload
 ```
 wrk http://localhost:8888/root/abc
 ```
+
+
+### systemd integration
+
+ - socket activation
+ - journald logging
+ - auto shutdown on inactivity
+
+Once - add our service to systemd
+```
+sudo ./installSystemSocket.sh
+```
+
+Kill possible instances of RESTBenchmark program
+```
+killall -TERM RESTBenchmark
+```
+
+Now program is **NOT running**, lets send an HTTP request
+```
+curl  http://localhost:8888/root/abc
+```
+
+Magik!! We got a response :) This is how systemd socket activation works.
+
+In case program activated by systemd it's designed to 
+ - log all activity into journald
+ - stop after 10 secong without GET requests
+
+Open new termonal window and run a comand to see all new logs for our service
+````
+journalctl -u rest_benchmark.service -f
+```
+
+and wait for 10 second
+

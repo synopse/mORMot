@@ -39,6 +39,7 @@
     </Target>
     <SearchPaths>
       <IncludeFiles Value="../..;../../..;$(ProjOutDir;$(ProjOutDir)"/>
+      <Libraries Value="../../../static/$(TargetCPU)-$(TargetOS)"/>
       <OtherUnitFiles Value="../..;../../.."/>
       <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
