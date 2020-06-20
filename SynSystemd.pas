@@ -32,6 +32,7 @@ const
   SD_LISTEN_FDS_START = 3;
   /// low-level libcurl library file name, depending on the running OS
   LIBSYSTEMD_PATH = 'libsystemd.so.0';
+  ENV_INVOCATION_ID = 'INVOCATION_ID';
 
 type
   /// low-level exception raised during systemd library access
@@ -53,17 +54,32 @@ var
     {$else}
     Module: THandle;
     {$endif FPC}
+    /// returns how many file descriptors have been passed to process.
+    // If result=1 then socket for accepting connection is SD_LISTEN_FDS_START
     listen_fds: function(unset_environment: integer): integer; cdecl;
-    is_socket_unix: function(fd, typr, listening: integer; var path: TFileName; pathLength: PtrUInt): integer; cdecl;
+    /// returns 1 if the file descriptor is an AF_UNIX socket of the specified type and path
+    is_socket_unix: function(fd, typr, listening: integer;
+      var path: TFileName; pathLength: PtrUInt): integer; cdecl;
     /// submit simple, plain text log entries to the system journal
     // priority can be obtained using longint(LOG_TO_SYSLOG[logLevel])
     journal_print: function(priority: longint; args: array of const): longint; cdecl;
+    /// sends notification to systemd. See https://www.freedesktop.org/software/systemd/man/sd_notify.html
+    // status notification sample: sd.notify(0, 'READY=1');
+    // watchdog notification: sd.notify(0, 'WATCHDOG=1');
+    notify: function(unset_environment: longint; state: PUTF8Char): longint; cdecl;
+    /// check whether the service manager expects watchdog keep-alive notifications from a service
+    // If result > 0 then usec contains notification interval (app should notify every usec\2 uniseconds)
+    watchdog_enabled: function(unset_environment: longint; usec: Puint64): longint; cdecl;
   end;
 
 /// return TRUE if a systemd library is available
 // - will load and initialize it, calling LibSystemdInitialize if necessary,
 // catching any exception during the process
 function SystemdIsAvailable: boolean;
+
+/// Return true in case process is started by systemd
+// For systemd v232+
+function ProcessIsStartedBySystemd: boolean;
 
 /// initialize the libsystemd API
 // - do nothing if the library has already been loaded
@@ -73,6 +89,7 @@ procedure LibSystemdInitialize(const libname: TFileName=LIBSYSTEMD_PATH);
 implementation
 
 uses
+  BaseUnix,
   SynFPCSock; // SynSockCS
 
 function SystemdIsAvailable: boolean;
@@ -86,12 +103,19 @@ begin
   end;
 end;
 
+function ProcessIsStartedBySystemd: boolean;
+begin
+  if not SystemdIsAvailable then
+    exit(false);
+  Result := fpGetenv(ENV_INVOCATION_ID) <> nil;
+end;
+
 procedure LibSystemdInitialize(const libname: TFileName);
 var P: PPointer;
     api: integer;
     h: {$ifdef FPC}TLibHandle{$else}THandle{$endif FPC};
-const NAMES: array[0..2] of string = (
-  'sd_listen_fds', 'sd_is_socket_unix', 'sd_journal_print');
+const NAMES: array[0..4] of string = (
+  'sd_listen_fds', 'sd_is_socket_unix', 'sd_journal_print', 'sd_notify', 'sd_watchdog_enabled');
 begin
   EnterCriticalSection(SynSockCS);
   try
