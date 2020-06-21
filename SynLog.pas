@@ -459,6 +459,7 @@ type
     fExceptionIgnore: TList;
     fOnBeforeException: TSynLogOnBeforeException;
     fEchoToConsole: TSynLogInfos;
+    fEchoToConsoleUseJournal: boolean;
     fEchoCustom: TOnTextWriterEcho;
     fEchoRemoteClient: TObject;
     fEchoRemoteClientOwned: boolean;
@@ -475,6 +476,7 @@ type
     procedure SetLevel(aLevel: TSynLogInfos);
     procedure SynLogFileListEcho(const aEvent: TOnTextWriterEcho; aEventAdd: boolean);
     procedure SetEchoToConsole(aEnabled: TSynLogInfos);
+    procedure SetEchoToConsoleUseJournal(aValue: boolean);
     procedure SetEchoCustom(const aEvent: TOnTextWriterEcho);
     function GetSynLogClassName: string;
     function GetExceptionIgnoreCurrentThread: boolean;
@@ -565,6 +567,13 @@ type
     // - can be set e.g. to LOG_VERBOSE in order to echo every kind of events
     // - EchoCustom or EchoToConsole can be activated separately
     property EchoToConsole: TSynLogInfos read fEchoToConsole write SetEchoToConsole;
+    /// For Linux with journald. If true - redirect all EchoToConsole logging
+    // into journald service.
+    // - such logs can exported in format what can be viewed by LogView tool using
+    // a command (raplace UNIT with your unit name and PROCESS with executable name):
+    // "journalctl -u UNIT --no-hostname -o short-iso-precise --since today | grep "PROCESS\[.*\]:  . " > todaysLog.log"
+    property EchoToConsoleUseJournal: boolean read fEchoToConsoleUseJournal
+      write SetEchoToConsoleUseJournal;
     /// can be set to a callback which will be called for each log line
     // - could be used with a third-party logging system
     // - EchoToConsole or EchoCustom can be activated separately
@@ -1574,7 +1583,11 @@ implementation
 uses
   SynFPCTypInfo // small wrapper unit around FPC's TypInfo.pp
   {$ifdef Linux}
-  , SynFPCLinux, BaseUnix, Unix, Errors, dynlibs
+  , SynFPCLinux, BaseUnix, Unix, Errors,
+  {$ifdef LINUXNOTBSD}
+  SynSystemd,
+  {$endif}
+  dynlibs
   {$endif} ;
 {$endif FPC}
 
@@ -3160,6 +3173,18 @@ begin
   fEchoToConsole := aEnabled;
 end;
 
+procedure TSynLogFamily.SetEchoToConsoleUseJournal(aValue: boolean);
+begin
+  if self=nil then
+    exit;
+  {$ifdef LINUXNOTBSD}
+  if aValue and SynSystemd.SystemdIsAvailable then
+    fEchoToConsoleUseJournal := true
+  else
+  {$endif}
+    fEchoToConsoleUseJournal := false;
+end;
+
 function TSynLogFamily.GetSynLogClassName: string;
 begin
   if self=nil then
@@ -4069,6 +4094,14 @@ begin
   result := true;
   if not (Level in fFamily.fEchoToConsole) then
     exit;
+  {$ifdef LINUXNOTBSD}
+  if Family.EchoToConsoleUseJournal then begin
+    // skip time "20200615 08003008  ." - journal do it for us; and first space after it
+    if length(Text) > 18 then
+      sd.journal_print(longint(LOG_TO_SYSLOG[Level]), [PUTF8Char(pointer(Text))+18]);
+    exit;
+  end;
+  {$endif}
   TextColor(LOG_CONSOLE_COLORS[Level]);
   {$ifdef MSWINDOWS}
   tmp := CurrentAnsiConvert.UTF8ToAnsi(Text);
@@ -4077,7 +4110,7 @@ begin
   {$endif}
   writeln(tmp);
   {$else}
-  write(Text,#13#10);
+  writeln(Text);
   {$endif}
   ioresult;
   TextColor(ccLightGray);
@@ -5355,7 +5388,7 @@ begin
       p := PosChar(LineBeg, ']'); //time proc[pid]:
       if p = nil then
         exit; // not a log
-      fLineLevelOffset := (p - LineBeg) + 5; // ":   " for :
+      fLineLevelOffset := (p - LineBeg) + 4; // ":  "
       fDayCurrent := PInt64(LineBeg+dcOffset)^;
     end else if LineBeg[8]=' ' then begin
       // YYYYMMDD HHMMSS is one char bigger than Timestamp
