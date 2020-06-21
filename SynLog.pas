@@ -459,6 +459,7 @@ type
     fExceptionIgnore: TList;
     fOnBeforeException: TSynLogOnBeforeException;
     fEchoToConsole: TSynLogInfos;
+    fEchoToConsoleUseJournal: boolean;
     fEchoCustom: TOnTextWriterEcho;
     fEchoRemoteClient: TObject;
     fEchoRemoteClientOwned: boolean;
@@ -475,6 +476,7 @@ type
     procedure SetLevel(aLevel: TSynLogInfos);
     procedure SynLogFileListEcho(const aEvent: TOnTextWriterEcho; aEventAdd: boolean);
     procedure SetEchoToConsole(aEnabled: TSynLogInfos);
+    procedure SetEchoToConsoleUseJournal(aValue: boolean);
     procedure SetEchoCustom(const aEvent: TOnTextWriterEcho);
     function GetSynLogClassName: string;
     function GetExceptionIgnoreCurrentThread: boolean;
@@ -565,6 +567,13 @@ type
     // - can be set e.g. to LOG_VERBOSE in order to echo every kind of events
     // - EchoCustom or EchoToConsole can be activated separately
     property EchoToConsole: TSynLogInfos read fEchoToConsole write SetEchoToConsole;
+    /// For Linux with journald. If true - redirect all EchoToConsole logging
+    // into journald service.
+    // - such logs can exported in format what can be viewed by LogView tool using
+    // a command (raplace UNIT with your unit name and PROCESS with executable name):
+    // "journalctl -u UNIT --no-hostname -o short-iso-precise --since today | grep "PROCESS\[.*\]:  . " > todaysLog.log"
+    property EchoToConsoleUseJournal: boolean read fEchoToConsoleUseJournal
+      write SetEchoToConsoleUseJournal;
     /// can be set to a callback which will be called for each log line
     // - could be used with a third-party logging system
     // - EchoToConsole or EchoCustom can be activated separately
@@ -1164,6 +1173,7 @@ type
     fLogProcSortInternalOrder: TLogProcSortOrder;
     /// used by ProcessOneLine//GetLogLevelTextMap
     fLogLevelsTextMap: array[TSynLogInfo] of cardinal;
+    fIsJournald: boolean;
     procedure SetLogProcMerged(const Value: boolean);
     function GetEventText(index: integer): RawUTF8;
     function GetLogLevelFromText(LineBeg: PUTF8Char): TSynLogInfo;
@@ -1573,7 +1583,11 @@ implementation
 uses
   SynFPCTypInfo // small wrapper unit around FPC's TypInfo.pp
   {$ifdef Linux}
-  , SynFPCLinux, BaseUnix, Unix, Errors, dynlibs
+  , SynFPCLinux, BaseUnix, Unix, Errors,
+  {$ifdef LINUXNOTBSD}
+  SynSystemd,
+  {$endif}
+  dynlibs
   {$endif} ;
 {$endif FPC}
 
@@ -3159,6 +3173,18 @@ begin
   fEchoToConsole := aEnabled;
 end;
 
+procedure TSynLogFamily.SetEchoToConsoleUseJournal(aValue: boolean);
+begin
+  if self=nil then
+    exit;
+  {$ifdef LINUXNOTBSD}
+  if aValue and SynSystemd.SystemdIsAvailable then
+    fEchoToConsoleUseJournal := true
+  else
+  {$endif}
+    fEchoToConsoleUseJournal := false;
+end;
+
 function TSynLogFamily.GetSynLogClassName: string;
 begin
   if self=nil then
@@ -4068,6 +4094,14 @@ begin
   result := true;
   if not (Level in fFamily.fEchoToConsole) then
     exit;
+  {$ifdef LINUXNOTBSD}
+  if Family.EchoToConsoleUseJournal then begin
+    // skip time "20200615 08003008  ." - journal do it for us; and first space after it
+    if length(Text) > 18 then
+      sd.journal_print(longint(LOG_TO_SYSLOG[Level]), [PUTF8Char(pointer(Text))+18]);
+    exit;
+  end;
+  {$endif}
   TextColor(LOG_CONSOLE_COLORS[Level]);
   {$ifdef MSWINDOWS}
   tmp := CurrentAnsiConvert.UTF8ToAnsi(Text);
@@ -4076,7 +4110,7 @@ begin
   {$endif}
   writeln(tmp);
   {$else}
-  write(Text,#13#10);
+  writeln(Text);
   {$endif}
   ioresult;
   TextColor(ccLightGray);
@@ -5050,76 +5084,99 @@ var aWow64, feat: RawUTF8;
     OK: boolean;
 begin
   // 1. calculate fLines[] + fCount and fLevels[] + fLogProcNatural[] from .log content
-  fLineHeaderCountToIgnore := 3;
+  fLineHeaderCountToIgnore := 3; fIsJournald := false;
+  if IdemPChar(fMap.Buffer,'-- LOGS BEGIN AT') then begin
+    //-- Logs begin at Sun 2020-06-07 12:42:31 EEST, end at Thu 2020-06-18 18:08:52 EEST. --
+    fIsJournald := true;
+    fHeaderLinesCount := 1;
+    fLineHeaderCountToIgnore := 1;
+  end else begin
+    //2020-06-18T13:28:20.754089+0300 ub[12316]:
+    Iso8601ToDateTimePUTF8CharVar(fMap.Buffer,26,fStartDateTime);
+    if fStartDateTime > 0 then begin
+      fIsJournald := true;
+      fHeaderLinesCount := 0;
+      fLineHeaderCountToIgnore := 0;
+    end;
+  end;
   inherited LoadFromMap(100);
   // 2. fast retrieval of header
   OK := false;
   try
-{  C:\Dev\lib\SQLite3\exe\TestSQL3.exe 0.0.0.0 (2011-04-07 11:09:06)
-   Host=BW013299 User=G018869 CPU=1*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545
-   TSynLog 1.13 LVCL 2011-04-07 12:04:09 }
-    if (fCount<=fLineHeaderCountToIgnore) or LineSizeSmallerThan(0,24) or
-       not IdemPChar(fLines[1],'HOST=') or (fLevels=nil) or (fLineLevelOffset=0) then
-      exit;
-    PBeg := fLines[0];
-    PEnd := PBeg+LineSize(0)-12;
-    if PEnd<PBeg then
-      exit;
-    if PEnd^='(' then begin  // '(2011-04-07)' format
-      if (PEnd[-1]<>' ') or (PEnd[0]<>'(') or (PEnd[11]<>')') then
+    // journald export
+    if fIsJournald then begin
+      if LineSizeSmallerThan(1,34) then exit;
+      Iso8601ToDateTimePUTF8CharVar(fLines[1],26,fStartDateTime);
+      if fStartDateTime=0 then
         exit;
-      Iso8601ToDateTimePUTF8CharVar(PEnd+1,10,fExeDate);
-    end else begin  // '(2011-04-07 11:09:06)' format
-      dec(PEnd,9);
-      if (PEnd<PBeg) or (PEnd[-1]<>' ') or (PEnd[0]<>'(') or (PEnd[20]<>')') then
+    end else begin
+    // SynLog original
+  {  C:\Dev\lib\SQLite3\exe\TestSQL3.exe 0.0.0.0 (2011-04-07 11:09:06)
+     Host=BW013299 User=G018869 CPU=1*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545
+     TSynLog 1.13 LVCL 2011-04-07 12:04:09 }
+      if (fCount<=fLineHeaderCountToIgnore) or LineSizeSmallerThan(0,24) or
+         not IdemPChar(fLines[1],'HOST=') or (fLevels=nil) or (fLineLevelOffset=0) then
         exit;
-      Iso8601ToDateTimePUTF8CharVar(PEnd+1,19,fExeDate);
+      PBeg := fLines[0];
+      PEnd := PBeg+LineSize(0)-12;
+      if PEnd<PBeg then
+        exit;
+      if PEnd^='(' then begin  // '(2011-04-07)' format
+        if (PEnd[-1]<>' ') or (PEnd[0]<>'(') or (PEnd[11]<>')') then
+          exit;
+        Iso8601ToDateTimePUTF8CharVar(PEnd+1,10,fExeDate);
+      end else begin  // '(2011-04-07 11:09:06)' format
+        dec(PEnd,9);
+        if (PEnd<PBeg) or (PEnd[-1]<>' ') or (PEnd[0]<>'(') or (PEnd[20]<>')') then
+          exit;
+        Iso8601ToDateTimePUTF8CharVar(PEnd+1,19,fExeDate);
+      end;
+      dec(PEnd);
+      P := PEnd;
+      repeat if P<=PBeg then exit else dec(P) until P^=' ';
+      FastSetString(fExeVersion,P+1,PEnd-P-1);
+      repeat dec(P); if P<=PBeg then exit; until P^<>' ';
+      FastSetString(fExeName,PBeg,P-PBeg+1);
+      PBeg := PUTF8Char(fLines[1])+5;
+      PEnd := PUTF8Char(fLines[1])+LineSize(1);
+      if not GetOne(' USER=',fHost) or not GetOne(' CPU=',fUser) or
+         not GetOne(' OS=',fCPU)    or not GetOne(' WOW64=',fOsDetailed) or
+         not GetOne(' FREQ=',aWow64) then
+        exit;
+      Split(fCPU,':',fCpu,feat);
+      SynCommons.HexToBin(pointer(feat),@fIntelCPU,SizeOf(fIntelCPU));
+      fWow64 := aWow64='1';
+      SetInt64(PBeg,fFreq);
+      while (PBeg<PEnd) and (PBeg^>' ') do inc(PBeg);
+      if IdemPChar(PBeg,' INSTANCE=') then // only available for a library log
+        FastSetString(fInstanceName,PBeg+10,PEnd-PBeg-10);
+      fHeaderLinesCount := 4;
+      while fHeaderLinesCount<fCount do begin
+        if PAnsiChar(fLines[fHeaderLinesCount-1])^<' ' then
+          break; // end of header = void line
+        inc(fHeaderLinesCount);
+      end;
+      if (LineSize(fHeaderLinesCount-1)<>0) or
+         LineSizeSmallerThan(fHeaderLinesCount,16) then
+        exit;
+      if fHeaderLinesCount<>4 then
+        FastSetString(fHeaders,fLines[2],PtrUInt(fLines[fHeaderLinesCount-2])-PtrUInt(fLines[2]));
+      if PWord(fLines[fHeaderLinesCount])^<>ord('0')+ord('0')shl 8 then // YYYYMMDD -> 20101225 e.g.
+        fFreq := 0 else // =0 if date time, >0 if high-resolution time stamp
+        fFreqPerDay := fFreq*SecsPerDay;
+      P := pointer(fOSDetailed);
+      fOS := TWindowsVersion(GetNextItemCardinal(P,'.'));
+      if fOS<>wUnknown then
+        fOSServicePack := GetNextItemCardinal(P);
+      P := fLines[fHeaderLinesCount-2]; // TSQLLog 1.18.2765 ERTL FTS3 2016-07-17T22:38:03
+      i := LineSize(fHeaderLinesCount-2)-19; // length('2016-07-17T22:38:03')=19
+      if i>0 then begin
+        FastSetString(fFramework,PAnsiChar(P),i-1);
+        Iso8601ToDateTimePUTF8CharVar(P+i,19,fStartDateTime);
+      end;
+      if fStartDateTime=0 then
+        exit;
     end;
-    dec(PEnd);
-    P := PEnd;
-    repeat if P<=PBeg then exit else dec(P) until P^=' ';
-    FastSetString(fExeVersion,P+1,PEnd-P-1);
-    repeat dec(P); if P<=PBeg then exit; until P^<>' ';
-    FastSetString(fExeName,PBeg,P-PBeg+1);
-    PBeg := PUTF8Char(fLines[1])+5;
-    PEnd := PUTF8Char(fLines[1])+LineSize(1);
-    if not GetOne(' USER=',fHost) or not GetOne(' CPU=',fUser) or
-       not GetOne(' OS=',fCPU)    or not GetOne(' WOW64=',fOsDetailed) or
-       not GetOne(' FREQ=',aWow64) then
-      exit;
-    Split(fCPU,':',fCpu,feat);
-    SynCommons.HexToBin(pointer(feat),@fIntelCPU,SizeOf(fIntelCPU));
-    fWow64 := aWow64='1';
-    SetInt64(PBeg,fFreq);
-    while (PBeg<PEnd) and (PBeg^>' ') do inc(PBeg);
-    if IdemPChar(PBeg,' INSTANCE=') then // only available for a library log
-      FastSetString(fInstanceName,PBeg+10,PEnd-PBeg-10);
-    fHeaderLinesCount := 4;
-    while fHeaderLinesCount<fCount do begin
-      if PAnsiChar(fLines[fHeaderLinesCount-1])^<' ' then
-        break; // end of header = void line
-      inc(fHeaderLinesCount);
-    end;
-    if (LineSize(fHeaderLinesCount-1)<>0) or
-       LineSizeSmallerThan(fHeaderLinesCount,16) then
-      exit;
-    if fHeaderLinesCount<>4 then
-      FastSetString(fHeaders,fLines[2],PtrUInt(fLines[fHeaderLinesCount-2])-PtrUInt(fLines[2]));
-    if PWord(fLines[fHeaderLinesCount])^<>ord('0')+ord('0')shl 8 then // YYYYMMDD -> 20101225 e.g.
-      fFreq := 0 else // =0 if date time, >0 if high-resolution time stamp
-      fFreqPerDay := fFreq*SecsPerDay;
-    P := pointer(fOSDetailed);
-    fOS := TWindowsVersion(GetNextItemCardinal(P,'.'));
-    if fOS<>wUnknown then
-      fOSServicePack := GetNextItemCardinal(P);
-    P := fLines[fHeaderLinesCount-2]; // TSQLLog 1.18.2765 ERTL FTS3 2016-07-17T22:38:03
-    i := LineSize(fHeaderLinesCount-2)-19; // length('2016-07-17T22:38:03')=19
-    if i>0 then begin
-      FastSetString(fFramework,PAnsiChar(P),i-1);
-      Iso8601ToDateTimePUTF8CharVar(P+i,19,fStartDateTime);
-    end;
-    if fStartDateTime=0 then
-      exit;
     // 3. compute fCount and fLines[] so that all fLevels[]<>sllNone
     CleanLevels(self);
     if Length(fLevels)-fCount>16384 then begin // size down only if worth it
@@ -5313,16 +5370,27 @@ procedure TSynLogFile.ProcessOneLine(LineBeg, LineEnd: PUTF8Char);
 var thread,n: cardinal;
     MS: integer;
     L: TSynLogInfo;
+    p: PUTF8Char; dcOffset: integer;
 begin
   inherited ProcessOneLine(LineBeg,LineEnd);
   if length(fLevels)<fLinesMax then
     SetLength(fLevels,fLinesMax);
   if (fCount<=fLineHeaderCountToIgnore) or (LineEnd-LineBeg<24) then
     exit;
+  if fIsJournald then
+    dcOffset := 2 // point to last 2 digit of year
+  else
+    dcOffset := 0;
   if fLineLevelOffset=0 then begin
     if (fCount>50) or not (LineBeg[0] in ['0'..'9']) then
       exit; // definitively does not sound like a .log content
-    if LineBeg[8]=' ' then begin
+    if fIsJournald then begin
+      p := PosChar(LineBeg, ']'); //time proc[pid]:
+      if p = nil then
+        exit; // not a log
+      fLineLevelOffset := (p - LineBeg) + 4; // ":  "
+      fDayCurrent := PInt64(LineBeg+dcOffset)^;
+    end else if LineBeg[8]=' ' then begin
       // YYYYMMDD HHMMSS is one char bigger than Timestamp
       fLineLevelOffset := 19;
       fDayCurrent := PInt64(LineBeg)^;
@@ -5342,8 +5410,8 @@ begin
   L := GetLogLevelFromText(LineBeg);
   if L=sllNone then
     exit;
-  if (fDayChangeIndex<>nil) and (fDayCurrent<>PInt64(LineBeg)^) then begin
-    fDayCurrent := PInt64(LineBeg)^;
+  if (fDayChangeIndex<>nil) and (fDayCurrent<>PInt64(LineBeg+dcOffset)^) then begin
+    fDayCurrent := PInt64(LineBeg+dcOffset)^;
     AddInteger(fDayChangeIndex,fCount-1);
   end;
   if fThreads<>nil then begin

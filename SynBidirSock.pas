@@ -1071,7 +1071,8 @@ type
     // once it has been upgraded to WebSockets
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
       const ProcessName: SockString; ServerThreadPoolCount: integer=2;
-      KeepAliveTimeOut: integer=30000; HeadersNotFiltered: boolean=false); override;
+      KeepAliveTimeOut: integer=30000; HeadersNotFiltered: boolean=false;
+      CreateSuspended: boolean = false); override;
     /// close the server
     destructor Destroy; override;
     /// will send a given frame to all connected clients
@@ -3150,7 +3151,7 @@ end;
 
 constructor TWebSocketServer.Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
   const ProcessName: SockString; ServerThreadPoolCount, KeepAliveTimeOut: integer;
-  HeadersNotFiltered: boolean);
+  HeadersNotFiltered: boolean; CreateSuspended: boolean);
 begin
   // override with custom processing classes
   fSocketClass := TWebSocketServerSocket;
@@ -3163,7 +3164,7 @@ begin
   fCanNotifyCallback := true;
   // start the server
   inherited Create(aPort,OnStart,OnStop,ProcessName,ServerThreadPoolCount,
-    KeepAliveTimeOut,HeadersNotFiltered);
+    KeepAliveTimeOut,HeadersNotFiltered,CreateSuspended);
 end;
 
 function TWebSocketServer.WebSocketProcessUpgrade(ClientSock: THttpServerSocket;
