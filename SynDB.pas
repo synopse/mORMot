@@ -6433,7 +6433,7 @@ begin
         result := fConnectionPool.List[i];
         exit;
       end;
-      result := NewConnection;
+      result := NewConnection; // no need to release the lock (fast method)
       (result as TSQLDBConnectionThreadSafe).fThreadID := GetCurrentThreadId;
       fLatestConnectionRetrievedInPool := fConnectionPool.Add(result)
     finally

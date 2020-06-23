@@ -957,6 +957,10 @@ procedure CopyCollection(Source, Dest: TCollection);
 // - will also reset the published properties of the nested classes
 procedure SetDefaultValuesObject(Value: TObject);
 
+/// returns TRUE on a nil instance or if all its published properties are default/0
+// - calls internally TPropInfo.IsDefaultOrVoid()
+function IsObjectDefaultOrVoid(Instance: TObject): boolean;
+
 /// will reset all the object properties to their default
 // - strings will be set to '', numbers to 0
 // - if FreeAndNilNestedObjects is the default FALSE, will recursively reset
@@ -1650,6 +1654,7 @@ type
     /// return the Default RTTI value defined for this property, or 0 if not set
     function DefaultOr0: integer; {$ifdef HASINLINE}inline;{$endif}
     /// return TRUE if the property has its Default RTTI value, or is 0/""/nil
+    // - will call function IsObjectDefaultOrVoid() for class properties
     function IsDefaultOrVoid(Instance: TObject): boolean;
     /// compute in how many bytes this property is stored
     function RetrieveFieldSize: integer;
@@ -28979,6 +28984,25 @@ begin
     result := Default;
 end;
 
+function IsObjectDefaultOrVoid(Instance: TObject): boolean;
+var i: integer;
+    C: TClass;
+    P: PPropinfo;
+begin
+  if Instance<>nil then begin
+    result := false;
+    C := Instance.ClassType;
+    repeat
+      for i := 1 to InternalClassPropInfo(C,P) do
+        if P^.IsDefaultOrVoid(Instance) then
+          P := P^.Next else
+          exit;
+      C := GetClassParent(C);
+    until C=TObject;
+  end;
+  result := true;
+end;
+
 function TPropInfo.IsDefaultOrVoid(Instance: TObject): boolean;
 var p: PPointer;
 begin
@@ -28990,7 +29014,7 @@ begin
   tkInt64{$ifdef FPC},tkQWord{$endif}:
     result := GetInt64Prop(Instance)=0;
   tkLString,{$ifdef HASVARUSTRING}tkUString,{$endif}{$ifdef FPC}tkLStringOld,{$endif}
-  tkWString,tkDynArray,tkClass,tkInterface: begin
+  tkWString,tkDynArray,tkInterface: begin
     p := GetFieldAddr(Instance);
     result := (p<>nil) and (p^=nil);
   end;
@@ -28998,6 +29022,8 @@ begin
     p := GetFieldAddr(Instance);
     result := (p<>nil) and VarDataIsEmptyOrNull(p^);
   end;
+  tkClass:
+    result := IsObjectDefaultOrVoid(GetObjProp(Instance));
   else result := false;
   end;
 end;
@@ -50925,13 +50951,14 @@ var Added: boolean;
       {$endif NOVARIANTS}
       tkClass: begin
         Obj := P^.GetObjProp(Value);
-        if PropIsIDTypeCastedField(P,IsObj,Value) then begin
-          HR(P);
-          Add(PtrInt(Obj)); // not true instances, but ID
-        end else if Obj<>nil then begin
-          HR(P); // TPersistent or any class defined with $M+
-          WriteObject(Obj,Options);
-        end;
+        if not(woDontStore0 in Options) or not IsObjectDefaultOrVoid(Obj) then
+          if PropIsIDTypeCastedField(P,IsObj,Value) then begin
+            HR(P);
+            Add(PtrInt(Obj)); // not true instances, but ID
+          end else if Obj<>nil then begin
+            HR(P); // TPersistent or any class defined with $M+
+            WriteObject(Obj,Options);
+          end;
       end;
       // tkString (shortstring) and tkInterface is not handled
     end;
