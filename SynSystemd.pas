@@ -107,7 +107,10 @@ function ProcessIsStartedBySystemd: boolean;
 begin
   if not SystemdIsAvailable then
     exit(false);
-  Result := fpGetenv(ENV_INVOCATION_ID) <> nil;
+  // note: for example on Ubuntu 20.04 INVOCATION_ID is always defined
+  // from the other side PPID 1 can be in case we run under docker of started by init.d
+  // so let's verify both
+  Result := (fpgetppid() = 1) and (fpGetenv(ENV_INVOCATION_ID) <> nil);
 end;
 
 procedure LibSystemdInitialize(const libname: TFileName);
