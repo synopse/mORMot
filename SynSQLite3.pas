@@ -48,10 +48,10 @@ unit SynSQLite3;
   ***** END LICENSE BLOCK *****
 
 
-     SQLite3 3.32.2 database engine
+     SQLite3 3.32.3 database engine
     ********************************
 
-   Brand new SQLite3 library to be used with Delphi
+   Brand new SQLite3 library to be used with Delphi/FPC
   - FLEXIBLE: in process, local or remote access (JSON RESTFUL HTTP server)
   - STANDARD: full UTF-8 and Unicode, SQLite3 engine (enhanced but not hacked)
   - SECURE: tested, multi-thread oriented, atomic commit, encryption ready
@@ -1187,7 +1187,7 @@ type
     close: function(DB: TSQLite3DB): integer; cdecl;
 
     /// Return the version of the SQLite database engine, in ascii format
-    // - currently returns '3.32.2', when used with our SynSQLite3Static unit
+    // - currently returns '3.32.3', when used with our SynSQLite3Static unit
     // - if an external SQLite3 library is used, version may vary
     // - you may use the VersionText property (or Version for full details) instead
     libversion: function: PUTF8Char; cdecl;
