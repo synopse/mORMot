@@ -7818,7 +7818,25 @@ type
     abArr: array of TSubAB;
     cdArr: array of TSubCD;
   end;
-{$ifdef ISDELPHI2010}
+  TNestedDtoObject = class(TSynAutoCreateFields)
+  private
+    FFieldString: RawUTF8;
+    FFieldInteger: integer;
+    FFieldVariant: variant;
+  published
+    property FieldString: RawUTF8 read FFieldString write FFieldString;
+    property FieldInteger: integer read FFieldInteger write FFieldInteger;
+    property FieldVariant: variant read FFieldVariant write FFieldVariant;
+  end;
+  TDtoObject = class(TSynAutoCreateFields)
+  private
+    FFieldNestedObject: TNestedDtoObject;
+    FSomeField: RawUTF8;
+  published
+    property NestedObject: TNestedDtoObject read FFieldNestedObject;
+    property SomeField: RawUTF8 read FSomeField write FSomeField;
+  end;
+  {$ifdef ISDELPHI2010}
   TStaticArrayOfInt = packed array[1..5] of Integer;
   TNewRTTI = record
     Number: integer;
@@ -7873,6 +7891,7 @@ var J,U,U2: RawUTF8;
     JAS: TTestCustomJSONArraySimple;
 {$ifndef NOVARIANTS}
     JAV: TTestCustomJSONArrayVariant;
+    GDtoObject: TDtoObject;
 {$endif}
     Trans: TTestCustomJSON2;
     Disco: TTestCustomDiscogs;
@@ -8340,7 +8359,20 @@ var J,U,U2: RawUTF8;
       end;
     end;
     Check(JAV.D='4');
-  {$endif}
+    GDtoObject := TDtoObject.Create;
+    U := '{"SomeField":"Test"}';
+    Check(ObjectLoadJSON(GDtoObject, U, nil, []),'nestedvariant1');
+     J := ObjectToJSON(GDtoObject, []);
+    CheckEqual(J,'{"NestedObject":{"FieldString":"","FieldInteger":0,'+
+      '"FieldVariant":null},"SomeField":"Test"}');
+    J := ObjectToJSON(GDtoObject, [woDontStore0]);
+    CheckEqual(J,U);
+    U := '{"NestedObject":{"FieldVariant":{"a":1,"b":2}},"SomeField":"Test"}';
+    Check(ObjectLoadJSON(GDtoObject, U, nil, [j2oHandleCustomVariants]),'nestedvariant2');
+    J := ObjectToJSON(GDtoObject, [woDontStore0,woDontStoreEmptyString]);
+    CheckEqual(J,U);
+    GDtoObject.Free;
+  {$endif NOVARIANTS}
 
     Finalize(Cache);
     FillCharFast(Cache,sizeof(Cache),0);

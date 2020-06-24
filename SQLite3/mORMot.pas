@@ -959,7 +959,7 @@ procedure SetDefaultValuesObject(Value: TObject);
 
 /// returns TRUE on a nil instance or if all its published properties are default/0
 // - calls internally TPropInfo.IsDefaultOrVoid()
-function IsObjectDefaultOrVoid(Instance: TObject): boolean;
+function IsObjectDefaultOrVoid(Value: TObject): boolean;
 
 /// will reset all the object properties to their default
 // - strings will be set to '', numbers to 0
@@ -28984,25 +28984,6 @@ begin
     result := Default;
 end;
 
-function IsObjectDefaultOrVoid(Instance: TObject): boolean;
-var i: integer;
-    C: TClass;
-    P: PPropinfo;
-begin
-  if Instance<>nil then begin
-    result := false;
-    C := Instance.ClassType;
-    repeat
-      for i := 1 to InternalClassPropInfo(C,P) do
-        if P^.IsDefaultOrVoid(Instance) then
-          P := P^.Next else
-          exit;
-      C := GetClassParent(C);
-    until C=TObject;
-  end;
-  result := true;
-end;
-
 function TPropInfo.IsDefaultOrVoid(Instance: TObject): boolean;
 var p: PPointer;
 begin
@@ -29020,7 +29001,7 @@ begin
   end;
   tkVariant: begin
     p := GetFieldAddr(Instance);
-    result := (p<>nil) and VarDataIsEmptyOrNull(p^);
+    result := (p<>nil) and VarDataIsEmptyOrNull(p);
   end;
   tkClass:
     result := IsObjectDefaultOrVoid(GetObjProp(Instance));
@@ -48821,6 +48802,25 @@ begin
     end;
     c := GetClassParent(c);
   until c=TObject;
+end;
+
+function IsObjectDefaultOrVoid(Value: TObject): boolean;
+var i: integer;
+    C: TClass;
+    P: PPropinfo;
+begin
+  if Value<>nil then begin
+    result := false;
+    C := Value.ClassType;
+    repeat
+      for i := 1 to InternalClassPropInfo(C,P) do
+        if P^.IsDefaultOrVoid(Value) then
+          P := P^.Next else
+          exit;
+      C := GetClassParent(C);
+    until C=TObject;
+  end;
+  result := true;
 end;
 
 procedure ClearObject(Value: TObject; FreeAndNilNestedObjects: boolean=false);
