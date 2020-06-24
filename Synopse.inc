@@ -272,11 +272,17 @@
       {$define BSDNOTDARWIN}   // OSX has some non-standard API calls
     {$endif}
     {$ifdef FREEBSD}
+      {$ifdef CPUX86}
+        {$define FPCSQLITE3STATIC} // we supply i386 static libs
+      {$endif CPUX86}
       {$ifdef CPUX64}
         {$define FPCSQLITE3STATIC} // we supply x64 static libs
       {$endif CPUX64}
     {$endif}
     {$ifdef OPENBSD}
+      {$ifdef CPUX86}
+        {$define FPCSQLITE3STATIC} // we supply i386 static libs
+      {$endif CPUX86}
       {$ifdef CPUX64}
         {$define FPCSQLITE3STATIC} // we supply x64 static libs
       {$endif CPUX64}
@@ -298,6 +304,14 @@
   {$ifdef FPC_PIC}
     {$define PUREPASCAL} // most asm code is not PIC-safe with global constants
   {$endif}
+
+  {$ifdef MSWINDOWS}
+    {$ifdef FPC_X64MM}
+      {$ifndef FPC_X64MM_WIN} // SynFPCx64MM not yet fully validated on Windows
+         {$undef FPC_X64MM}
+      {$endif FPC_X64MM_WIN}
+    {$endif FPC_X64MM}
+  {$endif MSWINDOWS}
 
   {$ifdef CPU64}
     {$define FPC_64}
@@ -331,6 +345,9 @@
       {$ifndef FPC_PIC}
         {$define CPUX86NOTPIC} // use "absolute" instead of local register
       {$endif FPC_PIC}
+      {$ifndef OPENBSD}
+        {$define FPC_X86ASM} // if assembler knows popcnt/crc32c opcodes
+      {$endif OPENBSD}
     {$endif CPUX86}
   {$endif CPU64}
 
@@ -641,6 +658,7 @@
 {$ifdef ABSOLUTEPASCAL}
   {$define ABSOLUTEORPUREPASCAL}
   {$define ABSOLUTEPASCALORNOTINTEL}
+  {$define PUREPASCAL}
 {$endif ABSOLUTEPASCAL}
 {$ifdef PUREPASCAL}
   {$define ABSOLUTEORPUREPASCAL}
