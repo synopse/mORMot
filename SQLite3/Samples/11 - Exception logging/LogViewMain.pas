@@ -34,7 +34,7 @@ uses
   {$endif}
   SynCommons,
   SynLog,
-  {$ifdef WINDOWS}
+  {$ifdef MSWINDOWS}
   SynMemoEx,
   {$endif}
   mORMotHttpServer;
@@ -98,9 +98,6 @@ type
     btnThreadDown: TButton;
     btnThreadUp: TButton;
     lstDays: TListBox;
-    {$ifdef LINUX}
-    MemoBottom: TMemo;
-    {$endif}
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure BtnFilterClick(Sender: TObject);
@@ -160,8 +157,10 @@ type
     procedure ThreadListNameRefresh(Index: integer);
     procedure ReceivedOne(const Text: RawUTF8);
   public
-    {$ifdef WINDOWS}
+    {$ifdef MSWINDOWS}
     MemoBottom: TMemoEx;
+    {$else}
+    MemoBottom: TMemo; // for LCL compatibility
     {$endif}
     destructor Destroy; override;
     property LogFileName: TFileName write SetLogFileName;
@@ -339,8 +338,11 @@ begin
   ProfileList.ColWidths[0] := 60;
   ProfileList.ColWidths[1] := 1000;
   ProfileList.Hide;
-  {$ifdef WINDOWS}
+  {$ifdef MSWINDOWS}
   MemoBottom := TMemoEx.Create(self);
+  {$else}
+  MemoBottom := TMemo.Create(self);
+  {$endif}
   MemoBottom.Parent := PanelBottom;
   MemoBottom.Align := alClient;
   MemoBottom.Font.Height := -11;
@@ -350,7 +352,6 @@ begin
   MemoBottom.ReadOnly := true;
   MemoBottom.ScrollBars := ssVertical;
   MemoBottom.Text := '';
-  {$endif}
 end;
 
 procedure TMainLogView.FormShow(Sender: TObject);
@@ -1086,7 +1087,7 @@ end;
 procedure TMainLogView.PanelBottomResize(Sender: TObject);
 var w: integer;
 begin
-  {$ifdef WINDOWS}
+  {$ifdef MSWINDOWS}
   w := MemoBottom.CellRect.Width;
   if w > 0 then
     MemoBottom.RightMargin := (PanelBottom.ClientWidth div w) - 7;

@@ -5110,14 +5110,14 @@ var aWow64, feat: RawUTF8;
 begin
   // 1. calculate fLines[] + fCount and fLevels[] + fLogProcNatural[] from .log content
   fLineHeaderCountToIgnore := 3; fIsJournald := false;
-  if IdemPChar(fMap.Buffer,'-- LOGS BEGIN AT') then begin
+  if IdemPChar(pointer(fMap.Buffer),'-- LOGS BEGIN AT') then begin
     //-- Logs begin at Sun 2020-06-07 12:42:31 EEST, end at Thu 2020-06-18 18:08:52 EEST. --
     fIsJournald := true;
     fHeaderLinesCount := 1;
     fLineHeaderCountToIgnore := 1;
   end else begin
     //2020-06-18T13:28:20.754089+0300 ub[12316]:
-    Iso8601ToDateTimePUTF8CharVar(fMap.Buffer,26,fStartDateTime);
+    Iso8601ToDateTimePUTF8CharVar(pointer(fMap.Buffer),26,fStartDateTime);
     if fStartDateTime > 0 then begin
       fIsJournald := true;
       fHeaderLinesCount := 0;
