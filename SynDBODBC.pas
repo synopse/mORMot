@@ -1704,6 +1704,13 @@ begin
             end;
           ftDouble: begin
             CValueType := SQL_C_DOUBLE;
+            if (fDBMS = dMSSQL) and (VInOut=paramIn) and (double(VInt64) > -1) and (double(VInt64) < 1) then begin
+              // MPV: prevent "Invalid character value for cast specification" error for numbers (-1; 1)
+              // for doubles outside this range SQL_C_DOUBLE must be used
+              ParameterType := SQL_NUMERIC;
+              ColumnSize := 9;
+              DecimalDigits := 6;
+            end;
             // in case of "Invalid character value for cast specification" error
             // for small digits like 0.01, -0.0001 under Linux msodbcsql17 should
             // be updated to >= 17.5.2
