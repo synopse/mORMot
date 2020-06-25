@@ -1702,14 +1702,9 @@ begin
             end;
           ftDouble: begin
             CValueType := SQL_C_DOUBLE;
-            if (fDBMS = dMSSQL) and (VInOut=paramIn) then begin
-              // MPV: prevent "Invalid character value for cast specification" error for small digits like 0.01, -0.0001
-              // verified under Linux for msodbcsql17
-              // FreeTDS throws cast error with this fix (and without also)
-              ParameterType := SQL_NUMERIC;
-              ColumnSize := 9;
-              DecimalDigits := 6;
-            end;
+	    // in case of "Invalid character value for cast specification" error
+            // for small digits like 0.01, -0.0001 under Linux msodbcsql17 should
+            // be updated to >= 17.5.2
             ParameterValue := pointer(@VInt64);
           end;
           ftCurrency:
