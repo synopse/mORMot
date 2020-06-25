@@ -60,7 +60,7 @@ uses
   SynTable,
   SynDB,
   DB,
-  {$ifndef FPC}DBCommon,{$endif}
+  DBCommon,
   SynVirtualDataSet;
 
 type
@@ -390,8 +390,7 @@ end;
 
 function TSynDBSQLDataSet.PSGetTableName: string;
 begin
-  // ToDo We miss GetTableNameFromSQL in FPC, Delphi function from DBCommon
-  result := {$ifdef FPC}''{$else}GetTableNameFromSQL(fCommandText){$endif};
+  result := GetTableNameFromSQL(fCommandText);
 end;
 
 function TSynDBSQLDataSet.PSIsSQLBased: Boolean;
