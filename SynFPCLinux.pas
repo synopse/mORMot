@@ -253,7 +253,7 @@ type
     sd_is_socket_unix: function(fd, typr, listening: integer;
       var path: TFileName; pathLength: PtrUInt): integer; cdecl;
     /// systemd: submit simple, plain text log entries to the system journal
-    // priority can be obtained using longint(LOG_TO_SYSLOG[logLevel])
+    // - priority value can be obtained using longint(LOG_TO_SYSLOG[logLevel])
     sd_journal_print: function(priority: longint; args: array of const): longint; cdecl;
     /// systemd: sends notification to systemd
     // - see https://www.freedesktop.org/software/systemd/man/sd_notify.html
