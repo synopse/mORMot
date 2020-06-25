@@ -286,12 +286,13 @@ type
     // Windows by now, using the SChannel API)
     constructor Open(const aServer, aPort: SockString; aLayer: TCrtSocketLayer=cslTCP;
       aTimeOut: cardinal=10000; aTLS: boolean=false);
-    /// bind to an address. Expects the address to be specified as Ansi string as
-    // - '1234' - bind to a port on all interfaces, the same as '0.0.0.0:1234'
-    // - 'IP:port' - bind to specified interface only, e.g. '1.2.3.4:1234'
-    // - 'unix:/path/to/file' - bind to unix domain socket, e.g. 'unix:/run/mormot.sock'
-    // - '' - bind to systemd descriptor on linux. See http://0pointer.de/blog/projects/socket-activation.html
-    constructor Bind(const anAddr: SockString; aLayer: TCrtSocketLayer=cslTCP);
+    /// bind to an address
+    // - aAddr='1234' - bind to a port on all interfaces, the same as '0.0.0.0:1234'
+    // - aAddr='IP:port' - bind to specified interface only, e.g. '1.2.3.4:1234'
+    // - aAddr='unix:/path/to/file' - bind to unix domain socket, e.g. 'unix:/run/mormot.sock'
+    // - aAddr='' - bind to systemd descriptor on linux. See
+    // http://0pointer.de/blog/projects/socket-activation.html
+    constructor Bind(const aAddr: SockString; aLayer: TCrtSocketLayer=cslTCP);
     /// low-level internal method called by Open() and Bind() constructors
     // - raise an ECrtSocket exception on error
     // - you may ask for a TLS secured client connection (only available under
@@ -3233,11 +3234,6 @@ var
 
 implementation
 
-{$ifdef LINUXNOTBSD}
-uses
-  SynSystemd;
-{$endif}
-
 { ************ some shared helper functions and classes }
 
 var
@@ -4930,7 +4926,7 @@ begin
   result := false;
 end;
 
-constructor TCrtSocket.Bind(const anAddr: SockString; aLayer: TCrtSocketLayer);
+constructor TCrtSocket.Bind(const aAddr: SockString; aLayer: TCrtSocketLayer);
 var s,p: SockString;
     aSock: integer;
     {$ifdef LINUXNOTBSD}
@@ -4938,30 +4934,31 @@ var s,p: SockString;
     {$endif}
 begin
   Create(10000);
-  if anAddr = '' then begin // try systemd
-    {$ifdef LINUXNOTBSD}
+  if aAddr='' then begin
+    {$ifdef LINUXNOTBSD} // try systemd
     if not SystemdIsAvailable then
-      raise ECrtSocket.Create('Systemd is not available but empty address is passed to bind');
-    n := sd.listen_fds(0);
-    if (n > 1) then
-      raise ECrtSocket.Create('Systemd activation fails - too many file descriptors received');
+      raise ECrtSocket.Create('Bind('''') but Systemd is not available');
+    n := ExternalLibraries.sd_listen_fds(0);
+    if n > 1 then
+      raise ECrtSocket.Create('Bind(''''): Systemd activation failed - too ' +
+        'many file descriptors received');
     aSock := SD_LISTEN_FDS_START + 0;
     {$else}
-    raise ECrtSocket.Create('Can''t bind to empty address');
+    raise ECrtSocket.Create('Bind('''') is not allowed on this platform');
     {$endif}
   end else begin
     aSock := -1; // force OpenBind to create listening socket
-    if not Split(anAddr,':',s,p) then begin
-    s := '0.0.0.0';
-      p := anAddr;
-  end;
-  {$ifndef MSWINDOWS}
-  if s='unix' then begin
-    aLayer := cslUNIX;
-    s := p;
-    p := '';
-  end;
-  {$endif}
+    if not Split(aAddr,':',s,p) then begin
+      s := '0.0.0.0';
+      p := aAddr;
+    end;
+    {$ifndef MSWINDOWS}
+    if s='unix' then begin
+      aLayer := cslUNIX;
+      s := p;
+      p := '';
+    end;
+    {$endif MSWINDOWS}
   end;
   OpenBind(s,p,{dobind=}true,aSock,aLayer); // raise a ECrtSocket on error
 end;
