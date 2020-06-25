@@ -172,7 +172,7 @@ begin
   auto := TSQLRecord.AutoFree([ // avoid several try..finally
     @info,TSQLBlogInfo, @article,TSQLArticle, @comment,TSQLComment, @tag,TSQLTag]);
   if not RestModel.Retrieve('',info) then begin // retrieve first item
-    tmp := StringFromFile('/home/ab/Downloads/2020-01-16-a8003957c2ae6bde5be6ea279c9c9ce4-backup.txt');
+    tmp := StringFromFile('/home/ab/Downloads/2020-06-16-a8003957c2ae6bde5be6ea279c9c9ce4-backup.txt');
     info.Language := 'en';
     if tmp<>'' then begin
       info.Title := 'Synopse Blog';

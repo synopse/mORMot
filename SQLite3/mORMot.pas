@@ -31224,9 +31224,12 @@ begin
     fields := Props.Props.Fields;
     case Props.Kind of
     rFTS3, rFTS4, rFTS5: begin
-      if (Props.fFTSWithoutContentFields<>'') and (Props.fFTSWithoutContentTableIndex>=0) then
+      if (Props.fFTSWithoutContentFields<>'') and (Props.fFTSWithoutContentTableIndex>=0) then begin
         result := FormatUTF8('%content="%",',[result,
           aModel.Tables[Props.fFTSWithoutContentTableIndex].SQLTableName]);
+        if Props.Kind = rFTS5 then
+           result := FormatUTF8('%content_rowid="ID",',[result]);
+      end;
       for i := 0 to fields.Count-1 do
         result := result+fields.List[i].Name+',';
       tokenizer := 'simple';
@@ -49288,18 +49291,34 @@ begin
   fts := Props.Props.SQLTableName;
   ftsfields := Props.Props.SQLTableSimpleFieldsNoRowID;
   // see http://www.sqlite.org/fts3.html#*fts4content
-  Server.ExecuteFmt('CREATE TRIGGER %_bu BEFORE UPDATE ON % '+
-    'BEGIN DELETE FROM % WHERE docid=old.rowid; END;',
-    [main,main,fts]);
-  Server.ExecuteFmt('CREATE TRIGGER %_bd BEFORE DELETE ON % '+
-    'BEGIN DELETE FROM % WHERE docid=old.rowid; END;',
-    [main,main,fts]);
-  Server.ExecuteFmt('CREATE TRIGGER %_au AFTER UPDATE ON % '+
-    'BEGIN INSERT INTO %(docid,%) VALUES(new.rowid%); END;',
-    [main,main,fts,ftsfields,Props.fFTSWithoutContentFields]);
-  Server.ExecuteFmt('CREATE TRIGGER %_ai AFTER INSERT ON % '+
-    'BEGIN INSERT INTO %(docid,%) VALUES(new.rowid%); END;',
-    [main,main,fts,ftsfields,Props.fFTSWithoutContentFields]);
+  if Props.Kind=rFTS5 then begin
+    // In fts 5 we can't use docid only rowid, also use insert() values('delete',) to delete record
+    Server.ExecuteFmt('CREATE TRIGGER %_bu BEFORE UPDATE ON % '+
+      'BEGIN INSERT INTO %(%,rowid,%) VALUES(''delete'',old.rowid%); END;',
+      [main,main,fts,fts,ftsfields, StringReplaceAll(Props.fFTSWithoutContentFields, 'new.', 'old.')]);
+    Server.ExecuteFmt('CREATE TRIGGER %_bd BEFORE DELETE ON % '+
+      'BEGIN INSERT INTO %(%,rowid,%) VALUES(''delete'',old.rowid%); END;',
+      [main,main,fts,fts,ftsfields, StringReplaceAll(Props.fFTSWithoutContentFields, 'new.', 'old.')]);
+    Server.ExecuteFmt('CREATE TRIGGER %_au AFTER UPDATE ON % '+
+      'BEGIN INSERT INTO %(rowid,%) VALUES(new.rowid%); END;',
+      [main,main,fts,ftsfields,Props.fFTSWithoutContentFields]);
+    Server.ExecuteFmt('CREATE TRIGGER %_ai AFTER INSERT ON % '+
+      'BEGIN INSERT INTO %(rowid,%) VALUES(new.rowid%); END;',
+      [main,main,fts,ftsfields,Props.fFTSWithoutContentFields]);
+  end else begin
+    Server.ExecuteFmt('CREATE TRIGGER %_bu BEFORE UPDATE ON % '+
+      'BEGIN DELETE FROM % WHERE docid=old.rowid; END;',
+      [main,main,fts]);
+    Server.ExecuteFmt('CREATE TRIGGER %_bd BEFORE DELETE ON % '+
+      'BEGIN DELETE FROM % WHERE docid=old.rowid; END;',
+      [main,main,fts]);
+    Server.ExecuteFmt('CREATE TRIGGER %_au AFTER UPDATE ON % '+
+      'BEGIN INSERT INTO %(docid,%) VALUES(new.rowid%); END;',
+      [main,main,fts,ftsfields,Props.fFTSWithoutContentFields]);
+    Server.ExecuteFmt('CREATE TRIGGER %_ai AFTER INSERT ON % '+
+      'BEGIN INSERT INTO %(docid,%) VALUES(new.rowid%); END;',
+      [main,main,fts,ftsfields,Props.fFTSWithoutContentFields]);
+  end;
 end;
 
 
