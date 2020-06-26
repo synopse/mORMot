@@ -2557,8 +2557,10 @@ begin
   try
     fTimeElapsed.Resume;
     FreeHandles(false);
+    {$ifndef SYNDB_SILENCE}
     SynDBLog.Add.Log(sllDB,'Destroy: stats = % row(s) in %',
       [TotalRowsRetrieved,fTimeElapsed.Stop],self);
+    {$endif}
   finally
     inherited;
   end;
@@ -3400,11 +3402,9 @@ end;
 
 procedure TSQLDBOracleStatement.Prepare(const aSQL: RawUTF8;
   ExpectResults: Boolean);
-var oSQL: RawUTF8;
-    env: POCIEnv;
-    cached: boolean;
+var env: POCIEnv;
+    L: PtrInt;
 begin
-  cached := false;
   SQLLogBegin(sllDB);
   try
     try
@@ -3412,21 +3412,28 @@ begin
         raise ESQLDBOracle.CreateUTF8('%.Prepare should be called only once',[self]);
       // 1. process SQL
       inherited Prepare(aSQL,ExpectResults); // set fSQL + Connect if necessary
-      fPreparedParamsCount := ReplaceParamsByNames(aSQL,oSQL);
+      fPreparedParamsCount := ReplaceParamsByNumbers(aSQL,fSQLPrepared,':', true);
+      L := Length(fSQLPrepared);
+      while (L>0) and (fSQLPrepared[L] in [#1..' ',';']) do
+      if (fSQLPrepared[L]=';') and (L>5) and IdemPChar(@fSQLPrepared[L-3],'END') then
+        break else // allows 'END;' at the end of a statement
+        dec(L);    // trim ' ' or ';' right (last ';' could be found incorrect)
+      if L <> Length(fSQLPrepared) then
+        fSQLPrepared := copy(fSQLPrepared,1,L); // trim right ';' if any
       // 2. prepare statement
       env := (Connection as TSQLDBOracleConnection).fEnv;
       with OCI do begin
         HandleAlloc(env,fError,OCI_HTYPE_ERROR);
         if fUseServerSideStatementCache then begin
           if StmtPrepare2(TSQLDBOracleConnection(Connection).fContext,fStatement,
-             fError,pointer(oSQL),length(oSQL),nil,0,OCI_NTV_SYNTAX,
+             fError,pointer(fSQLPrepared),length(fSQLPrepared),nil,0,OCI_NTV_SYNTAX,
              OCI_PREP2_CACHE_SEARCHONLY) = OCI_SUCCESS then
-            cached := true else
+            fCacheIndex := 1 else
           Check(nil,self,StmtPrepare2(TSQLDBOracleConnection(Connection).fContext,fStatement,
-            fError,pointer(oSQL),length(oSQL),nil,0,OCI_NTV_SYNTAX,OCI_DEFAULT),fError);
+            fError,pointer(fSQLPrepared),length(fSQLPrepared),nil,0,OCI_NTV_SYNTAX,OCI_DEFAULT),fError);
         end else begin
           HandleAlloc(env,fStatement,OCI_HTYPE_STMT);
-          Check(nil,self,StmtPrepare(fStatement,fError,pointer(oSQL),length(oSQL),
+          Check(nil,self,StmtPrepare(fStatement,fError,pointer(fSQLPrepared),length(fSQLPrepared),
             OCI_NTV_SYNTAX,OCI_DEFAULT),fError);
         end;
       end;
@@ -3439,7 +3446,7 @@ begin
       end;
     end;
   finally
-    fTimeElapsed.FromExternalMicroSeconds(SQLLogEnd(' cache=%',[cached]));
+    fTimeElapsed.FromExternalMicroSeconds(SQLLogEnd(' cache=%',[fCacheIndex]));
   end;
 end;
 
