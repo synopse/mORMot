@@ -3723,8 +3723,10 @@ begin
     while result^>#13 do
       inc(result);
     while result^<=#13 do
-      if result^=#0 then
-        exit else
+      if result^=#0 then begin
+        result := nil;
+        exit;
+      end else
         inc(result);
   until false;
 end;

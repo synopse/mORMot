@@ -302,7 +302,7 @@ procedure LibSystemdInitialize;
 /// returns TRUE if a systemd library is available
 // - will load and initialize it, calling LibSystemdInitialize if necessary,
 // catching any exception during the process
-function SystemdIsAvailable: boolean;
+function SystemdIsAvailable: boolean; inline;
 
 {$endif LINUXNOTBSD}
 
@@ -741,6 +741,8 @@ const
     'sd_listen_fds', 'sd_is_socket_unix', 'sd_journal_print',
     'sd_notify', 'sd_watchdog_enabled');
 begin
+  if lib in Loaded then
+    exit;
   EnterCriticalSection(Lock);
   if not (lib in Loaded) then
   case lib of
@@ -812,6 +814,11 @@ procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
 var trunc: array[0..15] of AnsiChar; // truncated to 16 bytes (including #0)
     i,L: integer;
 begin
+  if not(elPThread in ExternalLibraries.Loaded) then
+    ExternalLibraries.EnsureLoaded(elPThread);
+  ExternalLibraries.EnsureLoaded(elPThread);
+  if not Assigned(ExternalLibraries.pthread_setname_np) then
+    exit;
   if Name = '' then
     exit;
   L := 0; // trim unrelevant spaces and prefixes when filling the 16 chars 
@@ -834,9 +841,7 @@ begin
     exit;
   trunc[L] := #0;
   {$ifdef LINUXNOTBSD}
-  ExternalLibraries.EnsureLoaded(elPThread);
-  if Assigned(ExternalLibraries.pthread_setname_np) then
-    ExternalLibraries.pthread_setname_np(pointer(ThreadID), @trunc[0]);
+  ExternalLibraries.pthread_setname_np(pointer(ThreadID), @trunc[0]);
   {$endif LINUXNOTBSD}
 end;
 
@@ -845,7 +850,8 @@ end;
 
 function SystemdIsAvailable: boolean;
 begin
-  ExternalLibraries.EnsureLoaded(elSystemD);
+  if not(elSystemD in ExternalLibraries.Loaded) then
+    ExternalLibraries.EnsureLoaded(elSystemD);
   result := Assigned(ExternalLibraries.sd_listen_fds);
 end;
 
@@ -853,7 +859,7 @@ function ProcessIsStartedBySystemd: boolean;
 begin
   result := SystemdIsAvailable and
     // note: for example on Ubuntu 20.04 INVOCATION_ID is always defined
-    // from the other side PPID 1 can be in case we run under docker of started
+    // from the other side PPID 1 can be set if we run under docker and started
     // by init.d so let's verify both
     (fpgetppid() = 1) and (fpGetenv(ENV_INVOCATION_ID) <> nil);
 end;
