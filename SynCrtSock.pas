@@ -3728,7 +3728,7 @@ begin
       inc(result);
     while result^<=#13 do
       if result^=#0 then
-        exit else
+        exit(nil) else
         inc(result);
   until false;
 end;
