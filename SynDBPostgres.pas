@@ -89,8 +89,8 @@ type
     // the associated low-level provider connection
     fPGConn: pointer;
     // fServerSettings: set of (ssByteAasHex);
-    // maintain fPrepared[] hash list to identify already cached;
-    // return statement position in prepared cache
+    // maintain fPrepared[] hash list to identify already cached
+    // - returns statement index in prepared cache array
     function PrepareCached(const aSQL: RawUTF8; aParamCount: integer;
       out aName: RawUTF8): integer;
     /// direct execution of SQL statement what do not returns a result
@@ -837,8 +837,7 @@ begin
       pointer(fPGParams), pointer(fPGparamLengths), pointer(fPGParamFormats), PGFMT_TEXT)
   else if fPreparedParamsCount = 0 then
     // PQexec handles multiple SQL commands
-    fRes := PQ.Exec(c.fPGConn, pointer(fSQLPrepared))
-  else
+    fRes := PQ.Exec(c.fPGConn, pointer(fSQLPrepared)) else
     fRes := PQ.ExecParams(c.fPGConn, pointer(fSQLPrepared), fPreparedParamsCount, nil,
       pointer(fPGParams), pointer(fPGparamLengths), pointer(fPGParamFormats), PGFMT_TEXT);
   PQ.Check(c.fPGConn, fRes, @fRes, {forceClean=}false);

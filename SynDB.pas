@@ -746,18 +746,6 @@ type
     property ForceDateWithMS: boolean read GetForceDateWithMS write SetForceDateWithMS;
     /// gets a number of updates made by latest executed statement
     function UpdateCount: Integer;
-    function GetSQLLogTimer: TPrecisionTimer;
-    /// Timer for last DB operation
-    property SQLLogTimer: TPrecisionTimer read GetSQLLogTimer;
-    function GetSQLPrepared: RawUTF8;
-    /// After call to Prepare() returns query text as it will be passed to DB;
-    // Depends on DB parameters placeholder are replaced to ?, :AA, $1 etc
-    // this SQL is ready to be used in DB tool to check the real execution plan/timing
-    property SQLPrepared: RawUTF8 read GetSQLPrepared;
-    function GetCacheIndex: integer;
-    /// After call to Prepare() become >= 0 in case database supports prepared
-    // statement cache (Oracle, Postgres) and query plan is cached; -1 in other cases
-    property CacheIndex: integer read GetCacheIndex;
   end;
 
 {$ifdef WITH_PROXY}
@@ -1715,7 +1703,7 @@ type
     {$ifndef SYNDB_SILENCE}
     fSQLLogLog: TSynLog;
     fSQLLogLevel: TSynLogInfo;
-    {$ENDIF}
+    {$endif}
     fSQLWithInlinedParams: RawUTF8;
     fSQLLogTimer: TPrecisionTimer;
     fCacheIndex: integer;
@@ -1726,9 +1714,6 @@ type
     procedure SetForceBlobAsNull(value: boolean);
     function GetForceDateWithMS: boolean;
     procedure SetForceDateWithMS(value: boolean);
-    function GetSQLLogTimer: TPrecisionTimer;
-    function GetSQLPrepared: RawUTF8;
-    function GetCacheIndex: integer;
     /// raise an exception if Col is out of range according to fColumnCount
     procedure CheckCol(Col: integer); {$ifdef HASINLINE}inline;{$endif}
     /// will set a Int64/Double/Currency/TDateTime/RawUTF8/TBlobData Dest variable
@@ -2021,9 +2006,7 @@ type
     function ColumnInt(Col: integer): Int64; overload; virtual; abstract;
     /// return a Column floating point value of the current Row, first Col is 0
     function ColumnDouble(Col: integer): double; overload; virtual; abstract;
-    /// return a Column date and time value of the current     property SQLPrepared: RawUTF8 read GetSQLPrepared;
-    /// After call to Prepare() become >= 0 in case database supports prepared
-    // statement cache (Oracle, Postgres) and query plan is cached; -1 in other cases
+    /// return a Column date and time value of the current Row, first Col is 0
     function ColumnDateTime(Col: integer): TDateTime; overload; virtual; abstract;
     /// return a column date and time value of the current Row, first Col is 0
     // - call ColumnDateTime or ColumnUTF8 to convert into TTimeLogBits/Int64 time
@@ -2203,22 +2186,24 @@ type
     // - follows the format expected by TSQLDBProxyStatement
     procedure ColumnsToBinary(W: TFileBufferWriter;
       Null: pointer; const ColTypes: TSQLDBFieldTypeDynArray); virtual;
-    /// Timer for last DB operation
+    /// low-level access to the Timer used for last DB operation
     property SQLLogTimer: TPrecisionTimer read fSQLLogTimer;
-    /// After call to Prepare() returns query text as it will be passed to DB;
-    // Depends on DB parameters placeholder are replaced to ?, :AA, $1 etc
-    // this SQL is ready to be used in DB tool to check the real execution plan/timing
-    property SQLPrepared: RawUTF8 read GetSQLPrepared;
-    /// After call to Prepare() become >= 0 in case database supports prepared
-    // statement cache (Oracle, Postgres) and query plan is cached; -1 in other cases
-    property CacheIndex: integer read GetCacheIndex;
+    /// after a call to Prepare(), contains the query text to be passed to the DB
+    // - Depends on DB parameters placeholder are replaced to ?, :AA, $1 etc
+    // - this SQL is ready to be used in any DB tool, e.g. to check the real 
+    // execution plan/timing
+    property SQLPrepared: RawUTF8 read fSQLPrepared;
+    /// low-level access to the statement cache index, after a call to Prepare()
+    // - contains >= 0 if the database supports prepared statement cache 
+    //(Oracle, Postgres) and query plan is cached; contains -1 in other cases
+    property CacheIndex: integer read fCacheIndex;
   published
     /// the prepared SQL statement, as supplied to Prepare() method
     property SQL: RawUTF8 read fSQL;
     /// the prepared SQL statement, with all '?' changed into the supplied
     // parameter values
-    // - such statement query plan usually differ from a real execution
-    //  plan for prepared statements with parameters
+    // - such statement query plan usually differ from a real execution plan
+    // for prepared statements with parameters - see SQLPrepared property instead
     property SQLWithInlinedParams: RawUTF8 read GetSQLWithInlinedParams;
     /// the current row after Execute/Step call, corresponding to Column*() methods
     // - contains 0 before initial Step call, or a number >=1 during data retrieval
@@ -2863,10 +2848,11 @@ function ReplaceParamsByNames(const aSQL: RawUTF8; var aNewSQL: RawUTF8): intege
 /// replace all '?' in the SQL statement with indexed parameters like $1 $2 ...
 // - returns the number of ? parameters found within aSQL
 // - as used e.g. by PostgreSQL & Oracle (:1 :2) library
-// - if ignoreSemicolon is false (by default) do not replace anything
-//   (Postgres do not allow ; inside prepared statement). Should be true for Oracle
+// - if AllowSemicolon is false (by default), reject any statement with ;
+// (Postgres do not allow ; inside prepared statement); it should be 
+// true for Oracle
 function ReplaceParamsByNumbers(const aSQL: RawUTF8; var aNewSQL: RawUTF8;
-  IndexChar: AnsiChar = '$'; ignoreSemicolon: boolean = false): integer;
+  IndexChar: AnsiChar = '$'; AllowSemicolon: boolean = false): integer;
 
 /// create a JSON array from an array of UTF-8 bound values
 // - as generated during array binding, i.e. with quoted strings
@@ -6760,24 +6746,6 @@ begin
   fForceDateWithMS := value;
 end;
 
-function TSQLDBStatement.GetSQLLogTimer: TPrecisionTimer;
-begin
-  result := fSQLLogTimer;
-end;
-
-function TSQLDBStatement.GetSQLPrepared: RawUTF8;
-begin
-  if fSQLPrepared <> '' then
-    Result := fSQLPrepared
-  else
-    Result := fSQL;
-end;
-
-function TSQLDBStatement.GetCacheIndex: integer;
-begin
-  result := fCacheIndex;
-end;
-
 constructor TSQLDBStatement.Create(aConnection: TSQLDBConnection);
 begin
   inherited Create;
@@ -7371,9 +7339,8 @@ end;
 
 function TSQLDBStatement.SQLLogBegin(level: TSynLogInfo): TSynLog;
 begin
-  if (level = sllDB) then // prepare
-    fSQLLogTimer.Start
-  else
+  if level = sllDB then // prepare
+    fSQLLogTimer.Start else
     fSQLLogTimer.Resume;
   {$ifdef SYNDB_SILENCE}
   result := nil;
@@ -7427,18 +7394,15 @@ end;
 function TSQLDBStatement.SQLLogEnd(const Fmt: RawUTF8; const Args: array of const): Int64;
 var tmp: shortstring;
 begin
-  {$ifdef SYNDB_SILENCE}
   tmp[0] := #0;
-  result := SQLLogEnd(@tmp);
-  {$else}
+  {$ifndef SYNDB_SILENCE}
   result := 0;
   if fSQLLogLog=nil then
     exit;
-  if Fmt='' then
-    tmp[0] := #0 else
+  if Fmt<>'' then
     FormatShort(Fmt,Args,tmp);
-  result := SQLLogEnd(@tmp);
   {$endif}
+  result := SQLLogEnd(@tmp);
 end;
 
 function TSQLDBStatement.GetSQLWithInlinedParams: RawUTF8;
@@ -8135,7 +8099,7 @@ begin
 end;
 
 function ReplaceParamsByNumbers(const aSQL: RawUTF8; var aNewSQL: RawUTF8;
-  IndexChar: AnsiChar; ignoreSemicolon: boolean): integer;
+  IndexChar: AnsiChar; AllowSemicolon: boolean): integer;
 var
   ndx, L: PtrInt;
   s, d: PUTF8Char;
@@ -8179,7 +8143,7 @@ begin
           else
             break;
       until false;
-    end else if (c = ';') and not ignoreSemicolon then
+    end else if (c = ';') and not AllowSemicolon then
       exit; // complex expression can not be prepared
     inc(s);
   end;
@@ -9020,7 +8984,7 @@ end;
 { ESQLDBException }
 
 constructor ESQLDBException.CreateUTF8(const Format: RawUTF8; const Args: array of const);
-var msg{$ifndef SYNDB_SILENCE}, sql{$endif}: RawUTF8;
+var msg {$ifndef SYNDB_SILENCE}, sql{$endif}: RawUTF8;
 begin
   msg := FormatUTF8(Format,Args);
   {$ifndef SYNDB_SILENCE}
