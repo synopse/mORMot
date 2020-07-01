@@ -7793,15 +7793,16 @@ begin
   // -> we have nothing to do but return the current value! :)
   with fParams[Param] do begin
     result := VType;
-    case VType of
-      ftInt64:     Value := {$ifdef DELPHI5OROLDER}integer{$endif}(VInt64);
-      ftDouble:    Value := unaligned(PDouble(@VInt64)^);
-      ftCurrency:  Value := PCurrency(@VInt64)^;
-      ftDate:      Value := PDateTime(@VInt64)^;
-      ftUTF8:      RawUTF8ToVariant(RawUTF8(VData),Value);
-      ftBlob:      RawByteStringToVariant(VData,Value);
-      else         SetVariantNull(Value)
-    end;
+    if VArray=nil then
+      case VType of
+        ftInt64:     Value := {$ifdef DELPHI5OROLDER}integer{$endif}(VInt64);
+        ftDouble:    Value := unaligned(PDouble(@VInt64)^);
+        ftCurrency:  Value := PCurrency(@VInt64)^;
+        ftDate:      Value := PDateTime(@VInt64)^;
+        ftUTF8:      RawUTF8ToVariant(RawUTF8(VData),Value);
+        ftBlob:      RawByteStringToVariant(VData,Value);
+        else         SetVariantNull(Value)
+      end else SetVariantNull(Value);
   end;
 end;
 {$endif}
@@ -7811,17 +7812,19 @@ procedure TSQLDBStatementWithParams.AddParamValueAsText(Param: integer; Dest: TT
 begin
   dec(Param);
   if cardinal(Param)>=cardinal(fParamCount) then
-    Dest.Add(',') else
+    Dest.AddShort('null') else
     with fParams[Param] do
-    case VType of
-      ftInt64:    Dest.Add({$ifdef DELPHI5OROLDER}integer{$endif}(VInt64));
-      ftDouble:   Dest.AddDouble(unaligned(PDouble(@VInt64)^));
-      ftCurrency: Dest.AddCurr64(VInt64);
-      ftDate:     Dest.AddDateTime(PDateTime(@VInt64),' ','''');
-      ftUTF8:     Dest.AddQuotedStr(pointer(VData),'''',MaxCharCount);
-      ftBlob:     Dest.AddU(length(VData));
-      else        Dest.AddShort('null');
-    end;
+    if VArray=nil then
+      case VType of
+        ftInt64:    Dest.Add({$ifdef DELPHI5OROLDER}integer{$endif}(VInt64));
+        ftDouble:   Dest.AddDouble(unaligned(PDouble(@VInt64)^));
+        ftCurrency: Dest.AddCurr64(VInt64);
+        ftDate:     Dest.AddDateTime(PDateTime(@VInt64),' ','''');
+        ftUTF8:     Dest.AddQuotedStr(pointer(VData),'''',MaxCharCount);
+        ftBlob:     Dest.AddU(length(VData));
+        else        Dest.AddShort('null');
+      end
+      else Dest.AddString(VArray[0]); // first item is enough in the logs
 end;
 
 procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
