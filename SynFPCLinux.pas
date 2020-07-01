@@ -816,7 +816,6 @@ var trunc: array[0..15] of AnsiChar; // truncated to 16 bytes (including #0)
 begin
   if not(elPThread in ExternalLibraries.Loaded) then
     ExternalLibraries.EnsureLoaded(elPThread);
-  ExternalLibraries.EnsureLoaded(elPThread);
   if not Assigned(ExternalLibraries.pthread_setname_np) then
     exit;
   if Name = '' then
