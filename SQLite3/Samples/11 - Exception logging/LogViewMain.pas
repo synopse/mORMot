@@ -34,7 +34,7 @@ uses
   {$endif}
   SynCommons,
   SynLog,
-  {$ifdef MSWINDOWS}
+  {$ifndef FPC}
   SynMemoEx,
   {$endif}
   mORMotHttpServer;
@@ -157,7 +157,7 @@ type
     procedure ThreadListNameRefresh(Index: integer);
     procedure ReceivedOne(const Text: RawUTF8);
   public
-    {$ifdef MSWINDOWS}
+    {$ifndef FPC}
     MemoBottom: TMemoEx;
     {$else}
     MemoBottom: TMemo; // for LCL compatibility
@@ -338,7 +338,7 @@ begin
   ProfileList.ColWidths[0] := 60;
   ProfileList.ColWidths[1] := 1000;
   ProfileList.Hide;
-  {$ifdef MSWINDOWS}
+  {$ifndef FPC}
   MemoBottom := TMemoEx.Create(self);
   {$else}
   MemoBottom := TMemo.Create(self);
@@ -1085,9 +1085,11 @@ end;
 
 
 procedure TMainLogView.PanelBottomResize(Sender: TObject);
+{$ifndef FPC}
 var w: integer;
+{$endif}
 begin
-  {$ifdef MSWINDOWS}
+  {$ifndef FPC}
   w := MemoBottom.CellRect.Width;
   if w > 0 then
     MemoBottom.RightMargin := (PanelBottom.ClientWidth div w) - 7;
