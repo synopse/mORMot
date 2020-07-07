@@ -777,6 +777,13 @@ type
 
 {$endif}
 
+  /// OleDB connection properties to Microsoft Access Database
+  TOleDBACEConnectionProperties = class(TOleDBConnectionProperties)
+  protected
+    /// will set the appropriate provider name, i.e. 'Microsoft.ACE.OLEDB.12.0'
+    procedure SetInternalProperties; override;
+  end;
+
   /// OleDB connection properties to IBM AS/400
   TOleDBAS400ConnectionProperties = class(TOleDBConnectionProperties)
   protected
@@ -2933,6 +2940,17 @@ begin
 end;
 
 {$endif CPU64}
+
+{ TOleDBACEConnectionProperties }
+
+procedure TOleDBACEConnectionProperties.SetInternalProperties;
+begin
+  fProviderName := 'Microsoft.ACE.OLEDB.12.0';
+  fDBMS := dJet;
+  inherited SetInternalProperties;
+  if not FileExists(UTF8ToString(ServerName)) then
+    CreateDatabase;
+end;
 
 
 { TBaseAggregatingRowset }
