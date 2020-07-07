@@ -584,9 +584,11 @@ end;
 function fs_rename(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 const
   USAGE = 'usage: rename(fromPath, toPath: String)';
+  OS_ERROR = 'OS error %d: %s, rename ''%s'' -> ''%s''';
 var
   fromPath, toPath: TFileName;
-  //f : file;
+  err: integer;
+  E : EOSError;
 begin
   try
     if (argc <> 2) or not vp.argv[0].isString or not vp.argv[1].isString then
@@ -595,11 +597,25 @@ begin
     toPath := vp.argv[1].asJSString.ToString(cx);
     {$IFDEF MSWINDOWS} // libc rename implementation rewrites destination if it's already exist
     if FileExists(toPath) then
-      if not SysUtils.DeleteFile(toPath) then
-        RaiseLastOSError;
+      if not SysUtils.DeleteFile(toPath) then begin
+        err := GetLastOSError();
+        if (err <> 0) then
+          E := EOSError.CreateFmt(OS_ERROR, [LastError, SysErrorMessage(LastError), fromPath, toPath])
+        else
+          E := EOSError.CreateFmt(OS_ERROR, [-1, 'unknown', fromPath, toPath])
+        E.ErrorCode := err;
+        raise E;
+      end;
     {$ENDIF}
-    if not SysUtils.RenameFile(fromPath, toPath) then
-      RaiseLastOSError;
+    if not SysUtils.RenameFile(fromPath, toPath) then begin
+      err := GetLastOSError();
+      if (err <> 0) then
+        E := EOSError.CreateFmt(OS_ERROR, [err, SysErrorMessage(err), fromPath, toPath])
+      else
+        E := EOSError.CreateFmt(OS_ERROR, [-1, 'unknown', fromPath, toPath]);
+      E.ErrorCode := err;
+      raise E;
+    end;
     Result := True;
   except
     on E: Exception do begin
