@@ -600,9 +600,9 @@ begin
       if not SysUtils.DeleteFile(toPath) then begin
         err := GetLastOSError();
         if (err <> 0) then
-          E := EOSError.CreateFmt(OS_ERROR, [LastError, SysErrorMessage(LastError), fromPath, toPath])
+          E := EOSError.CreateFmt(OS_ERROR, [err, SysErrorMessage(err), fromPath, toPath])
         else
-          E := EOSError.CreateFmt(OS_ERROR, [-1, 'unknown', fromPath, toPath])
+          E := EOSError.CreateFmt(OS_ERROR, [-1, 'unknown', fromPath, toPath]);
         E.ErrorCode := err;
         raise E;
       end;
