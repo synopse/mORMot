@@ -4831,6 +4831,12 @@ end;
 { ESMException }
 
 constructor ESMException.CreateWithTrace(const AFileName: RawUTF8; AJSErrorNum, ALineNum: integer; AMessage: string; const AStackTrace: SynUnicode);
+{$ifndef SM_DEBUG}
+const
+  MODULE_START: SynUnicode = #10'Module.';
+var
+  appStackEnd: SizeInt;
+{$endif}
 begin
   Create(AMessage);
   FJSErrorNum := AJSErrorNum;
@@ -4839,39 +4845,32 @@ begin
   else
     FFileName := AFileName;
   FLineNum := ALineNum;
+  {$ifdef SM_DEBUG}
   FJSStackTrace := AStackTrace;
+  {$else}
+  if length(AStackTrace) = 0 then
+    FJSStackTrace := ''
+  else begin
+    appStackEnd := Pos(MODULE_START, AStackTrace);
+    if appStackEnd = 0 then
+      FJSStackTrace := AStackTrace
+    else
+      FJSStackTrace := Copy(AStackTrace, 0, appStackEnd - 1); // last \n
+  end;
+  {$endif}
 end;
 
 procedure ESMException.WriteFormatted(WR: TTextWriter);
-{$IFNDEF SM_DEBUG}
-var
-  P, Pb: PWord;
-{$ENDIF}
 begin
   WR.AddJSONEscape(pointer(FileName), Length(fileName));
     WR.Add(':'); WR.Add(Line);
   WR.AddShort('\n\nError: ');
-    WR.AddJSONEscapeString(Message); WR.AddShort('\n');
-  {$IFDEF SM_DEBUG}
+  WR.AddJSONEscapeString(Message); WR.AddShort('\n');
+  {$ifdef SM_DEBUG}
     WR.AddJSONEscapeString(Stack);
-  {$ELSE}
-    // any stack line what don't start with `@` is internal (core_modules) calls
-    // remove it to simplify domain logic debugging
-    if length(Stack) > 0 then begin
-      P := PWord(pointer(Stack));
-      while P^ <> 0 do begin
-        if (P^ = Ord('@')) then begin
-          Pb := P;
-          while (P^ <> 10) and (P^ <> 0) do Inc(P);
-          if (P^ = 10) then Inc(P);
-          WR.AddJSONEscapeW(Pb, (PtrUInt(P)-PtrUInt(Pb)) div 2);
-        end else
-          while (P^ <> 10) and (P^ <> 0) do
-            Inc(P);
-          if (P^ = 10) then Inc(P);
-      end;
-    end;
-  {$ENDIF}
+  {$else}
+   WR.AddJSONEscapeW(pointer(Stack), length(Stack));
+  {$endif}
 end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
