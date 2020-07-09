@@ -21,6 +21,7 @@ begin
   try
     obj.ptr.DefineProperty(cx, 'fipsMode', jsval.FalseValue, JSPROP_READONLY or JSPROP_PERMANENT);
     obj.ptr.DefineProperty(cx, 'fipsForced', jsval.FalseValue, JSPROP_READONLY or JSPROP_PERMANENT);
+    obj.ptr.DefineProperty(cx, 'preserveSymlinks', jsval.BooleanValue(FindCmdLineSwitch('-preserve-symlinks')), JSPROP_READONLY or JSPROP_PERMANENT);
 
     Result := obj.ptr.ToJSValue;
   finally
