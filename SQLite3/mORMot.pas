@@ -27829,8 +27829,9 @@ begin
   result := (fPrivateCopyHash=0) or (Hash=0) or (Hash<>fPrivateCopyHash);
   if not result then
     exit;
-  FastSetString(fPrivateCopy,aJSON,aLen+16); // +16 for SSE4.2 read-ahead
   fPrivateCopyHash := Hash;
+  FastSetString(fPrivateCopy,nil,aLen+16); // +16 for SSE4.2 read-ahead
+  MoveFast(pointer(aJSON)^,pointer(fPrivateCopy)^,aLen+1); // +1 for trailing #0
 end;
 
 function TSQLTableJSON.ParseAndConvert(Buffer: PUTF8Char; BufferLen: integer): boolean;
@@ -28002,7 +28003,7 @@ constructor TSQLTableJSON.Create(const aSQL, aJSON: RawUTF8);
 var len: integer;
 begin
   len := length(aJSON);
-  FastSetString(fPrivateCopy,pointer(aJSON),len+16); // +16 for SSE4.2 read-ahead
+  PrivateCopyChanged(pointer(aJSON),len);
   Create(aSQL,pointer(fPrivateCopy),len);
 end;
 
@@ -28018,7 +28019,7 @@ constructor TSQLTableJSON.CreateFromTables(const Tables: array of TSQLRecordClas
 var len: integer;
 begin
   len := length(aJSON);
-  FastSetString(fPrivateCopy,pointer(aJSON),len+16);
+  PrivateCopyChanged(pointer(aJSON),len);
   CreateFromTables(Tables,aSQL,pointer(fPrivateCopy),len);
 end;
 
@@ -28034,7 +28035,7 @@ constructor TSQLTableJSON.CreateWithColumnTypes(const ColumnTypes: array of TSQL
 var len: integer;
 begin
   len := length(aJSON);
-  FastSetString(fPrivateCopy,pointer(aJSON),len+16);
+  PrivateCopyChanged(pointer(aJSON),len);
   CreateWithColumnTypes(ColumnTypes,aSQL,pointer(fPrivateCopy),len);
 end;
 

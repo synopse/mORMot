@@ -5725,7 +5725,7 @@ end;
 
 function THttpClientSocket.Request(const url, method: SockString;
   KeepAlive: cardinal; const header, Data, DataType: SockString; retry: boolean): integer;
-procedure DoRetry(Error: integer; const msg: SockString);
+  procedure DoRetry(Error: integer; const msg: SockString);
   begin
     {$ifdef SYNCRTDEBUGLOW} TSynLog.Add.Log(sllCustom2,
       'Request: % socket=% DoRetry(%) retry=%',[msg,Sock,Error,BOOL_STR[retry]],self);
