@@ -28,7 +28,7 @@ uses
   BaseUnix,
   {$endif}
   {$ifdef LINUXNOTBSD}
-  SynSystemd,
+  SynFPCLinux,
   mORMotService,
   {$endif}
   mORMotHttpServer;    // HTTP server for RESTful server
@@ -163,12 +163,12 @@ const
   UNIX_SOCK_PATH = '/tmp/rest-bench.socket';
 
 {$ifdef LINUX}
-/// killa process after X second without GEt requests
+/// killa process after X second without Get requests
 function inactivityWatchdog(p: pointer): ptrint;
 var currentRC: TSynMonitorCount64;
 begin
   repeat
-    sleep(10000); /// once per 10 second
+    sleep(10000); // once per 10 second
     if aRestServer = nil then // not initialized
       continue;
     currentRC := aRestServer.Stats.Read;
@@ -182,6 +182,7 @@ begin
   Result := 0;
 end;
 {$endif}
+
 begin
   // set logging abilities
   SQLite3Log.Family.Level := LOG_VERBOSE;
@@ -190,10 +191,10 @@ begin
   SQLite3Log.Family.NoFile := true; // do not create log files for benchmark
   {$ifdef UNIX}
   {$ifdef LINUXNOTBSD}
-  if SynSystemd.ProcessIsStartedBySystemd then begin
+  if ProcessIsStartedBySystemd then begin
     SQLite3Log.Family.EchoToConsole := SQLite3Log.Family.Level;
     SQLite3Log.Family.EchoToConsoleUseJournal := true;
-    if sd.listen_fds(0) = 1 then
+    if ExternalLibraries.sd_listen_fds(0) = 1 then
       url := '' // force to use socket passed by systemd
     else
       url := '8888';
