@@ -17209,10 +17209,13 @@ end;
 
 function TSynAnsiConvert.AnsiBufferToRawUTF8(Source: PAnsiChar; SourceChars: Cardinal): RawUTF8;
 var tmp: TSynTempBuffer;
+    endchar: pointer; // try circumvent Delphi 10.4 optimization issue
 begin
   if (Source=nil) or (SourceChars=0) then
-    result := '' else
-    tmp.Done(AnsiBufferToUTF8(tmp.Init(SourceChars*3),Source,SourceChars),result);
+    result := '' else begin
+    endchar := AnsiBufferToUTF8(tmp.Init(SourceChars*3),Source,SourceChars,true);
+    tmp.Done(endchar,result);
+  end;
 end;
 
 constructor TSynAnsiConvert.Create(aCodePage: cardinal);
@@ -20702,7 +20705,8 @@ function FastNewString(len: PtrInt; cp: cardinal): PAnsiChar; inline;
 begin
   if len>0 then begin
     {$ifdef FPC_X64MM}result := _Getmem({$else}GetMem(result,{$endif}len+(STRRECSIZE+4));
-    PCardinal(@PStrRec(result)^.codePage)^ := cp or (1 shl 16); // also set elemSize:=1
+    PStrRec(result)^.codePage := cp;
+    PStrRec(result)^.elemSize := 1;
     PStrRec(result)^.refCnt := 1;
     PStrRec(result)^.length := len;
     PCardinal(result+len+STRRECSIZE)^ := 0; // ensure ends with four #0
