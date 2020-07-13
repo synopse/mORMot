@@ -7836,9 +7836,10 @@ type
     // (no additional memory buffer is allocated)
     function ParseAndConvert(Buffer: PUTF8Char; BufferLen: integer): boolean;
     /// will check then set (if needed) internal fPrivateCopy[Hash] values
-    // - returns TRUE if content changed (then fPrivateCopy+fPrivateCopyHash
-    // will be updated using crc32c hash)
-    function PrivateCopyChanged(aJSON: PUTF8Char; aLen: integer): boolean;
+    // - returns TRUE if fPrivateCopy content changed (then fPrivateCopyHash
+    // will be updated using crc32c hash if aUpdateHash is set)
+    function PrivateCopyChanged(aJSON: PUTF8Char; aLen: integer;
+      aUpdateHash: boolean): boolean;
   public
     /// create the result table from a JSON-formated Data message
     // - the JSON data is parsed and formatted in-place
@@ -27822,14 +27823,18 @@ end;
 
 { TSQLTableJSON }
 
-function TSQLTableJSON.PrivateCopyChanged(aJSON: PUTF8Char; aLen: integer): boolean;
+function TSQLTableJSON.PrivateCopyChanged(aJSON: PUTF8Char; aLen: integer;
+  aUpdateHash: boolean): boolean;
 var Hash: cardinal;
 begin
-  Hash := crc32c(0,pointer(aJSON),aLen);
-  result := (fPrivateCopyHash=0) or (Hash=0) or (Hash<>fPrivateCopyHash);
-  if not result then
-    exit;
-  fPrivateCopyHash := Hash;
+  if aUpdateHash then begin
+    Hash := crc32c(0,pointer(aJSON),aLen);
+    result := (fPrivateCopyHash=0) or (Hash=0) or (Hash<>fPrivateCopyHash);
+    if not result then
+      exit;
+    fPrivateCopyHash := Hash;
+  end else
+    result := true; // from Create() for better performance on single use
   FastSetString(fPrivateCopy,nil,aLen+16); // +16 for SSE4.2 read-ahead
   MoveFast(pointer(aJSON)^,pointer(fPrivateCopy)^,aLen+1); // +1 for trailing #0
 end;
@@ -27972,7 +27977,7 @@ function TSQLTableJSON.UpdateFrom(const aJSON: RawUTF8; var Refreshed: boolean;
 var len: Integer;
 begin
   len := length(aJSON);
-  if PrivateCopyChanged(pointer(aJSON),len) then
+  if PrivateCopyChanged(pointer(aJSON),len,{updatehash=}true) then
     if ParseAndConvert(pointer(fPrivateCopy),len) then begin
      // parse success from new aJSON data -> need some other update?
      if Assigned(fIDColumn) then begin
@@ -28003,7 +28008,7 @@ constructor TSQLTableJSON.Create(const aSQL, aJSON: RawUTF8);
 var len: integer;
 begin
   len := length(aJSON);
-  PrivateCopyChanged(pointer(aJSON),len);
+  PrivateCopyChanged(pointer(aJSON),len,{updatehash=}false);
   Create(aSQL,pointer(fPrivateCopy),len);
 end;
 
@@ -28019,7 +28024,7 @@ constructor TSQLTableJSON.CreateFromTables(const Tables: array of TSQLRecordClas
 var len: integer;
 begin
   len := length(aJSON);
-  PrivateCopyChanged(pointer(aJSON),len);
+  PrivateCopyChanged(pointer(aJSON),len,{updatehash=}false);
   CreateFromTables(Tables,aSQL,pointer(fPrivateCopy),len);
 end;
 
@@ -28035,7 +28040,7 @@ constructor TSQLTableJSON.CreateWithColumnTypes(const ColumnTypes: array of TSQL
 var len: integer;
 begin
   len := length(aJSON);
-  PrivateCopyChanged(pointer(aJSON),len);
+  PrivateCopyChanged(pointer(aJSON),len,{updatehash=}false);
   CreateWithColumnTypes(ColumnTypes,aSQL,pointer(fPrivateCopy),len);
 end;
 
