@@ -3188,6 +3188,7 @@ initialization
   {$ifndef CPU64} // Jet is not available on Win64
   TOleDBJetConnectionProperties.RegisterClassNameForDefinition;
   {$endif}
+  TOleDBACEConnectionProperties.RegisterClassNameForDefinition;
   TOleDBAS400ConnectionProperties.RegisterClassNameForDefinition;
   TOleDBODBCSQLConnectionProperties.RegisterClassNameForDefinition;
 
