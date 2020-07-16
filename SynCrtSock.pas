@@ -3895,7 +3895,6 @@ const
   ERROR_WINHTTP_TIMEOUT = 12002;
   ERROR_WINHTTP_INVALID_SERVER_RESPONSE = 12152;
 
-
 function SysErrorMessagePerModule(Code: DWORD; ModuleName: PChar): string;
 {$ifdef MSWINDOWS}
 var tmpLen: DWORD;
