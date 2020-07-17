@@ -17523,7 +17523,11 @@ By1:  c := byte(Source^); inc(Source);
   end;
   if not NoTrailingZero then
     Dest^ := #0;
+  {$ifdef ISDELPHI104}
+  exit(Dest); // circumvent Delphi 10.4 optimizer bug
+  {$else}
   Result := Dest;
+  {$endif}
 end;
 
 procedure TSynAnsiFixedWidth.InternalAppendUTF8(Source: PAnsiChar; SourceChars: Cardinal;
