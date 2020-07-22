@@ -1626,6 +1626,8 @@ function StringToWinAnsi(const Text: string): WinAnsiString;
 // according to each Args[] supplied items - so you will never get any exception
 // as with the SysUtils.Format() when a specifier is incorrect
 // - resulting string has no length limit and uses fast concatenation
+// - there is no escape char, so to output a '%' character, you need to use '%'
+// as place-holder, and specify '%' as value in the Args array
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name

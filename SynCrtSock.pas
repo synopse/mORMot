@@ -6652,7 +6652,7 @@ begin
         exit;
     until GetTick64>endtix;
   end;
-  result := false; // normal delay expiration
+  result := false; // abnormal delay expiration
 end;
 
 {$ifndef LVCL}
@@ -9862,7 +9862,8 @@ type
     hReceive, hSend
   );
 
-const sProtocolHeader: SockString = 'SEC-WEBSOCKET-PROTOCOL';
+const
+  sProtocolHeader: SockString = 'SEC-WEBSOCKET-PROTOCOL';
 
 function HttpSys2ToWebSocketHeaders(const aHttpHeaders: HTTP_REQUEST_HEADERS): WEB_SOCKET_HTTP_HEADER_ARR;
 var headerCnt: Integer;
