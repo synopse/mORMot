@@ -863,7 +863,7 @@ begin
     Config.hFooterIcon := TD_FOOTERICONS[aFooterIcon];
     Config.nDefaultButton := aButtonDef;
     Config.nDefaultRadioButton := aRadioDef;
-    Config.cxWidth := aWidth;
+    Config.cxWidth := round(aWidth / (LOWORD(GetDialogBaseUnits()) / 4));
     Config.pfCallback := @TaskDialogCallbackProc;
     Config.lpCallbackData := @self;
     if TaskDialogIndirect(@Config,@result,@RadioRes,@VerifyChecked)=S_OK then
