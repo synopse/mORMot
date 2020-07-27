@@ -6865,18 +6865,10 @@ begin
     SetLength(Content,ContentLength); // not chuncked: direct read
     SockInRead(pointer(Content),ContentLength); // works with SockIn=nil or not
   end else
-  if ContentLength<0 then begin // ContentLength=-1 if no Content-Length
-    // no Content-Length nor Chunked header -> read until eof()
-    if SockIn<>nil then
-      while not eof(SockIn^) do begin
-        readln(SockIn^,Line);
-        if Content='' then
-          Content := Line else
-          Content := Content+#13#10+Line;
-      end;
-    ContentLength := length(Content); // update Content-Length
-    exit;
-  end;
+    // no transferChuked or Content-Length - no body
+    // see https://greenbytes.de/tech/webdav/rfc7230.html#message.body.length
+    // TODO Transfer-Encoding: gzip, chunked
+    ContentLength := 0;
   // optionaly uncompress content
   if cardinal(fContentCompress)<cardinal(length(fCompress)) then
     if fCompress[fContentCompress].Func(Content,false)='' then
