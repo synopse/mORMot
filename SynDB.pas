@@ -5725,13 +5725,8 @@ begin
 end;
 
 function TSQLDBConnectionProperties.SQLDateToIso8601Quoted(DateTime: TDateTime): RawUTF8;
-var tmp: array[0..23] of AnsiChar;
-    P: PUTF8Char;
 begin
-  tmp[0] := '''';
-  P := DateTimeToIso8601ExpandedPChar(DateTime,@tmp[1],DateTimeFirstChar);
-  P^ := '''';
-  FastSetString(result,@tmp,PtrUInt(P)-PtrUInt(@tmp)+1);
+  result := DateTimeToIso8601(DateTime,true,DateTimeFirstChar,false,'''');
 end;
 
 function TSQLDBConnectionProperties.SQLCreate(const aTableName: RawUTF8;
@@ -7843,6 +7838,7 @@ procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
   ParamType: TSQLDBFieldType; const Values: TRawUTF8DynArray; ValuesCount: integer);
 var i: PtrInt;
     ChangeFirstChar: AnsiChar;
+    v: TTimeLogBits; // faster than TDateTime
 begin
   inherited; // raise an exception in case of invalid parameter
   if fConnection=nil then
@@ -7852,8 +7848,10 @@ begin
     VArray := Values; // immediate COW reference-counted assignment
     if (ParamType=ftDate) and (ChangeFirstChar<>'T') then
       for i := 0 to ValuesCount-1 do // fix e.g. for PostgreSQL
-        if (length(VArray[i])>11) and (VArray[i][12]='T') then
-          VArray[i][12] := ChangeFirstChar; // [12] since quoted 'dateTtime'
+        if VArray[i]<>'null' then begin
+          v.From(PUTF8Char(pointer(VArray[i]))+1,length(VArray[i])-2);
+          VArray[i] := v.FullText(true,ChangeFirstChar,'''');
+        end;
     VInt64 := ValuesCount;
   end;
   fParamsArrayCount := ValuesCount;
