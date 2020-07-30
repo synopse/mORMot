@@ -3357,13 +3357,6 @@ begin
     FormatShort16('#%',[ord(aType)],result);
 end;
 
-function OracleSQLIso8601ToDate(Iso8601: RawUTF8): RawUTF8;
-begin
-  if (length(Iso8601)>10) and (Iso8601[11]='T') then
-    Iso8601[11] := ' '; // 'T' -> ' '
-  result := 'to_date('''+Iso8601+''',''YYYY-MM-DD HH24:MI:SS'')'; // from Iso8601
-end;
-
 
 {$ifdef EMULATES_TQUERY}
 
@@ -5723,9 +5716,10 @@ function TSQLDBConnectionProperties.SQLIso8601ToDate(const Iso8601: RawUTF8): Ra
 begin
   case DBMS of
   dSQLite: result := TrimTInIso;
-  dOracle: result := OracleSQLIso8601ToDate(Iso8601);
+  dOracle: result := 'to_date('''+TrimTInIso+''',''YYYY-MM-DD HH24:MI:SS'')';
   dNexusDB: result := 'DATE '+Iso8601;
   dDB2: result := 'TIMESTAMP '''+TrimTInIso+'''';
+  dPostgreSQL: result := ''''+TrimTInIso+'''';
   else  result := ''''+Iso8601+'''';
   end;
 end;
@@ -7829,7 +7823,7 @@ end;
 
 procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
   const Values: array of double);
-var i: integer;
+var i: PtrInt;
 begin
   with CheckParam(Param,ftDouble,paramIn,length(Values))^ do
     for i := 0 to high(Values) do
@@ -7838,7 +7832,7 @@ end;
 
 procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
   const Values: array of Int64);
-var i: integer;
+var i: PtrInt;
 begin
   with CheckParam(Param,ftInt64,paramIn,length(Values))^ do
     for i := 0 to high(Values) do
@@ -7847,7 +7841,7 @@ end;
 
 procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
   ParamType: TSQLDBFieldType; const Values: TRawUTF8DynArray; ValuesCount: integer);
-var i: integer;
+var i: PtrInt;
     ChangeFirstChar: AnsiChar;
 begin
   inherited; // raise an exception in case of invalid parameter
@@ -7858,8 +7852,8 @@ begin
     VArray := Values; // immediate COW reference-counted assignment
     if (ParamType=ftDate) and (ChangeFirstChar<>'T') then
       for i := 0 to ValuesCount-1 do // fix e.g. for PostgreSQL
-        if (length(Values[i])>11) and (Values[i][12]='T') then
-          Values[i][12] := ChangeFirstChar; // [12] since quoted 'dateTtime'
+        if (length(VArray[i])>11) and (VArray[i][12]='T') then
+          VArray[i][12] := ChangeFirstChar; // [12] since quoted 'dateTtime'
     VInt64 := ValuesCount;
   end;
   fParamsArrayCount := ValuesCount;
@@ -7867,7 +7861,7 @@ end;
 
 procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
   const Values: array of RawUTF8);
-var i: integer;
+var i: PtrInt;
     StoreVoidStringAsNull: boolean;
 begin
   StoreVoidStringAsNull := (fConnection<>nil) and
@@ -7881,7 +7875,7 @@ end;
 
 procedure TSQLDBStatementWithParams.BindArrayCurrency(Param: Integer;
   const Values: array of currency);
-var i: integer;
+var i: PtrInt;
 begin
   with CheckParam(Param,ftCurrency,paramIn,length(Values))^ do
     for i := 0 to high(Values) do
@@ -7890,7 +7884,7 @@ end;
 
 procedure TSQLDBStatementWithParams.BindArrayDateTime(Param: Integer;
   const Values: array of TDateTime);
-var i: integer;
+var i: PtrInt;
 begin
   with CheckParam(Param,ftDate,paramIn,length(Values))^ do
     for i := 0 to high(Values) do
@@ -7899,7 +7893,7 @@ end;
 
 procedure TSQLDBStatementWithParams.BindArrayRowPrepare(
   const aParamTypes: array of TSQLDBFieldType; aExpectedMinimalRowCount: integer);
-var i: integer;
+var i: PtrInt;
 begin
   fParam.Count := 0;
   for i := 0 to high(aParamTypes) do
@@ -7908,7 +7902,7 @@ begin
 end;
 
 procedure TSQLDBStatementWithParams.BindArrayRow(const aValues: array of const);
-var i: integer;
+var i: PtrInt;
 begin
   if length(aValues)<>fParamCount then
     raise ESQLDBException.CreateFmt('Invalid %.BindArrayRow call',[self]);
@@ -7936,7 +7930,7 @@ begin
 end;
 
 procedure TSQLDBStatementWithParams.BindFromRows(Rows: TSQLDBStatement);
-var F: integer;
+var F: PtrInt;
     U: RawUTF8;
 begin
   if Rows<>nil then
