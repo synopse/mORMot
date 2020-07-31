@@ -7840,22 +7840,22 @@ procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
   ParamType: TSQLDBFieldType; const Values: TRawUTF8DynArray; ValuesCount: integer);
 var i: PtrInt;
     ChangeFirstChar: AnsiChar;
+    p: PSQLDBParam;
     v: TTimeLogBits; // faster than TDateTime
 begin
   inherited; // raise an exception in case of invalid parameter
   if fConnection=nil then
     ChangeFirstChar := 'T' else
     ChangeFirstChar := Connection.Properties.DateTimeFirstChar;
-  with CheckParam(Param,ParamType,paramIn)^ do begin
-    VArray := Values; // immediate COW reference-counted assignment
-    if (ParamType=ftDate) and (ChangeFirstChar<>'T') then
-      for i := 0 to ValuesCount-1 do // fix e.g. for PostgreSQL
-        if VArray[i]<>'null' then begin
-          v.From(PUTF8Char(pointer(VArray[i]))+1,length(VArray[i])-2);
-          VArray[i] := v.FullText(true,ChangeFirstChar,'''');
-        end;
-    VInt64 := ValuesCount;
-  end;
+  p := CheckParam(Param,ParamType,paramIn);
+  p^.VInt64 := ValuesCount;
+  p^.VArray := Values; // immediate COW reference-counted assignment
+  if (ParamType=ftDate) and (ChangeFirstChar<>'T') then
+    for i := 0 to ValuesCount-1 do // fix e.g. for PostgreSQL
+      if (p^.VArray[i]<>'') and (p^.VArray[i][1]='''') then begin
+        v.From(PUTF8Char(pointer(p^.VArray[i]))+1,length(p^.VArray[i])-2);
+        p^.VArray[i] := v.FullText({expanded=}true,ChangeFirstChar,'''');
+      end;
   fParamsArrayCount := ValuesCount;
 end;
 

@@ -12548,7 +12548,8 @@ type
     /// convert to Iso-8601 encoded text with date and time part
     // - never truncate to date/time nor return '' as Text() does
     function FullText(Expanded: boolean; FirstTimeChar: AnsiChar = 'T';
-      QuotedChar: AnsiChar = #0): RawUTF8; overload; {$ifdef HASINLINE}inline;{$endif}
+      QuotedChar: AnsiChar = #0): RawUTF8; overload;
+      {$ifdef FPC}inline;{$endif} //  URW1111 on Delphi 2010 and URW1136 on XE
     /// convert to Iso-8601 encoded text with date and time part
     // - never truncate to date/time or return '' as Text() does
     function FullText(Dest: PUTF8Char; Expanded: boolean;
