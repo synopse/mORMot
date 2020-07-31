@@ -12546,9 +12546,11 @@ type
     function Text(Dest: PUTF8Char; Expanded: boolean;
       FirstTimeChar: AnsiChar = 'T'): integer; overload;
     /// convert to Iso-8601 encoded text with date and time part
+    // - never truncate to date/time nor return '' as Text() does
     function FullText(Expanded: boolean; FirstTimeChar: AnsiChar = 'T';
-      QuotedChar: AnsiChar = #0): RawUTF8; overload;
+      QuotedChar: AnsiChar = #0): RawUTF8; overload; {$ifdef HASINLINE}inline;{$endif}
     /// convert to Iso-8601 encoded text with date and time part
+    // - never truncate to date/time or return '' as Text() does
     function FullText(Dest: PUTF8Char; Expanded: boolean;
       FirstTimeChar: AnsiChar = 'T'; QuotedChar: AnsiChar = #0): PUTF8Char; overload;
     /// convert to ready-to-be displayed text
@@ -38385,14 +38387,7 @@ end;
 function TTimeLogBits.FullText(Expanded: boolean; FirstTimeChar,QuotedChar: AnsiChar): RawUTF8;
 var tmp: array[0..31] of AnsiChar;
 begin
-  if Value=0 then
-    if QuotedChar<>#0 then begin
-      FastSetString(result,nil,2);
-      result[1] := QuotedChar;
-      result[2] := QuotedChar;
-    end else
-      result := '' else
-    FastSetString(result,@tmp,FullText(tmp,Expanded,FirstTimeChar,QuotedChar)-@tmp);
+  FastSetString(result,@tmp,FullText(tmp,Expanded,FirstTimeChar,QuotedChar)-@tmp);
 end;
 
 function TTimeLogBits.i18nText: string;
