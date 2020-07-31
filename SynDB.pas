@@ -2843,7 +2843,9 @@ function TrimLeftSchema(const TableName: RawUTF8): RawUTF8;
 // - returns the number of ? parameters found within aSQL
 // - won't generate any SQL keyword parameters (e.g. :AS :OF :BY), to be
 // compliant with Oracle OCI expectations
-function ReplaceParamsByNames(const aSQL: RawUTF8; var aNewSQL: RawUTF8): integer;
+// - any ending ';' character is deleted, unless aStripSemicolon is unset
+function ReplaceParamsByNames(const aSQL: RawUTF8; var aNewSQL: RawUTF8;
+  aStripSemicolon: boolean=true): integer;
 
 /// replace all '?' in the SQL statement with indexed parameters like $1 $2 ...
 // - returns the number of ? parameters found within aSQL
@@ -8039,7 +8041,8 @@ begin
     result := copy(TableName,j,maxInt);
 end;
 
-function ReplaceParamsByNames(const aSQL: RawUTF8; var aNewSQL: RawUTF8): integer;
+function ReplaceParamsByNames(const aSQL: RawUTF8; var aNewSQL: RawUTF8;
+  aStripSemicolon: boolean): integer;
 var i,j,B,L: PtrInt;
     P: PAnsiChar;
     c: array[0..3] of AnsiChar;
@@ -8048,10 +8051,11 @@ const SQL_KEYWORDS: array[0..19] of AnsiChar = 'ASATBYIFINISOFONORTO';
 begin
   result := 0;
   L := Length(aSQL);
-  while (L>0) and (aSQL[L] in [#1..' ',';']) do
-    if (aSQL[L]=';') and (L>5) and IdemPChar(@aSQL[L-3],'END') then
-      break else // allows 'END;' at the end of a statement
-      dec(L);    // trim ' ' or ';' right (last ';' could be found incorrect)
+  if aStripSemicolon then
+    while (L>0) and (aSQL[L] in [#1..' ',';']) do
+      if (aSQL[L]=';') and (L>5) and IdemPChar(@aSQL[L-3],'END') then
+        break else // allows 'END;' at the end of a statement
+        dec(L);    // trim ' ' or ';' right (last ';' could be found incorrect)
   if PosExChar('?',aSQL)>0 then begin
     aNewSQL:= '';
     // change ? into :AA :BA ..

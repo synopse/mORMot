@@ -312,6 +312,11 @@ type
     // - if ExpectResults is TRUE, then Step() and Column*() methods are available
     // to retrieve the data rows
     // - raise an ESQLDBOracle on any error
+    // - if aSQL requires a trailing ';', you should end it with ';;' e.g. for
+    // $ DB.ExecuteNoResult(
+    // $  'CREATE OR REPLACE FUNCTION ORA_POC(MAIN_TABLE IN VARCHAR2, REC_COUNT IN NUMBER, BATCH_SIZE IN NUMBER) RETURN VARCHAR2' +
+    // $  ' AS LANGUAGE JAVA' +
+    // $  ' NAME ''OraMain.selectTable(java.lang.String, int, int) return java.lang.String'';;', []);
     procedure Prepare(const aSQL: RawUTF8; ExpectResults: Boolean=false); overload; override;
     /// Execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
@@ -3412,14 +3417,18 @@ begin
         raise ESQLDBOracle.CreateUTF8('%.Prepare should be called only once',[self]);
       // 1. process SQL
       inherited Prepare(aSQL,ExpectResults); // set fSQL + Connect if necessary
-      fPreparedParamsCount := ReplaceParamsByNumbers(aSQL,fSQLPrepared,':', true);
+      fPreparedParamsCount := ReplaceParamsByNumbers(aSQL,fSQLPrepared,':',true);
       L := Length(fSQLPrepared);
       while (L>0) and (fSQLPrepared[L] in [#1..' ',';']) do
-      if (fSQLPrepared[L]=';') and (L>5) and IdemPChar(@fSQLPrepared[L-3],'END') then
-        break else // allows 'END;' at the end of a statement
-        dec(L);    // trim ' ' or ';' right (last ';' could be found incorrect)
-      if L <> Length(fSQLPrepared) then
-        fSQLPrepared := copy(fSQLPrepared,1,L); // trim right ';' if any
+        if (fSQLPrepared[L]=';') and (L>5) then
+          if fSQLPrepared[L-1]=';' then begin
+            dec(L); // allow one trailing ';' by writing ';;'
+            break;
+          end else if IdemPChar(@fSQLPrepared[L-3],'END') then
+          break else // allows 'END;' at the end of a statement
+          dec(L);    // trim ' ' or ';' right (last ';' could be found incorrect)
+      if L<>Length(fSQLPrepared) then
+        SetLength(fSQLPrepared,L); // trim trailing ';' if needed
       // 2. prepare statement
       env := (Connection as TSQLDBOracleConnection).fEnv;
       with OCI do begin
