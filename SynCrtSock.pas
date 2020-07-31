@@ -619,6 +619,7 @@ type
   /// a genuine identifier for a given client connection on server side
   // - maps http.sys ID, or is a genuine 31-bit value from increasing sequence
   THttpServerConnectionID = Int64;
+
   /// a dynamic array of client connection identifiers, e.g. for broadcasting
   THttpServerConnectionIDDynArray = array of THttpServerConnectionID;
 
@@ -6389,7 +6390,7 @@ begin
       exit;
     Sleep(1);
     if GetTick64 > tix then
-      raise ECrtSocket.CreateFmt('%s.WaitStarted failed after % seconds with %s',
+      raise ECrtSocket.CreateFmt('%s.WaitStarted failed after %d seconds [%s]',
         [ClassName,Seconds,fExecuteMessage]);
   until false;
 end;
