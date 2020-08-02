@@ -37427,17 +37427,16 @@ begin
     exit;
   InternalURI(Call^);
   if ((Sender=nil) or OnIdleBackgroundThreadActive) and
-      not(isDestroying in fInternalState) then
+      not(isDestroying in fInternalState) then begin
     if (Call^.OutStatus=HTTP_NOTIMPLEMENTED) and (isOpened in fInternalState) then begin
       InternalClose; // force recreate connection
       Exclude(fInternalState,isOpened);
-      if ((Sender=nil) or OnIdleBackgroundThreadActive) then begin
+      if ((Sender=nil) or OnIdleBackgroundThreadActive) then
         InternalURI(Call^); // try request again
-        if Call^.OutStatus<>HTTP_NOTIMPLEMENTED then
-          Include(fInternalState,isOpened);
-      end;
-    end else
+    end;
+    if Call^.OutStatus<>HTTP_NOTIMPLEMENTED then
       Include(fInternalState,isOpened);
+  end;
 end;
 
 function TSQLRestClientURI.GetOnIdleBackgroundThreadActive: boolean;
