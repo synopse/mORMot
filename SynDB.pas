@@ -1688,6 +1688,8 @@ type
   // overridden methods, especially Bind*(), Prepare(), ExecutePrepared, Step()
   // and Column*() methods
   TSQLDBStatement = class(TInterfacedObject, ISQLDBRows, ISQLDBStatement)
+  private
+    function GetSQLPrepared: RawUTF8;
   protected
     fStripSemicolon: boolean;
     fConnection: TSQLDBConnection;
@@ -2192,7 +2194,7 @@ type
     // - Depends on DB parameters placeholder are replaced to ?, :AA, $1 etc
     // - this SQL is ready to be used in any DB tool, e.g. to check the real 
     // execution plan/timing
-    property SQLPrepared: RawUTF8 read fSQLPrepared;
+    property SQLPrepared: RawUTF8 read GetSQLPrepared;
     /// low-level access to the statement cache index, after a call to Prepare()
     // - contains >= 0 if the database supports prepared statement cache 
     //(Oracle, Postgres) and query plan is cached; contains -1 in other cases
@@ -7394,6 +7396,14 @@ begin
     FormatShort(Fmt,Args,tmp);
   {$endif}
   result := SQLLogEnd(@tmp);
+end;
+
+function TSQLDBStatement.GetSQLPrepared: RawUTF8;
+begin
+  if fSQLPrepared <> '' then
+    Result := fSQLPrepared
+  else
+    Result := fSQL;
 end;
 
 function TSQLDBStatement.GetSQLWithInlinedParams: RawUTF8;
