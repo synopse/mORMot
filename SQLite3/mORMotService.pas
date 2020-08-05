@@ -1129,29 +1129,35 @@ begin
     result := FArgsList[Idx];
 end;
 
+
 {$ifdef CPUX86}
+  {.$define X86JUMPER} // this preliminary version is buggy so disabled
+  // a single service per excecutable is fine enough for our daemons
+  // also for proper Delphi 10.4 compilation with no hint
+{$endif CPUX86}
+
+{$ifdef X86JUMPER}
 procedure JumpToService;
 asm
   pop  eax
-  mov  eax, [eax]           // retrieve self value
+  mov  eax, [eax]           // retrieve TService self value
   mov  edx, [esp+4]
   call TService.CtrlHandle
   ret  4
 end;
-{$endif CPUX86}
+{$endif X86JUMPER}
 
 function TService.GetControlHandler: TServiceControlHandler;
-{$ifdef CPUX86}
+{$ifdef X86JUMPER}
 var AfterCallAddr: Pointer;
     Offset: Integer;
-{$endif}
+{$endif X86JUMPER}
 begin
   Result := fControlHandler;
   if not Assigned(Result) then
     ServiceLog.Add.Log(sllError,'%.GetControlHandler with fControlHandler=nil: '+
       'use TServiceSingle or set a custom ControlHandler',[self]);
-  {$ifdef CPUX86}
-  exit;
+  {$ifdef X86JUMPER}
   if not Assigned(Result) then
   begin
     raise EServiceException.Create('Automated jumper generation is not working: '+
@@ -1169,7 +1175,7 @@ begin
     end;
     Result := Pointer(fJumper);
   end;
-  {$endif CPUX86}
+  {$endif X86JUMPER}
 end;
 
 function TService.GetInstalled: boolean;

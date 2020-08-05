@@ -172,7 +172,7 @@ begin
   auto := TSQLRecord.AutoFree([ // avoid several try..finally
     @info,TSQLBlogInfo, @article,TSQLArticle, @comment,TSQLComment, @tag,TSQLTag]);
   if not RestModel.Retrieve('',info) then begin // retrieve first item
-    tmp := StringFromFile('/home/ab/Downloads/2020-01-16-a8003957c2ae6bde5be6ea279c9c9ce4-backup.txt');
+    tmp := StringFromFile('/home/ab/Downloads/2020-06-16-a8003957c2ae6bde5be6ea279c9c9ce4-backup.txt');
     info.Language := 'en';
     if tmp<>'' then begin
       info.Title := 'Synopse Blog';
@@ -187,7 +187,7 @@ begin
     end;
     info.About := info.About+#13#10'Website powered by mORMot MVC '+
       SYNOPSE_FRAMEWORK_VERSION+', compiled with '+GetDelphiCompilerVersion+
-      ', running on '+ToText(OSVersion32)+'.';
+      ', running on '+RawUTF8(ToText(OSVersion32))+'.';
     info.Copyright := '&copy;'+ToUTF8(CurrentYear)+'<a href=https://synopse.info>Synopse Informatique</a>';
     RestModel.Add(info,true);
   end;

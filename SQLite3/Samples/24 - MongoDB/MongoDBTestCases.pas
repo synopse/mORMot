@@ -23,7 +23,7 @@ uses
 
 const
   MONGOSERVER = 'localhost';
-  // MONGOSERVER = '10.0.2.2'; // from a VirtualBox VM
+  //MONGOSERVER = '10.0.2.2'; // from a VirtualBox VM
   MONGOPORT = 27017;
 
 type
@@ -205,7 +205,7 @@ begin
   Check(fDB.Collection[COLL_NAME]=Coll);
   Check(fDB.CollectionOrCreate[COLL_NAME]=Coll);
   errmsg := Coll.Drop;
-  Check(fClient.ServerBuildInfoNumber>20000);
+  CheckUTF8(fClient.ServerBuildInfoNumber>20000,errmsg);
   fValues := nil;
   SetLength(fValues,COLL_COUNT);
   for i := 0 to COLL_COUNT-1 do begin
@@ -764,6 +764,8 @@ begin
     FormatUTF8('[{"min(RowID)":1,"max(RowID)":%,"Count(RowID)":%}]',[COLL_COUNT,COLL_COUNT]));
   doc := fClient.RetrieveDocVariant(TSQLORM,'',[],
     'min(RowID) as a,max(RowID) as b,Count(RowID) as c');
+  if checkfailed(not VarIsEmptyOrNull(doc),'abc docvariant') then
+    exit;
   check(doc.a=1);
   check(doc.b=COLL_COUNT);
   check(doc.c=COLL_COUNT);

@@ -349,6 +349,7 @@ begin // should be fast enough in practice, especially inlined
 end;
 {$else}
 procedure MoveWithOverlap(Src: PByte; Dst: PByte; Count: Integer);
+  {$ifdef FPC} nostackframe; assembler; {$endif}
 asm // eax=source edx=dest ecx=count
         push    edx
         sub     edx, eax
@@ -356,19 +357,18 @@ asm // eax=source edx=dest ecx=count
         pop     edx     // restore original edx=dest
         ja      System.Move // call FastMove() routine for normal code
         or      ecx, ecx
-        jz      @@Exit
+        jz      @exit
         push    edi
         mov     edi, edx // restore original edi=dest
-@@overlap: // byte by byte slower but accurate move routine
+@overlap: // byte by byte slower but accurate move routine
         mov     dl, [eax]
         inc     eax
         mov     [edi], dl
         inc     edi
         dec     ecx
-        jnz     @@overlap
+        jnz     @overlap
         pop     edi
-
-@@Exit:
+@exit:
 end;
 {$endif}
 

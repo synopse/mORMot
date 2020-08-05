@@ -708,7 +708,7 @@ At first, some points can be highlighted, which make this framework distinct to 
 - More than 1800 pages of documentation;
 - {\i Delphi}, {\i FreePascal}, mobile and @*AJAX@ clients can share the same server, and ORM/SOA client access code can be generated on request for any kind of application - see @86@;
 - Full source code provided - so you can enhance it to fulfill any need;
-- Works from {\i Delphi} 6 up to {\i Delphi 10.3 Rio} and FPC 2.6.4/2.7.1/3.1.1, truly Unicode (uses @*UTF-8@ encoding in its kernel, just like JSON), with any version of {\i Delphi} (no need to upgrade your IDE).
+- Works from {\i Delphi} 6 up to {\i Delphi 10.3 Rio} and FPC 2.6.4/2.7.1/3.x, truly Unicode (uses @*UTF-8@ encoding in its kernel, just like JSON), with any version of {\i Delphi} (no need to upgrade your IDE).
 \page
 : Benefits
 As you can see from the previous section, {\i mORMot} provides a comprehensive set of features that can help you to manage your crosscutting concerns though a reusable set of components and core functionality.
@@ -11706,7 +11706,7 @@ At this time, the only missing feature of {\i mORMot}'s SOA is transactional pro
 Current version of the main framework units target only {\i Win32} / {\i Win64} systems under Delphi, and (in a preliminary state) {\i Windows} or {\i @*Linux@} under FPC.\line It allows to make easy self-hosting of {\i mORMot} servers for local business applications in any corporation, or pay cheap hosting in the @*Cloud@, since {\i mORMot} CPU and RAM expectations are much lower than a regular {\f1\fs20 IIS-WCF-MSSQL-.Net} stack.\line But in a @17@, you will probably need to create clients for platforms outside the support platform sets world, especially mobile devices or AJAX applications.
 A set of @**cross-platform@ client units is therefore available in the {\f1\fs20 CrossPlatform} sub-folder of the source code repository. It allows writing any client in modern {\i object pascal} language, for:
 - Any version of {\i Delphi}, on any platform ({\i Mac @*OSX@}, or any mobile supported devices);
-- {\i @*FreePascal@} Compiler (in 2.6.4, 2.7.1 or 3.1.1 branches);
+- {\i @*FreePascal@} Compiler (in 2.6.4, 2.7.1 or 3.x branches - preferred is {\i 3.2 fixes});
 - {\i @*Smart Mobile Studio@} (2.1 and up), to create AJAX or mobile applications (via {\i @*PhoneGap@}, if needed).
 The units are the following:
 |%37%63
@@ -11816,7 +11816,7 @@ In order to be compliant with the {\i NextGen} revision, our {\f1\fs20 SynCrossP
 On {\i Delphi}, the {\i @*Indy@} library is used for HTTP requests. It is cross-platform by nature, so should work on any supported system. For SSL support with {\i iOS} and {\i Android} clients, please follow instructions at @http://blog.marcocantu.com/blog/using_ssl_delphi_ios.html you may also download the needed {\f1\fs20 libcrypto.a} and {\f1\fs20 libssl.a} files from @http://indy.fulgan.com/SSL/OpenSSLStaticLibs.7z
 Feedback is needed for the mobile targets, via FMX.\line In fact, we rely for our own projects on {\i @*Smart Mobile Studio@} for our mobile applications, so the {\i Synopse} team did not test {\i Delphi NextGen} platforms (i.e. {\i iOS} and {\i Android}) as deep as other systems. Your input will be very valuable and welcome, here!
 :   FreePascal clients
-{\f1\fs20 SynCrossPlatform*} units support the {\i @**FreePascal@} Compiler, in its 2.7.1 / 3.1.1 branches.\line Most of the code is shared with {\i Delphi}, including RTTI support and all supported types.
+{\f1\fs20 SynCrossPlatform*} units support the {\i @**FreePascal@} Compiler, in its 2.7.1 / 3.x branches.\line Most of the code is shared with {\i Delphi}, including RTTI support and all supported types.
 Some restrictions apply, though.
 Due to a bug in {\i FreePascal} implementation of {\f1\fs20 variant} late binding, the following code won't work as expected on older revisions of FPC:
 !  doc.name2 := 3.1415926;
@@ -13393,7 +13393,7 @@ As we already stated, our @35@ allow all these patterns.\line We will now detail
 \page
 :112 Windows and Linux hosted
 The current version of the framework fully supports deploying the {\i mORMot} servers on the {\i @**Windows@} platform, either as a {\i Win32} executable, or - for latest versions of the {\i Delphi} compiler - as a {\i Win64} executable.
-{\i @**Linux@} support (via @**FPC@ 3.1.x) is available, but we face some FPC compiler-level issue with FPC 2.x, which does not supply the needed {\f1\fs20 interface} RTTI - see @http://bugs.freepascal.org/view.php?id=26774 - so that the SOA and MVC features are not working directly non old FPC revision, so you need to generate the RTTI from a Delphi compiler, as stated @125@. For the client side, there is no limitation, thanks to our @86@, which is perfectly supported even by oldest FPC compiler under {\i Linux}. The {\i Linux} backend available in latest Delphi is not supported, since FPC 2.x gives pretty good results (we use it on production since years), and a Delphi Entreprise licence is required to access it - which we don't have.
+{\i @**Linux@} support (via @**FPC@ 3.2.x) is available, but we face some FPC compiler-level issue with FPC 2.x, which does not supply the needed {\f1\fs20 interface} RTTI - see @http://bugs.freepascal.org/view.php?id=26774 - so that the SOA and MVC features are not working directly non old FPC revision, so you need to generate the RTTI from a Delphi compiler, as stated @125@. For the client side, there is no limitation, thanks to our @86@, which is perfectly supported even by oldest FPC compiler under {\i Linux}. The {\i Linux} backend available in latest Delphi is not supported, since FPC 2.x gives pretty good results (we use it on production since years), and a Delphi Entreprise licence is required to access it - which we don't have.
 In practice, a {\i mORMot} server expects much lower hardware requirements (in CPU, storage and RAM terms) than a regular {\f1\fs20 IIS-WCF-MSSQL-.Net} stack. And it requires almost no maintenance.
 As a consequence, the potential implementation schemes could be hosted as such:
 - Stand-alone application, without any explicit server;
@@ -15857,7 +15857,7 @@ Before any release all unitary regression tests are performed with the following
 - {\i Delphi} 10.2 Tokyo;
 - {\i Delphi} 10.3 Rio;
 - {\i @*CrossKylix@} 3.0;
-- {\i @*FPC@} 3.1.x (svn revision).
+- {\i @*FPC@} 3.x - preferred is {\i 3.2 fixes}.
 Target platforms are {\i Win32} and {\i Win64} for {\i Delphi} and {\i FPC}, plus {\i Linux 32/64} for {\i FPC} and {\i CrossKylix}.
 Then all sample source code (including the {\i Main Demo} and {\f1\fs20 @*SynDBExplorer@} sophisticated tools) are compiled, and user-level testing is performed against those applications.
 You can find in the {\f1\fs20 compil.bat} and {\f1\fs20 compilpil.bat} files of our source code repository how incremental builds and tests are performed.
@@ -16223,9 +16223,9 @@ Follow these steps:
 - Finally, click on the "{\i Zip Archive}" link, available at the end of the "{\i Overview}" header, right ahead to the "{\i Other Links}" title. This link will build a {\f1\fs20 .zip} archive of the complete source code and download it to your browser.
 :  Expected compilation platform
 The framework source code tree will compile and is tested for the following platforms:
-- {\i Delphi} 6 up to {\i Delphi 10.3 Rio} compiler and IDE, with {\i @*FreePascal@ Compiler} (FPC) 3.1.x and {\i @*Lazarus@} support;
+- {\i Delphi} 6 up to {\i Delphi 10.3 Rio} compiler and IDE, with {\i @*FreePascal@ Compiler} (FPC) 3.x and {\i @*Lazarus@} support;
 - Server side on Windows 32-bit and @**64-bit@ platforms (FPC or {\i Delphi} XE2 and up expected when targeting {\i Win64});
-- {\i @*Linux@} 32-bit and 64-bit platform for servers using the FPC 3.1.x compiler - now stable and tested in production since years (especially {\i @*Debian@/@*Ubuntu@} on {\f1\fs20 x86_64});
+- {\i @*Linux@} 32-bit and 64-bit platform for servers using the FPC 3.2 fixes branch - now stable and tested in production since years (especially {\i @*Debian@/@*Ubuntu@} on {\f1\fs20 x86_64});
 - VCL client on Win32/Win64 - GUI may be compiled optionally with third-party non Open-Source @*TMS@ Components, instead of default VCL components - see @http://www.tmssoftware.com/site/tmspack.asp
 - @69@ clients on any supported platforms;
 - @90@ startup with 2.1, for creating @*AJAX@ / @*JavaScript@ / HTML5 / Mobile clients.
@@ -16233,7 +16233,7 @@ Some part of the library (e.g. {\f1\fs20 SynCommons.pas}, {\f1\fs20 SynTests.pas
 If you want to compile {\i mORMot} unit into @*packages@, to avoid an obfuscated {\i [DCC Error] @*E2201@ Need imported data reference ($G) to access 'VarCopyProc'} error at compilation, you should defined the {\f1\fs20 USEPACKAGES} conditional in your project's options. Open {\f1\fs20 SynCommons.inc} for a description of this conditional, and all over definitions global to all {\i mORMot} units - see @45@.
 The framework source code implementation and design tried to be as cross-platform and cross-compiler as possible, since the beginning. It is a lot of work to maintain compatibility towards so many tools and platforms, but we think it is always worth it - especially if you try not depend on {\i Delphi} only, which as shown some backward compatibility issues during its lifetime.
 For HTML5 and Mobile clients, our main platform is {\i Smart Mobile Studio}, which is a great combination of ease of use, a powerful {\i SmartPascal} dialect, small applications (much smaller than FMX), with potential packaging as native iOS or {\i Android} applications (via {\i @*PhoneGap@}).
-The latest versions of the {\i FreePascal Compiler} together with its great {\i Lazarus} IDE, are now very stable and easy to work with. We don't support {\i CodeTyphon}, since we found some licensing issue with some part of it (e.g. {\i Orca} GUI library origin is doubtful). So we recommend using {\i @*fpcupdeluxe@} - see @203@ - which is maintained by Alfred, a {\i mORMot} contributor. This is amazing to build the whole set of compilers and IDE, with a lot of components, for several platforms (this is a cross-platform project), just from the sources. I like {\i Lazarus} stability and speed much more than {\i Delphi} (did you ever tried to browse and debug {\i included} {\f1\fs20 $I ...} files in the {\i Delphi} IDE? with Lazarus, it is painless), even if the compiler is slower than {\i Delphi}'s, and if the debugger is less integrated and even more unstable than {\i Delphi}'s under Windows (yes, it is possible!). At least, it works, and the {\i Lazarus} IDE is small and efficient. Official {\i @*Linux@} support is available for {\i mORMot} servers, with full features in the {\i FPC} 3.1.x branch - we use it on producing on {\i Linux} 64-bit since years.
+The latest versions of the {\i FreePascal Compiler} together with its great {\i Lazarus} IDE, are now very stable and easy to work with. We don't support {\i CodeTyphon}, since we found some licensing issue with some part of it (e.g. {\i Orca} GUI library origin is doubtful). So we recommend using {\i @*fpcupdeluxe@} - see @203@ - which is maintained by Alfred, a {\i mORMot} contributor. This is amazing to build the whole set of compilers and IDE, with a lot of components, for several platforms (this is a cross-platform project), just from the sources. I like {\i Lazarus} stability and speed much more than {\i Delphi} (did you ever tried to browse and debug {\i included} {\f1\fs20 $I ...} files in the {\i Delphi} IDE? with Lazarus, it is painless), even if the compiler is slower than {\i Delphi}'s, and if the debugger is less integrated and even more unstable than {\i Delphi}'s under Windows (yes, it is possible!). At least, it works, and the {\i Lazarus} IDE is small and efficient. Official {\i @*Linux@} support is available for {\i mORMot} servers, with full features in the {\i FPC} 3.2 branch - we use it on producing on {\i Linux} 64-bit since years.
 :  SQLite3 static linking for Delphi and FPC
 {\i Preliminary note}: if you retrieved the source code from @https://github.com/synopse/mORMot you will have all the needed {\f1\fs20 .obj/.o} static files available in the expected folders. Just ignore this chapter.
 In order to maintain our @https://synopse.info/fossil/timeline source code repository in a decent size, we excluded the {\f1\fs20 sqlite3.obj/.o} storage in it, but provide the full source code of the {\i @*SQlite3@} engine in a custom {\f1\fs20 sqlite3.c} file, ready to be compiled with all conditional defined as expected by {\f1\fs20 SynSQlite3Static.pas}. You need to add the official {\i SQlite3} amalgamation file from @https://www.sqlite.org/download.html and put its content into a {\f1\fs20 SQLite3\\amalgamation} sub-folder, for proper compilation. Our custom {\f1\fs20 sqlite3.c} file will add encryption feature to the engine. Also look into {\f1\fs20 SynSQlite3Static.pas} comments if there is any manual patch needed for proper compilation of the amalgamation sourece.
@@ -16423,18 +16423,20 @@ For proper FPC compilation, ensure you have the following settings to your proje
 - {\i Libraries (-fFl)}:\line{\i \f1\fs20 D:\\Dev\\mORMot\\static\\$(TargetCPU)-$(TargetOS)}
 Replace {\f1\fs20 D:\\Dev\\mORMot} path by the absolute/relative folder where you did install the framework. In practice, a relative path (e.g. {\f1\fs20 ..\\..\\mORMot}) is preferred.
 :203  Setup your dedicated FPC / Lazarus environment with fpcupdeluxe
-You could use a recent SVN trunk version of the FPC 2.7.1 / 3.1.1 compiler, and the corresponding {\i Lazarus} IDE.
+We currently use the FPC 3.2 fixes branch compiler, and the corresponding {\i Lazarus} IDE.
 If you want to use @80@, ensure that your revision includes the fix for @http://mantis.freepascal.org/view.php?id=26773 bug, i.e. newer than revision 28995 from 2014-11-05T22:17:54. This bug was not fixed in 2.6.4 branch, but any newer 3.x revision should be enough.
-But since the FPC trunk may be unstable, we will propose to put in place a stable development environment to work with your {\i mORMot}-based projects. It may ease support and debugging.
+But since the FPC trunk may be unstable, we will propose to put in place a stable development environment based on the FPC 3.2 branch to work with your {\i mORMot}-based projects. It may ease support and debugging.
 For this task, don't download an existing binary release of FPC / Lazarus, but use the {\i @**fpcupdeluxe@} tool, as published at @http://wiki.freepascal.org/fpcupdeluxe - it will allow to build your environment directly from the sources, and install it in a dedicated folder. Several FPC / Lazarus installations, with dedicated revision numbers, may coexist on the same computer: just ensure you run Lazarus from the shortcut created by {\i fpcupdeluxe}.
-Download the latest release of the tool from @https://github.com/LongDirtyAnimAlf/fpcupdeluxe/releases \line Unpack it in a dedicated folder, and run its executable.\line Click on the {\i "Setup +"} button, and enter the following revision numbers:
-- FPC trunk SVN {\f1\fs20 40491};
-- Lazarus trunk SVN {\f1\fs20 59757}.
-Don't forget to select the {\i trunk} versions for both FPC and Lazarus versions list, otherwise the exact SVN revisions you entered in {\i "Setup +"} won't be used.
-Those revisions are currently used for building our production projects, so are expected to be properly tested and supported.
-Then build the FPC and Lazarus binaries directly from the latest sources. One big advantage of {\i fpcupdeluxe} is that you can very easily install cross-compilers for the CPU / OS combinations enumerated at @202@.
+- Download the latest release of the tool from @https://github.com/LongDirtyAnimAlf/fpcupdeluxe/releases
+- Unpack it in a dedicated folder, and run its executable.
+- On the main screen, locate on the left the two versions listboxes. Select "3.2" for {\i FPC version} and "2.0.10" for {\i Lazarus version}.
+- Then build the FPC and Lazarus binaries directly from the latest sources, by clicking on "Install/update FPC+Laz".
+Those branches are currently used for building our production projects, so are expected to be properly tested and supported. \line At the time of the writing of this documentation, our Lazarus IDE (on Linux) reports using:
+- FPC SVN 45643 (3.2.0)
+- Lazarus SVN 63526 (2.0.10).
+One big advantage of {\i fpcupdeluxe} is that you can very easily install cross-compilers for the CPU / OS combinations enumerated at @202@.\line Just go to the "Cross" tab, then select the target systems, and click on "Install compiler".\line It may be needed to download the cross-compiler binaries (once): just select "Yes" when prompted.
 You could install {\i mORMot} using {\i fpcupdeluxe}, but we recommend you clone our @https://github.com/synopse/mORMot repository, and setup the expected project paths, as detailed above at @113@.
-If you don't want to define a given version, the current {\i trunk} should/could work, if it didn't include any regression at the time you get it - this is why we provide "supported" SVN revisions.\line If you want to use the {\i FPC trunk}, please modify line #262 in {\f1\fs20 Synopse.inc} to enable the {\f1\fs20 FPC_PROVIDE_ATTR_TABLE} conditional and support the latest trunk RTTI changes:
+If you don't want to define a given version, the current {\i trunk} should/could work, if it didn't include any regression at the time you get it - this is why we provide "supported" branches.\line If you want to use the {\i FPC trunk}, please modify line #262 in {\f1\fs20 Synopse.inc} to enable the {\f1\fs20 FPC_PROVIDE_ATTR_TABLE} conditional and support the latest trunk RTTI changes:
 !  {$if not defined(VER3_0) and not defined(VER3_2) and not defined(VER2)}
 !!    {$define FPC_PROVIDE_ATTR_TABLE} // to be defined since SVN 42356-42411
 !    // on compilation error in SynFPCTypInfo, undefine the above conditional
@@ -16595,7 +16597,7 @@ In order to install the 32-bit libraries needed by {\i mORMot} 32-bit executable
 $ sudo apt-get install lib32z1 lib32ncurses5 lib32bz2-1.0
 If you want {\f1\fs20 SynCrtSock.pas} to be able to handle {\f1\fs20 https://} on a 64-bit system - e.g. if you want to run the {\f1\fs20 TestSQL3} regression tests which download some {\f1\fs20 json} reference file over {\f1\fs20 https} - you will need also to install {\f1\fs20 @*libcurl@} (and {\f1\fs20 OpenSSL}) in 32-bit, as such:
 $ sudo apt-get install libcurl3:i386
-If it may be for any help, here are the static dependencies listed on a running 64-bit Ubuntu system, on a {\i FPC 3.1} compiled executable:
+If it may be for any help, here are the static dependencies listed on a running 64-bit Ubuntu system, on a {\i FPC 3.2} compiled executable:
 $user@xubuntu:~/lib/SQLite3/fpc/i386-linux$ ldd TestSQL3
 $   linux-gate.so.1 =>  (0xb774c000)
 $   libpthread.so.0 => /lib/i386-linux-gnu/libpthread.so.0 (0xb7718000)

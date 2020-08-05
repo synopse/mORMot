@@ -29,7 +29,7 @@ unit SynFPCx64MM;
       consumption (especially Intel TBB) and do panic/SIGKILL on any GPF
     - Pascal alternatives (FastMM4,ScaleMM2,BrainMM) are Windows+Delphi specific
     - Our lockess round-robin of tiny blocks is a unique algorithm in MM AFAIK
-    - It was so fun deeping into SSE2 x86_64 assembly and Pierre's insight
+    - It was so fun diving into SSE2 x86_64 assembly and Pierre's insight
     - Resulting code is still easy to understand and maintain
 
     IMPORTANT NOTICE: seems stable on Linux and Win64 but feedback is welcome!
@@ -2715,8 +2715,8 @@ begin
                    SeemsRealPointer(PPointer(vmt + vmtClassName)^) then
                 begin
                    StartReport;
-                   writeln(' may be a ', PShortString(PPointer(vmt + vmtClassName)^)^,
-                     ' leak (', PSmallBlockPoolHeader(block).BlockType.BlockSize, 'B)');
+                   writeln(' probable ', PShortString(PPointer(vmt + vmtClassName)^)^,
+                     ' leak (', PSmallBlockPoolHeader(block).BlockType.BlockSize, ' bytes)');
                 end;
               except
                 // intercept any GPF

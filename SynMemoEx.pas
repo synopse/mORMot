@@ -63,6 +63,8 @@ unit SynMemoEx;
 
 }
 
+{$I Synopse.inc}
+
 interface
 
 {.$define CLIPBOARDPROTECT} // if defined, ClipProtect truncates clipboard to 2KB
@@ -102,14 +104,19 @@ uses
   StdCtrls,
   ClipBrd,
   Menus
-  {$ifdef UNICODE}, UITypes{$endif};
+  {$ifdef FPC}  // FPC compatibility by alf (alfred) - thanks for the patch!
+  , LCLType
+  {$endif FPC}
+  {$ifdef UNICODE}
+  , UITypes
+  {$endif UNICODE};
 
 const
   RAEditorCompletionChars: set of AnsiChar =
     [#8, '_', '0'..'9', 'A'..'Z', 'a'..'z'];
   Separators: set of AnsiChar =
     [#0, ' ', '-', #13, #10, '.', ',', '/', '\', ':', '+', '%', '*', '(', ')',
-    ';', '=', '{', '}', '[', ']', '{', '}', '|', '!', '@', '"'];
+    ';', '=', '{', '}', '[', ']',  '|', '!', '@', '"'];
   GutterRightMargin = 2;
 
   WM_EDITCOMMAND = WM_USER + $101;
@@ -835,7 +842,10 @@ type
     property Align;
     property Enabled;
     property Color;
+    {$ifndef FPC}
     property Ctl3D;
+    property OnCanResize;
+    {$endif FPC}
     property Font;
     property ParentColor;
     property ParentFont;
@@ -854,7 +864,6 @@ type
     property ParentBiDiMode;
     property WantTabs default true;
     property WordWrap default true;
-    property OnCanResize;
     property OnConstrainedResize;
     property OnDockDrop;
     property OnDockOver;
@@ -1106,10 +1115,12 @@ function Min(x, y: integer): integer; {$ifdef HASINLINE}inline;{$endif}
 implementation
 
 uses
+  {$ifndef FPC}
   Consts,
+  {$endif FPC}
   RTLConsts;
 
-{$ifdef UNICODE}
+{$ifndef CPUX86}
 function PosEx(const SubStr, S: string; Offset: Integer = 1): Integer; inline;
 begin
   Result := System.Pos(SubStr, S, Offset);

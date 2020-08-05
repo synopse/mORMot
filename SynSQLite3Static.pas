@@ -1,4 +1,4 @@
-/// SQLite3 3.31.0 Database engine - statically linked for Windows/Linux
+/// SQLite3 3.32.3 Database engine - statically linked for Windows/Linux
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSQLite3Static;
@@ -47,7 +47,7 @@ unit SynSQLite3Static;
   ***** END LICENSE BLOCK *****
 
 
-    Statically linked SQLite3 3.31.0 engine with optional AES encryption
+    Statically linked SQLite3 3.32.3 engine with optional AES encryption
    **********************************************************************
 
   To be declared in your project uses clause:  will fill SynSQlite3.sqlite3
@@ -59,35 +59,12 @@ unit SynSQLite3Static;
   corresponding .o) under other platforms, this unit will just do nothing
   (but compile).
 
-  To compile our patched SQlite3.c version, available in this source folder:
-  - Run c.bat to compile the sqlite3.obj for Win32/Delphi
-  - Run c64.bat to compile the sqlite3.o for Win64/Delphi
-  - Run c-fpcmingw.bat to compile sqlite3.o for Win32/FPC
-  - Run c-fpcmingw64.bat to compile sqlite3.o and sqlite3-64.dll for Win64 (Delphi/FPC)
-  - Run c-fpcgcclin.sh to compile sqlite3.o for Linux32/FPC
+  To patch and compile the official SQlite3 amalgamation file, follow the
+  instruction from SQLite3\amalgamation\ReadMe.md
 
   Uses TSQLite3LibraryDynamic to access external library (e.g. sqlite3.dll/.so)
 
-  To retrieve and install the latest sqlite3 debian package on Ubuntu:
-  - retrieve latest .deb from https://launchpad.net/ubuntu/...
-  - for a 32 bit system, install e.g. as
-    sudo dpkg -i libsqlite3-0_3.8.7.4-1_i386.deb
-  - for a 64 bit system, you need to download and install both packages, e.g.
-    sudo dpkg -i libsqlite3-0_3.8.2-1ubuntu2_amd64.deb libsqlite3-0_3.8.2-1ubuntu2_i386.deb
 }
-
-(* WARNING: with current 3.29+ version, the following sqlite3.c patch is needed:
-
-SQLITE_PRIVATE int sqlite3RealSameAsInt(double r1, sqlite3_int64 i){
-  double r2 = (double)i;
-#if defined(__BORLANDC__) // avoid weird Borland C++ compiler limitation
-  return r1==r2; // safe and fast with x87 FPU
-#else // faster version without any memcmp() call (not an intrinsic on GCC)
-  return *( sqlite3_int64* )(&r1) == *( sqlite3_int64* )(&r2)
-          && i >= -2251799813685248LL && i < 2251799813685248LL;
-#endif
-}
-*)
 
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
@@ -243,6 +220,13 @@ implementation
   {$endif ANDROID}
 
   {$ifdef FREEBSD}
+    {$ifdef CPUX86}
+    const _PREFIX = '';
+    {$L .\static\i386-freebsd\sqlite3.o}
+    {$ifdef FPC_CROSSCOMPILING}
+      {$linklib .\static\i386-freebsd\libgcc.a}
+    {$endif}
+    {$endif CPUX86}
     {$ifdef CPUX64}
     const _PREFIX = '';
     {$L .\static\x86_64-freebsd\sqlite3.o}
@@ -253,6 +237,13 @@ implementation
   {$endif FREEBSD}
 
   {$ifdef OPENBSD}
+    {$ifdef CPUX86}
+      const _PREFIX = '';
+      {$L .\static\i386-openbsd\sqlite3.o}
+      {$ifdef FPC_CROSSCOMPILING}
+        {$linklib .\static\i386-openbsd\libgcc.a}
+      {$endif}
+    {$endif CPUX86}
     {$ifdef CPUX64}
       const _PREFIX = '';
       {$L .\static\x86_64-openbsd\sqlite3.o}
@@ -783,7 +774,7 @@ end;
 
 {$endif FPC}
 
-// some external functions as expected by codecext.c and our sqlite3.c wrapper
+// some external functions as expected by codecext.c and our sqlite3mc.c wrapper
 
 procedure CodecGenerateKey(var aes: TAES; userPassword: pointer; passwordLength: integer);
 var s: TSynSigner;
@@ -796,25 +787,27 @@ end;
 function CodecGetReadKey(codec: pointer): PAES; cdecl; external;
 function CodecGetWriteKey(codec: pointer): PAES; cdecl; external;
 
-procedure CodecGenerateReadKey(codec: pointer; userPassword: PAnsiChar; passwordLength: integer); cdecl;
+procedure CodecGenerateReadKey(codec: pointer;
+  userPassword: PAnsiChar; passwordLength: integer); cdecl;
   {$ifdef FPC}public name _PREFIX+'CodecGenerateReadKey';{$endif} export;
 begin
   CodecGenerateKey(CodecGetReadKey(codec)^,userPassword,passwordLength);
 end;
 
-procedure CodecGenerateWriteKey(codec: pointer; userPassword: PAnsiChar; passwordLength: integer); cdecl;
+procedure CodecGenerateWriteKey(codec: pointer;
+  userPassword: PAnsiChar; passwordLength: integer); cdecl;
   {$ifdef FPC}public name _PREFIX+'CodecGenerateWriteKey';{$endif} export;
 begin
   CodecGenerateKey(CodecGetWriteKey(codec)^,userPassword,passwordLength);
 end;
 
-procedure CodeEncryptDecrypt(page: cardinal; data: PAnsiChar; len: integer;
+procedure CodecAESProcess(page: cardinal; data: PAnsiChar; len: integer;
   aes: PAES; encrypt: boolean);
 var plain: Int64;    // bytes 16..23 should always be unencrypted
     iv: THash128Rec; // is genuine and AES-protected (since not random)
 begin
   if (len and AESBlockMod<>0) or (len<=0) or (integer(page)<=0) then
-    raise ESQLite3Exception.CreateUTF8('CodeEncryptDecrypt(page=%,len=%)', [page,len]);
+    raise ESQLite3Exception.CreateUTF8('CodecAESProcess(page=%,len=%)', [page,len]);
   iv.c0 := page xor 668265263; // prime-based initialization
   iv.c1 := page*2654435761;
   iv.c2 := page*2246822519;
@@ -841,25 +834,30 @@ begin
     aes^.DoBlocksOFB(iv.b,data,data,len);
 end;
 
-procedure CodecEncrypt(codec: pointer; page: integer; data: PAnsiChar; len, useWriteKey: integer); cdecl;
+function CodecEncrypt(codec: pointer; page: integer; data: PAnsiChar;
+  len, useWriteKey: integer): integer; cdecl;
   {$ifdef FPC}public name _PREFIX+'CodecEncrypt';{$endif} export;
 begin
   if useWriteKey=1 then
-     CodeEncryptDecrypt(page,data,len,CodecGetWriteKey(codec),true) else
-     CodeEncryptDecrypt(page,data,len,CodecGetReadKey(codec),true);
+     CodecAESProcess(page,data,len,CodecGetWriteKey(codec),true) else
+     CodecAESProcess(page,data,len,CodecGetReadKey(codec),true);
+  result := SQLITE_OK;
 end;
 
-procedure CodecDecrypt(codec: pointer; page: integer; data: PAnsiChar; len: integer); cdecl;
+function CodecDecrypt(codec: pointer; page: integer;
+data: PAnsiChar; len: integer): integer; cdecl;
   {$ifdef FPC}public name _PREFIX+'CodecDecrypt';{$endif} export;
 begin
-  CodeEncryptDecrypt(page,data,len,CodecGetReadKey(codec),false);
+  CodecAESProcess(page,data,len,CodecGetReadKey(codec),false);
+  result := SQLITE_OK;
 end;
 
-procedure CodecTerm(codec: pointer); cdecl;
+function CodecTerm(codec: pointer): integer; cdecl;
   {$ifdef FPC}public name _PREFIX+'CodecTerm';{$endif} export;
 begin
   CodecGetReadKey(codec)^.Done;
   CodecGetWriteKey(codec)^.Done;
+  result := SQLITE_OK;
 end;
 
 function ChangeSQLEncryptTablePassWord(const FileName: TFileName;
@@ -911,12 +909,12 @@ begin
         exit; // stop on any read error
       for p := 0 to n-1 do begin
         if OldPassword<>'' then begin
-          CodeEncryptDecrypt(page+p,buf,pagesize,@old,false);
+          CodecAESProcess(page+p,buf,pagesize,@old,false);
           if (p=0) and (page=1) and (PInteger(buf)^=0) then
             exit; // OldPassword is obviously incorrect
         end;
         if NewPassword<>'' then
-          CodeEncryptDecrypt(page+p,buf,pagesize,@new,true);
+          CodecAESProcess(page+p,buf,pagesize,@new,true);
         inc(buf,pagesize);
       end;
       FileSeek64(F,posi,soFromBeginning);
@@ -1144,7 +1142,7 @@ function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCall
 
 const
   // error message if statically linked sqlite3.o(bj) does not match this
-  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.31.0'{$endif};
+  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.32.3'{$endif};
 
 constructor TSQLite3LibraryStatic.Create;
 var error: RawUTF8;
@@ -1260,7 +1258,7 @@ begin
   // you should never see it if you cloned https://github.com/synopse/mORMot
   FormatUTF8('Static SQLite3 library as included within % is outdated!'#13+
     'Linked version is % whereas the current/expected is '+EXPECTED_SQLITE3_VERSION+'.'#13#13+
-    'Please download latest SQLite3 '+EXPECTED_SQLITE3_VERSION+' revision'#13+
+    'Please download supported latest SQLite3 '+EXPECTED_SQLITE3_VERSION+' revision'#13+
     'from https://synopse.info/files/sqlite3'+{$ifdef FPC}'fpc'{$else}'obj'{$endif}+'.7z',
     [ExeVersion.ProgramName,fVersionText],error);
   LogToTextFile(error); // annoyning enough on all platforms

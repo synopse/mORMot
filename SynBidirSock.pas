@@ -30,6 +30,7 @@ unit SynBidirSock;
 
   Contributor(s):
   - Alfred (alf)
+  - AntoineGS
   - f-vicente
   - nortg
 
@@ -1415,7 +1416,9 @@ begin
          'X-POWERED', 'USER-AGENT', 'REMOTEIP:', 'HOST:', 'ACCEPT:']) < 0 then begin
         if W = nil then
           W := TTextWriter.CreateOwnedStream(tmp);
-        W.AddNoJSONEscape(P, next - P);
+        if next=nil then
+          W.AddNoJSONEscape(P) else
+          W.AddNoJSONEscape(P, next - P);
       end;
       P := next;
     end;
@@ -3474,7 +3477,7 @@ var Ctxt: THttpServerRequest;
 begin
   if fProcess<>nil then begin
     if fProcess.fClientThread.fThreadState=sCreate then
-      sleep(10); // allow TWebSocketProcessClientThread.Execute warmup
+      sleep(10); // paranoid warmup of TWebSocketProcessClientThread.Execute
     if fProcess.fClientThread.fThreadState<>sRun then
       // WebSockets closed by server side
       result := STATUS_NOTIMPLEMENTED else begin
@@ -3603,11 +3606,16 @@ end;
 
 constructor TWebSocketProcessClient.Create(aSender: THttpClientWebSockets;
   aProtocol: TWebSocketProtocol; const aProcessName: RawUTF8);
+var endtix: Int64;
 begin
   fMaskSentFrames := FRAME_LEN_MASK; // https://tools.ietf.org/html/rfc6455#section-10.3
   inherited Create(aSender,aProtocol,0,nil,aSender.fSettings,aProcessName);
   // initialize the thread after everything is set (Execute may be instant)
   fClientThread := TWebSocketProcessClientThread.Create(self);
+  endtix := GetTickCount64+5000;
+  repeat // wait for TWebSocketProcess.ProcessLoop to initiate
+    SleepHiRes(0);
+  until fProcessEnded or (fState<>wpsCreate) or (GetTickCount64>endtix);
 end;
 
 destructor TWebSocketProcessClient.Destroy;
@@ -3640,20 +3648,19 @@ end;
 
 { TWebSocketProcessClientThread }
 
-constructor TWebSocketProcessClientThread.Create(
-  aProcess: TWebSocketProcessClient);
+constructor TWebSocketProcessClientThread.Create(aProcess: TWebSocketProcessClient);
 begin
   fProcess := aProcess;
   fProcess.fOwnerThread := self;
-  inherited Create(false);
+  inherited Create({suspended=}false);
 end;
 
 procedure TWebSocketProcessClientThread.Execute;
 begin
-  if fProcess<>nil then // may happen when debugging under FPC (alf)
-    SetCurrentThreadName('% % %',[fProcess.fProcessName,self,fProcess.Protocol.Name]);
-  fThreadState := sRun;
   try
+    fThreadState := sRun;
+    if fProcess<>nil then // may happen when debugging under FPC (alf)
+      SetCurrentThreadName('% % %',[fProcess.fProcessName,self,fProcess.Protocol.Name]);
     WebSocketLog.Add.Log(sllDebug,'Execute: before ProcessLoop %', [fProcess], self);
     if not Terminated and (fProcess<>nil) then
       fProcess.ProcessLoop;
@@ -3665,9 +3672,9 @@ begin
           OnWebSocketsClosed(self);
   except // ignore any exception in the thread
   end;
+  fThreadState := sFinished; // safely set final state
   if (fProcess<>nil) and (fProcess.fState=wpsClose) then
-    fThreadState := sClosed else
-    fThreadState := sFinished;
+    fThreadState := sClosed;
   WebSocketLog.Add.Log(sllDebug,'Execute: done (%)',[ToText(fThreadState)^],self);
 end;
 
@@ -3732,12 +3739,19 @@ end;
 
 function TAsynchConnectionsSockets.SlotFromConnection(connection: TObject): PPollSocketsSlot;
 begin
-  if not connection.InheritsFrom(TAsynchConnection) or
-     (TAsynchConnection(connection).Handle=0) then begin
-    fOwner.fLog.Add.Log(sllStackTrace,'SlotFromConnection() with dangling pointer',self);
+  try
+    if (connection=nil) or not connection.InheritsFrom(TAsynchConnection) or
+       (TAsynchConnection(connection).Handle=0) then begin
+      fOwner.fLog.Add.Log(sllStackTrace,'SlotFromConnection() with dangling pointer %',
+        [connection],self);
+      result := nil;
+    end else
+      result := @TAsynchConnection(connection).fSlot;
+  except
+    fOwner.fLog.Add.Log(sllError,'SlotFromConnection() with dangling pointer %',
+     [pointer(connection)],self);
     result := nil;
-  end else
-    result := @TAsynchConnection(connection).fSlot;
+  end;
 end;
 
 function TAsynchConnectionsSockets.Write(connection: TObject;

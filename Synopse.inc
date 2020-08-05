@@ -272,11 +272,17 @@
       {$define BSDNOTDARWIN}   // OSX has some non-standard API calls
     {$endif}
     {$ifdef FREEBSD}
+      {$ifdef CPUX86}
+        {$define FPCSQLITE3STATIC} // we supply i386 static libs
+      {$endif CPUX86}
       {$ifdef CPUX64}
         {$define FPCSQLITE3STATIC} // we supply x64 static libs
       {$endif CPUX64}
     {$endif}
     {$ifdef OPENBSD}
+      {$ifdef CPUX86}
+        {$define FPCSQLITE3STATIC} // we supply i386 static libs
+      {$endif CPUX86}
       {$ifdef CPUX64}
         {$define FPCSQLITE3STATIC} // we supply x64 static libs
       {$endif CPUX64}
@@ -298,6 +304,14 @@
   {$ifdef FPC_PIC}
     {$define PUREPASCAL} // most asm code is not PIC-safe with global constants
   {$endif}
+
+  {$ifdef MSWINDOWS}
+    {$ifdef FPC_X64MM}
+      {$ifndef FPC_X64MM_WIN} // SynFPCx64MM not yet fully validated on Windows
+         {$undef FPC_X64MM}
+      {$endif FPC_X64MM_WIN}
+    {$endif FPC_X64MM}
+  {$endif MSWINDOWS}
 
   {$ifdef CPU64}
     {$define FPC_64}
@@ -331,6 +345,9 @@
       {$ifndef FPC_PIC}
         {$define CPUX86NOTPIC} // use "absolute" instead of local register
       {$endif FPC_PIC}
+      {$ifndef OPENBSD}
+        {$define FPC_X86ASM} // if assembler knows popcnt/crc32c opcodes
+      {$endif OPENBSD}
     {$endif CPUX86}
   {$endif CPU64}
 
@@ -397,6 +414,7 @@
 
   {$define DELPHI_OR_FPC_OLDRTTI}
   {$define USE_VTYPE_STATIC} // "and VTYPE_STATIC" test before VarClear()
+  {$undef FPC_X64MM} // this is a FPC-specific memory manager
 
   {$ifdef LVCL}
     {$define OWNNORMTOUPPER} // NormToUpper[] exists only in our enhanced RTL
@@ -567,6 +585,9 @@
       {$if CompilerVersion >= 33.0}
         {$define ISDELPHI103}
       {$ifend}
+      {$if CompilerVersion >= 34.0}
+        {$define ISDELPHI104}
+      {$ifend}
     {$ifend CompilerVersion >= 17}
     {$ifopt O-} // if we don't expect fast code, don't optimize the framework
       {$undef ENHANCEDRTL}
@@ -640,6 +661,7 @@
 {$ifdef ABSOLUTEPASCAL}
   {$define ABSOLUTEORPUREPASCAL}
   {$define ABSOLUTEPASCALORNOTINTEL}
+  {$define PUREPASCAL}
 {$endif ABSOLUTEPASCAL}
 {$ifdef PUREPASCAL}
   {$define ABSOLUTEORPUREPASCAL}
@@ -661,6 +683,7 @@
   {$ifdef CPUX64}
     {$if CompilerVersion = 25.0} // exactly XE4
       {$define NOSQLITE3STATIC}
+      // :( to avoid "Fatal: F2084 Internal Error: AV004A7B1F-R03BDA7B0-0"
     {$ifend}
   {$endif} // other Win32/Win64 Delphi platforms should work as expected
 {$endif FPC}

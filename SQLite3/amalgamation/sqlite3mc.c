@@ -3,6 +3,7 @@
 **
 ** Please download and put sqlite3.c in amalgamation/ sub-folder
 ** from https://sqlite.org/download.html
+** then run ./patch.sh
 */
 
 /*
@@ -47,8 +48,16 @@
 // the RTREE extension is now (from v.1.8/3.7) compiled into the engine
 #define SQLITE_ENABLE_DESERIALIZE
 // enables  sqlite3_serialize() and sqlite3_deserialize()
-#define SQLITE_HAS_CODEC 1
-// see code below
+
+/*
+** Define function for extra initilization
+**
+** The extra initialization function registers an extension function
+** which will be automatically executed for each new database connection.
+*/
+
+#define SQLITE_EXTRA_INIT sqlite3mc_initialize
+#define SQLITE_EXTRA_SHUTDOWN sqlite3mc_terminate
 
 /*
 ** Compile the official SQLite3 amalgamation file
@@ -62,45 +71,15 @@
 #undef __STDC__
 #endif
 
-#include "amalgamation/sqlite3.c"
+#include "sqlite3patched.c"
 // to be downloaded from https://sqlite.org/download.html
-
-
-#ifdef SQLITE_HAS_CODEC
+// then execute ./patch.sh to apply Codec patches
 
 /*
-** handle SQLITE_HAS_CODEC
-** adapted from https://github.com/utelle/wxsqlite3 patches
+** Handle Database Ciphering
+** adapted from https://github.com/utelle/SQLite3MultipleCiphers patches
 ** wxWindows Library Licence, Version 3.1
 */
-
-/*
-** Get the codec argument for this pager on newer library versions
-*/
-
-void* mySqlite3PagerGetCodec(
-  Pager *pPager
-){
-#if (SQLITE_VERSION_NUMBER >= 3006016)
-  return sqlite3PagerGetCodec(pPager);
-#else
-  return (pPager->xCodec) ? pPager->pCodecArg : NULL;
-#endif
-}
-
-/*
-** Set the codec argument for this pager on newer library versions
-*/
-
-void mySqlite3PagerSetCodec(
-  Pager *pPager,
-  void *(*xCodec)(void*,void*,Pgno,int),
-  void (*xCodecSizeChng)(void*,int,int),
-  void (*xCodecFree)(void*),
-  void *pCodec
-){
-  sqlite3PagerSetCodec(pPager, xCodec, xCodecSizeChng, xCodecFree, pCodec);
-}
 
 /*
 ** Define the Codec types as needed by codecext.c
@@ -116,47 +95,39 @@ void mySqlite3PagerSetCodec(
 // We embed two SynCrypto's TAES objects in the Codec struct
 typedef struct _Codec
 {
+  /* Defined if this DB is encrypted */
   int           m_isEncrypted;
+  /* Read cipher */ 
   int           m_hasReadKey;
   unsigned char m_readKey[KEYLENGTH];
+  /* Write cipher */ 
   int           m_hasWriteKey;
   unsigned char m_writeKey[KEYLENGTH];
-  Btree*        m_bt; /* Pointer to B-tree used by DB */
-  unsigned char m_page[SQLITE_MAX_PAGE_SIZE+24];
+  /* Pointers to DB and its B-trees */
+  sqlite3*      m_db; 
+  Btree*        m_bt; 
+  BtShared*     m_btShared; 
+  /* Temporary memory buffer used during AES process */
+  unsigned char m_page[SQLITE_MAX_PAGE_SIZE + 24];
 } Codec;
 
-static void CodecInit(Codec* codec)
+static int CodecInit(Codec* codec)
 {
-  codec->m_isEncrypted = 0;
-  codec->m_hasReadKey  = 0;
-  codec->m_hasWriteKey = 0;
-}
-
-static void CodecCopy(Codec* codec, Codec* other)
-{
-  codec->m_isEncrypted = other->m_isEncrypted;
-  codec->m_hasReadKey  = other->m_hasReadKey;
-  codec->m_hasWriteKey = other->m_hasWriteKey;
-  memcpy(&codec->m_readKey, &other->m_readKey, KEYLENGTH);
-  memcpy(&codec->m_writeKey, &other->m_writeKey, KEYLENGTH);
-  codec->m_bt = other->m_bt;
-}
-
-// implemented in pascal using SynCrypto optimized AES functions
-extern void CodecGenerateReadKey(Codec* codec, char* userPassword, int passwordLength);
-extern void CodecGenerateWriteKey(Codec* codec, char* userPassword, int passwordLength);
-extern void CodecEncrypt(Codec* codec, int page, unsigned char* data, int len, int useWriteKey);
-extern void CodecDecrypt(Codec* codec, int page, unsigned char* data, int len);
-extern void CodecTerm(Codec* codec);
-
-unsigned char* CodecGetReadKey(Codec* codec)
-{
-  return codec->m_readKey;
-}
-
-unsigned char* CodecGetWriteKey(Codec* codec)
-{
-  return codec->m_writeKey;
+  int rc = SQLITE_OK;
+  if (codec != NULL)
+  {
+    codec->m_isEncrypted = 0;
+    codec->m_hasReadKey = 0;
+    codec->m_hasWriteKey = 0;
+    codec->m_db = 0;
+    codec->m_bt = 0;
+    codec->m_btShared = 0;
+  }
+  else
+  {
+    rc = SQLITE_NOMEM;
+  }
+  return rc;
 }
 
 static void CodecCopyKey(Codec* codec, int read2write)
@@ -169,6 +140,35 @@ static void CodecCopyKey(Codec* codec, int read2write)
   {
     memcpy(&codec->m_readKey, &codec->m_writeKey, KEYLENGTH);
   }
+}
+
+static int CodecCopyCipher(Codec* codec, Codec* other)
+{
+  codec->m_isEncrypted = other->m_isEncrypted;
+  codec->m_hasReadKey  = other->m_hasReadKey;
+  codec->m_hasWriteKey = other->m_hasWriteKey;
+  memcpy(&codec->m_readKey, &other->m_readKey, KEYLENGTH);
+  memcpy(&codec->m_writeKey, &other->m_writeKey, KEYLENGTH);
+  return SQLITE_OK;
+}
+
+// implemented in pascal using SynCrypto optimized AES functions
+extern void CodecGenerateReadKey(Codec* codec, char* userPassword, int passwordLength);
+extern void CodecGenerateWriteKey(Codec* codec, char* userPassword, int passwordLength);
+extern int CodecEncrypt(Codec* codec, int page, unsigned char* data, int len, int useWriteKey);
+extern int CodecDecrypt(Codec* codec, int page, unsigned char* data, int len);
+extern int CodecTerm(Codec* codec);
+
+// used by SynSQlite3Static to retrieve the PAES members from a given codec
+
+unsigned char* CodecGetReadKey(Codec* codec)
+{
+  return codec->m_readKey;
+}
+
+unsigned char* CodecGetWriteKey(Codec* codec)
+{
+  return codec->m_writeKey;
 }
 
 static void CodecSetIsEncrypted(Codec* codec, int isEncrypted)
@@ -186,11 +186,6 @@ static void CodecSetHasWriteKey(Codec* codec, int hasWriteKey)
   codec->m_hasWriteKey = hasWriteKey;
 }
 
-static void CodecSetBtree(Codec* codec, Btree* bt)
-{
-  codec->m_bt = bt;
-}
-
 static int CodecIsEncrypted(Codec* codec)
 {
   return codec->m_isEncrypted;
@@ -206,9 +201,25 @@ static int CodecHasWriteKey(Codec* codec)
   return codec->m_hasWriteKey;
 }
 
+static void CodecSetDb(Codec* codec, sqlite3* db)
+{
+  codec->m_db = db;
+}
+
+static void CodecSetBtree(Codec* codec, Btree* bt)
+{
+  codec->m_bt = bt;
+  codec->m_btShared = bt->pBt;
+}
+
 static Btree* CodecGetBtree(Codec* codec)
 {
   return codec->m_bt;
+}
+
+static BtShared* CodecGetBtShared(Codec* codec)
+{
+  return codec->m_btShared;
 }
 
 static unsigned char* CodecGetPageBuffer(Codec* codec)
@@ -217,6 +228,42 @@ static unsigned char* CodecGetPageBuffer(Codec* codec)
 }
 
 #include "codecext.c"
-// from https://github.com/utelle/wxsqlite3/blob/master/sqlite3/secure/src/codecext.c
 
-#endif
+/*
+** Multi cipher VFS
+*/
+
+SQLITE_API const char* sqlite3mc_vfs_name();
+SQLITE_API void sqlite3mc_vfs_terminate();
+SQLITE_API int sqlite3mc_vfs_initialize(sqlite3_vfs* vfsDefault, int makeDefault);
+
+#include "sqlite3mc_vfs.c"
+
+int
+sqlite3mc_initialize(const char* arg)
+{
+  int rc = SQLITE_OK;
+  sqlite3_vfs* vfsDefault;
+
+  /*
+  ** Initialize and register MultiCipher VFS as default VFS
+  ** if it isn't already registered
+  */
+  if (sqlite3_vfs_find(sqlite3mc_vfs_name()) == NULL)
+  {
+    vfsDefault = sqlite3_vfs_find("unix-excl");
+    /* WAL requires unix-excl so we force it as default on posix */
+    if (vfsDefault == NULL)
+    {
+      vfsDefault = sqlite3_vfs_find(NULL);
+    }
+    rc = sqlite3mc_vfs_initialize(vfsDefault, 1);
+  }
+  return rc;
+}
+
+void
+sqlite3mc_terminate(void)
+{
+  sqlite3mc_vfs_terminate();
+}

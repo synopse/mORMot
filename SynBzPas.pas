@@ -51,8 +51,9 @@ unit SynBzPas;
        - pascal and asm speed and memory optimization of the code
        - bug in main loop -> use it at once, TBZDecompressor is buggy
        - use UnCompressBzMem() global function
-      Disclosure:
-       - we discovered that it doesn't properly uncompress some big
+
+      HUGE WARNING / BIG DISCLOSURE / PLEASE README :
+       - we discovered that this unit doesn't properly uncompress some big
          content, so you should rather not trust this unit - consider it
          as a proof-of-concept, not to be used on production
 
@@ -589,7 +590,7 @@ begin // efficient code on FPC x86-64
     inc(a,256);
   until p=pend;
 end;
-{$else}
+{$else} {$ifdef FPC} nostackframe; assembler; {$endif}
 asm
       mov ecx,[eax+TBZip2_decode_stream.tt_count]
       jcxz @a2

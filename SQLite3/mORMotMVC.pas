@@ -163,8 +163,8 @@ type
       FileExt: TFileName;
       ContentType: RawUTF8;
       Locker: IAutoLocker;
-      FileTimestamp: TDateTime;
-      FileTimestampCheckTick: Int64;
+      FileAgeLast: PtrUInt;
+      FileAgeCheckTick: Int64;
       Flags: TMVCViewFlags;
     end;
     function GetRenderer(methodIndex: integer; var view: TMVCView): TSynMustache;
@@ -173,7 +173,7 @@ type
     /// return the template file contents
     function GetTemplate(const aFileName: TFileName): RawUTF8; virtual;
     /// return the template file date and time
-    function GetTemplateAge(const aFileName: TFileName): TDateTime; virtual;
+    function GetTemplateAge(const aFileName: TFileName): PtrUInt; virtual;
     /// overriden implementations should return the rendered content
     procedure Render(methodIndex: Integer; const Context: variant; var View: TMVCView); override;
     // some helpers defined here to avoid SynCrypto link in SynMustache
@@ -1144,7 +1144,7 @@ begin
 end;
 
 function TMVCViewsMustache.GetRenderer(methodIndex: integer; var view: TMVCView): TSynMustache;
-var age: TDateTime;
+var age: PtrUInt;
 begin
   if cardinal(methodIndex)>=fFactory.MethodsCount then
     raise EMVCException.CreateUTF8('%.Render(methodIndex=%)',[self,methodIndex]);
@@ -1155,11 +1155,11 @@ begin
       raise EMVCException.CreateUTF8('%.Render(''%''): Missing Template in ''%''',
         [self,MethodName,SearchPattern]);
     if (Mustache=nil) or ((fViewTemplateFileTimestampMonitor<>0) and
-       (FileTimestampCheckTick<GetTickCount64)) then begin
+       (FileAgeCheckTick<GetTickCount64)) then begin
       age := GetTemplateAge(ShortFileName);
-      if (Mustache=nil) or (age<>FileTimestamp) then begin
+      if (Mustache=nil) or (age<>FileAgeLast) then begin
         Mustache := nil; // no Mustache.Free: TSynMustache instances are cached
-        FileTimestamp := age;
+        FileAgeLast := age;
         Template := GetTemplate(ShortFileName);
         if Template<>'' then
         try
@@ -1174,7 +1174,7 @@ begin
           raise EMVCException.CreateUTF8('%.Render(''%''): Missing Template in ''%''',
             [self,ShortFileName,SearchPattern]);
         if fViewTemplateFileTimestampMonitor<>0 then
-          FileTimestampCheckTick := GetTickCount64+
+          FileAgeCheckTick := GetTickCount64+
             Int64(fViewTemplateFileTimestampMonitor)*Int64(1000);
       end;
     end;
@@ -1195,10 +1195,12 @@ begin
   result := AnyTextFileToRawUTF8(ViewTemplateFolder+aFileName,true);
 end;
 
-function TMVCViewsMustache.GetTemplateAge(const aFileName: TFileName): TDateTime;
+{$WARN SYMBOL_DEPRECATED OFF} // we don't need TDateTime, just values to compare
+function TMVCViewsMustache.GetTemplateAge(const aFileName: TFileName): PtrUInt;
 begin
-  result := FileAgeToDateTime(ViewTemplateFolder+aFileName);
+  result := FileAge(ViewTemplateFolder+aFileName);
 end;
+{$WARN SYMBOL_DEPRECATED ON}
 
 procedure TMVCViewsMustache.Render(methodIndex: Integer; const Context: variant;
   var View: TMVCView);

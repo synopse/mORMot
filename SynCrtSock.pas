@@ -286,12 +286,13 @@ type
     // Windows by now, using the SChannel API)
     constructor Open(const aServer, aPort: SockString; aLayer: TCrtSocketLayer=cslTCP;
       aTimeOut: cardinal=10000; aTLS: boolean=false);
-    /// bind to an address. Expects the address to be specified as Ansi string as
-    // - '1234' - bind to a port on all interfaces, the same as '0.0.0.0:1234'
-    // - 'IP:port' - bind to specified interface only, e.g. '1.2.3.4:1234'
-    // - 'unix:/path/to/file' - bind to unix domain socket, e.g. 'unix:/run/mormot.sock'
-    // - '' - bind to systemd descriptor on linux. See http://0pointer.de/blog/projects/socket-activation.html
-    constructor Bind(const anAddr: SockString; aLayer: TCrtSocketLayer=cslTCP);
+    /// bind to an address
+    // - aAddr='1234' - bind to a port on all interfaces, the same as '0.0.0.0:1234'
+    // - aAddr='IP:port' - bind to specified interface only, e.g. '1.2.3.4:1234'
+    // - aAddr='unix:/path/to/file' - bind to unix domain socket, e.g. 'unix:/run/mormot.sock'
+    // - aAddr='' - bind to systemd descriptor on linux. See
+    // http://0pointer.de/blog/projects/socket-activation.html
+    constructor Bind(const aAddr: SockString; aLayer: TCrtSocketLayer=cslTCP);
     /// low-level internal method called by Open() and Bind() constructors
     // - raise an ECrtSocket exception on error
     // - you may ask for a TLS secured client connection (only available under
@@ -618,6 +619,7 @@ type
   /// a genuine identifier for a given client connection on server side
   // - maps http.sys ID, or is a genuine 31-bit value from increasing sequence
   THttpServerConnectionID = Int64;
+
   /// a dynamic array of client connection identifiers, e.g. for broadcasting
   THttpServerConnectionIDDynArray = array of THttpServerConnectionID;
 
@@ -3727,8 +3729,10 @@ begin
     while result^>#13 do
       inc(result);
     while result^<=#13 do
-      if result^=#0 then
-        exit(nil) else
+      if result^=#0 then begin
+        result := nil;
+        exit;
+      end else
         inc(result);
   until false;
 end;
@@ -3896,7 +3900,6 @@ const
   ERROR_WINHTTP_CANNOT_CONNECT = 12029;
   ERROR_WINHTTP_TIMEOUT = 12002;
   ERROR_WINHTTP_INVALID_SERVER_RESPONSE = 12152;
-
 
 function SysErrorMessagePerModule(Code: DWORD; ModuleName: PChar): string;
 {$ifdef MSWINDOWS}
@@ -4930,7 +4933,7 @@ begin
   result := false;
 end;
 
-constructor TCrtSocket.Bind(const anAddr: SockString; aLayer: TCrtSocketLayer);
+constructor TCrtSocket.Bind(const aAddr: SockString; aLayer: TCrtSocketLayer);
 var s,p: SockString;
     aSock: integer;
     {$ifdef LINUXNOTBSD}
@@ -4938,30 +4941,31 @@ var s,p: SockString;
     {$endif}
 begin
   Create(10000);
-  if anAddr = '' then begin // try systemd
-    {$ifdef LINUXNOTBSD}
+  if aAddr='' then begin
+    {$ifdef LINUXNOTBSD} // try systemd
     if not SystemdIsAvailable then
-      raise ECrtSocket.Create('Systemd is not available but empty address is passed to bind');
-    n := sd.listen_fds(0);
-    if (n > 1) then
-      raise ECrtSocket.Create('Systemd activation fails - too many file descriptors received');
+      raise ECrtSocket.Create('Bind('''') but Systemd is not available');
+    n := ExternalLibraries.sd_listen_fds(0);
+    if n > 1 then
+      raise ECrtSocket.Create('Bind(''''): Systemd activation failed - too ' +
+        'many file descriptors received');
     aSock := SD_LISTEN_FDS_START + 0;
     {$else}
-    raise ECrtSocket.Create('Can''t bind to empty address');
+    raise ECrtSocket.Create('Bind('''') is not allowed on this platform');
     {$endif}
   end else begin
     aSock := -1; // force OpenBind to create listening socket
-    if not Split(anAddr,':',s,p) then begin
-    s := '0.0.0.0';
-      p := anAddr;
-  end;
-  {$ifndef MSWINDOWS}
-  if s='unix' then begin
-    aLayer := cslUNIX;
-    s := p;
-    p := '';
-  end;
-  {$endif}
+    if not Split(aAddr,':',s,p) then begin
+      s := '0.0.0.0';
+      p := aAddr;
+    end;
+    {$ifndef MSWINDOWS}
+    if s='unix' then begin
+      aLayer := cslUNIX;
+      s := p;
+      p := '';
+    end;
+    {$endif MSWINDOWS}
   end;
   OpenBind(s,p,{dobind=}true,aSock,aLayer); // raise a ECrtSocket on error
 end;
@@ -4995,7 +4999,7 @@ begin
   if fSock<=0 then
     exit; // no opened connection, or Close already executed
   {$ifdef LINUXNOTBSD}
-  if (fWasBind and (fPort='')) then begin // bind on external socket
+  if (fWasBind and (fPort='')) then begin // binded on external socket
     fSock := -1;
     exit;
   end;
@@ -5726,7 +5730,7 @@ end;
 
 function THttpClientSocket.Request(const url, method: SockString;
   KeepAlive: cardinal; const header, Data, DataType: SockString; retry: boolean): integer;
-procedure DoRetry(Error: integer; const msg: SockString);
+  procedure DoRetry(Error: integer; const msg: SockString);
   begin
     {$ifdef SYNCRTDEBUGLOW} TSynLog.Add.Log(sllCustom2,
       'Request: % socket=% DoRetry(%) retry=%',[msg,Sock,Error,BOOL_STR[retry]],self);
@@ -6391,7 +6395,7 @@ begin
       exit;
     Sleep(1);
     if GetTick64 > tix then
-      raise ECrtSocket.CreateFmt('%s.WaitStarted failed after % seconds with %s',
+      raise ECrtSocket.CreateFmt('%s.WaitStarted failed after %d seconds [%s]',
         [ClassName,Seconds,fExecuteMessage]);
   until false;
 end;
@@ -6654,7 +6658,7 @@ begin
         exit;
     until GetTick64>endtix;
   end;
-  result := false; // normal delay expiration
+  result := false; // abnormal delay expiration
 end;
 
 {$ifndef LVCL}
@@ -7876,7 +7880,16 @@ type
   end;
 
   HTTP_REQUEST_INFO_TYPE = (
-    HttpRequestInfoTypeAuth
+    HttpRequestInfoTypeAuth,
+    HttpRequestInfoTypeChannelBind,
+    HttpRequestInfoTypeSslProtocol,
+    HttpRequestInfoTypeSslTokenBindingDraft,
+    HttpRequestInfoTypeSslTokenBinding,
+    HttpRequestInfoTypeRequestTiming,
+    HttpRequestInfoTypeTcpInfoV0,
+    HttpRequestInfoTypeRequestSizing,
+    HttpRequestInfoTypeQuicStats,
+    HttpRequestInfoTypeTcpInfoV1
     );
 
   // about Authentication in HTTP Version 2.0
@@ -7910,7 +7923,9 @@ type
     PackedContextType: ULONG;
     PackedContext: pointer;
     MutualAuthDataLength: ULONG;
-    pMutualAuthData: PCHAR;
+    pMutualAuthData: PAnsiChar;
+    PackageNameLength: word;
+    pPackageName: LPWSTR;
   end;
   PHTTP_REQUEST_AUTH_INFO = ^HTTP_REQUEST_AUTH_INFO;
 
@@ -7960,9 +7975,13 @@ type
     RawConnectionId: HTTP_RAW_CONNECTION_ID;
     // SSL connection information
     pSslInfo: PHTTP_SSL_INFO;
-    // beginning of HTTP_REQUEST_V2 structure
-    xxxPadding: DWORD;
+    { beginning of HTTP_REQUEST_V2 structure - manual padding is needed :( }
+    {$ifdef CPU32}
+    padding: dword;
+    {$endif CPU32}
+    /// how many extended info about a specific request is available in v2
     RequestInfoCount: word;
+    /// v2 trailing structure used to handle extended info about a specific request
     pRequestInfo: PHTTP_REQUEST_INFOS;
   end;
   PHTTP_REQUEST = ^HTTP_REQUEST;
@@ -9205,6 +9224,9 @@ begin
     repeat
       Context.fInContent := ''; // release input/output body buffers ASAP
       Context.fOutContent := '';
+      // Reset AuthenticationStatus & user between requests
+      Context.fAuthenticationStatus := hraNone;
+      Context.fAuthenticatedUser := '';
       // retrieve next pending request, and read its headers
       fillchar(Req^,sizeof(HTTP_REQUEST),0);
       Err := Http.ReceiveHttpRequest(fReqQueue,ReqID,0,Req^,length(ReqBuf),bytesRead);
@@ -9252,8 +9274,12 @@ begin
             HttpAuthStatusSuccess:
             if AuthType>HttpRequestAuthTypeNone then begin
               byte(Context.fAuthenticationStatus) := ord(AuthType)+1;
-              if AccessToken<>0 then
+              if AccessToken<>0 then begin
                 GetDomainUserNameFromToken(AccessToken,Context.fAuthenticatedUser);
+                // Per spec https://docs.microsoft.com/en-us/windows/win32/http/authentication-in-http-version-2-0
+                // AccessToken lifecycle is application responsability and should be closed after use
+                CloseHandle(AccessToken);
+              end;
             end;
             HttpAuthStatusFailure:
               Context.fAuthenticationStatus := hraFailed;
@@ -9836,7 +9862,8 @@ type
     hReceive, hSend
   );
 
-const sProtocolHeader: SockString = 'SEC-WEBSOCKET-PROTOCOL';
+const
+  sProtocolHeader: SockString = 'SEC-WEBSOCKET-PROTOCOL';
 
 function HttpSys2ToWebSocketHeaders(const aHttpHeaders: HTTP_REQUEST_HEADERS): WEB_SOCKET_HTTP_HEADER_ARR;
 var headerCnt: Integer;
@@ -12369,7 +12396,7 @@ begin
   if (self=nil) or (socket=0) or (socket=fEPFD) or
      (byte(events)=0) or (fCount=fMaxSockets) then
     exit;
-  e.data.u64 := tag;
+  e.data.ptr := pointer(tag);
   if pseRead in events then
     e.events := EPOLLIN else
     e.events := 0;

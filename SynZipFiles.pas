@@ -1774,7 +1774,7 @@ function TBlobData.Next: PAnsiChar;
 begin
   result := PAnsiChar(@databuf)+dataSize;
 end;
-{$else}
+{$else} {$ifdef FPC} nostackframe; assembler; {$endif}
 asm
   lea ecx,[eax+TBlobData.databuf]
   mov eax,[eax].TBlobData.datasize

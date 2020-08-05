@@ -179,10 +179,16 @@ type
     function FindLocation(aAddressAbsolute: PtrUInt): RawUTF8; overload;
     /// return the symbol location according to the supplied ESynException
     // - i.e. unit name, symbol name and line number (if any), as plain text
+    // - under FPC, currently calls BacktraceStrFunc() which may be very slow
     class function FindLocation(exc: ESynException): RawUTF8; overload;
+    /// return the low-level stack trace exception information into human-friendly text
+    class function FindStackTrace(const Ctxt: TSynLogExceptionContext): TRawUTF8DynArray;
     /// returns the file name of
     // - if unitname = '', returns the main file name of the current executable
     class function FindFileName(const unitname: RawUTF8): TFileName;
+    /// returns the global TSynMapFile instance associated with the current
+    // executable
+    class function FromCurrentExecutable: TSynMapFile;
     /// all symbols associated to the executable
     property Symbols: TSynMapSymbolDynArray read fSymbol;
     /// all units, including line numbers, associated to the executable
@@ -567,11 +573,12 @@ type
     // - can be set e.g. to LOG_VERBOSE in order to echo every kind of events
     // - EchoCustom or EchoToConsole can be activated separately
     property EchoToConsole: TSynLogInfos read fEchoToConsole write SetEchoToConsole;
-    /// For Linux with journald. If true - redirect all EchoToConsole logging
-    // into journald service.
-    // - such logs can exported in format what can be viewed by LogView tool using
-    // a command (raplace UNIT with your unit name and PROCESS with executable name):
-    // "journalctl -u UNIT --no-hostname -o short-iso-precise --since today | grep "PROCESS\[.*\]:  . " > todaysLog.log"
+    /// For Linux with journald
+    // - if true: redirect all EchoToConsole logging into journald service
+    // - such logs can be exported into a format whichcan be viewed by our
+    // LogView tool using a command (replacing UNIT with your unit name and
+    // PROCESS with the executable name):
+    // $ "journalctl -u UNIT --no-hostname -o short-iso-precise --since today | grep "PROCESS\[.*\]:  . " > todaysLog.log"
     property EchoToConsoleUseJournal: boolean read fEchoToConsoleUseJournal
       write SetEchoToConsoleUseJournal;
     /// can be set to a callback which will be called for each log line
@@ -1551,7 +1558,6 @@ function GetLastExceptions(Depth: integer=0): variant; overload;
 /// convert low-level exception information into some human-friendly text
 function ToText(var info: TSynLogExceptionInfo): RawUTF8; overload;
 
-
 /// a TSynLogArchiveEvent handler which will delete older .log files
 function EventArchiveDelete(const aOldLogFileName, aDestinationPath: TFileName): boolean;
 
@@ -2271,14 +2277,20 @@ begin
     PointerToHex(pointer(aAddressAbsolute),result);
     exit;
   end;
-  result := '';
   offset := AbsoluteToOffset(aAddressAbsolute);
   s := FindSymbol(offset);
   u := FindUnit(offset,Line);
-  if (s<0) and (u<0) then
+  if (s<0) and (u<0) then begin
+    {$ifdef FPC} // note: BackTraceStrFunc is much slower than TSynMapFile.Log
+    if @BackTraceStrFunc=@SysBackTraceStr then // has debug information?
+      PointerToHex(pointer(aAddressAbsolute),result) else
+      ShortStringToAnsi7String(BackTraceStrFunc(pointer(aAddressAbsolute)),result);
+    {$endif FPC}
     exit;
+  end;
+  result := result+' ';
   if u>=0 then begin
-    result := Units[u].Symbol.Name;
+    result := result+Units[u].Symbol.Name;
     if s>=0 then
       if Symbols[s].Name=result then
         s := -1 else
@@ -2295,6 +2307,19 @@ begin
   if (exc=nil) or (exc.RaisedAt=nil) then
     result := '' else
     result := GetInstanceMapFile.FindLocation(PtrUInt(exc.RaisedAt));
+end;
+
+class function TSynMapFile.FindStackTrace(
+  const Ctxt: TSynLogExceptionContext): TRawUTF8DynArray;
+var i: PtrInt;
+    exe: TSynMapFile;
+begin
+  result := nil;
+  exe := GetInstanceMapFile;
+  AddRawUTF8(result,exe.FindLocation(Ctxt.EAddr));
+  for i := 0 to Ctxt.EStackCount-1 do
+    if (i=0) or (PPtrUIntArray(Ctxt.EStack)[i]<>PPtrUIntArray(Ctxt.EStack)[i-1]) then
+      AddRawUTF8(result,exe.FindLocation(PPtrUIntArray(Ctxt.EStack)[i]));
 end;
 
 function TSynMapFile.FindUnit(const aUnitName: RawUTF8): integer;
@@ -2321,6 +2346,11 @@ begin
   u := map.FindUnit(name);
   if u>=0 then
     result := UTF8ToString(map.fUnit[u].FileName);
+end;
+
+class function TSynMapFile.FromCurrentExecutable: TSynMapFile;
+begin
+  result := GetInstanceMapFile;
 end;
 
 
@@ -2684,7 +2714,7 @@ begin
          DefaultSynLogExceptionToStr(log.fWriter,Ctxt) then
         goto fin;
 adr:  log.fWriter.Add(' [%] at ',[log.fThreadContext^.ThreadName],twOnSameLine);
-      {$ifdef FPC} // note: BackTraceStrFunc is slower than TSynMapFile.Log
+      {$ifdef FPC} // note: BackTraceStrFunc is much slower than TSynMapFile.Log
       with log.fWriter do
       if @BackTraceStrFunc=@SysBackTraceStr then begin // no debug information
         AddPointer(Ctxt.EAddr); // write addresses as hexa
@@ -4097,8 +4127,9 @@ begin
   {$ifdef LINUXNOTBSD}
   if Family.EchoToConsoleUseJournal then begin
     // skip time "20200615 08003008  ." - journal do it for us; and first space after it
-    if length(Text) > 18 then
-      sd.journal_print(longint(LOG_TO_SYSLOG[Level]), [PUTF8Char(pointer(Text))+18]);
+    if length(Text)>18 then
+      ExternalLibraries.sd_journal_print(longint(LOG_TO_SYSLOG[Level]),
+        [PUTF8Char(pointer(Text))+18]);
     exit;
   end;
   {$endif}
@@ -5085,14 +5116,14 @@ var aWow64, feat: RawUTF8;
 begin
   // 1. calculate fLines[] + fCount and fLevels[] + fLogProcNatural[] from .log content
   fLineHeaderCountToIgnore := 3; fIsJournald := false;
-  if IdemPChar(fMap.Buffer,'-- LOGS BEGIN AT') then begin
+  if IdemPChar(pointer(fMap.Buffer),'-- LOGS BEGIN AT') then begin
     //-- Logs begin at Sun 2020-06-07 12:42:31 EEST, end at Thu 2020-06-18 18:08:52 EEST. --
     fIsJournald := true;
     fHeaderLinesCount := 1;
     fLineHeaderCountToIgnore := 1;
   end else begin
     //2020-06-18T13:28:20.754089+0300 ub[12316]:
-    Iso8601ToDateTimePUTF8CharVar(fMap.Buffer,26,fStartDateTime);
+    Iso8601ToDateTimePUTF8CharVar(pointer(fMap.Buffer),26,fStartDateTime);
     if fStartDateTime > 0 then begin
       fIsJournald := true;
       fHeaderLinesCount := 0;
@@ -5109,8 +5140,7 @@ begin
       Iso8601ToDateTimePUTF8CharVar(fLines[1],26,fStartDateTime);
       if fStartDateTime=0 then
         exit;
-    end else begin
-    // SynLog original
+    end else begin // TSynLog regular header
   {  C:\Dev\lib\SQLite3\exe\TestSQL3.exe 0.0.0.0 (2011-04-07 11:09:06)
      Host=BW013299 User=G018869 CPU=1*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545
      TSynLog 1.13 LVCL 2011-04-07 12:04:09 }
@@ -5370,7 +5400,8 @@ procedure TSynLogFile.ProcessOneLine(LineBeg, LineEnd: PUTF8Char);
 var thread,n: cardinal;
     MS: integer;
     L: TSynLogInfo;
-    p: PUTF8Char; dcOffset: integer;
+    p: PUTF8Char;
+    dcOffset: integer;
 begin
   inherited ProcessOneLine(LineBeg,LineEnd);
   if length(fLevels)<fLinesMax then
@@ -5378,8 +5409,7 @@ begin
   if (fCount<=fLineHeaderCountToIgnore) or (LineEnd-LineBeg<24) then
     exit;
   if fIsJournald then
-    dcOffset := 2 // point to last 2 digit of year
-  else
+    dcOffset := 2 else // point to last 2 digit of year
     dcOffset := 0;
   if fLineLevelOffset=0 then begin
     if (fCount>50) or not (LineBeg[0] in ['0'..'9']) then
