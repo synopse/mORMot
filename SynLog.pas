@@ -4114,16 +4114,27 @@ function TSynLog.ConsoleEcho(Sender: TTextWriter; Level: TSynLogInfo;
 {$ifdef MSWINDOWS}
 var tmp: AnsiString;
 {$endif}
+{$ifdef LINUXNOTBSD}
+var
+  tmp, mtmp: RawUTF8;
+  jvec: Array[0..1] of TioVec;
+{$endif}
 begin
   result := true;
   if not (Level in fFamily.fEchoToConsole) then
     exit;
   {$ifdef LINUXNOTBSD}
   if Family.EchoToConsoleUseJournal then begin
+    if length(Text)<18 then // should be at last "20200615 08003008  "
+      exit;
+    tmp := FormatUTF8('PRIORITY=%', [LOG_TO_SYSLOG[Level]]);
+    jvec[0].iov_base := pointer(tmp);
+    jvec[0].iov_len := length(tmp);
     // skip time "20200615 08003008  ." - journal do it for us; and first space after it
-    if length(Text)>18 then
-      ExternalLibraries.sd_journal_print(longint(LOG_TO_SYSLOG[Level]),
-        [PUTF8Char(pointer(Text))+18]);
+    mtmp := FormatUTF8('MESSAGE=%', [PUTF8Char(pointer(Text))+18]);
+    jvec[1].iov_base := pointer(mtmp);
+    jvec[1].iov_len := length(mtmp);
+    ExternalLibraries.sd_journal_sendv(@jvec[0], 2);
     exit;
   end;
   {$endif}
