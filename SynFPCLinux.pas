@@ -61,6 +61,7 @@ interface
 
 uses
   {$ifdef LINUX}
+  BaseUnix,
   UnixType,
   {$endif LINUX}
   SysUtils;
@@ -254,7 +255,13 @@ type
       var path: TFileName; pathLength: PtrUInt): integer; cdecl;
     /// systemd: submit simple, plain text log entries to the system journal
     // - priority value can be obtained using longint(LOG_TO_SYSLOG[logLevel])
+    // - WARNING: args strings processed using C printf semantic, so % is a printf
+    // placeholder and should be either escaped using %% or all formatting args must be passed
     sd_journal_print: function(priority: longint; args: array of const): longint; cdecl;
+    /// systemd: submit array of iov structures instead of the format string to the system journal.
+    //  - each structure should reference one field of the entry to submit.
+    //  - the second argument specifies the number of structures in the array.
+    sd_journal_sendv: function(const iov: Piovec; n: longint): longint; cdecl;
     /// systemd: sends notification to systemd
     // - see https://www.freedesktop.org/software/systemd/man/sd_notify.html
     // status notification sample: sd.notify(0, 'READY=1');
@@ -315,7 +322,6 @@ implementation
 uses
   Classes,
   Unix,
-  BaseUnix,
   {$ifdef BSD}
   sysctl,
   {$else}
@@ -737,8 +743,8 @@ var
   p: PPointer;
   i, j: integer;
 const
-  NAMES: array[0..4] of PAnsiChar = (
-    'sd_listen_fds', 'sd_is_socket_unix', 'sd_journal_print',
+  NAMES: array[0..5] of PAnsiChar = (
+    'sd_listen_fds', 'sd_is_socket_unix', 'sd_journal_print', 'sd_journal_sendv',
     'sd_notify', 'sd_watchdog_enabled');
 begin
   if lib in Loaded then
