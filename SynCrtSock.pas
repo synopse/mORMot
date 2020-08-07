@@ -3235,11 +3235,6 @@ var
 
 implementation
 
-{$ifdef LINUXNOTBSD}
-uses
-  SynSystemd;
-{$endif}
-
 { ************ some shared helper functions and classes }
 
 var
