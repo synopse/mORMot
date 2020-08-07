@@ -2975,14 +2975,14 @@ begin
             VDBType,@oIndicator[i],nil,nil,0,nil,OCI_DEFAULT),fError);
         end;
       end;
+      // 2. retrieve column information (if not already done)
       if fExpectResults and (fColumn.Count = 0) then
-        // 3. retrieve column information (if not already done) and dispatch data in row buffer
-        // We move this after params binding to prevent ORA-00932 : inconsistent datatypes
-        // during call to StmtExecute with OCI_DESCRIBE_ONLY.
-        // Because if called here sometimes it broke a Oracle shared poot and
-        // only `ALTER system flush shared_pool` helps
+        // We move this after params binding to prevent "ORA-00932: inconsistent
+        // datatypes" during call to StmtExecute with OCI_DESCRIBE_ONLY.
+        // Because if called here sometimes it breaks the Oracle shared pool and
+        // only `ALTER system flush shared_pool` seems to fix the DB state
         SetColumnsForPreparedStatement;
-      // 2. execute prepared statement
+      // 3. execute prepared statement and dispatch data in row buffers
       if (fColumnCount=0) and (Connection.TransactionCount=0) then
         // for INSERT/UPDATE/DELETE without a transaction: AutoCommit after execution
         mode := OCI_COMMIT_ON_SUCCESS else
@@ -2990,6 +2990,7 @@ begin
         mode := OCI_DEFAULT;
       Status := OCI.StmtExecute(TSQLDBOracleConnection(Connection).fContext,
         fStatement,fError,fRowCount,0,nil,nil,mode);
+      // 4. check execution error, and retrieve data result range
       FetchTest(Status); // error + set fRowCount+fCurrentRow+fRowFetchedCurrent
       Status := OCI_SUCCESS; // mark OK for fBoundCursor[] below
     finally
@@ -3453,9 +3454,8 @@ begin
             OCI_NTV_SYNTAX,OCI_DEFAULT),fError);
         end;
       end;
-      // If called here we randomly (rarely) got a "ORA-00932 : inconsistent datatypes"
-      // for queries with parameters. Call moved to ExecutePrepared.
-      //SetColumnsForPreparedStatement;
+      // note: if SetColumnsForPreparedStatement is called here, we randomly got
+      // "ORA-00932 : inconsistent datatypes" error -> moved to ExecutePrepared
     except
       on E: Exception do begin
         FreeHandles(True);
