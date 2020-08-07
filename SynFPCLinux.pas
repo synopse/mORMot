@@ -255,13 +255,13 @@ type
       var path: TFileName; pathLength: PtrUInt): integer; cdecl;
     /// systemd: submit simple, plain text log entries to the system journal
     // - priority value can be obtained using longint(LOG_TO_SYSLOG[logLevel])
-    // - WARNING: args strings processed using C printf semantic, so % is a printf placeholder
-    //   and should be either escaped using %% or all formatting args must be passed
+    // - WARNING: args strings processed using C printf semantic, so % is a printf
+    // placeholder and should be either escaped using %% or all formatting args must be passed
     sd_journal_print: function(priority: longint; args: array of const): longint; cdecl;
     /// systemd: submit array of iov structures instead of the format string to the system journal.
     //  - each structure should reference one field of the entry to submit.
     //  - the second argument specifies the number of structures in the array.
-    sd_journal_sendv: function(const iov : Piovec; n: longint): longint; cdecl;
+    sd_journal_sendv: function(const iov: Piovec; n: longint): longint; cdecl;
     /// systemd: sends notification to systemd
     // - see https://www.freedesktop.org/software/systemd/man/sd_notify.html
     // status notification sample: sd.notify(0, 'READY=1');
