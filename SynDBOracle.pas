@@ -2975,6 +2975,13 @@ begin
             VDBType,@oIndicator[i],nil,nil,0,nil,OCI_DEFAULT),fError);
         end;
       end;
+      if fExpectResults and (fColumn.Count = 0) then
+        // 3. retrieve column information (if not already done) and dispatch data in row buffer
+        // We move this after params binding to prevent ORA-00932 : inconsistent datatypes
+        // during call to StmtExecute with OCI_DESCRIBE_ONLY.
+        // Because if called here sometimes it broke a Oracle shared poot and
+        // only `ALTER system flush shared_pool` helps
+        SetColumnsForPreparedStatement;
       // 2. execute prepared statement
       if (fColumnCount=0) and (Connection.TransactionCount=0) then
         // for INSERT/UPDATE/DELETE without a transaction: AutoCommit after execution
@@ -3446,8 +3453,9 @@ begin
             OCI_NTV_SYNTAX,OCI_DEFAULT),fError);
         end;
       end;
-      // 3. retrieve column information and dispatch data in row buffer
-      SetColumnsForPreparedStatement;
+      // If called here we randomly (rarely) got a "ORA-00932 : inconsistent datatypes"
+      // for queries with parameters. Call moved to ExecutePrepared.
+      //SetColumnsForPreparedStatement;
     except
       on E: Exception do begin
         FreeHandles(True);
