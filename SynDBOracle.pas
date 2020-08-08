@@ -3427,14 +3427,12 @@ begin
       inherited Prepare(aSQL,ExpectResults); // set fSQL + Connect if necessary
       fPreparedParamsCount := ReplaceParamsByNumbers(aSQL,fSQLPrepared,':',true);
       L := Length(fSQLPrepared);
-      while (L>0) and (fSQLPrepared[L] in [#1..' ',';']) do
-        if (fSQLPrepared[L]=';') and (L>5) then
-          if fSQLPrepared[L-1]=';' then begin
-            dec(L); // allow one trailing ';' by writing ';;'
-            break;
-          end else if IdemPChar(@fSQLPrepared[L-3],'END') then
-          break else // allows 'END;' at the end of a statement
-          dec(L);    // trim ' ' or ';' right (last ';' could be found incorrect)
+      while (L>0) and (fSQLPrepared[L] <= ' ') do
+        dec(L); // trim all characters <= ' '
+      // allow one trailing ';' by writing ';;' or allows 'END;' at the end of a statement
+      if (fSQLPrepared[L]=';') and (L>5) and (fSQLPrepared[L-1]<>';') and
+         not IdemPChar(@fSQLPrepared[L-3],'END') then
+          dec(L);
       if L<>Length(fSQLPrepared) then
         SetLength(fSQLPrepared,L); // trim trailing ';' if needed
       // 2. prepare statement
