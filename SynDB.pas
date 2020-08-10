@@ -1688,8 +1688,6 @@ type
   // overridden methods, especially Bind*(), Prepare(), ExecutePrepared, Step()
   // and Column*() methods
   TSQLDBStatement = class(TInterfacedObject, ISQLDBRows, ISQLDBStatement)
-  private
-    function GetSQLCurrent: RawUTF8;
   protected
     fStripSemicolon: boolean;
     fConnection: TSQLDBConnection;
@@ -1710,6 +1708,7 @@ type
     fSQLLogTimer: TPrecisionTimer;
     fCacheIndex: integer;
     fSQLPrepared: RawUTF8;
+    function GetSQLCurrent: RawUTF8;
     function GetSQLWithInlinedParams: RawUTF8;
     procedure ComputeSQLWithInlinedParams;
     function GetForceBlobAsNull: boolean;
@@ -2191,12 +2190,14 @@ type
     /// low-level access to the Timer used for last DB operation
     property SQLLogTimer: TPrecisionTimer read fSQLLogTimer;
     /// after a call to Prepare(), contains the query text to be passed to the DB
-    // - Depends on DB parameters placeholder are replaced to ?, :1, $1 etc
+    // - depending on the DB, parameters placeholders are replaced by ?, :1, $1 etc
     // - this SQL is ready to be used in any DB tool, e.g. to check the real 
     // execution plan/timing
     property SQLPrepared: RawUTF8 read fSQLPrepared;
-    /// the query text to be passed to the DB - if statement is prepared
-    // then equal to SQLPrepared, else to SQL
+    /// the prepared SQL statement, in its current state
+    // - if statement is prepared, then equals SQLPrepared, otherwise, contains
+    // the raw SQL property content
+    // - used internally by the implementation units, e.g. for errors logging
     property SQLCurrent: RawUTF8 read GetSQLCurrent;
     /// low-level access to the statement cache index, after a call to Prepare()
     // - contains >= 0 if the database supports prepared statement cache 
@@ -7404,8 +7405,7 @@ end;
 function TSQLDBStatement.GetSQLCurrent: RawUTF8;
 begin
   if fSQLPrepared <> '' then
-    Result := fSQLPrepared
-  else
+    Result := fSQLPrepared else
     Result := fSQL;
 end;
 
