@@ -476,6 +476,7 @@ type
     fRotateFileCount: cardinal;
     fRotateFileSize: cardinal;
     fRotateFileAtHour: integer;
+    fRotateFileNoCompression: boolean;
     function CreateSynLog: TSynLog;
     procedure StartAutoFlush;
     procedure SetDestinationPath(const value: TFileName);
@@ -700,6 +701,8 @@ type
     // specified hour
     // - is not used if RotateFileCount is left to its default 0
     property RotateFileDailyAtHour: integer read fRotateFileAtHour write fRotateFileAtHour;
+    /// if set to TRUE, no #.synlz will be created at rotation but plain #.log file
+    property RotateFileNoCompression: boolean read fRotateFileNoCompression write fRotateFileNoCompression;
     /// the recursive depth of stack trace symbol to write
     // - used only if exceptions are handled, or by sllStackTrace level
     // - default value is 30, maximum is 255
@@ -4557,6 +4560,7 @@ begin
 end;
 
 procedure TSynLog.PerformRotation;
+const _LOG_SYNLZ: array[boolean] of TFileName = ('.synlz','.log');
 var currentMaxSynLZ: cardinal;
     i: integer;
     FN: array of TFileName;
@@ -4570,7 +4574,8 @@ begin
     if fFamily.fRotateFileCount>1 then begin
       SetLength(FN,fFamily.fRotateFileCount-1);
       for i := fFamily.fRotateFileCount-1 downto 1 do begin
-        FN[i-1] := ChangeFileExt(fFileName,'.'+IntToStr(i)+'.synlz');
+        FN[i-1] := ChangeFileExt(fFileName,
+          '.'+IntToStr(i)+_LOG_SYNLZ[fFamily.fRotateFileNoCompression]);
         if (currentMaxSynLZ=0) and FileExists(FN[i-1]) then
           currentMaxSynLZ := i;
       end;
@@ -4578,7 +4583,9 @@ begin
         DeleteFile(FN[currentMaxSynLZ-1]); // delete e.g. '9.synlz'
       for i := fFamily.fRotateFileCount-2 downto 1 do
         RenameFile(FN[i-1],FN[i]); // e.g. '8.synlz' -> '9.synlz'
-      FileSynLZ(fFileName,FN[0],LOG_MAGIC); // main -> '1.synlz'
+      if fFamily.fRotateFileNoCompression then
+        RenameFile(fFileName,FN[0]) else      // main -> '1.log'
+        FileSynLZ(fFileName,FN[0],LOG_MAGIC); // main -> '1.synlz'
     end;
     DeleteFile(fFileName);
   end;
