@@ -3427,14 +3427,13 @@ begin
       inherited Prepare(aSQL,ExpectResults); // set fSQL + Connect if necessary
       fPreparedParamsCount := ReplaceParamsByNumbers(aSQL,fSQLPrepared,':',true);
       L := Length(fSQLPrepared);
-      while (L>0) and (fSQLPrepared[L] <= ' ') do
-        dec(L); // trim all characters <= ' '
+      while (L>0) and (fSQLPrepared[L]<=' ') do // trim right
+        dec(L);
       // allow one trailing ';' by writing ';;' or allows 'END;' at the end of a statement
-      if (fSQLPrepared[L]=';') and (L>5) and (fSQLPrepared[L-1]<>';') and
-         not IdemPChar(@fSQLPrepared[L-3],'END') then
-          dec(L);
+      if (L>5) and (fSQLPrepared[L]=';') and not IdemPChar(@fSQLPrepared[L-3],'END') then
+        dec(L);
       if L<>Length(fSQLPrepared) then
-        SetLength(fSQLPrepared,L); // trim trailing ';' if needed
+        SetLength(fSQLPrepared,L); // trim trailing spaces or ';' if needed
       // 2. prepare statement
       env := (Connection as TSQLDBOracleConnection).fEnv;
       with OCI do begin
