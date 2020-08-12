@@ -328,6 +328,70 @@ type
     function KeyBits: integer; {$ifdef FPC}inline;{$endif}
   end;
 
+type
+  /// low-level AES-GCM processing
+  // - will use AES-NI if available
+  TAESGCMEngine = object
+  private
+    /// standard AES encryption context
+    actx: TAES;
+    /// ghash value of the Authentication Data
+    aad_ghv: TAESBlock;
+    /// ghash value of the Ciphertext
+    txt_ghv: TAESBlock;
+    // ghash H current value
+    ghash_h: TAESBlock;
+    /// number of Authentication Data bytes processed
+    aad_cnt: TQWordRec;
+    /// number of bytes of the Ciphertext
+    atx_cnt: TQWordRec;
+    /// initial 32-bit ctr val - to be reused in Final()
+    y0_val: integer;
+    /// current 0..15 position in encryption block
+    blen: byte;
+    /// the state of this context
+    flags: set of (flagFinalComputed, flagFlushed);
+    /// lookup table for fast Galois Finite Field multiplication
+    gf_t4k: array[byte] of TAESBlock;
+    /// build the gf_t4k[] internal table - assuming set to zero by caller
+    procedure Make4K_Table;
+    /// compute a * ghash_h in Galois Finite Field 2^128
+    procedure gf_mul_h(var a: TAESBlock);
+    /// low-level AES-CTR encryption
+    procedure internal_crypt(ptp, ctp: PByte; ILen: PtrUInt);
+    /// low-level GCM authentication
+    procedure internal_auth(ctp: PByte; ILen: PtrUInt;
+      var ghv: TAESBlock; var gcnt: TQWordRec);
+  public
+    /// initialize the AES-GCM structure for the supplied Key
+    function Init(const Key; KeyBits: PtrInt): boolean;
+    /// start AES-GCM encryption with a given Initialization Vector
+    function Reset(pIV: pointer; IV_len: PtrInt): boolean;
+    /// encrypt a buffer with AES-GCM, updating the associated authentication data
+    function Encrypt(ptp, ctp: Pointer; ILen: PtrInt): boolean;
+    /// decrypt a buffer with AES-GCM, updating the associated authentication data
+    // - also validate the GMAC with the supplied ptag/tlen if ptag<>nil,
+    // and skip the AES-CTR phase if the authentication doesn't match
+    function Decrypt(ctp, ptp: Pointer; ILen: PtrInt;
+      ptag: pointer=nil; tlen: PtrInt=0): boolean;
+    /// append some data to be authenticated, but not encrypted
+    function Add_AAD(pAAD: pointer; aLen: PtrInt): boolean;
+    /// finalize the AES-GCM encryption, returning the authentication tag
+    // - will also flush the AES context to avoid forensic issues
+    function Final(out tag: TAESBlock): boolean;
+    /// flush the AES context to avoid forensic issues
+    // - do nothing if Final() has been already called
+    procedure Done;
+    /// single call AES-GCM encryption and authentication process
+    function FullEncryptAndAuthenticate(const Key; KeyBits: PtrInt;
+      pIV: pointer; IV_len: PtrInt; pAAD: pointer; aLen: PtrInt;
+      ptp, ctp: Pointer; pLen: PtrInt; out tag: TAESBlock): boolean;
+    /// single call AES-GCM decryption and verification process
+    function FullDecryptAndVerify(const Key; KeyBits: PtrInt;
+      pIV: pointer; IV_len: PtrInt; pAAD: pointer; aLen: PtrInt;
+      ptp, ctp: Pointer; pLen: PtrInt; ptag: pointer; tLen: PtrInt): boolean;
+  end;
+
   /// class-reference type (metaclass) of an AES cypher/uncypher
   TAESAbstractClass = class of TAESAbstract;
 
@@ -6219,6 +6283,391 @@ begin
     CloseHandle(Handle[i]);
 end;
 {$endif USETHREADSFORBIGAESBLOCKS}
+
+
+{ AES-GCM Support }
+
+const
+  // lookup table as used by mul_x/gf_mul/gf_mul_h
+  gft_le: array[byte] of word = (
+     $0000, $c201, $8403, $4602, $0807, $ca06, $8c04, $4e05,
+     $100e, $d20f, $940d, $560c, $1809, $da08, $9c0a, $5e0b,
+     $201c, $e21d, $a41f, $661e, $281b, $ea1a, $ac18, $6e19,
+     $3012, $f213, $b411, $7610, $3815, $fa14, $bc16, $7e17,
+     $4038, $8239, $c43b, $063a, $483f, $8a3e, $cc3c, $0e3d,
+     $5036, $9237, $d435, $1634, $5831, $9a30, $dc32, $1e33,
+     $6024, $a225, $e427, $2626, $6823, $aa22, $ec20, $2e21,
+     $702a, $b22b, $f429, $3628, $782d, $ba2c, $fc2e, $3e2f,
+     $8070, $4271, $0473, $c672, $8877, $4a76, $0c74, $ce75,
+     $907e, $527f, $147d, $d67c, $9879, $5a78, $1c7a, $de7b,
+     $a06c, $626d, $246f, $e66e, $a86b, $6a6a, $2c68, $ee69,
+     $b062, $7263, $3461, $f660, $b865, $7a64, $3c66, $fe67,
+     $c048, $0249, $444b, $864a, $c84f, $0a4e, $4c4c, $8e4d,
+     $d046, $1247, $5445, $9644, $d841, $1a40, $5c42, $9e43,
+     $e054, $2255, $6457, $a656, $e853, $2a52, $6c50, $ae51,
+     $f05a, $325b, $7459, $b658, $f85d, $3a5c, $7c5e, $be5f,
+     $00e1, $c2e0, $84e2, $46e3, $08e6, $cae7, $8ce5, $4ee4,
+     $10ef, $d2ee, $94ec, $56ed, $18e8, $dae9, $9ceb, $5eea,
+     $20fd, $e2fc, $a4fe, $66ff, $28fa, $eafb, $acf9, $6ef8,
+     $30f3, $f2f2, $b4f0, $76f1, $38f4, $faf5, $bcf7, $7ef6,
+     $40d9, $82d8, $c4da, $06db, $48de, $8adf, $ccdd, $0edc,
+     $50d7, $92d6, $d4d4, $16d5, $58d0, $9ad1, $dcd3, $1ed2,
+     $60c5, $a2c4, $e4c6, $26c7, $68c2, $aac3, $ecc1, $2ec0,
+     $70cb, $b2ca, $f4c8, $36c9, $78cc, $bacd, $fccf, $3ece,
+     $8091, $4290, $0492, $c693, $8896, $4a97, $0c95, $ce94,
+     $909f, $529e, $149c, $d69d, $9898, $5a99, $1c9b, $de9a,
+     $a08d, $628c, $248e, $e68f, $a88a, $6a8b, $2c89, $ee88,
+     $b083, $7282, $3480, $f681, $b884, $7a85, $3c87, $fe86,
+     $c0a9, $02a8, $44aa, $86ab, $c8ae, $0aaf, $4cad, $8eac,
+     $d0a7, $12a6, $54a4, $96a5, $d8a0, $1aa1, $5ca3, $9ea2,
+     $e0b5, $22b4, $64b6, $a6b7, $e8b2, $2ab3, $6cb1, $aeb0,
+     $f0bb, $32ba, $74b8, $b6b9, $f8bc, $3abd, $7cbf, $bebe);
+
+procedure mul_x(var a: TAESBlock; const b: TAESBlock);
+// {$ifdef HASINLINE}inline;{$endif} // inlining has no benefit here
+var t: cardinal;
+    y: TWA4 absolute b;
+const
+  MASK_80 = cardinal($80808080);
+  MASK_7F = cardinal($7f7f7f7f);
+begin
+  t := gft_le[(y[3] shr 17) and MASK_80];
+  TWA4(a)[3] :=  ((y[3] shr 1) and MASK_7F) or (((y[3] shl 15) or (y[2] shr 17)) and MASK_80);
+  TWA4(a)[2] :=  ((y[2] shr 1) and MASK_7F) or (((y[2] shl 15) or (y[1] shr 17)) and MASK_80);
+  TWA4(a)[1] :=  ((y[1] shr 1) and MASK_7F) or (((y[1] shl 15) or (y[0] shr 17)) and MASK_80);
+  TWA4(a)[0] := (((y[0] shr 1) and MASK_7F) or ( (y[0] shl 15) and MASK_80)) xor t;
+end;
+
+procedure gf_mul(var a: TAESBlock; const b: TAESBlock);
+var p: array[0..7] of TAESBlock;
+    x: TWA4;
+    t: cardinal;
+    i: PtrInt;
+    j: integer;
+    c: byte;
+begin
+  p[0] := b;
+  for i := 1 to 7 do
+    mul_x(p[i], p[i-1]);
+  FillZero(TAESBlock(x));
+  for i:=0 to 15 do begin
+    c := a[15-i];
+    if i>0 then begin
+      // inlined mul_x8()
+      t := gft_le[x[3] shr 24];
+      x[3] := ((x[3] shl 8) or  (x[2] shr 24));
+      x[2] := ((x[2] shl 8) or  (x[1] shr 24));
+      x[1] := ((x[1] shl 8) or  (x[0] shr 24));
+      x[0] := ((x[0] shl 8) xor t);
+    end;
+    for j:=0 to 7 do begin
+      if c and ($80 shr j) <> 0 then begin
+        x[3] := x[3] xor TWA4(p[j])[3];
+        x[2] := x[2] xor TWA4(p[j])[2];
+        x[1] := x[1] xor TWA4(p[j])[1];
+        x[0] := x[0] xor TWA4(p[j])[0];
+      end;
+    end;
+  end;
+  a := TAESBlock(x);
+end;
+
+
+{ TAESGCMEngine }
+
+procedure TAESGCMEngine.Make4K_Table;
+var j, k: PtrInt;
+begin
+  gf_t4k[128] := ghash_h;
+  j := 64;
+  while j>0 do begin
+    mul_x(gf_t4k[j],gf_t4k[j+j]);
+    j := j shr 1;
+  end;
+  j := 2;
+  while j<256 do begin
+    for k := 1 to j-1 do
+      XorBlock16(@gf_t4k[k],@gf_t4k[j+k],@gf_t4k[j]);
+    inc(j,j);
+  end;
+end;
+
+procedure TAESGCMEngine.gf_mul_h(var a: TAESBlock);
+var
+  x: TWA4;
+  i: PtrUInt;
+  t: cardinal;
+  p: PWA4;
+begin
+  x := TWA4(gf_t4k[a[15]]);
+  for i := 14 downto 0 do begin
+    p := @gf_t4k[a[i]];
+    t := gft_le[x[3] shr 24];
+    // efficient mul_x8 and xor using pre-computed table entries
+    x[3] := ((x[3] shl 8) or  (x[2] shr 24)) xor p^[3];
+    x[2] := ((x[2] shl 8) or  (x[1] shr 24)) xor p^[2];
+    x[1] := ((x[1] shl 8) or  (x[0] shr 24)) xor p^[1];
+    x[0] := ((x[0] shl 8) xor t) xor p^[0];
+  end;
+  a := TAESBlock(x);
+end;
+
+procedure GCM_IncCtr(var x: TAESBlock); {$ifdef HASINLINE} inline; {$endif}
+begin
+  // in AES-GCM, CTR covers only 32 LSB Big-Endian bits, i.e. x[15]..x[12]
+  inc(x[15]);
+  if x[15]<>0 then
+    exit;
+  inc(x[14]);
+  if x[14]<>0 then
+    exit;
+  inc(x[13]);
+  if x[13]=0 then
+    inc(x[12]);
+end;
+
+procedure TAESGCMEngine.internal_crypt(ptp, ctp: PByte; ILen: PtrUInt);
+var cnt, b_pos: PtrUInt; { TODO : use ILen }
+begin
+  cnt := 0;
+  b_pos := blen;
+  inc(blen,ILen);
+  blen := blen and AESBlockMod;
+  if b_pos=0 then
+    b_pos := SizeOf(TAESBlock) else
+    while (cnt<ILen) and (b_pos<SizeOf(TAESBlock)) do begin
+      ctp^ := ptp^ xor TAESContext(actx).buf[b_pos];
+      inc(b_pos);
+      inc(ptp);
+      inc(ctp);
+      inc(cnt);
+    end;
+  while cnt+SizeOf(TAESBlock)<=ILen do begin
+    GCM_IncCtr(TAESContext(actx).IV);
+    actx.Encrypt(TAESContext(actx).IV,TAESContext(actx).buf); // maybe AES-NI
+    XorBlock16(pointer(ptp),@TAESContext(actx).buf);
+    inc(PAESBlock(ptp));
+    inc(PAESBlock(ctp));
+    inc(cnt,SizeOf(TAESBlock));
+  end;
+  while cnt<ILen do begin
+    if b_pos=SizeOf(TAESBlock) then begin
+      GCM_IncCtr(TAESContext(actx).IV);
+      actx.Encrypt(TAESContext(actx).IV,TAESContext(actx).buf); // maybe AES-NI
+      b_pos := 0;
+    end;
+    PByte(ctp)^ := TAESContext(actx).buf[b_pos] xor ptp^;
+    inc(b_pos);
+    inc(ptp);
+    inc(ctp);
+    inc(cnt);
+  end;
+end;
+
+procedure TAESGCMEngine.internal_auth(ctp: PByte; ILen: PtrUInt;
+  var ghv: TAESBlock; var gcnt: TQWordRec);
+var cnt, b_pos: PtrUInt; { TODO : use ILen }
+begin
+  cnt := 0;
+  b_pos := gcnt.L and AESBlockMod;
+  inc(gcnt.V,ILen);
+  if (b_pos=0) and (gcnt.V<>0) then
+    gf_mul_h(ghv);
+  while (cnt<ILen) and (b_pos<SizeOf(TAESBlock)) do begin
+    ghv[b_pos] := ghv[b_pos] xor ctp^;
+    inc(b_pos);
+    inc(ctp);
+    inc(cnt);
+  end;
+  while cnt+SizeOf(TAESBlock)<=ILen do begin
+    gf_mul_h(ghv);
+    XorBlock16(@ghv,pointer(ctp));
+    inc(PAESBlock(ctp));
+    inc(cnt,SizeOf(TAESBlock));
+  end;
+  while cnt<ILen do begin
+    if b_pos=SizeOf(TAESBlock) then begin
+      gf_mul_h(ghv);
+      b_pos := 0;
+    end;
+    ghv[b_pos] := ghv[b_pos] xor ctp^;
+    inc(b_pos);
+    inc(ctp);
+    inc(cnt);
+  end;
+end;
+
+function TAESGCMEngine.Init(const Key; KeyBits: PtrInt): boolean;
+begin
+  FillcharFast(self,SizeOf(self),0);
+  result := actx.EncryptInit(Key,KeyBits);
+  if not result then
+    exit;
+  actx.Encrypt(ghash_h, ghash_h);
+  Make4K_Table;
+end;
+
+const
+  CTR_POS  = 12;
+
+function TAESGCMEngine.Reset(pIV: pointer; IV_len: PtrInt): boolean;
+var i, n_pos: PtrInt;
+begin
+  if (pIV=nil) or (IV_len<>0) then begin
+    result := false;
+    exit;
+  end;
+  if IV_len=CTR_POS then begin
+    // Initialization Vector size matches perfect size of 12 bytes
+    MoveFast(pIV^,TAESContext(actx).IV,CTR_POS);
+    TWA4(TAESContext(actx).IV)[3] := $01000000;
+  end else begin
+    // Initialization Vector is computed from GHASH(IV,H)
+    n_pos := IV_len;
+    FillcharFast(TAESContext(actx).IV,sizeof(TAESContext(actx).IV),0);
+    while n_pos>=SizeOf(pIV^) do begin
+      XorBlock16(@TAESContext(actx).IV,pIV);
+      inc(PAesBlock(pIV));
+      dec(n_pos,SizeOf(pIV^));
+      gf_mul_h(TAESContext(actx).IV);
+    end;
+    if n_pos>0 then begin
+      for i := 0 to n_pos-1 do
+        TAESContext(actx).IV[i] := TAESContext(actx).IV[i] xor PAESBlock(pIV)^[i];
+      gf_mul_h(TAESContext(actx).IV);
+    end;
+    n_pos := IV_len shl 3;
+    i := 15;
+    while n_pos>0 do begin
+      TAESContext(actx).IV[i] := TAESContext(actx).IV[i] xor byte(n_pos);
+      n_pos := n_pos shr 8;
+      dec(i);
+    end;
+    gf_mul_h(TAESContext(actx).IV);
+  end;
+  y0_val := TWA4(TAESContext(actx).IV)[3];
+  FillZero(aad_ghv);
+  FillZero(txt_ghv);
+  aad_cnt.V := 0;
+  atx_cnt.V := 0;
+  flags := [];
+  result := true;
+end;
+
+function TAESGCMEngine.Encrypt(ptp, ctp: Pointer; ILen: PtrInt): boolean;
+begin
+  if ILen>0 then begin
+    if (ptp=nil) or (ctp=nil) or (flagFinalComputed in flags) then begin
+      result := false;
+      exit;
+    end;
+    internal_crypt(ptp,ctp,iLen);
+    internal_auth(ctp,ILen,txt_ghv,atx_cnt);
+  end;
+  result := true;
+end;
+
+function TAESGCMEngine.Decrypt(ctp, ptp: Pointer; ILen: PtrInt;
+  ptag: pointer; tlen: PtrInt): boolean;
+var tag: TAESBlock;
+begin
+  result := false;
+  if ILen>0 then begin
+    if (ptp=nil) or (ctp=nil) or (flagFinalComputed in flags) then
+      exit;
+    internal_auth(ctp,ILen,txt_ghv,atx_cnt);
+    if ptag<>nil then begin
+      Final(tag);
+      if not IsEqual(tag,ptag,tlen) then
+        exit;
+    end;
+    internal_crypt(ctp,ptp,iLen);
+  end;
+  result := true;
+end;
+
+function TAESGCMEngine.Add_AAD(pAAD: pointer; aLen: PtrInt): boolean;
+begin
+  if aLen>0 then begin
+    if (pAAD=nil) or (flagFinalComputed in flags) then begin
+      result := false;
+      exit;
+    end;
+    internal_auth(pAAD,aLen,aad_ghv,aad_cnt);
+  end;
+  result := true;
+end;
+
+function TAESGCMEngine.Final(out tag: TAESBlock): boolean;
+var
+  tbuf: TAESBlock;
+  x: TWA4 absolute tbuf;
+  ln: cardinal;
+begin
+  if not (flagFinalComputed in flags) then begin
+    include(flags,flagFinalComputed);
+    // compute GHASH(H, AAD, ctp)
+    gf_mul_h(aad_ghv);
+    gf_mul_h(txt_ghv);
+    // compute len(AAD) || len(ctp) with each len as 64-bit big-endian
+    ln := (atx_cnt.V+AESBlockMod) shr AESBlockShift;
+    if (aad_cnt.V>0) and (ln<>0) then begin
+      tbuf := ghash_h;
+      while ln<>0 do begin
+        if odd(ln) then
+          gf_mul(aad_ghv,tbuf);
+        ln := ln shr 1;
+        if ln<>0 then
+          gf_mul(tbuf,tbuf);
+      end;
+    end;
+    x[0] := bswap32((aad_cnt.L shr 29) or (aad_cnt.H shl 3));
+    x[1] := bswap32((aad_cnt.L shl  3));
+    x[2] := bswap32((atx_cnt.L shr 29) or (atx_cnt.H shl 3));
+    x[3] := bswap32((atx_cnt.L shl  3));
+    XorBlock16(@tbuf,@txt_ghv);
+    XorBlock16(@aad_ghv,@tbuf);
+    gf_mul_h(aad_ghv);
+    // compute E(K,Y0)
+    tbuf := TAESContext(actx).IV;
+    x[3] := y0_val;
+    actx.Encrypt(tbuf);
+    // GMAC = GHASH(H, AAD, ctp) xor E(K,Y0)
+    XorBlock16(@aad_ghv,@tag,@tbuf);
+    Done;
+    result := true;
+  end else begin
+    Done;
+    result := false;
+  end;
+end;
+
+procedure TAESGCMEngine.Done;
+begin
+  if flagFlushed in flags then
+    exit;
+  actx.Done;
+  include(flags,flagFlushed);
+end;
+
+function TAESGCMEngine.FullEncryptAndAuthenticate(const Key; KeyBits: PtrInt;
+  pIV: pointer; IV_len: PtrInt; pAAD: pointer; aLen: PtrInt; ptp, ctp: Pointer;
+  pLen: PtrInt; out tag: TAESBlock): boolean;
+begin
+  result := Init(Key,KeyBits) and Reset(pIV,IV_len) and Add_AAD(pAAD,aLen) and
+            Encrypt(ptp,ctp,pLen) and Final(tag);
+  Done;
+end;
+
+function TAESGCMEngine.FullDecryptAndVerify(const Key; KeyBits: PtrInt;
+  pIV: pointer; IV_len: PtrInt; pAAD: pointer; aLen: PtrInt; ptp, ctp: Pointer;
+  pLen: PtrInt; ptag: pointer; tLen: PtrInt): boolean;
+begin
+  result := Init(Key,KeyBits) and Reset(pIV,IV_len) and Add_AAD(pAAD,aLen) and
+            Decrypt(ptp,ctp,pLen,ptag,tlen);
+  Done;
+end;
+
 
 
 { TSHA256 }

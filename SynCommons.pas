@@ -12053,6 +12053,11 @@ procedure FillZero(var secret: RawUTF8); overload;
 procedure FillZero(var dest; count: PtrInt); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// returns TRUE if all bytes of both buffers do match
+// - this function is not sensitive to any timing attack, so is designed
+// for cryptographic purpose - and it is also branchless therefore fast
+function IsEqual(const A,B; count: PtrInt): boolean; overload;
+
 /// fast computation of two 64-bit unsigned integers into a 128-bit value
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
   {$ifndef CPUINTEL}inline;{$endif}
@@ -22997,6 +23002,17 @@ asm
   jmp dword ptr [FillCharFast]
 end;
 {$endif}
+
+function IsEqual(const A,B; count: PtrInt): boolean;
+var perbyte: boolean;
+begin
+  result := true;
+  while count>0 do begin
+    dec(count);
+    perbyte := PByteArray(@A)[count]=PByteArray(@B)[count];
+    result := result and perbyte;
+  end;
+end;
 
 function PosCharAny(Str: PUTF8Char; Characters: PAnsiChar): PUTF8Char;
 var s: PAnsiChar;
