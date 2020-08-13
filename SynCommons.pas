@@ -23007,7 +23007,7 @@ function IsEqual(const A,B; count: PtrInt): boolean;
 var perbyte: boolean;
 begin
   result := true;
-  while count>0 do begin
+  while ((count>0) and result) do begin
     dec(count);
     perbyte := PByteArray(@A)[count]=PByteArray(@B)[count];
     result := result and perbyte;
