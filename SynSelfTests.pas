@@ -461,6 +461,8 @@ type
     procedure _SHA3;
     /// AES encryption/decryption functions
     procedure _AES256;
+    /// AES-GCM encryption/decryption with authentication
+    procedure _AES_GCM;
     /// RC4 encryption function
     procedure _RC4;
     /// Base-64 encoding/decoding functions
@@ -12116,6 +12118,143 @@ begin
   {$ifdef CPUINTEL}
   CpuFeatures := backup;
   {$endif CPUINTEL}
+end;
+
+procedure TTestCryptographicRoutines._AES_GCM;
+const
+  hex32: THash256 = ($00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,
+    $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$1a,$1b,$1c,$1d,$1e,$1f);
+  buf32: THash256 = ($92,$4e,$17,$8a,$17,$fa,$1c,$a0,$e7,$48,$6f,$04,$04,$12,$3b,$91,
+   $db,$f7,$97,$bb,$9d,$bd,$e9,$b1,$d4,$8d,$5c,$7f,$53,$16,$59,$12);
+  tag32: array[0..15] of byte = ($10,$f9,$72,$b6,$f9,$e0,$a3,$c1,$cf,$9c,$cf,$56,$54,$3d,$ca,$79);
+  K01: THash256 = (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
+  I01: array[0..11] of byte = (0,0,0,0,0,0,0,0,0,0,0,0);
+  P01: array[0..15] of byte = (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
+  C01: array[0..15] of byte = ($ce,$a7,$40,$3d,$4d,$60,$6b,$6e,$07,$4e,$c5,$d3,$ba,$f3,$9d,$18);
+  T01: array[0..15] of byte = ($d0,$d1,$c8,$a7,$99,$99,$6b,$f0,$26,$5b,$98,$b5,$d4,$8a,$b9,$19);
+  K02: THash256 = (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
+  I02: array[0..11] of byte = (0,0,0,0,0,0,0,0,0,0,0,0);
+  H02: array[0..15] of byte = (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
+  T02: array[0..15] of byte = ($2d,$45,$55,$2d,$85,$75,$92,$2b,$3c,$a3,$cc,$53,$84,$42,$fa,$26);
+  K03: THash256 = (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
+  I03: array[0..11] of byte = (0,0,0,0,0,0,0,0,0,0,0,0);
+  H03: array[0..15] of byte = (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
+  P03: array[0..15] of byte = (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
+  C03: array[0..15] of byte = ($ce,$a7,$40,$3d,$4d,$60,$6b,$6e,$07,$4e,$c5,$d3,$ba,$f3,$9d,$18);
+  T03: array[0..15] of byte = ($ae,$9b,$17,$71,$db,$a9,$cf,$62,$b3,$9b,$e0,$17,$94,$03,$30,$b4);
+  K04: THash256 = ($fb,$76,$15,$b2,$3d,$80,$89,$1d,$d4,$70,$98,$0b,$c7,$95,$84,$c8,
+    $b2,$fb,$64,$ce,$60,$97,$8f,$4d,$17,$fc,$e4,$5a,$49,$e8,$30,$b7);
+  I04: array[0..11] of byte = ($db,$d1,$a3,$63,$60,$24,$b7,$b4,$02,$da,$7d,$6f);
+  P04: array[0..15] of byte = ($a8,$45,$34,$8e,$c8,$c5,$b5,$f1,$26,$f5,$0e,$76,$fe,$fd,$1b,$1e);
+  C04: array[0..15] of byte = ($5d,$f5,$d1,$fa,$bc,$bb,$dd,$05,$15,$38,$25,$24,$44,$17,$87,$04);
+  T04: array[0..15] of byte = ($4c,$43,$cc,$e5,$a5,$74,$d8,$a8,$8b,$43,$d4,$35,$3b,$d6,$0f,$9f);
+  K05: THash256 = ($40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$4a,$4b,$4c,$4d,$4e,$4f,
+    $50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$5a,$5b,$5c,$5d,$5e,$5f);
+  I05: array[0..11] of byte = ($10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$1a,$1b);
+  H05: array[0..19] of byte = (0,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$10,$11,$12,$13);
+  P05: array[0..23] of byte = ($20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$2a,$2b,$2c,$2d,$2e,$2f,$30,$31,$32,$33,$34,$35,$36,$37);
+  C05: array[0..23] of byte = ($59,$1b,$1f,$f2,$72,$b4,$32,$04,$86,$8f,$fc,$7b,$c7,$d5,$21,$99,$35,$26,$b6,$fa,$32,$24,$7c,$3c);
+  T05: array[0..15] of byte = ($7d,$e1,$2a,$56,$70,$e5,$70,$d8,$ca,$e6,$24,$a1,$6d,$f0,$9c,$08);
+  K07: THash256 = ($40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$4a,$4b,$4c,$4d,$4e,$4f,
+    $50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$5a,$5b,$5c,$5d,$5e,$5f);
+  I07: array[0..11] of byte = ($10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$1a,$1b);
+  H07: THash256 = ($20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$2a,$2b,$2c,$2d,$2e,$2f,
+    $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$3a,$3b,$3c,$3d,$3e,$3f);
+  P07: array[0..255] of byte =(0,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$10,$11,$12,$13,$14,$15,$16,$17,
+     $18,$19,$1a,$1b,$1c,$1d,$1e,$1f,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$2a,$2b,$2c,$2d,$2e,$2f,
+     $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$3a,$3b,$3c,$3d,$3e,$3f,$40,$41,$42,$43,$44,$45,$46,$47,
+     $48,$49,$4a,$4b,$4c,$4d,$4e,$4f,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$5a,$5b,$5c,$5d,$5e,$5f,
+     $60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$6a,$6b,$6c,$6d,$6e,$6f,$70,$71,$72,$73,$74,$75,$76,$77,
+     $78,$79,$7a,$7b,$7c,$7d,$7e,$7f,$80,$81,$82,$83,$84,$85,$86,$87,$88,$89,$8a,$8b,$8c,$8d,$8e,$8f,
+     $90,$91,$92,$93,$94,$95,$96,$97,$98,$99,$9a,$9b,$9c,$9d,$9e,$9f,$a0,$a1,$a2,$a3,$a4,$a5,$a6,$a7,
+     $a8,$a9,$aa,$ab,$ac,$ad,$ae,$af,$b0,$b1,$b2,$b3,$b4,$b5,$b6,$b7,$b8,$b9,$ba,$bb,$bc,$bd,$be,$bf,
+     $c0,$c1,$c2,$c3,$c4,$c5,$c6,$c7,$c8,$c9,$ca,$cb,$cc,$cd,$ce,$cf,$d0,$d1,$d2,$d3,$d4,$d5,$d6,$d7,
+     $d8,$d9,$da,$db,$dc,$dd,$de,$df,$e0,$e1,$e2,$e3,$e4,$e5,$e6,$e7,$e8,$e9,$ea,$eb,$ec,$ed,$ee,$ef,
+     $f0,$f1,$f2,$f3,$f4,$f5,$f6,$f7,$f8,$f9,$fa,$fb,$fc,$fd,$fe,$ff);
+  C07: array[0..255] of byte =($79,$3b,$3f,$d2,$52,$94,$12,$24,$a6,$af,$dc,$5b,$e7,$f5,$01,$b9,
+     $15,$06,$96,$da,$12,$04,$5c,$1c,$60,$77,$d3,$ca,$c7,$74,$ac,$cf,$c3,$d5,$30,$d8,$48,$d6,$65,$d8,
+     $1a,$49,$cb,$b5,0,$b8,$8b,$bb,$62,$4a,$e6,$1d,$16,$67,$22,$9c,$30,$2d,$c6,$ff,$0b,$b4,$d7,$0b,
+     $db,$bc,$85,$66,$d6,$f5,$b1,$58,$da,$99,$a2,$ff,$2e,$01,$dd,$a6,$29,$b8,$9c,$34,$ad,$1e,$5f,$eb,
+     $a7,$0e,$7a,$ae,$43,$28,$28,$9c,$36,$29,$b0,$58,$83,$50,$58,$1c,$a8,$b9,$7c,$cf,$12,$58,$fa,$3b,
+     $be,$2c,$50,$26,$04,$7b,$a7,$26,$48,$96,$9c,$ff,$8b,$a1,$0a,$e3,$0e,$05,$93,$5d,$f0,$c6,$93,$74,
+     $18,$92,$b7,$6f,$af,$67,$13,$3a,$bd,$2c,$f2,$03,$11,$21,$bd,$8b,$b3,$81,$27,$a4,$d2,$ee,$de,$ea,
+     $13,$27,$64,$94,$f4,$02,$cd,$7c,$10,$7f,$b3,$ec,$3b,$24,$78,$48,$34,$33,$8e,$55,$43,$62,$87,$09,
+     $2a,$c4,$a2,$6f,$5e,$a7,$ea,$4a,$d6,$8d,$73,$15,$16,$39,$b0,$5b,$24,$e6,$8b,$98,$16,$d1,$39,$83,
+     $76,$d8,$e4,$13,$85,$94,$75,$8d,$b9,$ad,$3b,$40,$92,$59,$b2,$6d,$cf,$c0,$6e,$72,$2b,$e9,$87,$b3,
+     $76,$7f,$70,$a7,$b8,$56,$b7,$74,$b1,$ba,$26,$85,$b3,$68,$09,$14,$29,$fc,$cb,$8d,$cd,$de,$09,$e4);
+  T07: array[0..15] of byte = ($87,$ec,$83,$7a,$bf,$53,$28,$55,$b2,$ce,$a1,$69,$d6,$94,$3f,$cd);
+  K08: THash256 = ($fb,$76,$15,$b2,$3d,$80,$89,$1d,$d4,$70,$98,$0b,$c7,$95,$84,$c8,
+    $b2,$fb,$64,$ce,$60,$97,$87,$8d,$17,$fc,$e4,$5a,$49,$e8,$30,$b7);
+  I08: array[0..11] of byte = ($db,$d1,$a3,$63,$60,$24,$b7,$b4,$02,$da,$7d,$6f);
+  H08: array[0.. 0] of byte = ($36);
+  P08: array[0.. 0] of byte = ($a9);
+  C08: array[0.. 0] of byte = ($0a);
+  T08: array[0..15] of byte = ($be,$98,$7d,0,$9a,$4b,$34,$9a,$a8,$0c,$b9,$c4,$eb,$c1,$e9,$f4);
+  K09: THash256 = ($f8,$d4,$76,$cf,$d6,$46,$ea,$6c,$23,$84,$cb,$1c,$27,$d6,$19,$5d,
+    $fe,$f1,$a9,$f3,$7b,$9c,$8d,$21,$a7,$9c,$21,$f8,$cb,$90,$d2,$89);
+  I09: array[0..11] of byte = ($db,$d1,$a3,$63,$60,$24,$b7,$b4,$02,$da,$7d,$6f);
+  H09: array[0..19] of byte = ($7b,$d8,$59,$a2,$47,$96,$1a,$21,$82,$3b,$38,$0e,$9f,$e8,$b6,$50,$82,$ba,$61,$d3);
+  P09: array[0..19] of byte = ($90,$ae,$61,$cf,$7b,$ae,$bd,$4c,$ad,$e4,$94,$c5,$4a,$29,$ae,$70,$26,$9a,$ec,$71);
+  C09: array[0..19] of byte = ($ce,$20,$27,$b4,$7a,$84,$32,$52,$01,$34,$65,$83,$4d,$75,$fd,$0f,$07,$29,$75,$2e);
+  T09: array[0..15] of byte = ($ac,$d8,$83,$38,$37,$ab,$0e,$de,$84,$f4,$74,$8d,$a8,$89,$9c,$15);
+  K10: THash256 = ($db,$bc,$85,$66,$d6,$f5,$b1,$58,$da,$99,$a2,$ff,$2e,$01,$dd,$a6,
+    $29,$b8,$9c,$34,$ad,$1e,$5f,$eb,$a7,$0e,$7a,$ae,$43,$28,$28,$9c);
+  I10: array[0..15] of byte = ($cf,$c0,$6e,$72,$2b,$e9,$87,$b3,$76,$7f,$70,$a7,$b8,$56,$b7,$74);
+  P10: array[0..15] of byte = ($ce,$20,$27,$b4,$7a,$84,$32,$52,$01,$34,$65,$83,$4d,$75,$fd,$0f);
+  C10: array[0..15] of byte = ($dc,$03,$e5,$24,$83,$0d,$30,$f8,$8e,$19,$7f,$3a,$ca,$ce,$66,$ef);
+  T10: array[0..15] of byte = ($99,$84,$ef,$f6,$90,$57,$55,$d1,$83,$6f,$2d,$b0,$40,$89,$63,$4c);
+  K11: THash256 = ($0e,$05,$93,$5d,$f0,$c6,$93,$74,$18,$92,$b7,$6f,$af,$67,$13,$3a,
+    $bd,$2c,$f2,$03,$11,$21,$bd,$8b,$b3,$81,$27,$a4,$d2,$ee,$de,$ea);
+  I11: array[0..16] of byte = ($74,$b1,$ba,$26,$85,$b3,$68,$09,$14,$29,$fc,$cb,$8d,$cd,$de,$09,$e4);
+  H11: array[0..19] of byte = ($7b,$d8,$59,$a2,$47,$96,$1a,$21,$82,$3b,$38,$0e,$9f,$e8,$b6,$50,$82,$ba,$61,$d3);
+  P11: array[0..19] of byte = ($90,$ae,$61,$cf,$7b,$ae,$bd,$4c,$ad,$e4,$94,$c5,$4a,$29,$ae,$70,$26,$9a,$ec,$71);
+  C11: array[0..19] of byte = ($6b,$e6,$5e,$56,$06,$6c,$40,$56,$73,$8c,$03,$fe,$23,$20,$97,$4b,$a3,$f6,$5e,$09);
+  T11: array[0..15] of byte = ($61,$08,$dc,$41,$7b,$f3,$2f,$7f,$b7,$55,$4a,$e5,$2f,$08,$8f,$87);
+  procedure test(ptag: pointer; tlen: PtrInt; const key; kbits: PtrInt;
+    pIV: pointer; IV_Len: PtrInt; pAAD: pointer; aLen: PtrInt;
+    ctp: pointer; cLen: PtrInt; ptp: pointer; tn: integer);
+  var tag: TAESBLock;
+      ctxt: TAESGCMEngine;
+      pt, ct: array[0..511] of byte;
+  begin
+    FillCharFast(pt,SizeOf(pt),0);
+    CheckUTF8(ctxt.FullDecryptAndVerify(
+      key,kbits,pIV,IV_Len,pAAD,aLen,ctp,@pt,cLen,ptag,tlen),
+      'FullDecryptAndVerify #%',[tn]);
+    CheckUTF8(CompareMem(@pt,ptp,cLen),'Plain #%',[tn]);
+    FillCharFast(ct,SizeOf(ct),0);
+    CheckUTF8(ctxt.FullEncryptAndAuthenticate(
+      key,kbits,pIV,IV_len,pAAD,aLen,ptp,@ct,clen,tag),
+      'FullEncryptAndAuthenticate #%',[tn]);
+    CheckUTF8(CompareMem(@tag,ptag,tLen),'Tag #%',[tn]);
+    CheckUTF8(CompareMem(@ct,ctp,cLen),'Encoded #%',[tn]);
+  end;
+var ctxt: TAESGCMEngine;
+    key,tag: TAESBlock;
+    buf: THash512;
+    n: integer;
+begin
+  key := PAESBlock(@hex32)^;
+  for n := 1 to 32 do begin
+    Check(ctxt.Init(key,128));
+    Check(ctxt.Reset(@hex32,n));
+    Check(ctxt.Add_AAD(@hex32,n));
+    Check(ctxt.Encrypt(@hex32,@buf,n));
+    Check(ctxt.Final(tag));
+    key := tag;
+  end;
+  Check(CompareMem(@buf32,@buf,SizeOf(buf32)));
+  Check(CompareMem(@tag32,@tag,SizeOf(tag32)));
+  test(@T01,16,K01,8*sizeof(K01),@I01,sizeof(I01),nil,0,@C01,sizeof(C01),@P01,01);
+  test(@T02,16,K02,8*sizeof(K02),@I02,sizeof(I02),@H02,sizeof(H02),nil,0,nil,02);
+  test(@T03,16,K03,8*sizeof(K03),@I03,sizeof(I03),@H03,sizeof(H03),@C03,sizeof(C03),@P03,03);
+  test(@T04,16,K04,8*sizeof(K04),@I04,sizeof(I04),nil,0,@C04,sizeof(C04),@P04,04);
+  test(@T05,16,K05,8*sizeof(K05),@I05,sizeof(I05),@H05,sizeof(H05),@C05,sizeof(C05),@P05,05);
+  test(@T07,16,K07,8*sizeof(K07),@I07,sizeof(I07),@H07,sizeof(H07),@C07,sizeof(C07),@P07,07);
+  test(@T08,16,K08,8*sizeof(K08),@I08,sizeof(I08),@H08,sizeof(H08),@C08,sizeof(C08),@P08,08);
+  test(@T09,16,K09,8*sizeof(K09),@I09,sizeof(I09),@H09,sizeof(H09),@C09,sizeof(C09),@P09,09);
+  test(@T10,16,K10,8*sizeof(K10),@I10,sizeof(I10),nil,0,@C10,sizeof(C10),@P10,10);
+  test(@T11,16,K11,8*sizeof(K11),@I11,sizeof(I11),@H11,sizeof(H11),@C11,sizeof(C11),@P11,11);
 end;
 
 procedure TTestCryptographicRoutines._CompressShaAes;

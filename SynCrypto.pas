@@ -377,8 +377,9 @@ type
     /// append some data to be authenticated, but not encrypted
     function Add_AAD(pAAD: pointer; aLen: PtrInt): boolean;
     /// finalize the AES-GCM encryption, returning the authentication tag
-    // - will also flush the AES context to avoid forensic issues
-    function Final(out tag: TAESBlock): boolean;
+    // - will also flush the AES context to avoid forensic issues, unless
+    // andDone is forced to false
+    function Final(out tag: TAESBlock; andDone: boolean=true): boolean;
     /// flush the AES context to avoid forensic issues
     // - do nothing if Final() has been already called
     procedure Done;
@@ -389,7 +390,7 @@ type
     /// single call AES-GCM decryption and verification process
     function FullDecryptAndVerify(const Key; KeyBits: PtrInt;
       pIV: pointer; IV_len: PtrInt; pAAD: pointer; aLen: PtrInt;
-      ptp, ctp: Pointer; pLen: PtrInt; ptag: pointer; tLen: PtrInt): boolean;
+      ctp, ptp: Pointer; pLen: PtrInt; ptag: pointer; tLen: PtrInt): boolean;
   end;
 
   /// class-reference type (metaclass) of an AES cypher/uncypher
@@ -6427,65 +6428,63 @@ begin
 end;
 
 procedure TAESGCMEngine.internal_crypt(ptp, ctp: PByte; ILen: PtrUInt);
-var cnt, b_pos: PtrUInt; { TODO : use ILen }
+var b_pos: PtrUInt;
 begin
-  cnt := 0;
   b_pos := blen;
   inc(blen,ILen);
   blen := blen and AESBlockMod;
   if b_pos=0 then
     b_pos := SizeOf(TAESBlock) else
-    while (cnt<ILen) and (b_pos<SizeOf(TAESBlock)) do begin
+    while (ILen>0) and (b_pos<SizeOf(TAESBlock)) do begin
       ctp^ := ptp^ xor TAESContext(actx).buf[b_pos];
       inc(b_pos);
       inc(ptp);
       inc(ctp);
-      inc(cnt);
+      dec(ILen);
     end;
-  while cnt+SizeOf(TAESBlock)<=ILen do begin
+  while ILen>=SizeOf(TAESBlock) do begin
     GCM_IncCtr(TAESContext(actx).IV);
     actx.Encrypt(TAESContext(actx).IV,TAESContext(actx).buf); // maybe AES-NI
-    XorBlock16(pointer(ptp),@TAESContext(actx).buf);
+    XorBlock16(pointer(ptp),pointer(ctp),@TAESContext(actx).buf);
     inc(PAESBlock(ptp));
     inc(PAESBlock(ctp));
-    inc(cnt,SizeOf(TAESBlock));
+    dec(ILen,SizeOf(TAESBlock));
   end;
-  while cnt<ILen do begin
+  while ILen>0 do begin
     if b_pos=SizeOf(TAESBlock) then begin
       GCM_IncCtr(TAESContext(actx).IV);
-      actx.Encrypt(TAESContext(actx).IV,TAESContext(actx).buf); // maybe AES-NI
+      actx.Encrypt(TAESContext(actx).IV,TAESContext(actx).buf);
       b_pos := 0;
     end;
-    PByte(ctp)^ := TAESContext(actx).buf[b_pos] xor ptp^;
+    ctp^ := TAESContext(actx).buf[b_pos] xor ptp^;
     inc(b_pos);
     inc(ptp);
     inc(ctp);
-    inc(cnt);
+    dec(ILen);
   end;
 end;
 
 procedure TAESGCMEngine.internal_auth(ctp: PByte; ILen: PtrUInt;
   var ghv: TAESBlock; var gcnt: TQWordRec);
-var cnt, b_pos: PtrUInt; { TODO : use ILen }
+var b_pos: PtrUInt;
 begin
-  cnt := 0;
   b_pos := gcnt.L and AESBlockMod;
   inc(gcnt.V,ILen);
   if (b_pos=0) and (gcnt.V<>0) then
     gf_mul_h(ghv);
-  while (cnt<ILen) and (b_pos<SizeOf(TAESBlock)) do begin
+  while (ILen>0) and (b_pos<SizeOf(TAESBlock)) do begin
     ghv[b_pos] := ghv[b_pos] xor ctp^;
     inc(b_pos);
     inc(ctp);
-    inc(cnt);
+    dec(ILen);
   end;
-  while cnt+SizeOf(TAESBlock)<=ILen do begin
+  while ILen>=SizeOf(TAESBlock) do begin
     gf_mul_h(ghv);
     XorBlock16(@ghv,pointer(ctp));
     inc(PAESBlock(ctp));
-    inc(cnt,SizeOf(TAESBlock));
+    dec(ILen,SizeOf(TAESBlock));
   end;
-  while cnt<ILen do begin
+  while ILen>0 do begin
     if b_pos=SizeOf(TAESBlock) then begin
       gf_mul_h(ghv);
       b_pos := 0;
@@ -6493,7 +6492,7 @@ begin
     ghv[b_pos] := ghv[b_pos] xor ctp^;
     inc(b_pos);
     inc(ctp);
-    inc(cnt);
+    dec(ILen);
   end;
 end;
 
@@ -6513,7 +6512,7 @@ const
 function TAESGCMEngine.Reset(pIV: pointer; IV_len: PtrInt): boolean;
 var i, n_pos: PtrInt;
 begin
-  if (pIV=nil) or (IV_len<>0) then begin
+  if (pIV=nil) or (IV_len=0) then begin
     result := false;
     exit;
   end;
@@ -6522,13 +6521,13 @@ begin
     MoveFast(pIV^,TAESContext(actx).IV,CTR_POS);
     TWA4(TAESContext(actx).IV)[3] := $01000000;
   end else begin
-    // Initialization Vector is computed from GHASH(IV,H)
+    // Initialization Vector is otherwise computed from GHASH(IV,H)
     n_pos := IV_len;
-    FillcharFast(TAESContext(actx).IV,sizeof(TAESContext(actx).IV),0);
-    while n_pos>=SizeOf(pIV^) do begin
+    FillZero(TAESContext(actx).IV);
+    while n_pos>=SizeOf(TAESBlock) do begin
       XorBlock16(@TAESContext(actx).IV,pIV);
       inc(PAesBlock(pIV));
-      dec(n_pos,SizeOf(pIV^));
+      dec(n_pos,SizeOf(TAESBlock));
       gf_mul_h(TAESContext(actx).IV);
     end;
     if n_pos>0 then begin
@@ -6545,6 +6544,7 @@ begin
     end;
     gf_mul_h(TAESContext(actx).IV);
   end;
+  // reset internal state and counters
   y0_val := TWA4(TAESContext(actx).IV)[3];
   FillZero(aad_ghv);
   FillZero(txt_ghv);
@@ -6576,10 +6576,10 @@ begin
     if (ptp=nil) or (ctp=nil) or (flagFinalComputed in flags) then
       exit;
     internal_auth(ctp,ILen,txt_ghv,atx_cnt);
-    if ptag<>nil then begin
-      Final(tag);
-      if not IsEqual(tag,ptag,tlen) then
-        exit;
+    if (ptag<>nil) and (tlen>0) then begin
+      Final(tag,{anddone=}false);
+      if not IsEqual(tag,ptag^,tlen) then
+        exit; // check authentication before encryption
     end;
     internal_crypt(ctp,ptp,iLen);
   end;
@@ -6598,10 +6598,9 @@ begin
   result := true;
 end;
 
-function TAESGCMEngine.Final(out tag: TAESBlock): boolean;
+function TAESGCMEngine.Final(out tag: TAESBlock; andDone: boolean): boolean;
 var
   tbuf: TAESBlock;
-  x: TWA4 absolute tbuf;
   ln: cardinal;
 begin
   if not (flagFinalComputed in flags) then begin
@@ -6621,20 +6620,21 @@ begin
           gf_mul(tbuf,tbuf);
       end;
     end;
-    x[0] := bswap32((aad_cnt.L shr 29) or (aad_cnt.H shl 3));
-    x[1] := bswap32((aad_cnt.L shl  3));
-    x[2] := bswap32((atx_cnt.L shr 29) or (atx_cnt.H shl 3));
-    x[3] := bswap32((atx_cnt.L shl  3));
+    TWA4(tbuf)[0] := bswap32((aad_cnt.L shr 29) or (aad_cnt.H shl 3));
+    TWA4(tbuf)[1] := bswap32((aad_cnt.L shl  3));
+    TWA4(tbuf)[2] := bswap32((atx_cnt.L shr 29) or (atx_cnt.H shl 3));
+    TWA4(tbuf)[3] := bswap32((atx_cnt.L shl  3));
     XorBlock16(@tbuf,@txt_ghv);
     XorBlock16(@aad_ghv,@tbuf);
     gf_mul_h(aad_ghv);
     // compute E(K,Y0)
     tbuf := TAESContext(actx).IV;
-    x[3] := y0_val;
+    TWA4(tbuf)[3] := y0_val;
     actx.Encrypt(tbuf);
     // GMAC = GHASH(H, AAD, ctp) xor E(K,Y0)
     XorBlock16(@aad_ghv,@tag,@tbuf);
-    Done;
+    if andDone then
+      Done;
     result := true;
   end else begin
     Done;
@@ -6660,11 +6660,11 @@ begin
 end;
 
 function TAESGCMEngine.FullDecryptAndVerify(const Key; KeyBits: PtrInt;
-  pIV: pointer; IV_len: PtrInt; pAAD: pointer; aLen: PtrInt; ptp, ctp: Pointer;
+  pIV: pointer; IV_len: PtrInt; pAAD: pointer; aLen: PtrInt; ctp, ptp: Pointer;
   pLen: PtrInt; ptag: pointer; tLen: PtrInt): boolean;
 begin
   result := Init(Key,KeyBits) and Reset(pIV,IV_len) and Add_AAD(pAAD,aLen) and
-            Decrypt(ptp,ctp,pLen,ptag,tlen);
+            Decrypt(ctp,ptp,pLen,ptag,tlen);
   Done;
 end;
 

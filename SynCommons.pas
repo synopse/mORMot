@@ -12055,7 +12055,8 @@ procedure FillZero(var dest; count: PtrInt); overload;
 
 /// returns TRUE if all bytes of both buffers do match
 // - this function is not sensitive to any timing attack, so is designed
-// for cryptographic purpose - and it is also branchless therefore fast
+// for cryptographic purposes - use CompareMem/CompareMemSmall/CompareMemFixed
+// as faster alternatives for general-purpose code
 function IsEqual(const A,B; count: PtrInt): boolean; overload;
 
 /// fast computation of two 64-bit unsigned integers into a 128-bit value
@@ -23004,7 +23005,7 @@ end;
 {$endif}
 
 function IsEqual(const A,B; count: PtrInt): boolean;
-var perbyte: boolean;
+var perbyte: boolean; // ensure no optimization takes place
 begin
   result := true;
   while count>0 do begin
