@@ -299,9 +299,9 @@ type
     // ESMException with message LONG_SCRIPT_EXECUTION
     procedure CancelExecution(AWithException: boolean = true);
 
-    procedure DefineProcessBinding;
-    procedure DefineNodeProcess;
-    procedure DefineModuleLoader;
+    procedure DefineProcessBinding; virtual;
+    procedure DefineNodeProcess; virtual;
+    procedure DefineModuleLoader; virtual;
 
     /// can hold any engine-specific data; Can be specified as second arg
     // for TSMEngineManager.ThreadSafeEngine to set Tag ASAP
