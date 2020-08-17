@@ -12935,19 +12935,19 @@ type
     bSHA3_256, bSHA3_512,
     // encryption
     bRC4,
-    bAES128CFB, bAES128OFB, bAES128CFBCRC, bAES128OFBCRC,
-    bAES256CFB, bAES256OFB, bAES256CFBCRC, bAES256OFBCRC,
+    bAES128CFB, bAES128OFB, bAES128CFBCRC, bAES128OFBCRC, bAES128GCM,
+    bAES256CFB, bAES256OFB, bAES256CFBCRC, bAES256OFBCRC, bAES256GCM,
     bSHAKE128, bSHAKE256
     );
 
 procedure TTestCryptographicRoutines.Benchmark;
 const SIZ: array[0..4] of integer = (8, 50, 100, 1000, 10000);
       COUNT = 500;
-      AESCLASS: array[bAES128CFB .. bAES256OFBCRC] of TAESAbstractClass = (
-        TAESCFB, TAESOFB, TAESCFBCRC, TAESOFBCRC,
-        TAESCFB, TAESOFB, TAESCFBCRC, TAESOFBCRC);
-      AESBITS: array[bAES128CFB .. bAES256OFBCRC] of integer = (
-        128, 128, 128, 128, 256, 256, 256, 256);
+      AESCLASS: array[bAES128CFB .. bAES256GCM] of TAESAbstractClass = (
+        TAESCFB, TAESOFB, TAESCFBCRC, TAESOFBCRC, TAESGCM,
+        TAESCFB, TAESOFB, TAESCFBCRC, TAESOFBCRC, TAESGCM);
+      AESBITS: array[bAES128CFB .. bAES256GCM] of integer = (
+        128, 128, 128, 128, 128, 256, 256, 256, 256, 256);
 var b: TBenchmark;
     s, i, size, n: integer;
     data, encrypted: RawByteString;
@@ -12961,7 +12961,7 @@ var b: TBenchmark;
     RC4: TRC4;
     timer: TPrecisionTimer;
     time: array[TBenchmark] of Int64;
-    AES: array[bAES128CFB .. bAES256OFBCRC] of TAESAbstract;
+    AES: array[bAES128CFB .. bAES256GCM] of TAESAbstract;
     TXT: array[TBenchmark] of RawUTF8;
 begin
   GetEnumTrimmedNames(TypeInfo(TBenchmark),@TXT);
@@ -13000,9 +13000,10 @@ begin
         bSHA3_512:   SHA3.Full(pointer(data),SIZ[s],dig.b);
         bRC4:        RC4.EncryptBuffer(pointer(data), pointer(Encrypted), SIZ[s]);
         bAES128CFB, bAES128OFB, bAES256CFB, bAES256OFB:
-                     AES[b].EncryptPKCS7(Data, true);
-        bAES128CFBCRC, bAES128OFBCRC, bAES256CFBCRC, bAES256OFBCRC:
-                     AES[b].MACAndCrypt(Data,true);
+                     AES[b].EncryptPKCS7(Data,{encrypt=}true);
+        bAES128CFBCRC, bAES128OFBCRC, bAES256CFBCRC, bAES256OFBCRC,
+        bAES128GCM, bAES256GCM:
+                     AES[b].MACAndCrypt(Data,{encrypt=}true);
         bSHAKE128:   SHAKE128.Cypher(pointer(Data), pointer(Encrypted), SIZ[s]);
         bSHAKE256:   SHAKE256.Cypher(pointer(Data), pointer(Encrypted), SIZ[s]);
         end;

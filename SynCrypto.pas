@@ -330,16 +330,18 @@ type
 
 type
   /// low-level AES-GCM processing
-  // - will use AES-NI if available
+  // - implements standard AEAD (authenticated-encryption with associated-data)
+  // algorithm, as defined by NIST and
   TAESGCMEngine = object
   private
     /// standard AES encryption context
+    // - will use AES-NI if available
     actx: TAES;
     /// ghash value of the Authentication Data
     aad_ghv: TAESBlock;
     /// ghash value of the Ciphertext
     txt_ghv: TAESBlock;
-    // ghash H current value
+    /// ghash H current value
     ghash_h: TAESBlock;
     /// number of Authentication Data bytes processed
     aad_cnt: TQWordRec;
@@ -350,7 +352,7 @@ type
     /// current 0..15 position in encryption block
     blen: byte;
     /// the state of this context
-    flags: set of (flagFinalComputed, flagFlushed);
+    flags: set of (flagInitialized, flagFinalComputed, flagFlushed);
     /// lookup table for fast Galois Finite Field multiplication
     gf_t4k: array[byte] of TAESBlock;
     /// build the gf_t4k[] internal table - assuming set to zero by caller
@@ -366,6 +368,8 @@ type
     /// initialize the AES-GCM structure for the supplied Key
     function Init(const Key; KeyBits: PtrInt): boolean;
     /// start AES-GCM encryption with a given Initialization Vector
+    // - IV_len is in bytes use 12 for exact IV setting, otherwise the
+    // supplied buffer will be hashed using gf_mul_h()
     function Reset(pIV: pointer; IV_len: PtrInt): boolean;
     /// encrypt a buffer with AES-GCM, updating the associated authentication data
     function Encrypt(ptp, ctp: Pointer; ILen: PtrInt): boolean;
@@ -704,7 +708,7 @@ type
     /// release the used instance memory and resources
     // - also fill the TAES instance with zeros, for safety
     destructor Destroy; override;
-    /// perform the AES cypher in the corresponding mode
+    /// perform the AES cypher in the corresponding mode, over Count bytes
     // - this abstract method will set CV from fIV property, and fIn/fOut
     // from BufIn/BufOut
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
@@ -881,6 +885,46 @@ type
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
     /// perform the AES un-cypher in the OFB mode, and compute a 256-bit MAC
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
+  end;
+
+  /// handle AES-GCM cypher/uncypher with built-in authentication
+  // - implements AEAD (authenticated-encryption with associated-data) methods
+  // like MACEncrypt/MACCheckError
+  // - this class will use AES-NI hardware instructions, if available
+  TAESGCM = class(TAESAbstract)
+  protected
+    fAES: TAESGCMEngine;
+    fContext: (ctxNone,ctxEncrypt,ctxDecrypt); // used to call AES.Reset()
+  public
+    /// Initialize the AES-GCM context for cypher
+    // - first method to call before using this class
+    // - KeySize is in bits, i.e. 128,192,256
+    constructor Create(const aKey; aKeySize: cardinal); override;
+    /// creates a new instance with the very same values
+    // - by design, our classes will use TAESGCMEngine stateless context, so
+    // this method will just copy the current fields to a new instance,
+    // by-passing the key creation step
+    function Clone: TAESAbstract; override;
+    /// release the used instance memory and resources
+    // - also fill the internal TAES instance with zeros, for safety
+    destructor Destroy; override;
+    /// perform the AES-GCM cypher and authentication
+    procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
+    /// perform the AES un-cypher and authentication
+    procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
+    /// prepare the AES-GCM process before Encrypt/Decrypt is called
+    // - aKey is not used: AES-GCM has its own nonce setting algorithm, and
+    // the IV will be set from random value by EncryptPKCS7()
+    // - will just include any supplied associated data to the GMAC tag
+    function MACSetNonce(const aKey: THash256; aAssociated: pointer=nil;
+      aAssociatedLen: integer=0): boolean; override;
+    /// returns AEAD (authenticated-encryption with associated-data) MAC
+    /// - only the lower 128-bit (THash256.Lo) of aCRC is filled with the GMAC
+    function MACGetLast(out aCRC: THash256): boolean; override;
+    /// validate if an encrypted buffer matches the stored AEAD MAC
+    // - since AES-GCM is a one pass process, always assume the content is fine
+    // and returns true - we don't know the IV at this time
+    function MACCheckError(aEncrypted: pointer; Count: cardinal): boolean; override;
   end;
 
 {$ifdef USE_PROV_RSA_AES}
@@ -2468,7 +2512,7 @@ type
     /// finalize the encryption
     destructor Destroy; override;
     /// initialize the communication by exchanging some client/server information
-    // - this method will return sprUnsupported
+    // - this method will return sprUnsupported, since no key negociation is involved
     function ProcessHandshake(const MsgIn: RawUTF8; out MsgOut: RawUTF8): TProtocolResult;
     /// encrypt a message on one side, ready to be transmitted to the other side
     // - this method uses AES encryption and PKCS7 padding
@@ -12702,7 +12746,7 @@ begin
       TAESPRNG.Main.FillRandom(rec.nonce);
       if not MACSetNonce(rec.nonce) then
         exit;
-      rec.Data := EncryptPKCS7(Data,true);
+      rec.Data := EncryptPKCS7(Data,{IVAtBeginning=}true);
       if not MACGetLast(rec.mac) then
         exit;
       rec.crc := crc32c(VERSION,@rec.nonce,CRCSIZ);
@@ -12825,6 +12869,7 @@ begin
   inherited Destroy;
   AES.Done;      // mandatory for Padlock - also fill buffer with 0 for safety
   FillZero(fCV); // may contain sensitive data on some modes
+  FillZero(fIV);
 end;
 
 function TAESAbstractSyn.Clone: TAESAbstract;
@@ -13585,6 +13630,86 @@ end;
 procedure TAESCTR.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 begin
   Encrypt(BufIn, BufOut, Count); // by definition
+end;
+
+
+{ TAESGCM }
+
+constructor TAESGCM.Create(const aKey; aKeySize: cardinal);
+begin
+  inherited Create(aKey,aKeySize); // set fKey/fKeySize
+  if not fAES.Init(aKey,aKeySize) then
+    raise ESynCrypto.CreateUTF8('%.Create(keysize=%) failed',[self,aKeySize]);
+end;
+
+function TAESGCM.Clone: TAESAbstract;
+begin
+  result := NewInstance as TAESGCM;
+  result.fKey := fKey;
+  result.fKeySize := fKeySize;
+  result.fKeySizeBytes := fKeySizeBytes;
+  TAESGCM(result).fAES := fAES; // reuse the very same TAESGCMEngine memory
+end;
+
+destructor TAESGCM.Destroy;
+begin
+  inherited Destroy;
+  fAES.Done;
+  FillZero(fIV);
+end;
+
+procedure TAESGCM.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
+begin
+  if fContext<>ctxEncrypt then
+    if fContext=ctxNone then begin
+      fAES.Reset(@fIV,CTR_POS); // caller should have set the IV
+      fContext := ctxEncrypt;
+    end else
+      raise ESynCrypto.CreateUTF8('%.Encrypt after Decrypt',[self]);
+  if not fAES.Encrypt(BufIn,BufOut,Count) then
+    raise ESynCrypto.CreateUTF8('%.Encrypt called after GCM final state',[self]);
+end;
+
+procedure TAESGCM.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
+begin
+  if fContext<>ctxDecrypt then
+    if fContext=ctxNone then begin
+      fAES.Reset(@fIV,CTR_POS);
+      fContext := ctxDecrypt;
+    end else
+      raise ESynCrypto.CreateUTF8('%.Decrypt after Encrypt',[self]);
+  if not fAES.Decrypt(BufIn,BufOut,Count) then
+    raise ESynCrypto.CreateUTF8('%.Decrypt called after GCM final state',[self]);
+end;
+
+function TAESGCM.MACSetNonce(const aKey: THash256; aAssociated: pointer;
+  aAssociatedLen: integer): boolean;
+begin
+  if fContext<>ctxNone then begin
+    result := false; // should be called before Encrypt/Decrypt
+    exit;
+  end;
+  // aKey is ignored since not used during GMAC computation
+  if (aAssociated<>nil) and (aAssociatedLen>0) then
+    fAES.Add_AAD(aAssociated,aAssociatedLen);
+  result := true;
+end;
+
+function TAESGCM.MACGetLast(out aCRC: THash256): boolean;
+begin
+  if fContext=ctxNone then begin
+    result := false; // should be called after Encrypt/Decrypt
+    exit;
+  end;
+  fAES.Final(THash256Rec(aCRC).Lo,{forreuse:anddone=}false);
+  FillZero(THash256Rec(aCRC).Hi); // upper 128-bit are not used
+  fContext := ctxNone; // allow reuse of this fAES instance
+  result := true;
+end;
+
+function TAESGCM.MACCheckError(aEncrypted: pointer; Count: cardinal): boolean;
+begin
+  result := true; // AES-GCM requires the IV to be set -> will be checked later
 end;
 
 
@@ -14417,9 +14542,9 @@ begin
     try
       if Compress then begin
         CompressSynLZ(Data,true);
-        Data := EncryptPKCS7(Data,true);
+        Data := EncryptPKCS7(Data,{IVAtBeginning=}true);
       end else begin
-        Data := DecryptPKCS7(Data,true);
+        Data := DecryptPKCS7(Data,{IVAtBeginning=}true);
         if CompressSynLZ(Data,false)='' then begin
           result := '';
           exit; // invalid content
@@ -14689,7 +14814,7 @@ procedure TProtocolAES.Encrypt(const aPlain: RawByteString;
 begin
   fSafe.Lock;
   try
-    aEncrypted := fAES[true].EncryptPKCS7(aPlain,{iv=}true);
+    aEncrypted := fAES[true].EncryptPKCS7(aPlain,{IVAtBeginning=}true);
   finally
     fSafe.UnLock;
   end;
