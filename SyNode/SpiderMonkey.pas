@@ -597,16 +597,16 @@ type
     function toSource(cx: PJSContext): PJSString;
     /// jsval.*Value functions cunstruct new jsval as in JS::Value C++
     // classes - see https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey/JSAPI_Reference/JS::Value
-    class function NullValue: jsval; {$ifdef FPC} static; {$endif} {$ifdef HASINLINE}inline;{$endif}
-    class function Int32Value(v: integer): jsval; {$ifdef FPC} static; {$endif} {$ifdef HASINLINE}inline;{$endif}
-    class function BooleanValue(v: boolean): jsval; {$ifdef FPC} static; {$endif} {$ifdef HASINLINE}inline;{$endif}
-    class function TrueValue: jsval; {$ifdef FPC} static; {$endif} {$ifdef HASINLINE}inline;{$endif}
-    class function FalseValue: jsval; {$ifdef FPC} static; {$endif} {$ifdef HASINLINE}inline;{$endif}
-    class function DoubleValue(v: double): jsval; {$ifdef FPC} static; {$endif} {$ifdef HASINLINE}inline;{$endif}
-    class function StringValue(v: PJSString): jsval; {$ifdef FPC} static; {$endif} {$ifdef HASINLINE}inline;{$endif}
-    class function ObjectValue(v: PJSObject): jsval; {$ifdef FPC} static; {$endif} {$ifdef HASINLINE}inline;{$endif}
+    class function NullValue: jsval; static; {$ifdef HASINLINE}inline;{$endif}
+    class function Int32Value(v: integer): jsval; static; {$ifdef HASINLINE}inline;{$endif}
+    class function BooleanValue(v: boolean): jsval; static; {$ifdef HASINLINE}inline;{$endif}
+    class function TrueValue: jsval; static; {$ifdef HASINLINE}inline;{$endif}
+    class function FalseValue: jsval; static; {$ifdef HASINLINE}inline;{$endif}
+    class function DoubleValue(v: double): jsval; static; {$ifdef HASINLINE}inline;{$endif}
+    class function StringValue(v: PJSString): jsval; static; {$ifdef HASINLINE}inline;{$endif}
+    class function ObjectValue(v: PJSObject): jsval; static; {$ifdef HASINLINE}inline;{$endif}
     // SyNode extension (not present in original C++)
-    class function Int64Value(v: Int64): jsval; {$ifdef FPC} static; {$endif} {$ifdef HASINLINE}inline;{$endif}
+    class function Int64Value(v: Int64): jsval; static; {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// an abstract array of jsval JavaScript values
