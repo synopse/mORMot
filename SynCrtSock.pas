@@ -292,7 +292,8 @@ type
     // - aAddr='unix:/path/to/file' - bind to unix domain socket, e.g. 'unix:/run/mormot.sock'
     // - aAddr='' - bind to systemd descriptor on linux. See
     // http://0pointer.de/blog/projects/socket-activation.html
-    constructor Bind(const aAddr: SockString; aLayer: TCrtSocketLayer=cslTCP);
+    constructor Bind(const aAddr: SockString; aLayer: TCrtSocketLayer=cslTCP;
+      aTimeOut: cardinal=10000);
     /// low-level internal method called by Open() and Bind() constructors
     // - raise an ECrtSocket exception on error
     // - you may ask for a TLS secured client connection (only available under
@@ -4928,14 +4929,15 @@ begin
   result := false;
 end;
 
-constructor TCrtSocket.Bind(const aAddr: SockString; aLayer: TCrtSocketLayer);
+constructor TCrtSocket.Bind(const aAddr: SockString; aLayer: TCrtSocketLayer;
+   aTimeOut: cardinal);
 var s,p: SockString;
     aSock: integer;
     {$ifdef LINUXNOTBSD}
     n: integer;
     {$endif}
 begin
-  Create(10000);
+  Create(aTimeOut);
   if aAddr='' then begin
     {$ifdef LINUXNOTBSD} // try systemd
     if not SystemdIsAvailable then
@@ -5435,7 +5437,7 @@ begin
         TSynLog.Add.Log(sllCustom2, 'TrySockRecv: sock=% AsynchRecv=% %',
           [Sock,read,SocketErrorMessage],self);
         {$endif}
-        if WSAIsFatalError then begin
+        if (read=0) or WSAIsFatalError then begin
           Close; // connection broken or socket closed gracefully
           exit;
         end;
