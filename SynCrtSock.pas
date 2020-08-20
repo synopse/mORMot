@@ -5435,8 +5435,8 @@ begin
         TSynLog.Add.Log(sllCustom2, 'TrySockRecv: sock=% AsynchRecv=% %',
           [Sock,read,SocketErrorMessage],self);
         {$endif}
-        if WSAIsFatalError then begin
-          Close; // connection broken or socket closed gracefully
+        if (read=0) or WSAIsFatalError then begin
+          Close; // connection broken or socket closed gracefully (read=0)
           exit;
         end;
         if StopBeforeLength then
