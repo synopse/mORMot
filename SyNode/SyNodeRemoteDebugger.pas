@@ -235,7 +235,7 @@ var
   threadsCnt: integer;
 begin
   AcceptedSocket := nil;
-  ServerSock := TCrtSocket.Bind(fPort);
+  ServerSock := TCrtSocket.Bind(fPort, cslTCP, 0); // no timeout
   try
     repeat
       AcceptedSocket := ServerSock.AcceptIncoming();
@@ -347,17 +347,9 @@ begin
 end;
 
 procedure TSMRemoteDebuggerThread.SetTerminated;
-var
-  socket: TCrtSocket;
 begin
-  if not Terminated then begin
+  if not Terminated then
     Terminate;
-    socket := Open('127.0.0.1', fPort);
-    if socket<>nil then
-      socket.Free;
-    while fThreadInWork>0 do
-      SleepHiRes(10);
-  end;
 end;
 
 { TSMRemoteDebuggerCommunicationThread }
@@ -395,7 +387,8 @@ begin
         request := _JsonFast(packet);
         SynSMLog.Add.Log(sllCustom4, packet);
         HandleMessage(request);
-      end;
+      end else
+        fNeedClose := true;
       if (fDebugger = nil) and (GetTickCount64 > tickCountsForSelectEngine) then begin
         fNeedClose := true
       end;
