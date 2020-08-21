@@ -354,11 +354,12 @@ type
     /// the state of this context
     flags: set of (flagInitialized, flagFinalComputed, flagFlushed);
     /// lookup table for fast Galois Finite Field multiplication
+    // - is defined as last field of the object for better code generation
     gf_t4k: array[byte] of TAESBlock;
     /// build the gf_t4k[] internal table - assuming set to zero by caller
     procedure Make4K_Table;
     /// compute a * ghash_h in Galois Finite Field 2^128
-    procedure gf_mul_h(var a: TAESBlock);
+    procedure gf_mul_h(var a: TAESBlock); {$ifdef FPC} inline; {$endif}
     /// low-level AES-CTR encryption
     procedure internal_crypt(ptp, ctp: PByte; ILen: PtrUInt);
     /// low-level GCM authentication
@@ -6443,11 +6444,19 @@ var
   i: PtrUInt;
   t: cardinal;
   p: PWA4;
+  {$ifdef CPUX86NOTPIC}
+  tab: TWordArray absolute gft_le;
+  {$else}
+  tab: PWordArray;
+  {$endif CPUX86NOTPIC}
 begin
+  {$ifndef CPUX86NOTPIC}
+  tab := @gft_le;
+  {$endif CPUX86NOTPIC}
   x := TWA4(gf_t4k[a[15]]);
   for i := 14 downto 0 do begin
     p := @gf_t4k[a[i]];
-    t := gft_le[x[3] shr 24];
+    t := tab[x[3] shr 24];
     // efficient mul_x8 and xor using pre-computed table entries
     x[3] := ((x[3] shl 8) or  (x[2] shr 24)) xor p^[3];
     x[2] := ((x[2] shl 8) or  (x[1] shr 24)) xor p^[2];
@@ -6605,8 +6614,23 @@ begin
       result := false;
       exit;
     end;
-    internal_crypt(ptp,ctp,iLen);
-    internal_auth(ctp,ILen,txt_ghv,atx_cnt);
+    if (ILen and AESBlockMod=0) and (blen=0) then begin
+      inc(atx_cnt.V,ILen);
+      ILen := ILen shr AESBlockShift;
+      repeat // loop optimized e.g. for PKCS7 padding
+        GCM_IncCtr(TAESContext(actx).IV);
+        actx.Encrypt(TAESContext(actx).IV,TAESContext(actx).buf); // maybe AES-NI
+        XorBlock16(ptp,ctp,@TAESContext(actx).buf);
+        gf_mul_h(txt_ghv);
+        XorBlock16(@txt_ghv,ctp);
+        inc(PAESBlock(ptp));
+        inc(PAESBlock(ctp));
+        dec(ILen);
+      until ILen=0;
+    end else begin // generic process in dual steps
+      internal_crypt(ptp,ctp,iLen);
+      internal_auth(ctp,ILen,txt_ghv,atx_cnt);
+    end;
   end;
   result := true;
 end;
@@ -6619,13 +6643,33 @@ begin
   if ILen>0 then begin
     if (ptp=nil) or (ctp=nil) or (flagFinalComputed in flags) then
       exit;
-    internal_auth(ctp,ILen,txt_ghv,atx_cnt);
-    if (ptag<>nil) and (tlen>0) then begin
-      Final(tag,{anddone=}false);
-      if not IsEqual(tag,ptag^,tlen) then
-        exit; // check authentication before encryption
+    if (ILen and AESBlockMod=0) and (blen=0) then begin
+      inc(atx_cnt.V,ILen);
+      ILen := ILen shr AESBlockShift;
+      repeat // loop optimized e.g. for PKCS7 padding
+        gf_mul_h(txt_ghv);
+        XorBlock16(@txt_ghv,ctp);
+        GCM_IncCtr(TAESContext(actx).IV);
+        actx.Encrypt(TAESContext(actx).IV,TAESContext(actx).buf); // maybe AES-NI
+        XorBlock16(ctp,ptp,@TAESContext(actx).buf);
+        inc(PAESBlock(ptp));
+        inc(PAESBlock(ctp));
+        dec(ILen);
+      until ILen=0;
+      if (ptag<>nil) and (tlen>0) then begin
+        Final(tag,{anddone=}false);
+        if not IsEqual(tag,ptag^,tlen) then
+          exit; // check authentication after single pass encryption + auth
+      end;
+    end else begin // generic process in dual steps
+      internal_auth(ctp,ILen,txt_ghv,atx_cnt);
+      if (ptag<>nil) and (tlen>0) then begin
+        Final(tag,{anddone=}false);
+        if not IsEqual(tag,ptag^,tlen) then
+          exit; // check authentication before encryption
+      end;
+      internal_crypt(ctp,ptp,iLen);
     end;
-    internal_crypt(ctp,ptp,iLen);
   end;
   result := true;
 end;
