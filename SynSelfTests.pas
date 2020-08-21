@@ -3162,7 +3162,7 @@ begin
   str := UTF8ToString(UrlEncode(StringToUTF8('https://test3.diavgeia.gov.gr/doc/')));
   check(str='https%3A%2F%2Ftest3.diavgeia.gov.gr%2Fdoc%2F');
   Test('abcdef','abcdef');
-  Test('abcdefyzABCDYZ01239_-.~ ','abcdefyzABCDYZ01239_-.~+');
+  Test('abcdefyzABCDYZ01239_-.~ ','abcdefyzABCDYZ01239_-.%7E+');
   Test('"Aardvarks lurk, OK?"','%22Aardvarks+lurk%2C+OK%3F%22');
   Test('"Aardvarks lurk, OK%"','%22Aardvarks+lurk%2C+OK%25%22');
   Test('where=name like :(''Arnaud%'')','where%3Dname+like+%3A%28%27Arnaud%25%27%29');

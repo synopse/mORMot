@@ -63129,7 +63129,9 @@ begin
       include(TEXT_CHARS[c], tcIdentifierFirstChar);
     if c in ['_','0'..'9','a'..'z','A'..'Z'] then
       include(TEXT_CHARS[c], tcIdentifier);
-    if c in ['_','-','.','~','0'..'9','a'..'z','A'..'Z'] then
+    if c in ['_','-','.','0'..'9','a'..'z','A'..'Z'] then
+      // '~' is part of the RFC 3986 but should be escaped in practice
+      // see https://blog.synopse.info/?post/2020/08/11/The-RFC%2C-The-URI%2C-and-The-Tilde
       include(TEXT_CHARS[c], tcURIUnreserved);
     if c in [#1..#9,#11,#12,#14..' '] then
       include(TEXT_CHARS[c], tcCtrlNotLF);
