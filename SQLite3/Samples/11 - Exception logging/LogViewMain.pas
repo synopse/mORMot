@@ -358,7 +358,7 @@ end;
 procedure TMainLogView.FormShow(Sender: TObject);
 var CmdLine: TFileName;
 begin
-  PanelThread.Width := 300;
+  PanelThread.Width := 200;
   if ParamCount>0 then begin
     CmdLine := ParamStr(1);
     if SysUtils.DirectoryExists(CmdLine) then begin
