@@ -2777,8 +2777,10 @@ begin
     FCellRect.Height := Max(1, Size.cy);
     EditorClient.Canvas.Font := Font;
     Size := EditorClient.Canvas.TextExtent(BiggestSymbol);
+    {
     if FCellRect.Width <> Max(1, Size.cx) then
       raise EMemoExError.CreateFmt('Font %s has inconsistent width vs style', [Font.Name]);
+    }
     FDrawBitmap.Canvas.Font.Assign(Font);
     FDrawBitmap.Canvas.Brush.Assign(EditorClient.Canvas.Brush);
     FDrawBitmap.Width := Width;
