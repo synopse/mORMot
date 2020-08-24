@@ -57,6 +57,7 @@ type
     fInts: TIntegerDynArray;
     fCreateTime: TCreateTime;
     fData: TSQLRawBlob;
+    fFP: double;
   published
     property Name: RawUTF8 read fName write fName stored AS_UNIQUE;
     property Age: integer read fAge write fAge;
@@ -65,6 +66,7 @@ type
     property Ints: TIntegerDynArray index 1 read fInts write fInts;
     property Data: TSQLRawBlob read fData write fData;
     property CreateTime: TCreateTime read fCreateTime write fCreateTime;
+    property FP: double read fFP write fFP;
   end;
 
   TTestORM = class(TSynTestCase)
@@ -452,6 +454,7 @@ begin
       R.Value := _ObjFast(['num',i]);
       R.Ints := nil;
       R.DynArray(1).Add(i);
+      R.FP := i*7.3445;
       Check(fClient.BatchAdd(R,True)>=0);
     end;
   finally
@@ -473,6 +476,7 @@ begin
   Check(Length(R.Ints)=1);
   Check(R.Ints[0]=aID);
   Check(R.CreateTime>=fStartTimeStamp);
+  CheckSame(R.FP,aID*7.3445);
 end;
 
 procedure TTestORM.Retrieve;
