@@ -57878,11 +57878,11 @@ begin // replace comments by ' ' characters which will be ignored by parser
         // replace trailing comma by space for JSON parsers what not understand trailing commas
         if P^ in ['}', ']'] then
           possibleTrailingComma^ := ' ';
-    end;
+      end;
     else
-    inc(P);
+      inc(P);
+    end;
   end;
-end;
 end;
 
 procedure JSONBufferToXML(P: PUTF8Char; const Header,NameSpace: RawUTF8;
