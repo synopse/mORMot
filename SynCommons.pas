@@ -10839,9 +10839,11 @@ function JsonObjectsByPath(JsonObject,PropPath: PUTF8Char): RawUTF8;
 // - is the reverse of the TTextWriter.AddJSONArraysAsJSONObject() method
 function JSONObjectAsJSONArrays(JSON: PUTF8Char; out keys,values: RawUTF8): boolean;
 
-/// remove comments from a text buffer before passing it to JSON parser
+/// remove comments and trailing commas from a text buffer before passing it to JSON parser
 // - handle two types of comments: starting from // till end of line
 // or /* ..... */ blocks anywhere in the text content
+// - trailing commas is replaced by ' ', so resulting JSON is valid for parsers
+// what not allows trailing commas (browsers for example)
 // - may be used to prepare configuration files before loading;
 // for example we store server configuration in file config.json and
 // put some comments in this file then code for loading is:
@@ -57832,6 +57834,8 @@ begin
 end;
 
 procedure RemoveCommentsFromJSON(P: PUTF8Char);
+var
+  possibleTrailingComma: PUTF8Char;
 begin // replace comments by ' ' characters which will be ignored by parser
   if P<>nil then
   while P^<>#0 do begin
@@ -57839,7 +57843,8 @@ begin // replace comments by ' ' characters which will be ignored by parser
       '"': begin
         P := GotoEndOfJSONString(P);
         if P^<>'"' then
-          exit;
+          exit else
+          Inc(P);
       end;
       '/': begin
          inc(P);
@@ -57850,6 +57855,7 @@ begin // replace comments by ' ' characters which will be ignored by parser
                P^ := ' ';
                inc(P)
              until P^ in [#0, #10, #13];
+             if P^<>#0 then Inc(P);
            end;
            '*': begin // this is /* comment - replace by ' ' but keep CRLF
              P[-1] := ' ';
@@ -57866,8 +57872,16 @@ begin // replace comments by ' ' characters which will be ignored by parser
            end;
          end;
       end;
+      ',': begin
+        possibleTrailingComma := P;
+        repeat inc(P) until (P^>' ') or (P^=#0);
+        // replace trailing comma by space for JSON parsers what not understand trailing commas
+        if P^ in ['}', ']'] then
+          possibleTrailingComma^ := ' ';
+      end;
+    else
+      inc(P);
     end;
-    inc(P);
   end;
 end;
 
