@@ -185,8 +185,9 @@ begin
   Check(serverTime<>0);
   CheckSame(Now,serverTime,0.5);
   if System.Pos('MongoDB',Owner.CustomVersions)=0 then
-    Owner.CustomVersions := Owner.CustomVersions+'Using '+
-      string(fClient.ServerBuildInfoText);
+    Owner.CustomVersions := format('%sUsing %s'#13#10'Running on %s'#13#10+
+      'Compiled with mORMot '+SYNOPSE_FRAMEWORK_VERSION,
+      [Owner.CustomVersions,fClient.ServerBuildInfoText,OSVersionText]);
   fExpectedCount := COLL_COUNT;
 end;
 
