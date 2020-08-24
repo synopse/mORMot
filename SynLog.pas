@@ -5136,8 +5136,9 @@ begin
   end else begin
     //2020-06-18T13:28:20.754089+0300 ub[12316]:
     Iso8601ToDateTimePUTF8CharVar(pointer(fMap.Buffer),26,fStartDateTime);
-    if fStartDateTime > 0 then begin
-      fIsJournald := true;
+    if unaligned(fStartDateTime) <> 0 then begin
+      if (fMap.Buffer+8)^ <> ' ' then //20200821 14450738 ... - syn log without header
+        fIsJournald := true;
       fHeaderLinesCount := 0;
       fLineHeaderCountToIgnore := 0;
     end;
@@ -5146,8 +5147,8 @@ begin
   // 2. fast retrieval of header
   OK := false;
   try
-    // journald export
-    if fIsJournald then begin
+    // journald export or TSynLog WITHOUT regular header
+    if fIsJournald or (fLineHeaderCountToIgnore=0) then begin
       if LineSizeSmallerThan(1,34) then exit;
       Iso8601ToDateTimePUTF8CharVar(fLines[1],26,fStartDateTime);
       if fStartDateTime=0 then
