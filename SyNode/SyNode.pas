@@ -355,6 +355,7 @@ type
     FMaxNurseryBytes: Cardinal;
     FMaxRecursionDepth: Cardinal;
     FEnginePool: TSynObjectListLocked;
+    FMainEngine: TSMEngine;
     FRemoteDebuggerThread: TThread;
     FContentVersion: Cardinal;
     FOnNewEngine: TEngineEvent;
@@ -398,6 +399,7 @@ type
     function evalDllModule(cx: PJSContext; module: PJSRootedObject; const filename: RawUTF8): TDllModuleUnInitProc;
     /// Get handler of process.binding
     function GetBinding(const Name: RawUTF8): TSMProcessBindingHandler;
+    function getMainEngine: TSMEngine; virtual;
   public
     /// initialize the SpiderMonkey scripting engine
     // aCoreModulesPath can be empty in case core modules are embadded
@@ -451,6 +453,8 @@ type
     property WorkersManager: TJSWorkersManager read FWorkersManager;
     /// Delete all started worker threads
     procedure ClearWorkers;
+    /// Thread UNSAFE main engine
+    property mainEngine: TSMEngine read getMainEngine;
   published
     /// max amount of memory (in bytes) for a single SpiderMonkey instance
     // - this parameter will be set only at Engine start, i.e. it  must be set
@@ -649,12 +653,13 @@ begin
   FCreatedAtTick := GetTickCount64;
   FManager := aManager;
   FEngineContentVersion := FManager.ContentVersion;
-// TODO - solve problem of destroying parent engine before slave and uncomment a code below
+// aManager.grandParent sets by call to mainEngine;
+// main engine always destroyed after all other so it's safe to use it as a parent
 // this will save up to 20% of RAM - some internal structures of SM Engines will be reused 
 // between threads
-//  if aManager.grandParent <> nil then
-//    fCx := PJSContext(nil).CreateNew(FManager.MaxPerEngineMemory, $01000000, aManager.grandParent.cx)
-//  else
+  if aManager.grandParent <> nil then
+    fCx := PJSContext(nil).CreateNew(FManager.MaxPerEngineMemory, $01000000, aManager.grandParent.cx)
+  else
     fCx := PJSContext(nil).CreateNew(FManager.MaxPerEngineMemory, $01000000, nil);
   if fCx = nil then
     raise ESMException.Create('Create context: out of memory');
@@ -1140,6 +1145,10 @@ begin
     Dispose(dllModule);
   end;
   FDllModules.Free;
+  if FMainEngine <> nil then begin
+    FMainEngine.GarbageCollect;
+    FreeAndNil(FMainEngine);
+  end;
   inherited;
   {$ifdef ISDELPHIXE2}
   FRttiCx.Free;
@@ -1313,8 +1322,6 @@ begin
 
     Result := FEngineClass.Create(Self);
     Result.Tag := aTagForNewEngine;
-    if grandParent = nil then
-      grandParent := Result;
 
     if (pThreadData <> nil) then
       Result.SetThreadData(pThreadData);
@@ -1341,6 +1348,26 @@ begin
     if WorkersManager.curThreadIsWorker then
       Result.doInteruptInOwnThread := WorkersManager.DoInteruptInOwnThreadhandlerForCurThread;
   //end;
+  DoOnNewEngine(Result);
+end;
+
+function TSMEngineManager.getMainEngine: TSMEngine;
+begin
+  if FMainEngine <> nil then begin
+    Result := FMainEngine;
+    exit;
+  end;
+  Result := FEngineClass.Create(Self);
+  if grandParent = nil then
+    grandParent := Result;
+
+  if Assigned(OnGetName) then
+    Result.fnameForDebug := OnGetName(Result);
+
+  if Assigned(OnGetWebAppRootPath) then
+    Result.fWebAppRootDir := OnGetWebAppRootPath(Result)
+  else
+    Result.fWebAppRootDir := StringToUTF8(ExeVersion.ProgramFilePath);
   DoOnNewEngine(Result);
 end;
 
