@@ -1353,22 +1353,21 @@ end;
 
 function TSMEngineManager.getMainEngine: TSMEngine;
 begin
-  if FMainEngine <> nil then begin
-    Result := FMainEngine;
-    exit;
+  if FMainEngine = nil then begin
+    FMainEngine := FEngineClass.Create(Self);
+    if grandParent = nil then
+      grandParent := FMainEngine;
+
+    if Assigned(OnGetName) then
+      FMainEngine.fnameForDebug := OnGetName(FMainEngine);
+
+    if Assigned(OnGetWebAppRootPath) then
+      FMainEngine.fWebAppRootDir := OnGetWebAppRootPath(FMainEngine)
+    else
+      FMainEngine.fWebAppRootDir := StringToUTF8(ExeVersion.ProgramFilePath);
+    DoOnNewEngine(FMainEngine);
   end;
-  Result := FEngineClass.Create(Self);
-  if grandParent = nil then
-    grandParent := Result;
-
-  if Assigned(OnGetName) then
-    Result.fnameForDebug := OnGetName(Result);
-
-  if Assigned(OnGetWebAppRootPath) then
-    Result.fWebAppRootDir := OnGetWebAppRootPath(Result)
-  else
-    Result.fWebAppRootDir := StringToUTF8(ExeVersion.ProgramFilePath);
-  DoOnNewEngine(Result);
+  Result := FMainEngine;
 end;
 
 procedure TSMEngineManager.Lock;
