@@ -801,7 +801,7 @@ begin
       Split(EnvStr, '=', eName, eVal);
       if (eName <> '') then begin
         env.ptr.DefineUCProperty(cx, UTF8ToSynUnicode(eName), cx.NewJSString(eVal).ToJSVal,
-          JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY, nil, nil);
+          JSPROP_ENUMERATE or JSPROP_PERMANENT, nil, nil);
       end
     end;
     {$ELSE}
@@ -816,7 +816,7 @@ begin
             SetString(strName, p, pEq-P);
             SetString(strVal, pEq+1, L-(pEq+1-p));
             env.ptr.DefineUCProperty(cx, Pointer(strName), Length(strName), cx.NewJSString(strVal).ToJSVal,
-              JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY, nil, nil);
+              JSPROP_ENUMERATE or JSPROP_PERMANENT, nil, nil);
           end;
         end;
         inc(P,L+1);
@@ -1355,6 +1355,7 @@ function TSMEngineManager.getMainEngine: TSMEngine;
 begin
   if FMainEngine = nil then begin
     FMainEngine := FEngineClass.Create(Self);
+    FMainEngine.NeverExpire := true;
     if grandParent = nil then
       grandParent := FMainEngine;
 
