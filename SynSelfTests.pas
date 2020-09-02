@@ -3911,6 +3911,7 @@ var crc: array[0..10000] of record
       crc: cardinal;
     end;
     totallen: Cardinal;
+    s2: RawByteString;
 procedure Test(hash: THasher; const name: string);
 var i: Integer;
     Timer: TPrecisionTimer;
@@ -4036,6 +4037,11 @@ begin
     hmac32.Init(@c1,4);
     hmac32.Update(pointer(s),length(s));
     check(hmac32.Done=c2);
+    s2 := s;
+    SymmetricEncrypt(i, s2);
+    check(s2 <> s);
+    SymmetricEncrypt(i, s2);
+    check(s2 = s);
   end;
   Test(crc32creference,'pas');
   Test(crc32cfast,'fast');

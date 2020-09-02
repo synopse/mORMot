@@ -1632,7 +1632,7 @@ type
     // corresponding TSQLDBProxyConnectionCommand on the current connection
     procedure RemoteProcessMessage(const Input: RawByteString;
       out Output: RawByteString; Protocol: TSQLDBProxyConnectionProtocol); virtual;
-    {$endif}
+    {$endif WITH_PROXY}
 
     /// the current Date and Time, as retrieved from the server
     // - note that this value is the DB_SERVERTIME[] constant SQL value, so
@@ -3336,7 +3336,7 @@ function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): TShort16;
 /// retrieve the ready-to-be displayed text of proxy commands implemented by
 // TSQLDBProxyConnectionProperties.Process()
 function ToText(cmd: TSQLDBProxyConnectionCommand): PShortString; overload;
-{$endif}
+{$endif WITH_PROXY}
 
 
 implementation

@@ -11913,7 +11913,6 @@ begin
   fSSL.CACertFile := aCertFile;
 end;
 
-
 procedure TCurlHTTP.UseClientCertificate(
   const aCertFile, aCACertFile, aKeyName, aPassPhrase: SockString);
 begin
