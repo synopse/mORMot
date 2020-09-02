@@ -57834,7 +57834,38 @@ begin
 end;
 
 procedure RemoveCommentsFromJSON(P: PUTF8Char);
-var PComma: PUTF8Char;
+var  PComma: PUTF8Char;
+
+  procedure tryRemoveComment(p: PUTF8Char);
+  begin
+    if (P^ <> '/') or (P^ = #0) then
+      exit;
+    inc(P);
+    case P^ of
+     '/': begin // this is // comment - replace by ' '
+       dec(P);
+       repeat
+         P^ := ' ';
+         inc(P)
+       until P^ in [#0, #10, #13];
+       if P^<>#0 then Inc(P);
+     end;
+     '*': begin // this is /* comment - replace by ' ' but keep CRLF
+       P[-1] := ' ';
+       repeat
+         if not(P^ in [#10, #13]) then
+           P^ := ' '; // keep CRLF for correct line numbering (e.g. for error)
+         inc(P);
+         if PWord(P)^=ord('*')+ord('/')shl 8 then begin
+           PWord(P)^ := $2020;
+           inc(P,2);
+           break;
+         end;
+       until P^=#0;
+     end;
+    end;
+  end;
+
 begin // replace comments by ' ' characters which will be ignored by parser
   if P<>nil then
   while P^<>#0 do begin
@@ -57842,39 +57873,16 @@ begin // replace comments by ' ' characters which will be ignored by parser
       '"': begin
         P := GotoEndOfJSONString(P);
         if P^<>'"' then
-          exit;
-        inc(P);
+          exit else
+          Inc(P);
       end;
-      '/': begin
-         inc(P);
-         case P^ of
-           '/': begin // this is // comment - replace by ' '
-             dec(P);
-             repeat
-               P^ := ' ';
-               inc(P)
-             until P^ in [#0,#10,#13];
-             if P^<>#0 then Inc(P);
-           end;
-           '*': begin // this is /* comment - replace by ' ' but keep CRLF
-             P[-1] := ' ';
-             repeat
-               if not(P^ in [#10, #13]) then
-                 P^ := ' '; // keep CRLF for correct line numbering (e.g. for error)
-               inc(P);
-               if PWord(P)^=ord('*')+ord('/')shl 8 then begin
-                 PWord(P)^ := $2020;
-                 inc(P,2);
-                 break;
-               end;
-             until P^=#0;
-           end;
-         end;
-      end;
+      '/': tryRemoveComment(P);
       ',': begin // replace trailing comma by space for strict JSON parsers
         PComma := P;
         repeat inc(P) until (P^>' ') or (P^=#0);
-        if P^ in ['}',']'] then
+        tryRemoveComment(P);
+        while (P^<=' ') and (P^<>#0) do inc(P);
+        if P^ in ['}', ']'] then
           PComma^ := ' ';
       end;
     else
