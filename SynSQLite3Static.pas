@@ -1265,7 +1265,7 @@ begin
   // SynSQLite3Log.Add.Log() would do nothing: we are in .exe initialization
   {$ifdef MSWINDOWS} // PITA popup
   MessageBoxA(0,pointer(error),' WARNING: deprecated SQLite3 engine',MB_OK or MB_ICONWARNING);
-  {$endif}
+  {$endif MSWINDOWS}
 end;
 
 destructor TSQLite3LibraryStatic.Destroy;
