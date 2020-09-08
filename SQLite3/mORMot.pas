@@ -1929,7 +1929,7 @@ type
       /// =$ff for a ptField address, or =$fe for a ptVirtual method
       Kind: byte;
     end;
-  {$A+} // back to normal alignment
+    {$A+} // back to normal alignment
 {$endif FPC}
 
 const

@@ -10171,7 +10171,8 @@ begin
     fFirstEmptyConnectionIndex := index;
 end;
 
-function THttpApiWebSocketServerProtocol.Send(index: Integer; aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: ULONG): boolean;
+function THttpApiWebSocketServerProtocol.Send(index: Integer;
+  aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: ULONG): boolean;
 var conn: PHttpApiWebSocketConnection;
 begin
   result := false;
