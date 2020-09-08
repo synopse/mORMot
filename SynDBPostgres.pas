@@ -322,12 +322,6 @@ type
   /// direct access to the libpq native Postgres protocol 3 library
   // - only the endpoints needed by this unit are imported
   TSQLDBPostgresLib = class(TSQLDBLib)
-  protected
-    /// raise an exception on error and clean result
-    // - will set pRes to nil if passed
-    // - if andClear is true - will call always PQ.Clear(res)
-    procedure Check(conn: PPGconn; res: PPGresult;
-      pRes: PPPGresult = nil; andClear: boolean = true);
   public
     LibVersion: function: integer; cdecl;
     IsThreadSafe: function: integer; cdecl;
@@ -365,6 +359,11 @@ type
     /// just a wrapper around FastSetString + GetValue/GetLength
     procedure GetRawUTF8(res: PPGresult; tup_num, field_num: integer;
       var result: RawUTF8);
+    /// raise an exception on error and clean result
+    // - will set pRes to nil if passed
+    // - if andClear is true - will call always PQ.Clear(res)
+    procedure Check(conn: PPGconn; res: PPGresult;
+      pRes: PPPGresult = nil; andClear: boolean = true);
   end;
 
 const

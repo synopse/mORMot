@@ -63,9 +63,11 @@ uses
   Classes,
   Contnrs,
   SynCommons,
+  SynTable,
   SynLog,
   SynDB,
   SynDBDataset,
+  OleDB, // for CoInit/CoUnInit
   Uni,
   UniProvider,
   UniScript;
@@ -232,15 +234,15 @@ begin
     fSpecificOptions.Values['CharLength'] := '2';
     fSpecificOptions.Values['DescribeParams'] := 'true';
   end; // http://www.devart.com/unidac/docs/index.html?ibprov_article.htm
-    dOracle: begin
-      fSpecificOptions.Values['UseUnicode'] := 'true';
-      fSpecificOptions.Values['Direct'] := 'true';
-      fSpecificOptions.Values['HOMENAME'] := '';
-    end;
-    dMySQL: begin
-      // s.d. 30.11.19 Damit der Connect schneller geht ! CRVioTCP.pas WaitForConnect
-      fSpecificOptions.Values['MySQL.ConnectionTimeout'] := '0';
-    end;
+  dOracle: begin
+    fSpecificOptions.Values['UseUnicode'] := 'true';
+    fSpecificOptions.Values['Direct'] := 'true';
+    fSpecificOptions.Values['HOMENAME'] := '';
+  end;
+  dMySQL: begin
+    // s.d. 30.11.19 Damit der Connect schneller geht ! CRVioTCP.pas WaitForConnect
+    fSpecificOptions.Values['MySQL.ConnectionTimeout'] := '0';
+  end;
   dMSSQL: begin
     if aUserID='' then
       fSpecificOptions.Values['Authentication'] := 'auWindows';
@@ -284,7 +286,7 @@ begin
     if Owner = '' then
       Owner := MainConnection.Properties.DatabaseName; // itSDS
     if Owner<>'' then
-      meta.Restrictions.Values['TABLE_SCHEMA'] := UTF8ToString(UpperCase(Owner))
+      meta.Restrictions.Values['TABLE_SCHEMA'] := UTF8ToString(UpperCase(Owner)) else
       meta.Restrictions.Values['SCOPE'] := 'LOCAL';
     meta.Restrictions.Values['TABLE_NAME'] := UTF8ToString(UpperCase(Table));
     meta.Open;
@@ -300,6 +302,7 @@ begin
       F.ColumnPrecision := meta.FieldByName('DATA_PRECISION').AsInteger;
       F.ColumnType := ColumnTypeNativeToDB(F.ColumnTypeNative,F.ColumnScale);
       if F.ColumnType=ftUnknown then begin // UniDAC metadata failed -> use SQL
+        Fields := nil;
         inherited GetFields(aTableName,Fields);
         exit;
       end;
@@ -398,7 +401,7 @@ begin
   if aLibraryLocation<>'' then begin
     result := result+'?ClientLibrary=';
     if aLibraryLocationAppendExePath then
-      result := result+StringToUTF8(ExtractFilePath(ParamStr(0)));
+      result := result+StringToUTF8(ExeVersion.ProgramFilePath);
     result := result+StringToUTF8(aLibraryLocation);
   end;
   if aServerName<>'' then begin
