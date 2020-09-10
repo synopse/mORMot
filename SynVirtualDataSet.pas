@@ -77,7 +77,7 @@ uses
 type
   {$ifndef UNICODE} // defined as TRecordBuffer = PByte in newer DB.pas
   TRecordBuffer = PChar;
-  {$endif}
+  {$endif UNICODE}
   PDateTimeRec = ^TDateTimeRec;
 
   /// read-only virtual TDataSet able to access any content

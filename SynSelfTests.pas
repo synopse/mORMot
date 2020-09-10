@@ -3911,6 +3911,7 @@ var crc: array[0..10000] of record
       crc: cardinal;
     end;
     totallen: Cardinal;
+    s2: RawByteString;
 procedure Test(hash: THasher; const name: string);
 var i: Integer;
     Timer: TPrecisionTimer;
@@ -4036,6 +4037,11 @@ begin
     hmac32.Init(@c1,4);
     hmac32.Update(pointer(s),length(s));
     check(hmac32.Done=c2);
+    s2 := s;
+    SymmetricEncrypt(i, s2);
+    check(s2 <> s);
+    SymmetricEncrypt(i, s2);
+    check(s2 = s);
   end;
   Test(crc32creference,'pas');
   Test(crc32cfast,'fast');
@@ -10913,7 +10919,7 @@ var Model: TSQLModel;
     Batch: TSQLRestBatch;
     IDs: TIDDynArray;
     i,j,n: integer;
-    dummy: RawUTF8;
+    dummy, s: RawUTF8;
 {$ifndef NOVARIANTS}
 procedure CheckVariantWith(const V: Variant; const i: Integer; const offset: integer=0);
 begin
@@ -11053,7 +11059,7 @@ begin
           Client.RetrieveDocVariantArray(TSQLRecordTest,'items','Int,Test'));
         check(IdemPChar(pointer(dummy),'1=1'#$D#$A'2=2'#$D#$A'3=3'#$D#$A'4=4'));
         check(Hash32(dummy)=$BC89CA72);
-        {$endif}
+        {$endif NOVARIANTS}
         Check(Client.UpdateField(TSQLRecordTest,100,'ValWord',[100+10]),
           'update one field of a given record');
         R := TSQLRecordTest.Create(Client,100);
@@ -11062,6 +11068,8 @@ begin
         finally
           R.Free;
         end;
+        s := Client.OneFieldValues(TSQLRecordTest,'Test',FormatUTF8('ValWord=?',[],[110]));
+        Check(s='100,110');
         Check(Client.UpdateField(TSQLRecordTest,100,'ValWord',[100]));
         R := TSQLRecordTest.Create(Client,100);
         try

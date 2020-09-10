@@ -227,7 +227,6 @@ function DropNexusEmbeddedEngine: TnxServerEngine;
 implementation
 
 uses
-
   {$ifdef SYNDB_FULLNEXUSDB}
   nxreRemoteServerEngine,
   uMiscellaneous,

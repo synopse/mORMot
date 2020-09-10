@@ -820,6 +820,7 @@ procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
 var trunc: array[0..15] of AnsiChar; // truncated to 16 bytes (including #0)
     i,L: integer;
 begin
+  {$ifdef LINUXNOTBSD}
   if not(elPThread in ExternalLibraries.Loaded) then
     ExternalLibraries.EnsureLoaded(elPThread);
   if not Assigned(ExternalLibraries.pthread_setname_np) then
@@ -845,7 +846,6 @@ begin
   if L = 0 then
     exit;
   trunc[L] := #0;
-  {$ifdef LINUXNOTBSD}
   ExternalLibraries.pthread_setname_np(pointer(ThreadID), @trunc[0]);
   {$endif LINUXNOTBSD}
 end;

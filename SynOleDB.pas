@@ -603,6 +603,7 @@ type
 
 
 { -------------- TOleDB* OleDB classes and types }
+
 type
   /// generic Exception type, generated for OleDB connection
   EOleDBException = class(ESQLDBException);
@@ -2792,6 +2793,7 @@ type
     bClass: byte;
     wLineNumber: word;
   end;
+  /// to retrieve enhanced Microsoft SQL Server error information
   ISQLServerErrorInfo = interface(IUnknown)
     ['{5CF4CA12-EF21-11d0-97E7-00C04FC2AD98}']
     function GetErrorInfo(out ppErrorInfo: PSSERRORINFO;

@@ -209,6 +209,8 @@ const
   FIREDAC_PROVIDER: array[dOracle..high(TSQLDBDefinition)] of RawUTF8 = (
     'Ora','MSSQL','MSAcc','MySQL','SQLite','IB','','PG','DB2','Infx');
   {$endif}
+
+  
 implementation
 
 uses

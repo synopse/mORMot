@@ -73,7 +73,7 @@ uses
 { -------------- Oracle Client Interface native connection  }
 
 type
-  /// execption type associated to the native Oracle Client Interface (OCI)
+  /// exception type associated to the native Oracle Client Interface (OCI)
   ESQLDBOracle = class(ESQLDBException);
 
   POracleDate = ^TOracleDate;
@@ -443,6 +443,7 @@ var
 
   /// how many blob chunks should be handled at once
   SynDBOracleBlobChunksCount: integer = 250;
+
 
 implementation
 
@@ -2616,7 +2617,9 @@ begin
 end;
 
 type
+  /// Oracle VARNUM memory structure
   TSQLT_VNU = array[0..21] of byte;
+  /// points to a Oracle VARNUM memory structure
   PSQLT_VNU = ^TSQLT_VNU;
 
 procedure Int64ToSQLT_VNU(Value: Int64; OutData: PSQLT_VNU);
@@ -2662,7 +2665,7 @@ begin
 end;
 
 procedure UnQuoteSQLString(S,D: PUTF8Char; SLen: integer);
-begin
+begin // internal method, tuned for our OCI process
   if S=nil then
     D^ := #0 else
   if S^<>'''' then
