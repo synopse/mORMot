@@ -698,6 +698,20 @@ type
     property UTF8Length: boolean read fUTF8Length write fUTF8Length;
   end;
 
+resourcestring
+  sInvalidIPAddress = '"%s" is an invalid IP v4 address';
+  sInvalidEmailAddress = '"%s" is an invalid email address';
+  sInvalidPattern = '"%s" does not match the expected pattern';
+  sCharacter01n = 'character,character,characters';
+  sInvalidTextLengthMin = 'Expect at least %d %s';
+  sInvalidTextLengthMax = 'Expect up to %d %s';
+  sInvalidTextChar = 'Expect at least %d %s %s,Expect up to %d %s %s,'+
+    'alphabetical,digital,punctuation,lowercase,uppercase,space,'+
+    'Too much spaces on the left,Too much spaces on the right';
+  sValidationFailed = '"%s" rule failed';
+  sValidationFieldVoid = 'An unique key field must not be void';
+  sValidationFieldDuplicate = 'Value already used for this unique key field';
+
 
 { ************ Database types and classes ************************** }
 

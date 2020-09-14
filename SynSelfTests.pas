@@ -11068,7 +11068,7 @@ begin
         finally
           R.Free;
         end;
-        s := Client.OneFieldValues(TSQLRecordTest,'Test',FormatUTF8('ValWord=?',[],[110]));
+        s := Client.OneFieldValues(TSQLRecordTest,'Test','ValWord=:(110):');
         Check(s='100,110');
         Check(Client.UpdateField(TSQLRecordTest,100,'ValWord',[100]));
         R := TSQLRecordTest.Create(Client,100);
@@ -11077,6 +11077,8 @@ begin
         finally
           R.Free;
         end;
+        s := Client.OneFieldValues(TSQLRecordTest,'Test',FormatUTF8('ValWord=?',[],[110]));
+        Check(s='110');
         Check(Client.UpdateField(TSQLRecordTest,'Unicode',['110'],'ValWord',[120]),
           'update one field of a given record');
         R := TSQLRecordTest.Create(Client,110);
