@@ -37689,7 +37689,8 @@ begin
       exit; // avoid integer overflow e.g. if '0000' is an invalid date
     Div100(Y,d100);
     unaligned(result) := (146097*d100.d) shr 2 + (1461*d100.m) shr 2 +
-          (153*M+2) div 5+D-693900;
+          (153*M+2) div 5+D;
+    unaligned(result) := unaligned(result)-693900; // as float: avoid sign issue
     if L<15 then
       exit; // not enough space to retrieve the time
   end;
@@ -38270,7 +38271,8 @@ begin // faster version by AB
       else exit; // Month <= 0
     Div100(Year,d100);
     Date := (146097*d100.D) shr 2+(1461*d100.M) shr 2+
-            (153*Month+2) div 5+Day-693900;
+            (153*Month+2) div 5+Day;
+    Date := Date-693900; // should be separated to avoid sign issues
     result := true;
   end;
 end;
