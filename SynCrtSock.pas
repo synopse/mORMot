@@ -1020,7 +1020,7 @@ type
     /// a 31-bit sequential number identifying this instance on the server
     property RequestID: integer read fRequestID;
     /// the ID of the connection which called this execution context
-    // - e.g. SynCrtSock's TWebSocketProcess.NotifyCallback method would use
+    // - e.g. SynBidirSock's TWebSocketProcess.NotifyCallback method would use
     // this property to specify the client connection to be notified
     // - is set as an Int64 to match http.sys ID type, but will be an
     // increasing 31-bit integer sequence for (web)socket-based servers

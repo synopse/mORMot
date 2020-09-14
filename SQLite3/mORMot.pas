@@ -10560,8 +10560,8 @@ type
   {$M-}
 
   /// class handling interface implementation generated from source
-  // - this class targets FPC, which does not generate the expected RTTI - see
-  // http://bugs.freepascal.org/view.php?id=26774
+  // - this class targets oldest FPC, which did not generate the expected RTTI -
+  // see http://bugs.freepascal.org/view.php?id=26774
   // - mORMotWrapper.pas will generate a new inherited class, overriding abstract
   // AddMethodsFromTypeInfo() to define the interface methods
   TInterfaceFactoryGenerated = class(TInterfaceFactory)
