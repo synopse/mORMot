@@ -67,7 +67,7 @@ uses
   SynLog,
   SynDB,
   SynDBDataset,
-  OleDB, // for CoInit/CoUnInit
+  SynOleDB, // for CoInit/CoUnInit
   Uni,
   UniProvider,
   UniScript;
