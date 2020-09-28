@@ -68,7 +68,7 @@ unit mORMot;
 *)
 
 
-{$I Synopse.inc} // define HASINLINE CPU32 CPU64
+{$I ..\Synopse.inc} // define HASINLINE CPU32 CPU64
 
 {.$define PUREPASCAL}  // define for debugg, not on production
 
@@ -12871,7 +12871,7 @@ type
     /// used by all overloaded Add() methods
     function InternalAdd(Value: TSQLRecord; SendData: boolean; CustomFields: PSQLFieldBits;
       ForceID, DoNotAutoComputeFields: boolean): TID; virtual;
-   protected // these abstract methods must be overriden by real database engine
+  protected // these abstract methods must be overriden by real database engine
     /// retrieve a list of members as JSON encoded data
     // - implements REST GET collection
     // - returns '' on error, or JSON data, even with no result rows
@@ -20654,7 +20654,7 @@ constructor TSQLPropInfo.Create(const aName: RawUTF8; aSQLFieldType: TSQLFieldTy
   aAttributes: TSQLPropInfoAttributes; aFieldWidth, aPropertyIndex: integer);
 begin
   if aName='' then
-    EORMException.CreateUTF8('Void name for %.Create',[self]);
+    raise EORMException.CreateUTF8('Void name for %.Create',[self]);
   if aAuxiliaryRTreeField in aAttributes then
     fName := copy(aName,2,MaxInt) else
     fName := aName;
@@ -23528,7 +23528,7 @@ end;
 function TSQLPropInfoList.GetItem(aIndex: integer): TSQLPropInfo;
 begin
   if cardinal(aIndex)>=Cardinal(fCount) then
-    EORMException.Create('Invalid TSQLPropInfoList index');
+    raise EORMException.Create('Invalid TSQLPropInfoList index');
   result := fList[aIndex];
 end;
 
@@ -32317,7 +32317,7 @@ begin
 end;
 
 procedure TSQLRecord.ComputeFieldsBeforeWrite(aRest: TSQLRest; aOccasion: TSQLEvent);
-var F: integer;
+var F: PtrInt;
     types: TSQLFieldTypes;
     i64: Int64;
     p: TSQLPropInfo;
@@ -32332,7 +32332,7 @@ begin
       if integer(types)<>0 then begin
         i64 := aRest.ServerTimestamp;
         for F := 0 to Fields.Count-1 do begin
-          p := Fields.List[f];
+          p := Fields.List[F];
           if p.SQLFieldType in types then
             TSQLPropInfoRTTIInt64(p).fPropInfo.SetInt64Prop(Self,i64);
         end;
@@ -32341,7 +32341,7 @@ begin
         i64 := aRest.GetCurrentSessionUserID;
         if i64<>0 then
           for F := 0 to Fields.Count-1 do begin
-            p := Fields.List[f];
+            p := Fields.List[F];
             if p.SQLFieldType=sftSessionUserID then
               TSQLPropInfoRTTIInt64(p).fPropInfo.SetInt64Prop(Self,i64);
           end;
