@@ -54756,7 +54756,7 @@ begin
   '{': begin
     repeat inc(JSON) until (JSON^=#0) or (JSON^>' ');
     if JSON^='}' then
-      repeat inc(JSON) until (JSON^=#0) or (JSON^>' ');
+      repeat inc(JSON) until (JSON^=#0) or (JSON^>' ') else begin
       repeat
         Name := GetJSONPropName(JSON);
         if Name=nil then
@@ -54773,6 +54773,7 @@ begin
           Add('>');
         end;
       until objEnd='}';
+    end;
   end;
   else begin
     Value := GetJSONField(JSON,result,nil,EndOfObject); // let wasString=nil
