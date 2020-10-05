@@ -12785,7 +12785,7 @@ type
     fServerTimestampCacheValue: TTimeLogBits;
     fServices: TServiceContainer;
     fPrivateGarbageCollector: TSynObjectList;
-    fRoutingClass: TSQLRestServerURIContextClass;
+    fServicesRouting: TSQLRestServerURIContextClass;
     fBackgroundTimer: TSQLRestBackgroundTimer;
     fOnDecryptBody, fOnEncryptBody: TNotifyRestBody;
     fCustomEncryptAES: TAESAbstract;
@@ -14176,7 +14176,7 @@ type
     // server sides), if the client will rather use JSON/RPC alternative pattern
     // - NEVER set the abstract TSQLRestServerURIContext class on this property
     property ServicesRouting: TSQLRestServerURIContextClass
-      read fRoutingClass write SetRoutingClass;
+      read fServicesRouting write SetRoutingClass;
     /// low-level background timer thread associated with this TSQLRest
     // - contains nil if TimerEnable/AsynchInvoke was never executed
     // - you may instantiate your own TSQLRestBackgroundTimer instances, if
@@ -33946,7 +33946,7 @@ begin
     fAcquireExecution[cmd] := TSQLRestAcquireExecution.Create;
   AcquireWriteMode := amLocked;
   AcquireWriteTimeOut := 5000; // default 5 seconds
-  fRoutingClass := TSQLRestRoutingREST;
+  fServicesRouting := TSQLRestRoutingREST;
   {$ifdef WITHLOG}
   SetLogClass(SQLite3Log); // by default
   {$endif}
@@ -34417,11 +34417,11 @@ end;
 procedure TSQLRest.SetRoutingClass(aServicesRouting: TSQLRestServerURIContextClass);
 begin
   if self<>nil then
-    if aServicesRouting<>fRoutingClass then
+    if aServicesRouting<>fServicesRouting then
       if (aServicesRouting=nil) or (aServicesRouting=TSQLRestServerURIContext) then
          raise EServiceException.CreateUTF8('Unexpected %.SetRoutingClass(%)',
            [self,aServicesRouting]) else
-         fRoutingClass := aServicesRouting;
+         fServicesRouting := aServicesRouting;
 end;
 
 function TSQLRest.MultiFieldValue(Table: TSQLRecordClass;
