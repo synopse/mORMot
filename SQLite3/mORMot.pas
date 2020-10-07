@@ -7034,7 +7034,7 @@ type
   protected
     fRowCount: integer;
     fFieldCount: integer;
-    /// contains the data, as returned by sqlite3_get_table()
+    /// contains the data, e.g. as returned by sqlite3_get_table()
     fResults: PPUTF8CharArray;
     fFieldType: array of TSQLTableFieldType;
     fFieldTypeAllRows: boolean;
@@ -12784,7 +12784,6 @@ type
     fServerTimestampCacheTix: cardinal;
     fServerTimestampCacheValue: TTimeLogBits;
     fServices: TServiceContainer;
-    fPrivateGarbageCollector: TSynObjectList;
     fServicesRouting: TSQLRestServerURIContextClass;
     fBackgroundTimer: TSQLRestBackgroundTimer;
     fOnDecryptBody, fOnEncryptBody: TNotifyRestBody;
@@ -12793,6 +12792,7 @@ type
     fCustomEncryptCompress: TAlgoCompress;
     fCustomEncryptContentPrefix, fCustomEncryptContentPrefixUpper, fCustomEncryptUrlIgnore: RawUTF8;
     fAcquireExecution: array[TSQLRestServerURIContextCommand] of TSQLRestAcquireExecution;
+    fPrivateGarbageCollector: TSynObjectList;
     {$ifdef WITHLOG}
     fLogClass: TSynLogClass;   // =SQLite3Log by default
     fLogFamily: TSynLogFamily; // =SQLite3Log.Family by default
@@ -33838,7 +33838,7 @@ begin
     if fBatchCount>0 then begin // if something to send
       for i := 0 to fDeletedCount-1 do
         if fDeletedRecordRef[i]<>0 then
-          fRest.Cache.NotifyDeletion(fDeletedRecordRef[i] and 63,fDeletedRecordRef[i] shr 6);
+          fRest.fCache.NotifyDeletion(fDeletedRecordRef[i] and 63,fDeletedRecordRef[i] shr 6);
       fBatch.CancelLastComma;
       fBatch.Add(']');
       if fTable<>nil then
@@ -33890,7 +33890,7 @@ begin
   if fCalledWithinRest and (FieldBits-Props.SimpleFieldsBits[soUpdate]=[]) then
     ForceCacheUpdate := true; // safe to update the cache with supplied values
   if ForceCacheUpdate then
-    fRest.Cache.Notify(Value,soUpdate) else
+    fRest.fCache.Notify(Value,soUpdate) else
     // may not contain all cached fields -> delete from cache
     AddID(fDeletedRecordRef,fDeletedCount,RecordReference(tableIndex,ID));
   result := fBatchCount;
@@ -34943,7 +34943,7 @@ begin
   SetVariantNull(result);
   if (self<>nil) and (Table<>nil) then begin
     with Table.RecordProps do // optimized primary key direct access
-    if Cache.IsCached(Table) and (length(BoundsSQLWhere)=1) and
+    if fCache.IsCached(Table) and (length(BoundsSQLWhere)=1) and
        VarRecToInt64(BoundsSQLWhere[0],Int64(ID)) and
        FieldBitsFromCSV(CustomFieldsCSV,bits) and
        (IdemPropNameU('RowID=?',FormatSQLWhere) or
@@ -35722,7 +35722,7 @@ begin
 end;
 
 function TSQLRest.MainFieldValue(Table: TSQLRecordClass; ID: TID;
-   ReturnFirstIfNoUnique: boolean=false): RawUTF8;
+   ReturnFirstIfNoUnique: boolean): RawUTF8;
 begin
   if (self=nil) or (Table=nil) or (ID<=0) then
     result := '' else begin
@@ -41849,10 +41849,10 @@ begin
   case Ctxt.Method of
   mGET: begin
     if Ctxt.Table=nil then
-      Cache.Flush else
+      fCache.Flush else
       if Ctxt.TableID=0 then
-        Cache.Flush(Ctxt.Table) else
-        Cache.SetCache(Ctxt.Table,Ctxt.TableID);
+        fCache.Flush(Ctxt.Table) else
+        fCache.SetCache(Ctxt.Table,Ctxt.TableID);
     Ctxt.Success;
   end;
   mPOST:
@@ -52890,7 +52890,7 @@ begin
     exit;
   CheckInterface(aInterfaces);
   for i := 0 to high(aInterfaces) do begin
-    F := ServicesFactoryClients.Create(
+    F := fServicesFactoryClients.Create(
       Rest,aInterfaces[i],aInstanceCreation,aContractExpected);
     AddServiceInternal(F);
     aContractExpected := ''; // supplied contract is only for the 1st interface
@@ -52903,7 +52903,7 @@ function TServiceContainer.AddInterface(aInterface: PTypeInfo;
   const aContractExpected: RawUTF8): TServiceFactoryClient;
 begin
   CheckInterface([aInterface]);
-  result := ServicesFactoryClients.Create(Rest,aInterface,aInstanceCreation,aContractExpected);
+  result := fServicesFactoryClients.Create(Rest,aInterface,aInstanceCreation,aContractExpected);
   AddServiceInternal(result);
 end;
 
@@ -55647,8 +55647,7 @@ type
   end;
   TInterfacedObjectMultiDestDynArray = array of TInterfacedObjectMultiDest;
   TInterfacedObjectMulti = class;
-  TInterfacedObjectMultiList = class(TInterfacedObjectLocked,
-    IMultiCallbackRedirect)
+  TInterfacedObjectMultiList = class(TInterfacedObjectLocked, IMultiCallbackRedirect)
   protected
     fDest: TInterfacedObjectMultiDestDynArray;
     fDestCount: integer;
