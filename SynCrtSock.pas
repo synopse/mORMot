@@ -1020,7 +1020,7 @@ type
     /// a 31-bit sequential number identifying this instance on the server
     property RequestID: integer read fRequestID;
     /// the ID of the connection which called this execution context
-    // - e.g. SynCrtSock's TWebSocketProcess.NotifyCallback method would use
+    // - e.g. SynBidirSock's TWebSocketProcess.NotifyCallback method would use
     // this property to specify the client connection to be notified
     // - is set as an Int64 to match http.sys ID type, but will be an
     // increasing 31-bit integer sequence for (web)socket-based servers
@@ -2560,6 +2560,10 @@ function HttpGetAuth(const aURI, aAuthToken: SockString;
 
 /// send some data to a remote web server, using the HTTP/1.1 protocol and POST method
 function HttpPost(const server, port: SockString; const url, Data, DataType: SockString;
+  outData: PSockString=nil; const auth: SockString=''): boolean;
+
+/// send some data to a remote web server, using the HTTP/1.1 protocol and PUT method
+function HttpPut(const server, port: SockString; const url, Data, DataType: SockString;
   outData: PSockString=nil; const auth: SockString=''): boolean;
 
 /// compute the 'Authorization: Bearer ####' HTTP header of a given token value
@@ -5228,7 +5232,7 @@ begin
     exit;
   if ResultClass=nil then
     ResultClass := TCrtSocket;
-  result := ResultClass.Create;
+  result := ResultClass.Create(Timeout);
   result.AcceptRequest(client,@sin);
   result.CreateSockIn; // use SockIn with 1KB input buffer: 2x faster
 end;
@@ -5916,6 +5920,23 @@ begin
   if Http<>nil then
   try
     result := Http.Post(url,Data,DataType,0,AuthorizationBearer(auth)) in
+      [STATUS_SUCCESS,STATUS_CREATED,STATUS_NOCONTENT];
+    if outdata<>nil then
+      outdata^ := Http.Content;
+  finally
+    Http.Free;
+  end;
+end;
+
+function HttpPut(const server, port: SockString; const url, Data, DataType: SockString;
+  outData: PSockString; const auth: SockString): boolean;
+var Http: THttpClientSocket;
+begin
+  result := false;
+  Http := OpenHttp(server,port);
+  if Http<>nil then
+  try
+    result := Http.Put(url,Data,DataType,0,AuthorizationBearer(auth)) in
       [STATUS_SUCCESS,STATUS_CREATED,STATUS_NOCONTENT];
     if outdata<>nil then
       outdata^ := Http.Content;
@@ -10165,7 +10186,8 @@ begin
     fFirstEmptyConnectionIndex := index;
 end;
 
-function THttpApiWebSocketServerProtocol.Send(index: Integer; aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: ULONG): boolean;
+function THttpApiWebSocketServerProtocol.Send(index: Integer;
+  aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: ULONG): boolean;
 var conn: PHttpApiWebSocketConnection;
 begin
   result := false;

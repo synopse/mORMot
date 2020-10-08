@@ -1291,7 +1291,6 @@ implementation
 
 { -------------- high-level SynCrtSock classes depending on SynCommons }
 
-
 { THttpRequestCached }
 
 constructor THttpRequestCached.Create(const aURI: RawUTF8;

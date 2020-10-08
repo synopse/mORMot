@@ -68,7 +68,7 @@ unit mORMot;
 *)
 
 
-{$I Synopse.inc} // define HASINLINE CPU32 CPU64
+{$I ..\Synopse.inc} // define HASINLINE CPU32 CPU64
 
 {.$define PUREPASCAL}  // define for debugg, not on production
 
@@ -1929,7 +1929,7 @@ type
       /// =$ff for a ptField address, or =$fe for a ptVirtual method
       Kind: byte;
     end;
-  {$A+} // back to normal alignment
+    {$A+} // back to normal alignment
 {$endif FPC}
 
 const
@@ -7034,7 +7034,7 @@ type
   protected
     fRowCount: integer;
     fFieldCount: integer;
-    /// contains the data, as returned by sqlite3_get_table()
+    /// contains the data, e.g. as returned by sqlite3_get_table()
     fResults: PPUTF8CharArray;
     fFieldType: array of TSQLTableFieldType;
     fFieldTypeAllRows: boolean;
@@ -10560,8 +10560,8 @@ type
   {$M-}
 
   /// class handling interface implementation generated from source
-  // - this class targets FPC, which does not generate the expected RTTI - see
-  // http://bugs.freepascal.org/view.php?id=26774
+  // - this class targets oldest FPC, which did not generate the expected RTTI -
+  // see http://bugs.freepascal.org/view.php?id=26774
   // - mORMotWrapper.pas will generate a new inherited class, overriding abstract
   // AddMethodsFromTypeInfo() to define the interface methods
   TInterfaceFactoryGenerated = class(TInterfaceFactory)
@@ -12784,8 +12784,7 @@ type
     fServerTimestampCacheTix: cardinal;
     fServerTimestampCacheValue: TTimeLogBits;
     fServices: TServiceContainer;
-    fPrivateGarbageCollector: TSynObjectList;
-    fRoutingClass: TSQLRestServerURIContextClass;
+    fServicesRouting: TSQLRestServerURIContextClass;
     fBackgroundTimer: TSQLRestBackgroundTimer;
     fOnDecryptBody, fOnEncryptBody: TNotifyRestBody;
     fCustomEncryptAES: TAESAbstract;
@@ -12793,6 +12792,7 @@ type
     fCustomEncryptCompress: TAlgoCompress;
     fCustomEncryptContentPrefix, fCustomEncryptContentPrefixUpper, fCustomEncryptUrlIgnore: RawUTF8;
     fAcquireExecution: array[TSQLRestServerURIContextCommand] of TSQLRestAcquireExecution;
+    fPrivateGarbageCollector: TSynObjectList;
     {$ifdef WITHLOG}
     fLogClass: TSynLogClass;   // =SQLite3Log by default
     fLogFamily: TSynLogFamily; // =SQLite3Log.Family by default
@@ -12871,7 +12871,7 @@ type
     /// used by all overloaded Add() methods
     function InternalAdd(Value: TSQLRecord; SendData: boolean; CustomFields: PSQLFieldBits;
       ForceID, DoNotAutoComputeFields: boolean): TID; virtual;
-   protected // these abstract methods must be overriden by real database engine
+  protected // these abstract methods must be overriden by real database engine
     /// retrieve a list of members as JSON encoded data
     // - implements REST GET collection
     // - returns '' on error, or JSON data, even with no result rows
@@ -14176,7 +14176,7 @@ type
     // server sides), if the client will rather use JSON/RPC alternative pattern
     // - NEVER set the abstract TSQLRestServerURIContext class on this property
     property ServicesRouting: TSQLRestServerURIContextClass
-      read fRoutingClass write SetRoutingClass;
+      read fServicesRouting write SetRoutingClass;
     /// low-level background timer thread associated with this TSQLRest
     // - contains nil if TimerEnable/AsynchInvoke was never executed
     // - you may instantiate your own TSQLRestBackgroundTimer instances, if
@@ -20654,7 +20654,7 @@ constructor TSQLPropInfo.Create(const aName: RawUTF8; aSQLFieldType: TSQLFieldTy
   aAttributes: TSQLPropInfoAttributes; aFieldWidth, aPropertyIndex: integer);
 begin
   if aName='' then
-    EORMException.CreateUTF8('Void name for %.Create',[self]);
+    raise EORMException.CreateUTF8('Void name for %.Create',[self]);
   if aAuxiliaryRTreeField in aAttributes then
     fName := copy(aName,2,MaxInt) else
     fName := aName;
@@ -23528,7 +23528,7 @@ end;
 function TSQLPropInfoList.GetItem(aIndex: integer): TSQLPropInfo;
 begin
   if cardinal(aIndex)>=Cardinal(fCount) then
-    EORMException.Create('Invalid TSQLPropInfoList index');
+    raise EORMException.Create('Invalid TSQLPropInfoList index');
   result := fList[aIndex];
 end;
 
@@ -32317,7 +32317,7 @@ begin
 end;
 
 procedure TSQLRecord.ComputeFieldsBeforeWrite(aRest: TSQLRest; aOccasion: TSQLEvent);
-var F: integer;
+var F: PtrInt;
     types: TSQLFieldTypes;
     i64: Int64;
     p: TSQLPropInfo;
@@ -32332,7 +32332,7 @@ begin
       if integer(types)<>0 then begin
         i64 := aRest.ServerTimestamp;
         for F := 0 to Fields.Count-1 do begin
-          p := Fields.List[f];
+          p := Fields.List[F];
           if p.SQLFieldType in types then
             TSQLPropInfoRTTIInt64(p).fPropInfo.SetInt64Prop(Self,i64);
         end;
@@ -32341,7 +32341,7 @@ begin
         i64 := aRest.GetCurrentSessionUserID;
         if i64<>0 then
           for F := 0 to Fields.Count-1 do begin
-            p := Fields.List[f];
+            p := Fields.List[F];
             if p.SQLFieldType=sftSessionUserID then
               TSQLPropInfoRTTIInt64(p).fPropInfo.SetInt64Prop(Self,i64);
           end;
@@ -33838,7 +33838,7 @@ begin
     if fBatchCount>0 then begin // if something to send
       for i := 0 to fDeletedCount-1 do
         if fDeletedRecordRef[i]<>0 then
-          fRest.Cache.NotifyDeletion(fDeletedRecordRef[i] and 63,fDeletedRecordRef[i] shr 6);
+          fRest.fCache.NotifyDeletion(fDeletedRecordRef[i] and 63,fDeletedRecordRef[i] shr 6);
       fBatch.CancelLastComma;
       fBatch.Add(']');
       if fTable<>nil then
@@ -33890,7 +33890,7 @@ begin
   if fCalledWithinRest and (FieldBits-Props.SimpleFieldsBits[soUpdate]=[]) then
     ForceCacheUpdate := true; // safe to update the cache with supplied values
   if ForceCacheUpdate then
-    fRest.Cache.Notify(Value,soUpdate) else
+    fRest.fCache.Notify(Value,soUpdate) else
     // may not contain all cached fields -> delete from cache
     AddID(fDeletedRecordRef,fDeletedCount,RecordReference(tableIndex,ID));
   result := fBatchCount;
@@ -33946,7 +33946,7 @@ begin
     fAcquireExecution[cmd] := TSQLRestAcquireExecution.Create;
   AcquireWriteMode := amLocked;
   AcquireWriteTimeOut := 5000; // default 5 seconds
-  fRoutingClass := TSQLRestRoutingREST;
+  fServicesRouting := TSQLRestRoutingREST;
   {$ifdef WITHLOG}
   SetLogClass(SQLite3Log); // by default
   {$endif}
@@ -34417,11 +34417,11 @@ end;
 procedure TSQLRest.SetRoutingClass(aServicesRouting: TSQLRestServerURIContextClass);
 begin
   if self<>nil then
-    if aServicesRouting<>fRoutingClass then
+    if aServicesRouting<>fServicesRouting then
       if (aServicesRouting=nil) or (aServicesRouting=TSQLRestServerURIContext) then
          raise EServiceException.CreateUTF8('Unexpected %.SetRoutingClass(%)',
            [self,aServicesRouting]) else
-         fRoutingClass := aServicesRouting;
+         fServicesRouting := aServicesRouting;
 end;
 
 function TSQLRest.MultiFieldValue(Table: TSQLRecordClass;
@@ -34512,7 +34512,7 @@ begin
 end;
 
 function TSQLRest.OneFieldValues(Table: TSQLRecordClass; const FieldName,
-  WhereClause: RawUTF8; Strings: TStrings; IDToIndex: PID=nil): Boolean;
+  WhereClause: RawUTF8; Strings: TStrings; IDToIndex: PID): Boolean;
 var Row: integer;
     aID: TID;
     T: TSQLTableJSON;
@@ -34553,7 +34553,7 @@ end;
 
 function TSQLRest.OneFieldValues(Table: TSQLRecordClass; const FieldName,
   WhereClause, Separator: RawUTF8): RawUTF8;
-var i, Len, SepLen, L: integer;
+var i, Len, SepLen, L: PtrInt;
     Lens: TIntegerDynArray;
     T: TSQLTableJSON;
     P: PUTF8Char;
@@ -34567,13 +34567,12 @@ begin
     // calculate row values CSV needed memory
     SetLength(Lens,T.fRowCount);
     SepLen := length(Separator);
-    Len := 0;
+    Len := SepLen*(T.fRowCount-1);
     for i := 1 to T.fRowCount do begin
       L := StrLen(T.fResults[i]); // ignore fResults[0] i.e. field name
-      inc(Len,L+SepLen);
+      inc(Len,L);
       Lens[i-1] := L;
     end;
-    dec(Len,SepLen);
     SetLength(result,Len);
     // add row values as CSV
     P := pointer(result);
@@ -34944,7 +34943,7 @@ begin
   SetVariantNull(result);
   if (self<>nil) and (Table<>nil) then begin
     with Table.RecordProps do // optimized primary key direct access
-    if Cache.IsCached(Table) and (length(BoundsSQLWhere)=1) and
+    if fCache.IsCached(Table) and (length(BoundsSQLWhere)=1) and
        VarRecToInt64(BoundsSQLWhere[0],Int64(ID)) and
        FieldBitsFromCSV(CustomFieldsCSV,bits) and
        (IdemPropNameU('RowID=?',FormatSQLWhere) or
@@ -35723,7 +35722,7 @@ begin
 end;
 
 function TSQLRest.MainFieldValue(Table: TSQLRecordClass; ID: TID;
-   ReturnFirstIfNoUnique: boolean=false): RawUTF8;
+   ReturnFirstIfNoUnique: boolean): RawUTF8;
 begin
   if (self=nil) or (Table=nil) or (ID<=0) then
     result := '' else begin
@@ -41850,10 +41849,10 @@ begin
   case Ctxt.Method of
   mGET: begin
     if Ctxt.Table=nil then
-      Cache.Flush else
+      fCache.Flush else
       if Ctxt.TableID=0 then
-        Cache.Flush(Ctxt.Table) else
-        Cache.SetCache(Ctxt.Table,Ctxt.TableID);
+        fCache.Flush(Ctxt.Table) else
+        fCache.SetCache(Ctxt.Table,Ctxt.TableID);
     Ctxt.Success;
   end;
   mPOST:
@@ -52891,7 +52890,7 @@ begin
     exit;
   CheckInterface(aInterfaces);
   for i := 0 to high(aInterfaces) do begin
-    F := ServicesFactoryClients.Create(
+    F := fServicesFactoryClients.Create(
       Rest,aInterfaces[i],aInstanceCreation,aContractExpected);
     AddServiceInternal(F);
     aContractExpected := ''; // supplied contract is only for the 1st interface
@@ -52904,7 +52903,7 @@ function TServiceContainer.AddInterface(aInterface: PTypeInfo;
   const aContractExpected: RawUTF8): TServiceFactoryClient;
 begin
   CheckInterface([aInterface]);
-  result := ServicesFactoryClients.Create(Rest,aInterface,aInstanceCreation,aContractExpected);
+  result := fServicesFactoryClients.Create(Rest,aInterface,aInstanceCreation,aContractExpected);
   AddServiceInternal(result);
 end;
 
@@ -55648,8 +55647,7 @@ type
   end;
   TInterfacedObjectMultiDestDynArray = array of TInterfacedObjectMultiDest;
   TInterfacedObjectMulti = class;
-  TInterfacedObjectMultiList = class(TInterfacedObjectLocked,
-    IMultiCallbackRedirect)
+  TInterfacedObjectMultiList = class(TInterfacedObjectLocked, IMultiCallbackRedirect)
   protected
     fDest: TInterfacedObjectMultiDestDynArray;
     fDestCount: integer;

@@ -76,6 +76,8 @@
 // - it will avoid error like "[DCC Error] E2201 Need imported data reference ($G)
 //   to access 'VarCopyProc' from unit 'SynCommons'"
 // - shall be set at the package options level, and left untouched by default
+// - note: you should probably also set "Generate DCUs only" in Project Options
+// -> Delphi Compiler -> Output C/C++ -> C/C++ output file generation
 
 {.$define DOPATCHTRTL}
 // if defined, some low-level patches are applied to Delphi or FPC RTL
@@ -162,6 +164,7 @@
 
   {$INLINE ON}
   {$MINENUMSIZE 1}
+  {$PACKRECORDS DEFAULT} // force normal alignment
   {$PACKSET 1}
   {$PACKENUM 1}
   {$CODEPAGE UTF8} // otherwise unexpected behavior occurs in most cases
@@ -415,6 +418,8 @@
   {$define DELPHI_OR_FPC_OLDRTTI}
   {$define USE_VTYPE_STATIC} // "and VTYPE_STATIC" test before VarClear()
   {$undef FPC_X64MM} // this is a FPC-specific memory manager
+
+  {$A+} // force normal alignment
 
   {$ifdef LVCL}
     {$define OWNNORMTOUPPER} // NormToUpper[] exists only in our enhanced RTL
