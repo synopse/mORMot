@@ -1729,8 +1729,14 @@ begin
             if ansitext then begin
   retry:      VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
               CValueType := SQL_C_CHAR;
-            end else
+            end else begin
               VData := Utf8DecodeToRawUnicode(VData);
+              if (fDBMS=dMSSQL) then begin // statements like CONTAINS(field, ?) do not accept NVARCHAR(max)
+                ColumnSize := length(VData) shr 1; // length in characters
+                if (ColumnSize > 4000) then // > 8000 bytes - use varchar(max)
+                  ColumnSize := 0;
+              end;
+            end;
           ftBlob:
             StrLen_or_Ind[p] := length(VData);
           else
