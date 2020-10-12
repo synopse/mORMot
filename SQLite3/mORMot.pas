@@ -4504,6 +4504,7 @@ type
   end;
 
   TServiceFactoryServer = class;
+
   PSQLAccessRights = ^TSQLAccessRights;
 
   /// flags which may be set by the caller to notify low-level context
@@ -7620,7 +7621,7 @@ type
     // of the first associated record class (from internal QueryTables[])
     // - always returns an instance, even if the TSQLTable is nil or void
     function ToObjectList<T: TSQLRecord>: TObjectList<T>; overload;
-    {$endif}
+    {$endif ISDELPHI2010}
     /// fill an existing T*ObjArray variable with TSQLRecord instances
     // corresponding to this TSQLTable result set
     // - use the specified TSQLRecord class or create instances
@@ -12624,7 +12625,7 @@ type
   /// a dynamic array of TSQLRest instances
   TSQLRestDynArray = array of TSQLRest;
 
-  /// a dynamic array of TSQLRest instances, owniing the instances
+  /// a dynamic array of TSQLRest instances, owning the instances
   TSQLRestObjArray = array of TSQLRest;
 
   /// used to store the execution parameters for a TSQLRest instance
@@ -13901,7 +13902,7 @@ type
     function RetrieveList<T: TSQLRecord>(const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8=''): TObjectList<T>; overload;
-    {$endif ISDELPHIXE}
+    {$endif ISDELPHI2010}
 
     /// you can call this method in TThread.Execute to ensure that
     // the thread will be taken into account during process
@@ -18162,7 +18163,7 @@ type
     /// method calling the remote Server via a RESTful command
     // - calls the InternalURI abstract method, which should be overridden with a
     // local, piped or HTTP/1.1 provider
-    // - this method will add sign the url with the appropriate digital signature
+    // - this method will sign the url with the appropriate digital signature
     // according to the current SessionUser property
     // - this method will retry the connection in case of authentication failure
     // (i.e. if the session was closed by the remote server, for any reason -
@@ -18230,7 +18231,7 @@ type
     /// internal method able to emulate a call to TSynLog.Add.Log()
     // - will compute timestamp and event text, than call the overloaded
     // ServerRemoteLog() method
-    function ServerRemoteLog(Level: TSynLogInfo; FormatMsg: PUTF8Char;
+    function ServerRemoteLog(Level: TSynLogInfo; const FormatMsg: RawUTF8;
       const Args: array of const): boolean; overload;
     /// start to send all logs to the server 'RemoteLog' method-based service
     // - will associate the EchoCustom callback of the running log class to the
@@ -18270,7 +18271,8 @@ type
     // !end;
     // - you may use the dedicated TransactionBeginRetry() method in case of
     // potential Client concurrent access
-    function TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal=1): boolean; override;
+    function TransactionBegin(aTable: TSQLRecordClass;
+      SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED): boolean; override;
     /// begin a transaction
     // - implements REST BEGIN collection
     // - in aClient-Server environment with multiple Clients connected at the
@@ -18501,7 +18503,7 @@ type
     // - is defines as a class procedure, since the underlying TSQLRestClientURI
     // instance has no impact here: a single WM_* handler is enough for
     // several TSQLRestClientURI instances
-    class procedure ServiceNotificationMethodExecute(var Msg : TMessage);
+    class procedure ServiceNotificationMethodExecute(var Msg: TMessage);
     {$endif MSWINDOWS}
   published
     /// low-level error code, as returned by server
@@ -35922,7 +35924,7 @@ begin
   end;
 end;
 
-{$endif}
+{$endif ISDELPHI2010}
 
 
 { TSQLRestCacheEntry }
@@ -36783,7 +36785,7 @@ begin
   fServiceNotificationMethodViaMessages.Msg := Msg;
 end;
 
-class procedure TSQLRestClientURI.ServiceNotificationMethodExecute(var Msg : TMessage);
+class procedure TSQLRestClientURI.ServiceNotificationMethodExecute(var Msg: TMessage);
 var exec: TSQLRestClientURIServiceNotification;
 begin
   exec := pointer(Msg.LParam);
@@ -37000,7 +37002,7 @@ end;
 {$endif LVCL}
 
 function TSQLRestClientURI.ServerRemoteLog(Level: TSynLogInfo;
-  FormatMsg: PUTF8Char; const Args: array of const): boolean;
+  const FormatMsg: RawUTF8; const Args: array of const): boolean;
 begin
   result := ServerRemoteLog(nil,Level,
     FormatUTF8('%00%    %',[NowToString(false),LOG_LEVEL_TEXT[Level],
@@ -37040,8 +37042,8 @@ begin
   fRemoteLogClass := nil;
 end;
 
-function TSQLRestClientURI.UpdateFromServer(const Data: array of TObject; out Refreshed: boolean;
-  PCurrentRow: PInteger): boolean;
+function TSQLRestClientURI.UpdateFromServer(const Data: array of TObject;
+  out Refreshed: boolean; PCurrentRow: PInteger): boolean;
 // notes about refresh mechanism:
 // - if server doesn't implement InternalState, its value is 0 -> always refresh
 // - if any TSQLTableJSON or TSQLRecord belongs to a TSQLRestStorage,
@@ -37221,7 +37223,7 @@ begin
   fSafe := TAutoLockerDebug.Create(fLogClass,aModel.Root); // more verbose
   {$else}
   fSafe := TAutoLocker.Create;
-  {$endif}
+  {$endif USELOCKERDEBUG}
 end;
 
 destructor TSQLRestClientURI.Destroy;
@@ -50243,7 +50245,7 @@ end;
 function TSQLRecordProperties.CreateJSONWriter(JSON: TStream; Expand,
   withID: boolean; const aFields: TSQLFieldIndexDynArray; KnownRowsCount,aBufSize: integer): TJSONSerializer;
 begin
-  if (self=nil) or ((Fields=nil) and not withID) then  // no data
+  if (self=nil) or ((Fields.Count=0) and not withID) then  // no data
     result := nil else begin
     result := TJSONSerializer.Create(JSON,Expand,withID,aFields,aBufSize);
     SetJSONWriterColumnNames(result,KnownRowsCount);
@@ -55358,6 +55360,7 @@ begin
       batch := fBackgroundBatch[b];
       if batch.Count=0 then
         continue;
+      data := '';
       batch.Safe.Lock;
       try
         table := batch.Table;

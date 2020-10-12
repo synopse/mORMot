@@ -7021,7 +7021,7 @@ begin
         PWord(@line[len])^ := 13+10 shl 8; // CR + LF
         SockSend(@line,len+2);
       end else
-        SockSend(s);
+        SockSend(s); // SockSend() internal buffer is used as temporary buffer
   until false;
   Headers := copy(fSndBuf, 1, fSndBufLen);
   fSndBufLen := 0;
