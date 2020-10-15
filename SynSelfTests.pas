@@ -1359,8 +1359,8 @@ uses
 {$else}
   Graphics,
 {$endif}
-{$endif}
-{$endif}
+{$endif FPC}
+{$endif MSWINDOWS}
   SynCrypto,
   SynZip,
   SynLZO,
@@ -11665,7 +11665,7 @@ begin
     Free;
   end;
 end;
-{$ifdef MSWINDOWS}
+{$ifdef MSWINDOWS} // PasZip.TZipRead uses memory mapped API
 procedure TestPasZipRead(const FN: TFileName; Count: integer);
 var pasZR: PasZip.TZipRead;
 begin
@@ -11679,7 +11679,7 @@ begin
   end;
 end;
 var pasZW: PasZip.TZipWrite;
-{$endif}
+{$endif MSWINDOWS}
 var i: integer;
 begin
   ExeName := ExtractFileName(ExeVersion.ProgramFileName);
