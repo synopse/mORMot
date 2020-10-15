@@ -39205,7 +39205,7 @@ end;
 
 function TSQLRestServer.AuthenticationRegister(
   aMethod: TSQLRestServerAuthenticationClass): TSQLRestServerAuthentication;
-var i: integer;
+var i: PtrInt;
 begin
   result := nil;
   if self=nil then
@@ -39235,14 +39235,14 @@ end;
 
 procedure TSQLRestServer.AuthenticationRegister(
   const aMethods: array of TSQLRestServerAuthenticationClass);
-var i: integer;
+var i: PtrInt;
 begin
   for i := 0 to high(aMethods) do
     AuthenticationRegister(aMethods[i]);
 end;
 
 procedure TSQLRestServer.AuthenticationUnregister(aMethod: TSQLRestServerAuthenticationClass);
-var i: integer;
+var i: PtrInt;
 begin
   if (self=nil) or (fSessionAuthentication=nil) then
     exit;
@@ -39261,7 +39261,7 @@ end;
 
 procedure TSQLRestServer.AuthenticationUnregister(
   const aMethods: array of TSQLRestServerAuthenticationClass);
-var i: integer;
+var i: PtrInt;
 begin
   for i := 0 to high(aMethods) do
     AuthenticationUnregister(aMethods[i]);
