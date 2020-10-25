@@ -14162,7 +14162,8 @@ type
     /// access or initialize the internal IoC resolver, used for interface-based
     // remote services, and more generaly any Services.Resolve() call
     // - create and initialize the internal TServiceContainer if no service
-    // interface has been registered yet    // - may be used to inject some dependencies, which are not interface-based
+    // interface has been registered yet
+    // - may be used to inject some dependencies, which are not interface-based
     // remote services, but internal IoC, without the ServiceRegister()
     // or ServiceDefine() methods - e.g.
     // ! aRest.ServiceContainer.InjectResolver([TInfraRepoUserFactory.Create(aRest)],true);
@@ -16455,7 +16456,7 @@ type
     // - return nil on any error, or an EModelException if the class is not in
     // the database model
     function StaticDataCreate(aClass: TSQLRecordClass;
-      const aFileName: TFileName = ''; aBinaryFile: boolean=false;
+      const aFileName: TFileName=''; aBinaryFile: boolean=false;
       aServerClass: TSQLRestStorageInMemoryClass=nil): TSQLRestStorage;
     /// register an external static storage for a given table
     // - will be added to StaticDataServer[] internal list
@@ -19580,7 +19581,7 @@ procedure SetWeakZero(aObject: TObject; aObjectInterfaceField: PIInterface;
 {$ifdef ISDELPHIXE} // class helper requires Delphi 2006 or newer but are buggy before XE :(
 type
   /// TWeakZeroInterfaceHelper is a class helper that allows you to use
-  // SetWeakZero() in any class without specifying the Self parameter
+  // SetWeakZero() in any class without specifying the self parameter
   TWeakZeroInterfaceHelper = class helper for TObject
   protected
     /// Use SetWeak0 to assign an interface to a weak interface field
@@ -28898,7 +28899,7 @@ begin
   kD := DestInfo^.PropType^.Kind;
   case kS of
     {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkInteger, tkSet, tkChar, tkWChar:
-int:  if DestInfo=@Self then
+int:  if DestInfo=@self then
         SetOrdProp(Dest,GetOrdProp(Source)) else
 dst:  if kD in tkOrdinalTypes then // use Int64 to handle e.g. cardinal
         DestInfo^.SetInt64Value(Dest,GetInt64Value(Source));
@@ -30684,7 +30685,7 @@ begin
         f := D.Fields.IndexByName(SP.Name);
       if f>=0 then begin
         SP.GetValueVar(aRecord,False,tmp,@wasString);
-        D.Fields.List[f].SetValueVar(Self,tmp,wasString);
+        D.Fields.List[f].SetValueVar(self,tmp,wasString);
       end;
     end;
 end;
@@ -31036,7 +31037,7 @@ begin
         W.AddString(W.ColNames[n]); // '"'+ColNames[]+'":'
         inc(n);
       end;
-      Props.List[W.Fields[i]].GetJSONValues(Self,W);
+      Props.List[W.Fields[i]].GetJSONValues(self,W);
       W.Add(',');
     end;
   end;
@@ -31049,7 +31050,7 @@ procedure TSQLRecord.AppendAsJsonObject(W: TJSONSerializer; Fields: TSQLFieldBit
 var i: integer;
     Props: TSQLPropInfoList;
 begin
-  if Self=nil then begin
+  if self=nil then begin
     W.AddShort('null');
     exit;
   end;
@@ -31063,7 +31064,7 @@ begin
       W.Add(',','"');
       W.AddNoJSONEscape(pointer(Props.List[i].Name),length(Props.List[i].Name));
       W.Add('"',':');
-      Props.List[i].GetJSONValues(Self,W);
+      Props.List[i].GetJSONValues(self,W);
     end;
   W.Add('}');
 end;
@@ -31352,7 +31353,7 @@ var i: integer;
 begin
   result := false;
   if (self=nil) or (Reference=nil) or
-     (PSQLRecordClass(Reference)^<>PSQLRecordClass(Self)^) or (Reference.fID<>fID) then
+     (PSQLRecordClass(Reference)^<>PSQLRecordClass(self)^) or (Reference.fID<>fID) then
     exit;
   with RecordProps do
     for i := 0 to length(SimpleFields)-1 do
@@ -31410,7 +31411,7 @@ begin
       for i := 0 to length(CopiableFields)-1 do
         if CopiableFields[i].SQLFieldType<>sftID then
           CopiableFields[i].SetValue(self,nil,false) else
-          TSQLRecord(TSQLPropInfoRTTIInstance(CopiableFields[i]).GetInstance(Self)).
+          TSQLRecord(TSQLPropInfoRTTIInstance(CopiableFields[i]).GetInstance(self)).
             ClearProperties; // clear nested allocated TSQLRecord
     end else
     for i := 0 to length(CopiableFields)-1 do
@@ -31439,7 +31440,7 @@ function TSQLRecord.RecordClass: TSQLRecordClass;
 begin
   if self=nil then
     Result := nil else
-    Result := PSQLRecordClass(Self)^;
+    Result := PSQLRecordClass(self)^;
 end;
 {$else}
 function TSQLRecord.RecordClass: TSQLRecordClass;
@@ -31481,7 +31482,7 @@ function TSQLRecord.RecordReference(Model: TSQLModel): TRecordReference;
 begin
   if (self=nil) or (fID<=0) then
     result := 0 else begin
-    result := Model.GetTableIndexExisting(PSQLRecordClass(Self)^);
+    result := Model.GetTableIndexExisting(PSQLRecordClass(self)^);
     if result>63 then // TRecordReference handle up to 64=1 shl 6 tables
       result := 0 else
       inc(result,fID shl 6);
@@ -31594,7 +31595,7 @@ var i,n: integer;
     SQL: RawUTF8;
 begin
   Create;
-  props := aClient.Model.Props[PSQLRecordClass(Self)^];
+  props := aClient.Model.Props[PSQLRecordClass(self)^];
   if props.props.JoinedFields=nil then
     raise EORMException.CreateUTF8('No nested TSQLRecord to JOIN in %',[self]);
   SQL := props.SQL.SelectAllJoined;
@@ -31609,7 +31610,7 @@ begin
   fFill.fTable.OwnerMustFree := true;
   n := 0;
   with props.props do begin // follow SQL.SelectAllJoined columns
-    fFill.AddMapSimpleFields(Self,SimpleFields,n);
+    fFill.AddMapSimpleFields(self,SimpleFields,n);
     for i := 1 to length(JoinedFieldsTable)-1 do begin
       instance := JoinedFieldsTable[i].Create;
       JoinedFields[i-1].SetInstance(self,instance);
@@ -31921,14 +31922,14 @@ end;
 
 function TSQLRecord.GetHasBlob: boolean;
 begin
-  if Self=nil then
+  if self=nil then
     result := false else
     result := RecordProps.BlobFields<>nil;
 end;
 
 function TSQLRecord.GetSimpleFieldCount: integer;
 begin
-  if Self=nil then
+  if self=nil then
     result := 0 else
     result := length(RecordProps.SimpleFields);
 end;
@@ -32084,8 +32085,8 @@ end;
 {$ifdef FPC_OR_PUREPASCAL}
 class function TSQLRecord.RecordProps: TSQLRecordProperties;
 begin
-  if Self<>nil then begin
-    result := PPointer(PtrInt(PtrUInt(Self))+vmtAutoTable)^;
+  if self<>nil then begin
+    result := PPointer(PtrInt(PtrUInt(self))+vmtAutoTable)^;
     if result=nil then
       result := PropsCreate(self);
   end else
@@ -32336,7 +32337,7 @@ begin
         for F := 0 to Fields.Count-1 do begin
           p := Fields.List[F];
           if p.SQLFieldType in types then
-            TSQLPropInfoRTTIInt64(p).fPropInfo.SetInt64Prop(Self,i64);
+            TSQLPropInfoRTTIInt64(p).fPropInfo.SetInt64Prop(self,i64);
         end;
       end;
       if sftSessionUserID in HasTypeFields then begin
@@ -32345,7 +32346,7 @@ begin
           for F := 0 to Fields.Count-1 do begin
             p := Fields.List[F];
             if p.SQLFieldType=sftSessionUserID then
-              TSQLPropInfoRTTIInt64(p).fPropInfo.SetInt64Prop(Self,i64);
+              TSQLPropInfoRTTIInt64(p).fPropInfo.SetInt64Prop(self,i64);
           end;
       end;
     end;
@@ -32826,7 +32827,7 @@ begin
     Kind := rCustomAutoID else
     Kind := rSQLite3;
   Props := TSQLModelRecordProperties.Create(self,Table,Kind);
-  Props.Props.InternalRegisterModel(Self,aIndex,Props);
+  Props.Props.InternalRegisterModel(self,aIndex,Props);
   for t := low(t) to high(t) do
     if fCustomCollationForAll[t]<>'' then
       Props.Props.SetCustomCollationForAll(t,fCustomCollationForAll[t]);
@@ -33497,14 +33498,14 @@ end;
 
 function TSQLModel.ActionName(const Action): string;
 begin
-  if (Self=nil) or (fActions=nil) then
+  if (self=nil) or (fActions=nil) then
     result := '' else
     result := TSQLRecord.CaptionNameFromRTTI(fActions^.GetEnumName(byte(Action)));
 end;
 
 function TSQLModel.EventName(const Event): string;
 begin
-  if (Self=nil) or (fEvents=nil) then
+  if (self=nil) or (fEvents=nil) then
     result := '' else
     result := TSQLRecord.CaptionNameFromRTTI(fEvents^.GetEnumName(byte(Event)));
 end;
@@ -34814,7 +34815,7 @@ var Rec: TSQLRecord;
 begin
   if (self=nil) or (Table=nil) or (W=nil) then
     exit;
-  Rec := Table.CreateAndFillPrepare(Self,FormatSQLWhere,BoundsSQLWhere,CustomFieldsCSV);
+  Rec := Table.CreateAndFillPrepare(self,FormatSQLWhere,BoundsSQLWhere,CustomFieldsCSV);
   try
     Rec.AppendFillAsJsonArray(OutputFieldName,W,Rec.fFill.TableMapFields);
   finally
@@ -35629,7 +35630,7 @@ var BlobData: TSQLRawBlob;
     TableIndex, i: integer;
 begin
   result := false;
-  if (Self=nil) or (Value=nil) or (Value.fID<=0) then
+  if (self=nil) or (Value=nil) or (Value.fID<=0) then
     exit;
   with Value.RecordProps do
   if BlobFields<>nil then begin
@@ -36730,7 +36731,7 @@ end;
 
 function TSQLRestClientURI.ServerInternalState: cardinal;
 begin
-  if (Self=nil) or (Model=nil) then // avoid GPF
+  if (self=nil) or (Model=nil) then // avoid GPF
     result := cardinal(-1) else
     result := URI(Model.Root,'STATE').Hi;
 end;
@@ -36738,7 +36739,7 @@ end;
 function TSQLRestClientURI.ServerCacheFlush(aTable: TSQLRecordClass; aID: TID): boolean;
 var aResp: RawUTF8;
 begin
-  if (Self=nil) or (Model=nil) then // avoid GPF
+  if (self=nil) or (Model=nil) then // avoid GPF
     result := false else
     result := CallBackGet('CacheFlush',[],aResp,aTable,aID) in [HTTP_SUCCESS,HTTP_NOCONTENT];
 end;
@@ -37478,7 +37479,7 @@ var retry: Integer;
   begin
     Call.Url := url; // reset to allow proper re-sign
     if fSessionAuthentication<>nil then
-      fSessionAuthentication.ClientSessionSign(Self,Call);
+      fSessionAuthentication.ClientSessionSign(self,Call);
     Call.Method := method;
     if SendData<>nil then
       Call.InBody := SendData^;
@@ -37488,7 +37489,7 @@ var retry: Integer;
     if Assigned(fOnIdle) then begin
       if fBackgroundThread=nil then
         fBackgroundThread := TSynBackgroundThreadEvent.Create(OnBackgroundProcess,
-          OnIdle,FormatUTF8('% % background',[Self,Model.Root]));
+          OnIdle,FormatUTF8('% % background',[self,Model.Root]));
       if not fBackgroundThread.RunAndWait(@Call) then
         Call.OutStatus := HTTP_UNAVAILABLE;
     end else
@@ -37506,7 +37507,7 @@ var retry: Integer;
   end;
 
 begin
-  if Self=nil then begin
+  if self=nil then begin
     Int64(result) := HTTP_UNAVAILABLE;
     SetLastException(nil,HTTP_UNAVAILABLE);
     exit;
@@ -37555,7 +37556,7 @@ begin
       InternalLog('% % returned % (%) with message  %',
         [method,url,Call.OutStatus,StatusMsg,fLastErrorMessage],sllError);
       if Assigned(fOnFailed) then
-        fOnFailed(Self,nil,@Call);
+        fOnFailed(self,nil,@Call);
     end;
   except
     on E: Exception do begin
@@ -38301,16 +38302,16 @@ begin
   end;
 end;
 
-procedure TSQLRestServer.CreateMissingTables(user_version: cardinal=0;
-  Options: TSQLInitializeTableOptions=[]);
+procedure TSQLRestServer.CreateMissingTables(user_version: cardinal;
+  Options: TSQLInitializeTableOptions);
 begin
   fCreateMissingTablesOptions := Options;
 end;
 
 procedure TSQLRestServer.InitializeTables(Options: TSQLInitializeTableOptions);
-var t: integer;
+var t: PtrInt;
 begin
-  if (Self<>nil) and (Model<>nil) then
+  if (self<>nil) and (Model<>nil) then
     for t := 0 to Model.TablesMax do
       if not TableHasRows(Model.Tables[t]) then
         Model.Tables[t].InitializeTable(self,'',Options);
@@ -38323,7 +38324,7 @@ begin
 end;
 
 destructor TSQLRestServer.Destroy;
-var i: integer;
+var i: PtrInt;
 begin
   Shutdown;
   if GlobalURIRequestServer=self then begin
@@ -38336,7 +38337,7 @@ begin
   CloseServerMessage;
   {$endif}
   AsynchBatchStop(nil); // may use fStaticData[]
-  FreeAndNil(fBackgroundTimer);
+  FreeAndNil(fBackgroundTimer); // do it ASAP
   fRecordVersionSlaveCallbacks := nil; // should be done before fServices.Free
   for i := 0 to high(fStaticVirtualTable) do
   if fStaticVirtualTable[i]<>nil then begin
@@ -39182,7 +39183,7 @@ end;
 
 function TSQLRestServer.CreateSQLIndex(Table: TSQLRecordClass;
   const FieldNames: array of RawUTF8; Unique: boolean): boolean;
-var i: integer;
+var i: PtrInt;
 begin
   result := true;
   for i := 0 to high(FieldNames) do
@@ -39281,7 +39282,7 @@ begin
 end;
 
 function TSQLRestServer.ServiceMethodByPassAuthentication(const aMethodName: RawUTF8): integer;
-var i: integer;
+var i: PtrInt;
 begin
   result := -1;
   if self=nil then
@@ -42311,7 +42312,7 @@ class procedure TSQLRecordHistory.InitializeTable(Server: TSQLRestServer;
 begin
   inherited InitializeTable(Server,FieldName,Options);
   if FieldName='' then
-    Server.CreateSQLMultiIndex(Self,['ModifiedRecord','Event'],false);
+    Server.CreateSQLMultiIndex(self,['ModifiedRecord','Event'],false);
 end;
 
 destructor TSQLRecordHistory.Destroy;
@@ -42863,7 +42864,7 @@ begin
     if (Model.TableProps[TableModelIndex].Props.RecordVersionField=nil) or
        not result then
       exit;
-    Batch := TSQLRestBatch.Create(Self,Model.Tables[TableModelIndex],1000);
+    Batch := TSQLRestBatch.Create(self,Model.Tables[TableModelIndex],1000);
     try
       for i := 0 to high(IDs) do
         InternalRecordVersionDelete(TableModelIndex,IDs[i],Batch);
@@ -42951,7 +42952,7 @@ var EndOfObject: AnsiChar;
     for i := 0 to high(RunTableTransactions) do
       if RunTableTransactions[i]<>nil then begin
         RunTableTransactions[i].Commit(CONST_AUTHENTICATION_NOT_USED,true);
-        if RunTableTransactions[i]=Self then
+        if RunTableTransactions[i]=self then
           RunMainTransaction := false;
         RunTableTransactions[i] := nil; // to acquire and begin a new transaction
       end;
@@ -44781,7 +44782,7 @@ function TSQLRestStorageInMemory.FindWhereEqual(const WhereFieldName, WhereValue
 var WhereFieldIndex: integer;
 begin
   result := 0;
-  if (Self=nil) or not Assigned(OnFind) then
+  if (self=nil) or not Assigned(OnFind) then
     exit;
   if IsRowID(pointer(WhereFieldName)) then
     WhereFieldIndex := 0 else begin
@@ -46758,7 +46759,7 @@ begin
   for t := 0 to fStaticDataCount-1 do
     with TSQLRestStorageInMemory(fStaticData[t]) do
     if Count=0 then // emulates TSQLRestServerDB.CreateMissingTables
-      StoredClass.InitializeTable(Self,'',Options);
+      StoredClass.InitializeTable(self,'',Options);
 end;
 
 destructor TSQLRestServerFullMemory.Destroy;
@@ -49385,8 +49386,8 @@ begin
   inherited Create;
   with RecordProps do
     if (fRecordManySourceProp<>nil) and (fRecordManyDestProp<>nil) then begin
-      fSourceID := fRecordManySourceProp.GetFieldAddr(Self);
-      fDestID := fRecordManyDestProp.GetFieldAddr(Self);
+      fSourceID := fRecordManySourceProp.GetFieldAddr(self);
+      fDestID := fRecordManyDestProp.GetFieldAddr(self);
     end;
 end;
 
@@ -49470,7 +49471,7 @@ begin
 end;
 begin
   result := nil;
-  if (Self=nil) or (fSourceID=nil) or (fDestID=nil) or (aClient=nil) then
+  if (self=nil) or (fSourceID=nil) or (fDestID=nil) or (aClient=nil) then
     exit;
   if aSourceID=0 then
     if fSourceID<>nil then
@@ -49505,7 +49506,7 @@ begin
       SQL := 'SELECT % FROM %,% WHERE %.Source=:(%): AND %.Dest=%.RowID AND %' else
       // statement is not globaly inlined -> no caching of prepared statement
       SQL := 'SELECT % FROM %,% WHERE %.Source=% AND %.Dest=%.RowID AND %';
-  result := aClient.ExecuteList([PSQLRecordClass(Self)^,
+  result := aClient.ExecuteList([PSQLRecordClass(self)^,
       TSQLRecordClass(SelfProps.Props.fRecordManyDestProp.ObjectClass)],
     FormatUTF8(SQL,
       [Select, DestProps.Props.SQLTableName,SelfProps.Props.SQLTableName,
@@ -49548,7 +49549,7 @@ begin
   if (self=nil) or (aClient=nil) or (aSourceID=0) or (aDestID=0) then
     result := false else // invalid parameters
     result := aClient.Retrieve(FormatUTF8('Source=:(%): AND Dest=:(%):',
-      [aSourceID,aDestID]),Self);
+      [aSourceID,aDestID]),self);
 end;
 
 function TSQLRecordMany.ManySelect(aClient: TSQLRest; aDestID: TID): boolean;
@@ -51245,7 +51246,7 @@ end;
 
 function TSQLVirtualTable.Prepare(var Prepared: TSQLVirtualTablePrepared): boolean;
 begin
-  result := Self<>nil;
+  result := self<>nil;
   if result then
     if (vtWhereIDPrepared in fModule.Features) and
        Prepared.IsWhereIDEquals(true) then
@@ -51315,7 +51316,7 @@ end;
 function TSQLVirtualTable.Structure: RawUTF8;
 begin
   result := '';
-  if Self<>nil then
+  if self<>nil then
     if (Static<>nil) then
       // e.g. for TSQLVirtualTableJSON or TSQLVirtualTableExternal
       Result := StructureFromClass(StaticTable,TableName) else
@@ -53288,7 +53289,7 @@ const
   // always aligned to 8 bytes boundaries for 64-bit
   ARGS_IN_STACK_SIZE: array[TServiceMethodValueType] of Cardinal = (
      0,  PTRSIZ,PTRSIZ, PTRSIZ,PTRSIZ,PTRSIZ, PTRSIZ,    8,     8,      8,
- // None, Self, Boolean, Enum, Set,  Integer, Cardinal, Int64, Double, DateTime,
+ // None, self, Boolean, Enum, Set,  Integer, Cardinal, Int64, Double, DateTime,
      8,       PTRSIZ,  PTRSIZ, PTRSIZ,        PTRSIZ,     0,      PTRSIZ,
  // Currency, RawUTF8, String, RawByteString, WideString, Binary, Record,
     {$ifndef NOVARIANTS}PTRSIZ,{$endif} // Variant
@@ -54756,7 +54757,7 @@ begin
   {$endif KYLIX3}
   if fStub=MAP_FAILED then
   {$endif MSWINDOWS}
-    raise EServiceException.CreateUTF8('%.Create: OS memory allocation failed',[Self]);
+    raise EServiceException.CreateUTF8('%.Create: OS memory allocation failed',[self]);
 end;
 
 destructor TFakeStubBuffer.Destroy;
@@ -57297,7 +57298,7 @@ end;
 
 function TServiceFactory.GetInterfaceTypeInfo: PTypeInfo;
 begin
-  if (Self<>nil) and (fInterface<>nil) then
+  if (self<>nil) and (fInterface<>nil) then
     result := fInterface.fInterfaceTypeInfo else
     result := nil;
 end;
@@ -60395,7 +60396,7 @@ begin
         end;
       end;
       // prepare the low-level call context for the asm stub
-      //Pass the Self (also named $this)
+      //Pass the self (also named $this)
       call.ParamRegs[PARAMREG_FIRST] := PtrInt(Instances[i]);
       call.method := PPtrIntArray(PPointer(Instances[i])^)^[ExecutionMethodIndex];
       if ArgsResultIndex>=0 then
@@ -60691,7 +60692,7 @@ class procedure TSQLRecordServiceLog.InitializeTable(
 begin
   inherited;
   if FieldName='' then
-    Server.CreateSQLMultiIndex(Self,['Method','MicroSec'],false);
+    Server.CreateSQLMultiIndex(self,['Method','MicroSec'],false);
 end;
 
 
@@ -60703,7 +60704,7 @@ class procedure TSQLRecordServiceNotifications.InitializeTable(
 begin
   inherited;
   if (FieldName='') or (FieldName='Sent') then
-    Server.CreateSQLMultiIndex(Self,['Sent'],false);
+    Server.CreateSQLMultiIndex(self,['Sent'],false);
 end;
 
 class function TSQLRecordServiceNotifications.LastEventsAsObjects(Rest: TSQLRest;
@@ -61175,7 +61176,7 @@ var baseuri,uri,sent,resp,clientDrivenID,head,error,ct: RawUTF8;
   end;
 begin
   result := false;
-  if Self=nil then
+  if self=nil then
     exit;
   if fClient=nil then
     fClient := fRest as TSQLRestClientURI;
@@ -61356,7 +61357,7 @@ function TServiceFactoryClient.Get(out Obj): Boolean;
 var O: TInterfacedObjectFake;
 begin
   result := false;
-  if Self=nil then
+  if self=nil then
     exit;
   case fInstanceCreation of
   sicShared, sicPerSession, sicPerUser, sicPerGroup, sicPerThread:
