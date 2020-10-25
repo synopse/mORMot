@@ -14198,42 +14198,42 @@ function TAESPRNG.Random32: cardinal;
 var block: THash128Rec;
 begin
   FillRandom(block.b);
-  result := block.c0 xor block.c1 xor block.c2 xor block.c3;
+  result := block.c0; // no need to XOR with c1, c2, c3 with a permutation algo
 end;
 
 function TAESPRNG.Random32(max: cardinal): cardinal;
 var block: THash128Rec;
 begin
   FillRandom(block.b);
-  result := (Qword(block.c0 xor block.c1 xor block.c2 xor block.c3)*max) shr 32;
+  result := (Qword(block.c0)*max) shr 32; // no need to XOR with c1, c2, c3
 end;
 
 function TAESPRNG.Random64: QWord;
 var block: THash128Rec;
 begin
   FillRandom(block.b);
-  result := block.L xor block.H;
+  result := block.L; // no need to XOR with H
 end;
 
 function Hash128ToExt({$ifdef FPC}constref{$else}const{$endif} r: THash128): TSynExtended;
 const
   COEFF64: TSynExtended = (1.0/$80000000)/$100000000;  // 2^-63
 begin
-  result := ((THash128Rec(r).Lo xor THash128Rec(r).Hi) and $7fffffffffffffff)*COEFF64;
+  result := (THash128Rec(r).Lo and $7fffffffffffffff)*COEFF64;
 end;
 
 function Hash128ToDouble({$ifdef FPC}constref{$else}const{$endif} r: THash128): double;
 const
   COEFF64: double = (1.0/$80000000)/$100000000;  // 2^-63
 begin
-  result := ((THash128Rec(r).Lo xor THash128Rec(r).Hi) and $7fffffffffffffff)*COEFF64;
+  result := (THash128Rec(r).Lo and $7fffffffffffffff)*COEFF64;
 end;
 
 function Hash128ToSingle({$ifdef FPC}constref{$else}const{$endif} r: THash128): double;
 const
   COEFF64: single = (1.0/$80000000)/$100000000;  // 2^-63
 begin
-  result := ((THash128Rec(r).Lo xor THash128Rec(r).Hi) and $7fffffffffffffff)*COEFF64;
+  result := (THash128Rec(r).Lo and $7fffffffffffffff)*COEFF64;
 end;
 
 function TAESPRNG.RandomExt: TSynExtended;
