@@ -356,6 +356,7 @@ type
     FMaxRecursionDepth: Cardinal;
     FEnginePool: TSynObjectListLocked;
     FMainEngine: TSMEngine;
+    FDebugMainThread: boolean;
     FRemoteDebuggerThread: TThread;
     FContentVersion: Cardinal;
     FOnNewEngine: TEngineEvent;
@@ -443,7 +444,7 @@ type
     // '1.2.3.4:1234'
     // - debugger create a dedicated thread where it listen to a requests
     // from a remote debug UI
-    procedure startDebugger(const port: SockString = '6000');
+    procedure startDebugger(const port: SockString = '6000'; forMainThread: boolean = false);
     procedure stopDebugger;
     /// Write text as console log to current thread Engine's debugger (if exists)
     procedure debuggerLog(const Text: RawUTF8);
@@ -1171,6 +1172,10 @@ function TSMEngineManager.EngineForThread(ThreadID: TThreadID): TSMEngine;
 var
   i: integer;
 begin
+  if (ThreadID = MainThreadID) and (FMainEngine <> nil) then begin
+    Result := FMainEngine;
+    exit;
+  end;
   FEnginePool.Safe.Lock;
   try
     i := ThreadEngineIndex(ThreadID);
@@ -1343,7 +1348,7 @@ begin
   end;
 
   //if not WorkersManager.curThreadIsWorker then begin
-    if FRemoteDebuggerThread <> nil then
+    if (FRemoteDebuggerThread <> nil) and not FDebugMainThread then
       TSMRemoteDebuggerThread(FRemoteDebuggerThread).startDebugCurrentThread(result);
     if WorkersManager.curThreadIsWorker then
       Result.doInteruptInOwnThread := WorkersManager.DoInteruptInOwnThreadhandlerForCurThread;
@@ -1366,6 +1371,10 @@ begin
       FMainEngine.fWebAppRootDir := OnGetWebAppRootPath(FMainEngine)
     else
       FMainEngine.fWebAppRootDir := StringToUTF8(ExeVersion.ProgramFilePath);
+
+    if (FRemoteDebuggerThread <> nil) and FDebugMainThread then
+      TSMRemoteDebuggerThread(FRemoteDebuggerThread).startDebugCurrentThread(FMainEngine);
+
     DoOnNewEngine(FMainEngine);
   end;
   Result := FMainEngine;
@@ -1434,8 +1443,9 @@ begin
   end
 end;
 
-procedure TSMEngineManager.startDebugger(const port: SockString = '6000');
+procedure TSMEngineManager.startDebugger(const port: SockString; forMainThread: boolean);
 begin
+  FDebugMainThread := forMainThread;
   FRemoteDebuggerThread := TSMRemoteDebuggerThread.Create(self, port);
   inc(FContentVersion);
 end;
