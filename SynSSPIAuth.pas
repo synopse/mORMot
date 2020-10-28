@@ -224,7 +224,7 @@ var UserPos: Integer;
     AuthIdentity: TSecWinntAuthIdentityW;
     TargetName: PWideChar;
 begin
-  UserPos := PosEx('\', aUserName);
+  UserPos := PosExChar('\', aUserName);
   if UserPos=0 then begin
     Domain := '';
     User := UTF8ToSynUnicode(aUserName);

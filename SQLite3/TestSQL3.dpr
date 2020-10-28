@@ -157,9 +157,13 @@ uses
       {$endif FPC}
       SynDB in '..\SynDB.pas',
       SynDBSQLite3 in '..\SynDBSQLite3.pas',
-      SynDBOracle in '..\SynDBOracle.pas',
+      SynDBOracle in '..\SynDBOracle.pas', 
+      SynDBPostgres in '..\SynDBPostgres.pas',
       SynOleDB in '..\SynOleDB.pas',
       SynDBODBC in '..\SynDBODBC.pas',
+      // SynDBFirebird in '..\SynDBFirebird.pas',
+      // SynDBDataSet in '..\SynDBDataSet.pas',
+      // SynDBFireDAC in '..\SynDBDataSet\SynDBFireDAC.pas',
       {$ifdef USEZEOS}
         SynDBZeos in '..\SynDBZeos.pas',
       {$endif}
@@ -180,6 +184,8 @@ uses
   {$R ..\vista.RES} // includes Win10 manifest - use .RES for linux cross-compilation
 {$endif}
 
+
+
 begin
   {$ifdef ISDELPHI2007ANDUP}
   {$ifdef DEBUG}
@@ -193,4 +199,7 @@ begin
     ['..\CrossPlatform\templates','..\..\CrossPlatform\templates'],
      '\..\..\SQlite3\TestSQL3FPCInterfaces.pas');
   {$endif}
+  {$ifdef FPC_X64MM}
+  WriteHeapStatus(#13#10'Memory Usage Report:', 16, 12, {flags=}true);
+  {$endif FPC_X64MM}
 end.

@@ -57,14 +57,17 @@ unit SynDBFirebird;
 interface
 
 uses
+  {$ifdef MSWINDOWS}
   Windows,
+  {$endif MSWINDOWS}
   SysUtils,
-{$ifndef DELPHI5OROLDER}
+  {$ifndef DELPHI5OROLDER}
   Variants,
-{$endif}
+  {$endif}
   Classes,
   Contnrs,
   SynCommons,
+  SynTable,
   SynLog,
   SynDB;
 
@@ -290,7 +293,7 @@ var F: THandle;
     end; // cf. http://www.firebirdsql.org/manual/fbint-standard-header.html
 begin
   F := FileOpen(FileName,fmOpenRead or fmShareDenyNone);
-  if F=INVALID_HANDLE_VALUE then
+  if F<=0 then
     result := false else begin
     result := (FileRead(F,Header,sizeof(Header))=SizeOf(Header)) and
       (Header.pag_type=1) and (Header.pag_checksum=12345) and
@@ -413,7 +416,6 @@ type
   /// direct access to the Firebird library
   TFirebirdLib = class(TSQLDBLib)
   protected
-    fLibName: TFileName;
     fEmbedded: boolean;
   public
     isc_attach_database: function(var user_status: TSQLDBFirebirdStatus; file_length: Smallint;
@@ -484,8 +486,6 @@ type
     /// wrapper around isc_start_multiple() function
     procedure StartTransaction(var PrivateStatus: TSQLDBFirebirdStatus;
       var Database, Transaction: pointer);
-    /// the loaded library name
-    property LibName: TFileName read fLibName;
     /// if the library is the "Firebird Embedded Server" version
     property Embedded: boolean read fEmbedded;
   end;
@@ -521,13 +521,12 @@ begin
       {$ifdef UNICODE}UTF8ToString(fProperties.ServerName){$else}ServerName{$endif}) then begin
       SQL := fProperties.SQLCreateDatabase(fProperties.ServerName,
         TSQLDBFirebirdConnectionProperties(fProperties).DefaultPageSize);
-      Log.Log(sllDB,'No DB file found -> % using %',
-        [SQL,fLibName],fProperties);
+      Log.Log(sllDB,'No DB file found -> % using %', [SQL,LibraryPath],fProperties);
       Check(isc_dsql_execute_immediate(fStatus,fDatabase,nil,0,pointer(SQL)),fStatus);
       exit;
     end;
     Log.Log(sllDB,'Connect to "%" as "%" using %',
-      [fProperties.ServerName,fProperties.UserID,fLibName],fProperties);
+      [fProperties.ServerName,fProperties.UserID,LibraryPath],fProperties);
     BufClear;
     BufAddStr(ord(dpb_user_name),fProperties.UserID);
     BufAddStr(ord(dpb_password),fProperties.PassWord);
@@ -864,12 +863,11 @@ end;
 procedure TSQLDBFirebirdStatement.Reset;
 begin
   ReleaseMainStatementIfAny; // global transaction context may have changed
-  inherited Reset;
-  with TFirebirdLib(TSQLDBFirebirdConnection(fConnection).fFirebirdInstance) do begin
+  with TFirebirdLib(TSQLDBFirebirdConnection(fConnection).fFirebirdInstance) do
     if fExpectResults and (fCurrent<>nil) then
         // release opened cursor for queries
         Check(isc_dsql_free_statement(fStatus,fCurrent.Statement,DSQL_close),fStatus);
-  end;
+  inherited Reset;
 end;
 
 
@@ -909,66 +907,50 @@ end;
 constructor TFirebirdLib.Create(aEmbedded: boolean);
 var P: PPointer;
     i: integer;
-{$ifdef MSWINDOWS}
+    {$ifdef MSWINDOWS}
     Key: HKEY;
     Size: Cardinal;
     HR: Integer;
-    CurrentDir: TFileName;
-{$endif}
+    {$endif}
+    l1, l2: TFileName;
 begin
+  fEmbedded := aEmbedded;
   if aEmbedded then begin
-    fLibName := ExeVersion.ProgramFilePath;
-    if FileExists(LibName+FBLIBNAME[true]) then
-      fLibName := LibName+FBLIBNAME[true] else
-      fLibName := LibName+'Firebird\'+FBLIBNAME[true];
-    if FileExists(fLibName) then begin
-      {$ifdef MSWINDOWS}
-      CurrentDir := GetCurrentDir;
-      SetCurrentDir(ExtractFilePath(fLibName));
-      {$endif}
-      fHandle := SafeLoadLibrary(LibName);
-      {$ifdef MSWINDOWS}
-      SetCurrentDir(CurrentDir);
-      {$endif}
-      if fHandle<>0 then
-        fEmbedded := true;
-    end;
+    l1 := ExeVersion.ProgramFilePath;
+    if FileExists(l1+FBLIBNAME[true]) then
+      l1 := l1+FBLIBNAME[true] else
+      l1 := l1+'Firebird\'+FBLIBNAME[true];
   end else begin
-    fLibName := FBLIBNAME[false];
-    fHandle := SafeLoadLibrary(fLibName);
-    {$ifdef MSWINDOWS}
-    if fHandle=0 then begin // not found in path -> search from registry
-      HR := RegOpenKeyEx(HKEY_LOCAL_MACHINE,
-        'SOFTWARE\Firebird Project\Firebird Server\Instances',0,KEY_READ,Key);
+    l1 := FBLIBNAME[false];
+    {$ifdef MSWINDOWS}  // also search from registry
+    HR := RegOpenKeyEx(HKEY_LOCAL_MACHINE,
+      'SOFTWARE\Firebird Project\Firebird Server\Instances',0,KEY_READ,Key);
+    if HR=ERROR_SUCCESS then begin
+      HR := RegQueryValueEx(Key,'DefaultInstance',nil,nil,nil,@Size);
       if HR=ERROR_SUCCESS then begin
-        HR := RegQueryValueEx(Key,'DefaultInstance',nil,nil,nil,@Size);
+        SetLength(l2,Size div SizeOf(Char));
+        HR := RegQueryValueEx(Key,'DefaultInstance',nil,nil,pointer(l2),@Size);
         if HR=ERROR_SUCCESS then begin
-          SetLength(fLibName,Size div SizeOf(Char));
-          HR := RegQueryValueEx(Key,'DefaultInstance',nil,nil,pointer(fLibName),@Size);
-          if HR=ERROR_SUCCESS then begin
-            fLibName := IncludeTrailingPathDelimiter(SysUtils.Trim(fLibName));
-            if FileExists(LibName+FBLIBNAME[false]) then
-              fLibName := LibName+FBLIBNAME[false] else
-              fLibName := LibName+('bin\'+FBLIBNAME[false]);
-            fHandle := SafeLoadLibrary(LibName);
-          end;
+          l2 := IncludeTrailingPathDelimiter(SysUtils.Trim(l2));
+          if FileExists(l2+FBLIBNAME[false]) then
+            l2 := l2+FBLIBNAME[false] else
+            l2 := l2+('bin\'+FBLIBNAME[false]);
         end;
-        RegCloseKey(Key);
       end;
+      RegCloseKey(Key);
     end;
     {$endif}
   end;
-  if fHandle=0 then
-    raise EFirebirdException.CreateFmt('Unable to find Firebird Client Interface %s',
-     [FBLIBNAME[aEmbedded]]);
-  SynDBLog.Add.Log(sllDebug,'Loading %',StringToUTF8(LibName));
+  TryLoadLibrary([l1, l2],EFirebirdException);
+  SynDBLog.Add.Log(sllDebug,'Loading %',StringToUTF8(LibraryPath));
   P := @@isc_attach_database;
   for i := 0 to High(FIREBIRD_ENTRIES) do begin
     P^ := GetProcAddress(fHandle,FIREBIRD_ENTRIES[i]);
     if P^=nil then begin
       FreeLibrary(fHandle);
       fHandle := 0;
-      raise EFirebirdException.CreateFmt('Invalid %s: missing %s',[LibName,Firebird_ENTRIES[i]]);
+      raise EFirebirdException.CreateFmt('Invalid %s: missing %s',
+        [LibraryPath,Firebird_ENTRIES[i]]);
     end;
     inc(P);
   end;
@@ -992,7 +974,6 @@ var
   GlobalFirebird: array[boolean] of TFirebirdLib;
 
 function Firebird(Embedded: boolean): TFirebirdLib;
-const LIBNOTAVAILABLE: TFirebirdLib = pointer(-1);
 begin
   if GlobalFirebird[Embedded]=nil then
   try
@@ -1001,11 +982,11 @@ begin
     GlobalFirebird[Embedded] := result;
   except
     on E: EFirebirdException do begin
-      GlobalFirebird[Embedded] := LIBNOTAVAILABLE;
+      GlobalFirebird[Embedded] := pointer(-1);
       result := nil;
     end;
   end else
-    if GlobalFirebird[Embedded]=LIBNOTAVAILABLE then
+    if GlobalFirebird[Embedded]=pointer(-1) then
       result := nil else
       result := GlobalFirebird[Embedded];
 end;

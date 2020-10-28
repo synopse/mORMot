@@ -21,6 +21,11 @@ uses
   mORMotSQLite3,
   mORMotMongoDB;
 
+const
+  MONGOSERVER = 'localhost';
+  //MONGOSERVER = '10.0.2.2'; // from a VirtualBox VM
+  MONGOPORT = 27017;
+
 type
   TTestDirect = class(TSynTestCase)
   protected
@@ -52,6 +57,7 @@ type
     fInts: TIntegerDynArray;
     fCreateTime: TCreateTime;
     fData: TSQLRawBlob;
+    fFP: double;
   published
     property Name: RawUTF8 read fName write fName stored AS_UNIQUE;
     property Age: integer read fAge write fAge;
@@ -60,6 +66,7 @@ type
     property Ints: TIntegerDynArray index 1 read fInts write fInts;
     property Data: TSQLRawBlob read fData write fData;
     property CreateTime: TCreateTime read fCreateTime write fCreateTime;
+    property FP: double read fFP write fFP;
   end;
 
   TTestORM = class(TSynTestCase)
@@ -114,8 +121,6 @@ end;
 
 const
   DB_NAME = 'test24';
-  USER_NAME = 'toto';
-  USER_PWD = 'pass';
   COLL_NAME = 'direct';
   {$ifndef ADD5000}
   COLL_COUNT = 100;
@@ -128,6 +133,9 @@ const
   {$endif}
 
 {$ifdef TESTMONGOAUTH}
+const
+  USER_NAME = 'toto';
+  USER_PWD = 'pass';
 var
   UserCreated: boolean;
 {$endif}
@@ -145,7 +153,7 @@ begin
   assert(fClient=nil);
   {$ifdef TESTMONGOAUTH}
   if not UserCreated then begin
-    fClient := TMongoClient.Create('localhost',27017);
+    fClient := TMongoClient.Create(MONGOSERVER,MONGOPORT);
     with fClient.Database[DB_NAME] do begin
       DropUser(USER_NAME);
       Check(CreateUserForThisDatabase(USER_NAME,USER_PWD,true)='');
@@ -154,7 +162,7 @@ begin
     UserCreated := true;
   end;
   {$endif}
-  fClient := TMongoClient.Create('localhost',27017);
+  fClient := TMongoClient.Create(MONGOSERVER,MONGOPORT);
   if ClassType=TTestDirectWithAcknowledge then
     fClient.WriteConcern := wcAcknowledged else
   if ClassType=TTestDirectWithoutAcknowledge then
@@ -177,8 +185,9 @@ begin
   Check(serverTime<>0);
   CheckSame(Now,serverTime,0.5);
   if System.Pos('MongoDB',Owner.CustomVersions)=0 then
-    Owner.CustomVersions := Owner.CustomVersions+'Using '+
-      string(fClient.ServerBuildInfoText);
+    Owner.CustomVersions := format('%sUsing %s'#13#10'Running on %s'#13#10+
+      'Compiled with mORMot '+SYNOPSE_FRAMEWORK_VERSION,
+      [Owner.CustomVersions,fClient.ServerBuildInfoText,OSVersionText]);
   fExpectedCount := COLL_COUNT;
 end;
 
@@ -199,12 +208,12 @@ begin
   Check(fDB.Collection[COLL_NAME]=Coll);
   Check(fDB.CollectionOrCreate[COLL_NAME]=Coll);
   errmsg := Coll.Drop;
-  Check(fClient.ServerBuildInfoNumber>20000);
+  CheckUTF8(fClient.ServerBuildInfoNumber>20000,errmsg);
   fValues := nil;
   SetLength(fValues,COLL_COUNT);
   for i := 0 to COLL_COUNT-1 do begin
     TDocVariant.New(fValues[i]);
-    if i<50 then
+    if i<0 then
       fValues[i]._id := null else
       fValues[i]._id := ObjectID;
     fValues[i].Name := 'Name '+IntToStr(i+1);
@@ -228,9 +237,9 @@ begin
   Coll.EnsureIndex(['Name']);
   bytes := fClient.BytesTransmitted;
   for i := 0 to COLL_COUNT-1 do begin
-    Check(Coll.Save(fValues[i],@oid)=(i<50));
+    Check(Coll.Save(fValues[i],@oid)=(i<0));
     Check(BSONVariantType.IsOfKind(fValues[i]._id,betObjectID));
-    Check(fValues[i]._id=oid.ToVariant,'EnsureDocumentHasID failure');
+    Check(oid.Equal(fValues[i]._id),'EnsureDocumentHasID failure');
   end;
   NotifyTestSpeed('rows inserted',COLL_COUNT,fClient.BytesTransmitted-bytes);
   Check(Coll.Count=COLL_COUNT);
@@ -370,7 +379,7 @@ end;
 
 procedure TTestORM.ConnectToLocalServer;
 begin
-  fMongoClient := TMongoClient.Create('localhost',27017);
+  fMongoClient := TMongoClient.Create(MONGOSERVER,MONGOPORT);
   if ClassType=TTestORMWithAcknowledge then
     fMongoClient.WriteConcern := wcAcknowledged else
   if ClassType=TTestORMWithoutAcknowledge then
@@ -446,6 +455,7 @@ begin
       R.Value := _ObjFast(['num',i]);
       R.Ints := nil;
       R.DynArray(1).Add(i);
+      R.FP := i*7.3445;
       Check(fClient.BatchAdd(R,True)>=0);
     end;
   finally
@@ -467,6 +477,7 @@ begin
   Check(Length(R.Ints)=1);
   Check(R.Ints[0]=aID);
   Check(R.CreateTime>=fStartTimeStamp);
+  CheckSame(R.FP,aID*7.3445);
 end;
 
 procedure TTestORM.Retrieve;
@@ -758,6 +769,8 @@ begin
     FormatUTF8('[{"min(RowID)":1,"max(RowID)":%,"Count(RowID)":%}]',[COLL_COUNT,COLL_COUNT]));
   doc := fClient.RetrieveDocVariant(TSQLORM,'',[],
     'min(RowID) as a,max(RowID) as b,Count(RowID) as c');
+  if checkfailed(not VarIsEmptyOrNull(doc),'abc docvariant') then
+    exit;
   check(doc.a=1);
   check(doc.b=COLL_COUNT);
   check(doc.c=COLL_COUNT);

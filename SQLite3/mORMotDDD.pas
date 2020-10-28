@@ -682,10 +682,10 @@ type
     // - if aAggregate is nil, fCurrentORMInstance field values would be used
     // - if aAggregate is set, its fields would be set to fCurrentORMInstance
     procedure ORMPrepareForCommit(aCommand: TSQLOccasion;
-      aAggregate: TObject; var Result: TCQRSResult); virtual;
+      aAggregate: TObject; var Result: TCQRSResult; aAllFields: boolean=false); virtual;
     /// minimal implementation using AggregateToTable() conversion
-    function ORMAdd(aAggregate: TObject): TCQRSResult; virtual;
-    function ORMUpdate(aAggregate: TObject): TCQRSResult; virtual;
+    function ORMAdd(aAggregate: TObject; aAllFields: boolean=false): TCQRSResult; virtual;
+    function ORMUpdate(aAggregate: TObject; aAllFields: boolean=false): TCQRSResult; virtual;
     /// this default implementation will send the internal BATCH
     // - you should override it, if you need a specific behavior
     procedure InternalCommit(var Result: TCQRSResult); virtual;
@@ -1766,7 +1766,7 @@ function TDDDRepositoryRestManager.GetFactoryIndex(
   const aInterface: TGUID): integer;
 begin
   for result := 0 to length(fFactory)-1 do
-    if IsEqualGUID(fFactory[result].fInterface.InterfaceIID,aInterface) then
+    if IsEqualGUID(@fFactory[result].fInterface.InterfaceIID,@aInterface) then
       exit;
   result := -1;
 end;
@@ -1953,16 +1953,18 @@ begin
       end;
 end;
 
-function TDDDRepositoryRestCommand.ORMAdd(aAggregate: TObject): TCQRSResult;
+function TDDDRepositoryRestCommand.ORMAdd(aAggregate: TObject;
+  aAllFields: boolean): TCQRSResult;
 begin
   if CqrsBeginMethod(qaCommandDirect,result) then
-    ORMPrepareForCommit(soInsert,aAggregate,result);
+    ORMPrepareForCommit(soInsert,aAggregate,result,aAllFields);
 end;
 
-function TDDDRepositoryRestCommand.ORMUpdate(aAggregate: TObject): TCQRSResult;
+function TDDDRepositoryRestCommand.ORMUpdate(aAggregate: TObject;
+  aAllFields: boolean): TCQRSResult;
 begin
   if CqrsBeginMethod(qaCommandOnSelect,result) then
-    ORMPrepareForCommit(soUpdate,aAggregate,result);
+    ORMPrepareForCommit(soUpdate,aAggregate,result,aAllFields);
 end;
 
 procedure TDDDRepositoryRestCommand.ORMEnsureBatchExists;
@@ -1973,10 +1975,12 @@ begin
 end;
 
 procedure TDDDRepositoryRestCommand.ORMPrepareForCommit(
-  aCommand: TSQLOccasion; aAggregate: TObject; var Result: TCQRSResult);
+  aCommand: TSQLOccasion; aAggregate: TObject; var Result: TCQRSResult;
+  aAllFields: boolean);
 var msg: RawUTF8;
     validator: TSynValidate;
     ndx: integer;
+    fields: TSQLFieldBits;
 
   procedure SetValidationError(default: TCQRSResult);
   begin
@@ -2016,9 +2020,12 @@ begin
   end;
   ORMEnsureBatchExists;
   ndx := -1;
+  if aAllFields then
+    fields := ALL_FIELDS else
+    fields := [];
   case aCommand of
-  soInsert: ndx := fBatch.Add(fCurrentORMInstance,true,fFactory.fAggregateID<>nil );
-  soUpdate: ndx := fBatch.Update(fCurrentORMInstance);
+  soInsert: ndx := fBatch.Add(fCurrentORMInstance,true,fFactory.fAggregateID<>nil,fields);
+  soUpdate: ndx := fBatch.Update(fCurrentORMInstance,fields);
   soDelete: ndx := fBatch.Delete(fCurrentORMInstance.IDValue);
   end;
   CqrsSetResultSuccessIf(ndx>=0,Result);
@@ -2273,7 +2280,8 @@ begin
   Stop(dummy); // ignore any error when stopping
   fProcessTimer.Resume;
   {$ifdef WITHLOG}
-  Log.Log(sllTrace,'Start %',[self],self);
+  if Log<>nil then
+    Log.Log(sllTrace,'Start %',[self],self);
   {$endif}
   CqrsBeginMethod(qaNone,result,cqrsSuccess);
   SetLength(fProcess,fProcessThreadCount);
@@ -2407,7 +2415,8 @@ begin
     CqrsSetResult(cqrsAlreadyExists,result) else
     try
       {$ifdef WITHLOG}
-      log.Log(sllDDDInfo,'Starting',self);
+      if log<>nil then
+        log.Log(sllDDDInfo,'Starting',self);
       {$endif}
       InternalStart;
       fStatus := dsStarted;
@@ -2451,12 +2460,14 @@ begin
     if InternalRetrieveState(Information) then
     try
       {$ifdef WITHLOG}
-      log.Log(sllDDDInfo,'Stopping %',[Information],self);
+      if log<>nil then
+        log.Log(sllDDDInfo,'Stopping %',[Information],self);
       {$endif}
       InternalStop; // always stop
       fStatus := dsStopped;
       {$ifdef WITHLOG}
-      log.Log(sllDDDInfo,'Stopped: %',[Information],self);
+      if log<>nil then
+        log.Log(sllDDDInfo,'Stopped: %',[Information],self);
       {$endif}
       CqrsSetResult(cqrsSuccess,result);
     except
@@ -2479,7 +2490,8 @@ begin
   if InternalIsRunning then
   try
     {$ifdef WITHLOG}
-    log.Log(sllDDDInfo,'Halting',self);
+    if log<>nil then
+      log.Log(sllDDDInfo,'Halting',self);
     {$endif}
     CqrsSetResult(Stop(Information),result);
   except
@@ -2599,7 +2611,7 @@ begin
     1: if fInternalSettings<>nil then begin
         if SQL[10]=' ' then begin
           name := copy(SQL,11,maxInt);
-          if PosEx('=',name)>0 then begin
+          if PosExChar('=',name)>0 then begin
             Split(name,'=',name,value);
             if (name<>'') and (value<>'') then begin
               VariantLoadJSON(status,pointer(value));

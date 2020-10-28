@@ -4806,8 +4806,7 @@ procedure JSString.ToVariant(cx: PJSContext; var Value: Variant);
 var len: size_t;
 begin
   with TVarData(Value) do begin
-    if VType and VTYPE_STATIC<>0 then
-      VarClear(Value);
+    VarClear(Value);
     VType := varSynUnicode;
     VAny := nil; // avoid GPF below
     SetString(SynUnicode(VAny),

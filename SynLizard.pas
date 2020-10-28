@@ -169,7 +169,7 @@ const
 
 {$ifndef LIZARD_EXTERNALONLY}
   {$ifndef MSWINDOWS}
-    function __printf_chk(Flag:integer; Format: PChar; Arguments: array of TVarRec):longint;
+  // function __printf_chk(Flag:integer; Format: PChar; Arguments: array of TVarRec):longint;
   {$endif MSWINDOWS}
 {$endif LIZARD_EXTERNALONLY}
 
@@ -317,24 +317,6 @@ implementation
 
 
 {$ifndef LIZARD_EXTERNALONLY}
-  {$ifndef MSWINDOWS}
-    function vprintf_mormot(f,a:pansichar):longint; cdecl; external name 'vprintf';
-    function __printf_chk(Flag:integer; Format: PChar; Arguments: array of TVarRec):longint; alias: '__printf_chk';
-    var
-      arg: PIntegerArray;
-      i: integer;
-    begin
-      GetMem(arg, Length(Arguments) * sizeof(Integer));
-      try
-        Assert(Low(Arguments) = 0);
-        for i := Low(Arguments) to High(Arguments) do
-            arg[i] := Arguments[i].VInteger;
-        result:=vprintf_mormot(Format, PChar(arg));
-      finally
-        FreeMem(arg);
-      end;
-    end;
-    {$endif MSWINDOWS}
 
 function Lizard_versionNumber: integer; cdecl; external;
 function Lizard_compressBound(inputSize: integer): integer; cdecl; external;
@@ -380,6 +362,9 @@ function Lizard_decompress_safe_usingDict(src, dst: pointer; srcSize, maxDstSize
     {$L static/x86_64-linux/fse_compress.o}
     {$L static/x86_64-linux/fse_decompress.o}
     {$L static/x86_64-linux/entropy_common.o}
+    {$ifdef FPC_CROSSCOMPILING}
+      {$linklib ./static/x86_64-linux/libgcc.a}
+    {$endif}
     {$endif MSWINDOWS}
   {$endif FPC}
 {$endif CPUX64}

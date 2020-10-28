@@ -655,7 +655,7 @@ begin
     result := STATUS_SUCCESS;
     exit;
   end;
-  bearer := FindIniNameValue(pointer(aInHeaders), HEADER_BEARER_UPPER);
+  FindNameValue(aInHeaders, HEADER_BEARER_UPPER, bearer);
   res := fServerJWT.Verify(bearer);
   if res = jwtValid then
     if fServerConnected <> nil then begin
@@ -729,8 +729,9 @@ begin
     start := GetTickCount64;
     repeat
       if Ctxt.Status <> 0 then begin
-        log.Log(sllTrace, 'OnClientsRequest: answer [%] % %',
-          [Ctxt.Status, KB(Ctxt.OutContent), Ctxt.OutContentType], self);
+        if log<>nil then
+          log.Log(sllTrace, 'OnClientsRequest: answer [%] % %',
+            [Ctxt.Status, KB(Ctxt.OutContent), Ctxt.OutContentType], self);
         result := Ctxt.Status;
         break;
       end;
@@ -742,8 +743,9 @@ begin
           Sleep(1);
         continue;
       end;
-      log.Log(sllTrace, 'OnClientsRequest: timeout after %ms (start=% now=%)',
-        [diff, start, GetTickCount64], self);
+      if log<>nil then
+        log.Log(sllTrace, 'OnClientsRequest: timeout after %ms (start=% now=%)',
+          [diff, start, GetTickCount64], self);
       break;
     until false;
   finally
@@ -751,7 +753,8 @@ begin
     Safe.Lock;
     try
       if PtrArrayDelete(fRestFrame, Ctxt, @fRestFrameCount) < 0 then
-        log.Log(sllWarning, 'OnClientsRequest: no Ctxt in fRestFrame[]', self);
+        if log<>nil then
+          log.Log(sllWarning, 'OnClientsRequest: no Ctxt in fRestFrame[]', self);
     finally
       Safe.UnLock;
     end;
@@ -793,15 +796,18 @@ begin
      [aClientsPort, aServerPort, BOOL_STR[aServerKey<>''], aServerJWT], self);
   fServerJWT := aServerJWT;
   fServer := TWebSocketServer.Create(aServerPort, nil, nil, 'relayserver');
+  fServer.WaitStarted;
   if fServerJWT <> nil then
     fServer.OnBeforeBody := OnServerBeforeBody;
   fServer.OnRequest := OnServerRequest;
   fServer.WebSocketProtocols.Add(TRelayServerProtocol.Create(self, aServerKey));
   fClients := TWebSocketServer.Create(aClientsPort, nil, nil, 'relayclients',
     aClientsThreadPoolCount, aClientsKeepAliveTimeOut);
+  fClients.WaitStarted;
   fClients.WebSocketProtocols.Add(TSynopseServerProtocol.Create(self));
   fClients.OnRequest := OnClientsRequest;
-  log.Log(sllDebug, 'Create: Server=% Clients=%', [fServer, fClients], self);
+  if log<>nil then
+    log.Log(sllDebug, 'Create: Server=% Clients=%', [fServer, fClients], self);
 end;
 
 destructor TPublicRelay.Destroy;
@@ -1060,7 +1066,8 @@ begin // caller made fSafe.Lock
     result.OriginIP := ip;
     ObjArrayAddCount(fServers, result, fServersCount);
   end;
-  log.Log(sllTrace, 'NewServerClient = %', [result], self);
+  if log<>nil then
+    log.Log(sllTrace, 'NewServerClient = %', [result], self);
 end;
 
 procedure TPrivateRelay.Disconnect;
@@ -1085,7 +1092,8 @@ begin
     fSafe.UnLock;
   end;
   for i := 0 to high(threadsafe) do begin
-    log.Log(sllDebug, 'Disconnect %', [threadsafe[i]], self);
+    if log<>nil then
+      log.Log(sllDebug, 'Disconnect %', [threadsafe[i]], self);
     threadsafe[i].Free;
   end;
 end;
@@ -1116,7 +1124,8 @@ begin
   finally
     fSafe.UnLock;
   end;
-  log.Log(sllDebug, 'TryConnect=%', [BOOL_STR[result]], self);
+  if log<>nil then
+    log.Log(sllDebug, 'TryConnect=%', [BOOL_STR[result]], self);
 end;
 
 destructor TPrivateRelay.Destroy;
@@ -1125,10 +1134,12 @@ var
 begin
   log := fLog.Enter(self, 'Destroy');
   try
-    log.Log(sllDebug, 'Destroying %', [self], self);
+    if log<>nil then
+      log.Log(sllDebug, 'Destroying %', [self], self);
     if Connected then begin
       Disconnect;
-      log.Log(sllDebug, 'Destroy: disconnected as %', [self], self);
+      if log<>nil then
+        log.Log(sllDebug, 'Destroy: disconnected as %', [self], self);
     end;
   except
   end;

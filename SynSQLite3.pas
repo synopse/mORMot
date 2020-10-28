@@ -48,10 +48,10 @@ unit SynSQLite3;
   ***** END LICENSE BLOCK *****
 
 
-     SQLite3 3.31.0 database engine
+     SQLite3 3.33.0 database engine
     ********************************
 
-   Brand new SQLite3 library to be used with Delphi
+   Brand new SQLite3 library to be used with Delphi/FPC
   - FLEXIBLE: in process, local or remote access (JSON RESTFUL HTTP server)
   - STANDARD: full UTF-8 and Unicode, SQLite3 engine (enhanced but not hacked)
   - SECURE: tested, multi-thread oriented, atomic commit, encryption ready
@@ -1187,7 +1187,7 @@ type
     close: function(DB: TSQLite3DB): integer; cdecl;
 
     /// Return the version of the SQLite database engine, in ascii format
-    // - currently returns '3.31.0', when used with our SynSQLite3Static unit
+    // - currently returns '3.33.0', when used with our SynSQLite3Static unit
     // - if an external SQLite3 library is used, version may vary
     // - you may use the VersionText property (or Version for full details) instead
     libversion: function: PUTF8Char; cdecl;
@@ -2767,7 +2767,9 @@ type
     // - if specified, the password will be used to cypher this file on disk
     // (the main SQLite3 database file is encrypted, not the wal file during run);
     // the password may be a JSON-serialized TSynSignerParams object, or will use
-    // AES-OFB-128 after SHAKE_128 with rounds=1000 and a fixed salt on plain password text
+    // AES-OFB-128 after SHAKE_128 with rounds=1000 and a fixed salt on plain
+    // password text; note that our custom encryption is not compatible with the
+    // official SQLite Encryption Extension module
     // - you can specify some optional flags for sqlite3.open_v2() as
     // SQLITE_OPEN_READONLY or SQLITE_OPEN_READWRITE instead of supplied default
     // value (which corresponds to the sqlite3.open() behavior)
@@ -3967,7 +3969,8 @@ begin
   {$ifdef WITHLOG}
   if SQLShouldBeLogged(aSQL) then begin
     log := fLog.Enter(self{$ifndef DELPHI5OROLDER},'ExecuteAll'{$endif});
-    log.Log(sllSQL,aSQL,self,4096);
+    if log<>nil then
+      log.Log(sllSQL,aSQL,self,4096);
   end;
   {$endif WITHLOG}
   LockAndFlushCache; // don't trust aSQL -> assume modify -> inc(InternalState^)
@@ -4007,7 +4010,8 @@ begin
   {$ifdef WITHLOG}
   if SQLShouldBeLogged(aSQL) then begin
     log := fLog.Enter(self{$ifndef DELPHI5OROLDER},'Execute'{$endif});
-    log.Log(sllSQL,aSQL,self,2048);
+    if log<>nil then
+      log.Log(sllSQL,aSQL,self,2048);
   end;
   {$endif}
   Lock(aSQL);
@@ -4032,8 +4036,7 @@ begin
     UnLock;
     {$ifdef WITHLOG}
     if not NoLog then
-      fLog.Add.Log(sllSQL,'% % returned % for %',
-        [Timer.Stop,FileNameWithoutPath,ID,aSQL],self);
+      fLog.Add.Log(sllSQL,'% % returned % for %',[Timer.Stop,FileNameWithoutPath,ID,aSQL],self);
     {$endif}
   end;
 end;
@@ -4231,7 +4234,7 @@ end;
 
 function IsCacheable(const aSQL: RawUTF8): boolean;
 begin
-  result := isSelect(pointer(aSQL)) and (PosEx(SQLDATABASE_NOCACHE, aSQL) = 0);
+  result := isSelect(pointer(aSQL)) and (PosEx(SQLDATABASE_NOCACHE,aSQL)=0);
 end;
 
 procedure TSQLDataBase.Lock(const aSQL: RawUTF8);
@@ -4462,15 +4465,16 @@ end;
 
 function TSQLDataBase.DBClose: integer;
 {$ifdef WITHLOG}
-var FPCLog: ISynLog;
+var log: ISynLog;
 {$endif}
 begin
   result := SQLITE_OK;
   if (self=nil) or (fDB=0) then
     exit;
   {$ifdef WITHLOG}
-  FPCLog := fLog.Enter(self{$ifndef DELPHI5OROLDER},'DBClose'{$endif});
-  FPCLog.Log(sllDB,'closing [%] %',[FileName, KB(GetFileSize)],self);
+  log := fLog.Enter(self{$ifndef DELPHI5OROLDER},'DBClose'{$endif});
+  if log<>nil then
+    log.Log(sllDB,'closing [%] %',[FileName, KB(GetFileSize)],self);
   {$endif}
   if (sqlite3=nil) or not Assigned(sqlite3.close) then
     raise ESQLite3Exception.CreateUTF8('%.DBClose called with no sqlite3 global',[self]);
@@ -4484,15 +4488,16 @@ end;
 {$ifndef DELPHI5OROLDER}
 function TSQLDataBase.EnableCustomTokenizer: integer;
 {$ifdef WITHLOG}
-var FPCLog: ISynLog;
+var log: ISynLog;
 {$endif}
 begin
   result := SQLITE_OK;
   if (self=nil) or (fDB=0) then
     exit;
   {$ifdef WITHLOG}
-  FPCLog := fLog.Enter;
-  FPCLog.Log(sllDB,'Enable custom tokenizer for [%]',[FileName],self);
+  log := fLog.Enter;
+  if log<>nil then
+    log.Log(sllDB,'Enable custom tokenizer for [%]',[FileName],self);
   {$endif}
   if (sqlite3=nil) or not Assigned(sqlite3.db_config) then
     raise ESQLite3Exception.CreateUTF8('%.EnableCustomTokenizer called with no sqlite3 engine',[self]);
@@ -4504,9 +4509,9 @@ function TSQLDataBase.DBOpen: integer;
 var utf8: RawUTF8;
     i: integer;
 {$ifdef WITHLOG}
-    FPCLog: ISynLog;
+    log: ISynLog;
 begin
-  FPCLog := fLog.Enter('DBOpen %',[fFileNameWithoutPath],self);
+  log := fLog.Enter('DBOpen %',[fFileNameWithoutPath],self);
 {$else}
 begin
 {$endif WITHLOG}
@@ -4518,7 +4523,7 @@ begin
   utf8 := StringToUTF8(fFileName);
   {$ifdef LINUX}
   // for WAL to work under Linux - see http://www.sqlite.org/vfs.html
-  if assigned(sqlite3.open_v2) then begin
+  if assigned(sqlite3.open_v2) and (fPassword='') then begin
     result := sqlite3.open_v2(pointer(utf8),fDB,fOpenV2Flags,'unix-excl');
     if result<>SQLITE_OK then // may be 'unix-excl' is not supported by the library
       result := sqlite3.open_v2(pointer(utf8),fDB,fOpenV2Flags,nil);
@@ -4530,8 +4535,8 @@ begin
     result := sqlite3.open(pointer(utf8),fDB);
   if result<>SQLITE_OK then begin
     {$ifdef WITHLOG}
-    if FPCLog<>nil then
-      FPCLog.Log(sllError,'sqlite3_open ("%") failed with error % (%): %',
+    if log<>nil then
+      log.Log(sllError,'sqlite3_open ("%") failed with error % (%): %',
         [utf8,sqlite3_resultToErrorText(result),result,sqlite3.errmsg(fDB)]);
     {$endif WITHLOG}
     sqlite3.close(fDB); // should always be closed, even on failure
@@ -4613,8 +4618,9 @@ begin
   if i<0 then
     i := (-i) shr 10 else
     i := PageSize*CacheSize;
-  FPCLog.Log(sllDB,'"%" database file (%) opened with PageSize=% CacheSize=% (%)',
-    [FileName,KB(GetFileSize),PageSize,CacheSize,KB(i)],self);
+  if log<>nil then
+    log.Log(sllDB,'"%" database file (%) opened with PageSize=% CacheSize=% (%)',
+      [FileName,KB(GetFileSize),PageSize,CacheSize,KB(i)],self);
   {$endif}
 end;
 
@@ -4734,7 +4740,7 @@ begin
   if self=nil then
     exit;
   if InternalState<>nil then
-    inc(InternalState^);
+    inc(InternalState^); 
   if fCache.Reset then
    {$ifdef WITHLOG}
     if fLog<>nil then
@@ -4998,14 +5004,15 @@ begin
 end;
 
 function TSQLRequest.Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; JSON: TStream;
-  Expand: boolean=false): PtrInt;
+  Expand: boolean): PtrInt;
 // expand=true: [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
 // expand=false: { "FieldCount":2,"Values":["col1","col2",val11,"val12",val21,..] }
 var i: integer;
     W: TJSONWriter;
+    tmp: TTextWriterStackBuffer;
 begin
   result := 0;
-  W := TJSONWriter.Create(JSON,Expand,false,nil,{bufsize=}65536);
+  W := TJSONWriter.Create(JSON,Expand,false,nil,0,@tmp);
   try
     // prepare the SQL request
     if aSQL<>'' then // if not already prepared, reset and bound by caller
@@ -5400,10 +5407,8 @@ end;
 
 function ErrorCodeToText(err: TSQLite3ErrorCode): RawUTF8;
 begin
-  if err=secUnknown then
-    result := 'unknown SQLITE_*' else
-    result := 'SQLITE_'+Copy(ShortStringToUTF8(GetEnumName(
-      TypeInfo(TSQLite3ErrorCode),ord(err))^),4,100);
+  result := 'SQLITE_'+TrimLeftLowerCaseShort(GetEnumName(
+    TypeInfo(TSQLite3ErrorCode),ord(err)));
 end;
 
 function sqlite3_resultToErrorText(aResult: integer): RawUTF8;
@@ -5694,7 +5699,11 @@ begin
         if fStepSynLzCompress then begin
           NotifyProgressAndContinue(backupStepSynLz);
           fn2 := ChangeFileExt(fn, '.db.tmp');
-          if not (RenameFile(fn,fn2) and TSQLDatabase.BackupSynLZ(fn2,fn,true)) then
+          DeleteFile(fn2);
+          if not RenameFile(fn,fn2)  then
+            raise ESQLite3Exception.CreateUTF8('%.Execute: RenameFile(%,%) failed',
+              [self,fn,fn2]);
+          if not TSQLDatabase.BackupSynLZ(fn2,fn,true) then
             raise ESQLite3Exception.CreateUTF8('%.Execute: BackupSynLZ(%,%) failed',
               [self,fn,fn2]);
           {$ifdef WITHLOG}
@@ -5826,13 +5835,23 @@ begin // varargs attribute was unsupported on Delphi 5
 // due to FPC's linker limitation, all wrapper functions should be defined outside
 var mem: TSQLite3MemMethods;
     res: integer;
+    {$ifdef FPC_X64}
+    mm: TMemoryManager;
+    {$endif FPC_X64}
 begin
   if not Assigned(config) then
     exit;
+  {$ifdef FPC_X64} // SQLite3 prototypes match FPC RTL functions on x86_64 ABI
+  GetMemoryManager(mm);
+  mem.xMalloc := @mm.Getmem;
+  mem.xFree := @mm.Freemem;
+  mem.xSize := @mm.MemSize;
+  {$else}
   mem.xMalloc := @xMalloc;
   mem.xFree := @xFree;
-  mem.xRealloc := @xRealloc;
   mem.xSize := @xSize;
+  {$endif FPC_X64}
+  mem.xRealloc := @xRealloc;
   mem.xRoundup := @xRoundup;
   mem.xInit := @xInit;
   mem.xShutdown := @xShutdown;

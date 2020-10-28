@@ -1086,6 +1086,7 @@ end;
 
 {$ifndef ENHANCEDRTL}
 function i18nInnerCompareStr(const S1, S2: AnsiString): Integer;
+  {$ifdef FPC} nostackframe; assembler; {$endif}
 // original name: CompareStr_PLR_IA32_14
 asm
   cmp eax, edx
@@ -1183,6 +1184,7 @@ end;
 {$endif}
 
 function i18nInnerCompareText(const S1, S2: AnsiString): Integer;
+  {$ifdef FPC} nostackframe; assembler; {$endif}
 asm // fast CompareText() version using i18nToUpper[] instead of NormToUpper[]
     cmp eax,edx
     je @2

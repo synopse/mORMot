@@ -603,6 +603,7 @@ type
 
 
 { -------------- TOleDB* OleDB classes and types }
+
 type
   /// generic Exception type, generated for OleDB connection
   EOleDBException = class(ESQLDBException);
@@ -776,6 +777,13 @@ type
   end;
 
 {$endif}
+
+  /// OleDB connection properties to Microsoft Access Database
+  TOleDBACEConnectionProperties = class(TOleDBConnectionProperties)
+  protected
+    /// will set the appropriate provider name, i.e. 'Microsoft.ACE.OLEDB.12.0'
+    procedure SetInternalProperties; override;
+  end;
 
   /// OleDB connection properties to IBM AS/400
   TOleDBAS400ConnectionProperties = class(TOleDBConnectionProperties)
@@ -962,7 +970,7 @@ type
     procedure GetCol64(Col: integer; DestType: TSQLDBFieldType; var Dest);
       {$ifdef HASINLINE}inline;{$endif}
     procedure FlushRowSetData;
-    procedure ReleaseRows;
+    procedure ReleaseRowSetDataAndRows;
     procedure CloseRowSet;
     ///  retrieve column information, and initialize Bindings[]
     // - add the high-level column information in Column[], initializes
@@ -1082,7 +1090,7 @@ type
     function ParamToVariant(Param: Integer; var Value: Variant;
       CheckIsOutParameter: boolean=true): TSQLDBFieldType; override;
 
-    /// After a statement has been prepared via Prepare() + ExecutePrepared() or
+    /// after a statement has been prepared via Prepare() + ExecutePrepared() or
     // Execute(), this method must be called one or more times to evaluate it
     // - you shall call this method before calling any Column*() methods
     // - return TRUE on success, with data ready to be retrieved by Column*()
@@ -1093,6 +1101,8 @@ type
     // otherwise, it will fetch one row of data, to be called within a loop
     // - raise an ESQLEOleDBException on any error
     function Step(SeekFirst: boolean=false): boolean; override;
+    /// clear result rowset when ISQLDBStatement is back in cache
+    procedure ReleaseRows; override;
     /// retrieve a column name of the current Row
     // - Columns numeration (i.e. Col value) starts with 0
     // - it's up to the implementation to ensure than all column names are unique
@@ -1606,9 +1616,8 @@ begin // dedicated version to avoid as much memory allocation than possible
   if V=nil then
     result := ftNull else
     result := C^.ColumnType;
+  VarClear(Value);
   with TVarData(Value) do begin
-    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
-      VarClear(Value);
     VType := MAP_FIELDTYPE2VARTYPE[result];
     case result of
       ftInt64, ftDouble, ftCurrency, ftDate:
@@ -1702,7 +1711,7 @@ Write:case ColumnType of
 end;
 
 function TOleDBStatement.ParamToVariant(Param: Integer; var Value: Variant;
-  CheckIsOutParameter: boolean=true): TSQLDBFieldType;
+  CheckIsOutParameter: boolean): TSQLDBFieldType;
 begin
   inherited ParamToVariant(Param,Value); // raise exception if Param incorrect
   dec(Param); // start at #1
@@ -1740,15 +1749,11 @@ const
    IDList_type: WideString = 'IDList';
    StrList_TYPE: WideString = 'StrList';
 
-
-
-procedure TOleDBStatement.Prepare(const aSQL: RawUTF8;
-  ExpectResults: Boolean);
+procedure TOleDBStatement.Prepare(const aSQL: RawUTF8; ExpectResults: Boolean);
 var L: integer;
     SQLW: RawUnicode;
-    Timer: TPrecisionTimer;
 begin
-  Timer.Start;
+  SQLLogBegin(sllDB);
   if Assigned(fCommand) or Assigned(fRowSet) or (fColumnCount>0) or
      (fColumnBindings<>nil) or (fParamBindings<>nil) then
     raise EOleDBException.CreateUTF8('%.Prepare should be called once',[self]);
@@ -1766,9 +1771,7 @@ begin
   SetLength(SQLW,L*2+1);
   UTF8ToWideChar(pointer(SQLW),pointer(fSQL),L);
   fCommand.SetCommandText(DBGUID_DEFAULT,pointer(SQLW));
-  with SynDBLog.Add do
-  if sllDB in Family.Level then
-    Log(sllDB,'Prepare % %',[Timer.Stop,SQL],self);
+  SQLLogEnd;
 end;
 
 procedure TOleDBStatement.ExecutePrepared;
@@ -1777,7 +1780,6 @@ var i: integer;
     B: PDBBinding;
     ParamsStatus: TCardinalDynArray;
     RowSet: IRowSet;
-    Timer: TPrecisionTimer;
     mr: IMultipleResults;
     res: HResult;
     fParamBindInfo: TDBParamBindInfoDynArray;
@@ -1793,181 +1795,172 @@ var i: integer;
     ssParamPropsCount: integer;
     IDLists: array of TIDListRowset;
 begin
-  Timer.Start;
+  SQLLogBegin(sllSQL);
+  // 1. check execution context
+  if not Assigned(fCommand) then
+    raise EOleDBException.CreateUTF8('%s.Prepare should have been called',[self]);
+  if Assigned(fRowSet) or (fColumnCount>0) or
+     (fColumnBindings<>nil) or (fParamBindings<>nil) then
+    raise EOleDBException.CreateUTF8('Missing call to %.Reset',[self]);
+  inherited ExecutePrepared; // set fConnection.fLastAccessTicks
+  // 2. bind parameters
+  SetLength(IDLists,fParamCount);
   try
-    // 1. check execution context
-    if not Assigned(fCommand) then
-      raise EOleDBException.CreateUTF8('%s.Prepare should have been called',[self]);
-    if Assigned(fRowSet) or (fColumnCount>0) or
-       (fColumnBindings<>nil) or (fParamBindings<>nil) then
-      raise EOleDBException.CreateUTF8('Missing call to %.Reset',[self]);
-    inherited ExecutePrepared; // set fConnection.fLastAccessTicks
-    // 2. bind parameters
-    SetLength(IDLists,fParamCount);
-    try
-      if fParamCount=0 then
-        // no parameter to bind
-        fDBParams.cParamSets := 0 else begin
-        // bind supplied parameters, with direct mapping to fParams[]
-        for i := 0 to fParamCount-1 do
-          case fParams[i].VType of
-            ftUnknown: raise EOleDBException.CreateUTF8(
-              '%.Execute: missing #% bound parameter for [%]',[self,i+1,fSQL]);
-          end;
-        P := pointer(fParams);
-        SetLength(fParamBindings,fParamCount);
-        B := pointer(fParamBindings);
-        SetLength(fParamBindInfo, fParamCount);
-        BI := pointer(fParamBindInfo);
-        SetLength(fParamOrdinals, fParamCount);
-        PO := pointer(fParamOrdinals);
-        dbObjTVP.dwFlags := STGM_READ;
-        dbObjTVP.iid := IID_IRowset;
-        FillChar(ssPropParamIDList,SizeOf(ssPropParamIDList),0);
-        ssPropParamIDList.dwPropertyID := SSPROP_PARAM_TYPE_TYPENAME;
-        ssPropParamIDList.vValue := IDList_TYPE;
-        ssPropsetParamIDList.cProperties := 1;
-        ssPropsetParamIDList.guidPropertySet := DBPROPSET_SQLSERVERPARAMETER;
-        ssPropsetParamIDList.rgProperties := @ssPropParamIDList;
-        FillChar(ssPropParamStrList,SizeOf(ssPropParamStrList),0);
-        ssPropParamStrList.dwPropertyID := SSPROP_PARAM_TYPE_TYPENAME;
-        ssPropParamStrList.vValue := StrList_TYPE;
-        ssPropsetParamStrList.cProperties := 1;
-        ssPropsetParamStrList.guidPropertySet := DBPROPSET_SQLSERVERPARAMETER;
-        ssPropsetParamStrList.rgProperties := @ssPropParamStrList;
-        SetLength(ssParamProps, fParamCount);
-        ssParamPropsCount := 0;
-        for i := 1 to fParamCount do begin
-          B^.iOrdinal := i; // parameter index (starting at 1)
-          B^.eParamIO := PARAMTYPE2OLEDB[P^.VInOut]; // parameter direction
-          B^.wType := FIELDTYPE2OLEDB[P^.VType];     // parameter data type
-          B^.dwPart := DBPART_VALUE or DBPART_STATUS;
-          B^.obValue := PAnsiChar(@P^.VInt64)-pointer(fParams);
-          B^.obStatus := PAnsiChar(@P^.VStatus)-pointer(fParams);
-          BI^.dwFlags := PARAMTYPE2OLEDB[P^.VInOut]; // parameter direction
-          BI^.pwszName := nil; //unnamed parameters
-          BI^.pwszDataSourceType :=  Pointer(FIELDTYPE2OLEDBTYPE_NAME[P^.VType]);
-          BI^.ulParamSize := 0;
-          PO^ := i;
-          // check array binding
-          if P.VArray<>nil then begin
-            BI^.pwszDataSourceType := Pointer(TABLE_PARAM_DATASOURCE);
-            B^.wType := DBTYPE_TABLE;
-            B^.cbMaxLen := sizeof(IUnknown);
-            B^.pObject := @dbObjTVP;
-            B^.obValue := PAnsiChar(@P^.VIUnknown)-pointer(fParams);
-            case P^.VType of
-              ftInt64: ssParamProps[ssParamPropsCount].rgPropertySets := @ssPropsetParamIDList;
-              ftUTF8: ssParamProps[ssParamPropsCount].rgPropertySets := @ssPropsetParamStrList;
-              else raise EOleDBException.Create('Unsupported array parameter type');
-            end;
-            ssParamProps[ssParamPropsCount].cPropertySets := 1;
-            ssParamProps[ssParamPropsCount].iOrdinal := i;
-            inc(ssParamPropsCount);
-            IDLists[i-1] := TIDListRowset.Create(P.VArray, P^.VType);
-            IDLists[i-1].Initialize(OleDBConnection.fSession as IOpenRowset);
-            P^.VIUnknown := IDLists[i-1];
-          end else begin
-            P^.VIUnknown := nil;
-            case P^.VType of
-            ftNull: begin
-              P^.VStatus := ord(stIsNull);
-              BI.pwszDataSourceType := 'DBTYPE_WVARCHAR';
-              BI.dwFlags := BI^.dwFlags or DBPARAMFLAGS_ISNULLABLE;
-            end;
-            ftInt64, ftDouble, ftCurrency, ftDate:
-              // those types match the VInt64 binary representation :)
-              B^.cbMaxLen := sizeof(Int64);
-            ftBlob: begin
-              // sent as DBTYPE_BYREF mapping directly RawByteString VBlob content
-              B^.dwPart := DBPART_VALUE or DBPART_LENGTH or DBPART_STATUS;
-              B^.obValue := PAnsiChar(@P^.VBlob)-pointer(fParams);
-              B^.cbMaxLen := length(P^.VBlob);
-              P^.VInt64 := length(P^.VBlob); // store length in unused VInt64 property
-              B^.obLength := PAnsiChar(@P^.VInt64)-pointer(fParams);
-            end;
-            ftUTF8: begin
-              B^.obValue := PAnsiChar(@P^.VText)-pointer(fParams);
-              if P^.VText='' then begin
-                B^.wType := DBTYPE_WSTR; // '' -> bind one #0 wide char
-                B^.cbMaxLen := sizeof(WideChar);
-              end else begin
-                // mapping directly the WideString VText content
-                B^.wType := DBTYPE_BSTR; // DBTYPE_WSTR just doesn't work :(
-                B^.cbMaxLen := sizeof(Pointer);
-                BI^.ulParamSize := length(P^.VText);
-              end;
-            end;
-            end;
-            if BI^.ulParamSize = 0 then
-              BI^.ulParamSize := B^.cbMaxLen;
-          end;
-          inc(P);
-          inc(B);
-          inc(BI);
-          inc(PO);
+    if fParamCount=0 then
+      // no parameter to bind
+      fDBParams.cParamSets := 0 else begin
+      // bind supplied parameters, with direct mapping to fParams[]
+      for i := 0 to fParamCount-1 do
+        case fParams[i].VType of
+          ftUnknown: raise EOleDBException.CreateUTF8(
+            '%.Execute: missing #% bound parameter for [%]',[self,i+1,fSQL]);
         end;
-        if not OleDBConnection.OleDBProperties.fSupportsOnlyIRowset then begin
-          OleDBConnection.OleDBCheck(self,
-            (fCommand as ICommandWithParameters).SetParameterInfo(
-              fParamCount, pointer(fParamOrdinals), pointer(fParamBindInfo)));
-          if ssParamPropsCount>0 then
-            OleDBConnection.OleDBCheck(self,
-              (fCommand as ISSCommandWithParameters).SetParameterProperties(
-                ssParamPropsCount, pointer(ssParamProps)));
+      P := pointer(fParams);
+      SetLength(fParamBindings,fParamCount);
+      B := pointer(fParamBindings);
+      SetLength(fParamBindInfo, fParamCount);
+      BI := pointer(fParamBindInfo);
+      SetLength(fParamOrdinals, fParamCount);
+      PO := pointer(fParamOrdinals);
+      dbObjTVP.dwFlags := STGM_READ;
+      dbObjTVP.iid := IID_IRowset;
+      FillChar(ssPropParamIDList,SizeOf(ssPropParamIDList),0);
+      ssPropParamIDList.dwPropertyID := SSPROP_PARAM_TYPE_TYPENAME;
+      ssPropParamIDList.vValue := IDList_TYPE;
+      ssPropsetParamIDList.cProperties := 1;
+      ssPropsetParamIDList.guidPropertySet := DBPROPSET_SQLSERVERPARAMETER;
+      ssPropsetParamIDList.rgProperties := @ssPropParamIDList;
+      FillChar(ssPropParamStrList,SizeOf(ssPropParamStrList),0);
+      ssPropParamStrList.dwPropertyID := SSPROP_PARAM_TYPE_TYPENAME;
+      ssPropParamStrList.vValue := StrList_TYPE;
+      ssPropsetParamStrList.cProperties := 1;
+      ssPropsetParamStrList.guidPropertySet := DBPROPSET_SQLSERVERPARAMETER;
+      ssPropsetParamStrList.rgProperties := @ssPropParamStrList;
+      SetLength(ssParamProps, fParamCount);
+      ssParamPropsCount := 0;
+      for i := 1 to fParamCount do begin
+        B^.iOrdinal := i; // parameter index (starting at 1)
+        B^.eParamIO := PARAMTYPE2OLEDB[P^.VInOut]; // parameter direction
+        B^.wType := FIELDTYPE2OLEDB[P^.VType];     // parameter data type
+        B^.dwPart := DBPART_VALUE or DBPART_STATUS;
+        B^.obValue := PAnsiChar(@P^.VInt64)-pointer(fParams);
+        B^.obStatus := PAnsiChar(@P^.VStatus)-pointer(fParams);
+        BI^.dwFlags := PARAMTYPE2OLEDB[P^.VInOut]; // parameter direction
+        BI^.pwszName := nil; //unnamed parameters
+        BI^.pwszDataSourceType :=  Pointer(FIELDTYPE2OLEDBTYPE_NAME[P^.VType]);
+        BI^.ulParamSize := 0;
+        PO^ := i;
+        // check array binding
+        if P.VArray<>nil then begin
+          BI^.pwszDataSourceType := Pointer(TABLE_PARAM_DATASOURCE);
+          B^.wType := DBTYPE_TABLE;
+          B^.cbMaxLen := sizeof(IUnknown);
+          B^.pObject := @dbObjTVP;
+          B^.obValue := PAnsiChar(@P^.VIUnknown)-pointer(fParams);
+          case P^.VType of
+            ftInt64: ssParamProps[ssParamPropsCount].rgPropertySets := @ssPropsetParamIDList;
+            ftUTF8: ssParamProps[ssParamPropsCount].rgPropertySets := @ssPropsetParamStrList;
+            else raise EOleDBException.Create('Unsupported array parameter type');
+          end;
+          ssParamProps[ssParamPropsCount].cPropertySets := 1;
+          ssParamProps[ssParamPropsCount].iOrdinal := i;
+          inc(ssParamPropsCount);
+          IDLists[i-1] := TIDListRowset.Create(P.VArray, P^.VType);
+          IDLists[i-1].Initialize(OleDBConnection.fSession as IOpenRowset);
+          P^.VIUnknown := IDLists[i-1];
+        end else begin
+          P^.VIUnknown := nil;
+          case P^.VType of
+          ftNull: begin
+            P^.VStatus := ord(stIsNull);
+            BI.pwszDataSourceType := 'DBTYPE_WVARCHAR';
+            BI.dwFlags := BI^.dwFlags or DBPARAMFLAGS_ISNULLABLE;
+          end;
+          ftInt64, ftDouble, ftCurrency, ftDate:
+            // those types match the VInt64 binary representation :)
+            B^.cbMaxLen := sizeof(Int64);
+          ftBlob: begin
+            // sent as DBTYPE_BYREF mapping directly RawByteString VBlob content
+            B^.dwPart := DBPART_VALUE or DBPART_LENGTH or DBPART_STATUS;
+            B^.obValue := PAnsiChar(@P^.VBlob)-pointer(fParams);
+            B^.cbMaxLen := length(P^.VBlob);
+            P^.VInt64 := length(P^.VBlob); // store length in unused VInt64 property
+            B^.obLength := PAnsiChar(@P^.VInt64)-pointer(fParams);
+          end;
+          ftUTF8: begin
+            B^.obValue := PAnsiChar(@P^.VText)-pointer(fParams);
+            if P^.VText='' then begin
+              B^.wType := DBTYPE_WSTR; // '' -> bind one #0 wide char
+              B^.cbMaxLen := sizeof(WideChar);
+            end else begin
+              // mapping directly the WideString VText content
+              B^.wType := DBTYPE_BSTR; // DBTYPE_WSTR just doesn't work :(
+              B^.cbMaxLen := sizeof(Pointer);
+              BI^.ulParamSize := length(P^.VText);
+            end;
+          end;
+          end;
+          if BI^.ulParamSize = 0 then
+            BI^.ulParamSize := B^.cbMaxLen;
         end;
-        SetLength(ParamsStatus,fParamCount);
-        OleDBConnection.OleDBCheck(self,
-          (fCommand as IAccessor).CreateAccessor(
-            DBACCESSOR_PARAMETERDATA,fParamCount,Pointer(fParamBindings),0,
-            fDBParams.HACCESSOR,pointer(ParamsStatus)),ParamsStatus);
-        fDBParams.cParamSets := 1;
-        fDBParams.pData := pointer(fParams);
+        inc(P);
+        inc(B);
+        inc(BI);
+        inc(PO);
       end;
-      // 3. Execute SQL
-      if fExpectResults then
-      try
-        // 3.1 SELECT will allow access to resulting rows data from fRowSet
-        res := E_UNEXPECTED; // makes compiler happy
-        if not OleDBConnection.OleDBProperties.fSupportsOnlyIRowset then begin
-          // use IMultipleResults for 'insert into table1 values (...); select ... from table2 where ...'
-          res := fCommand.Execute(nil,IID_IMultipleResults,fDBParams,@fUpdateCount,@mr);
-          if res=E_NOINTERFACE then
-            OleDBConnection.OleDBProperties.fSupportsOnlyIRowset := true else begin
+      if not OleDBConnection.OleDBProperties.fSupportsOnlyIRowset then begin
+        OleDBConnection.OleDBCheck(self,
+          (fCommand as ICommandWithParameters).SetParameterInfo(
+            fParamCount, pointer(fParamOrdinals), pointer(fParamBindInfo)));
+        if ssParamPropsCount>0 then
+          OleDBConnection.OleDBCheck(self,
+            (fCommand as ISSCommandWithParameters).SetParameterProperties(
+              ssParamPropsCount, pointer(ssParamProps)));
+      end;
+      SetLength(ParamsStatus,fParamCount);
+      OleDBConnection.OleDBCheck(self,
+        (fCommand as IAccessor).CreateAccessor(
+          DBACCESSOR_PARAMETERDATA,fParamCount,Pointer(fParamBindings),0,
+          fDBParams.HACCESSOR,pointer(ParamsStatus)),ParamsStatus);
+      fDBParams.cParamSets := 1;
+      fDBParams.pData := pointer(fParams);
+    end;
+    // 3. Execute SQL
+    if fExpectResults then
+    try
+      // 3.1 SELECT will allow access to resulting rows data from fRowSet
+      res := E_UNEXPECTED; // makes compiler happy
+      if not OleDBConnection.OleDBProperties.fSupportsOnlyIRowset then begin
+        // use IMultipleResults for 'insert into table1 values (...); select ... from table2 where ...'
+        res := fCommand.Execute(nil,IID_IMultipleResults,fDBParams,@fUpdateCount,@mr);
+        if res=E_NOINTERFACE then
+          OleDBConnection.OleDBProperties.fSupportsOnlyIRowset := true else
+          if Assigned(mr) then
             repeat
               res := mr.GetResult(nil,0,IID_IRowset,@fUpdateCount,@RowSet);
             until Assigned(RowSet) or (res <> S_OK);
-          end;
-        end;
-        if OleDBConnection.OleDBProperties.fSupportsOnlyIRowset then
-          res := fCommand.Execute(nil,IID_IRowset,fDBParams,nil,@RowSet);
-        OleDBConnection.OleDBCheck(self,res,ParamsStatus);
-        FromRowSet(RowSet);
-      except
-        on E: Exception do begin
-          CloseRowSet; // force fRowSet=nil
-          raise;
-        end;
-      end else
-        // 3.2 ExpectResults=false (e.g. SQL UPDATE) -> leave fRowSet=nil
-        OleDBConnection.OleDBCheck(self,
-          fCommand.Execute(nil,DB_NULLGUID,fDBParams,@fUpdateCount,nil));
-      with SynDBLog.Add do
-        if sllSQL in Family.Level then
-          Log(sllSQL,'% %',[Timer.Stop,SQLWithInlinedParams],self);
-    finally
-      for i := 0 to fParamCount - 1 do
-        if Assigned(IDLists[i]) then begin
-          fParams[i].VIUnknown := nil;
-          IDLists[i].free;
-        end;
-    end;
-  except
-    on E: Exception do begin
-      SynDBLog.Add.Log(sllError,E);
-      raise;
-    end;
+      end;
+      if OleDBConnection.OleDBProperties.fSupportsOnlyIRowset then
+        res := fCommand.Execute(nil,IID_IRowset,fDBParams,nil,@RowSet);
+      OleDBConnection.OleDBCheck(self,res,ParamsStatus);
+      FromRowSet(RowSet);
+    except
+      on E: Exception do begin
+        CloseRowSet; // force fRowSet=nil
+        raise;
+      end;
+    end else
+      // 3.2 ExpectResults=false (e.g. SQL UPDATE) -> leave fRowSet=nil
+      OleDBConnection.OleDBCheck(self,
+        fCommand.Execute(nil,DB_NULLGUID,fDBParams,@fUpdateCount,nil));
+  finally
+    for i := 0 to fParamCount - 1 do
+      if Assigned(IDLists[i]) then begin
+        fParams[i].VIUnknown := nil;
+        IDLists[i].Free;
+      end;
   end;
+  SQLLogEnd;
 end;
 
 procedure TOleDBStatement.FromRowSet(RowSet: IRowSet);
@@ -2020,13 +2013,13 @@ begin
   end else
   if SeekFirst then begin
     // rewind to first row
-    ReleaseRows;
+    ReleaseRowSetDataAndRows;
     OleDBConnection.OleDBCheck(self,fRowSet.RestartPosition(DB_NULL_HCHAPTER));
     fRowStepResult := 0;
   end else
     FlushRowSetData;
   if fRowStepHandleCurrent>=fRowStepHandleRetrieved then begin
-    ReleaseRows;
+    ReleaseRowSetDataAndRows;
     if fRowStepResult=DB_S_ENDOFROWSET then
       exit; // no more row available -> return false
     fRowStepResult := fRowSet.GetNextRows(DB_NULL_HCHAPTER,0,length(fRowStepHandles),
@@ -2062,7 +2055,7 @@ begin
   fRowBufferSize := Value;
 end;
 
-procedure TOleDBStatement.ReleaseRows;
+procedure TOleDBStatement.ReleaseRowSetDataAndRows;
 begin
   FlushRowSetData;
   if fRowStepHandleRetrieved<>0 then begin
@@ -2076,7 +2069,7 @@ procedure TOleDBStatement.CloseRowSet;
 begin
   if not Assigned(fRowSet) then
     exit;
-  ReleaseRows;
+  ReleaseRowSetDataAndRows;
   if fRowSetAccessor<>0 then begin
     (fRowSet as IAccessor).ReleaseAccessor(fRowSetAccessor,nil);
     fRowSetAccessor := 0;
@@ -2086,14 +2079,8 @@ end;
 
 procedure TOleDBStatement.Reset;
 begin
-  inherited Reset;
-  if fParamCount>0 then begin
-    fParam.Clear;
-    Finalize(fParamBindings);
-  end;
+  ReleaseRows;
   if fColumnCount>0 then begin
-    CloseRowSet;
-    Finalize(fColumnBindings);
     fColumn.Clear;
     fColumn.ReHash;
     // faster if full command is re-prepared!
@@ -2101,6 +2088,17 @@ begin
     Prepare(fSQL,fExpectResults);
   end;
   fUpdateCount := 0;
+  inherited Reset;
+end;
+
+procedure TOleDBStatement.ReleaseRows;
+begin
+  if fParamCount>0 then
+    fParam.Clear;
+  fParamBindings := nil;
+  CloseRowSet;
+  fColumnBindings := nil;
+  inherited ReleaseRows;
 end;
 
 function TOleDBStatement.UpdateCount: integer;
@@ -2261,7 +2259,7 @@ var DataInitialize : IDataInitialize;
     unknown: IUnknown;
     Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Connect'{$endif});
+  Log := SynDBLog.Enter(self,'Connect');
   // check context
   if Connected then
     Disconnect;
@@ -2287,7 +2285,6 @@ begin
     inherited Connect; // notify any re-connection
   except
     on E: Exception do begin
-      Log.Log(sllError,E);
       fSession := nil; // mark not connected
       fDBInitialize := nil;
       DataInitialize := nil;
@@ -2299,7 +2296,7 @@ end;
 constructor TOleDBConnection.Create(aProperties: TSQLDBConnectionProperties);
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Create'{$endif});
+  Log := SynDBLog.Enter(self,'Create');
   if not aProperties.InheritsFrom(TOleDBConnectionProperties) then
     raise EOleDBException.CreateUTF8('Invalid %.Create(%)',[self,aProperties]);
   fOleDBProperties := TOleDBConnectionProperties(aProperties);
@@ -2311,21 +2308,22 @@ end;
 destructor TOleDBConnection.Destroy;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Destroy'{$endif});
+  Log := SynDBLog.Enter(self,'Destroy');
   try
     inherited Destroy; // call Disconnect;
     fMalloc := nil;
     CoUninit;
   except
     on E: Exception do
-      Log.Log(sllError,E);
+      if Log<>nil then
+        Log.Log(sllError,E);
   end;
 end;
 
 procedure TOleDBConnection.Disconnect;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Disconnect'{$endif});
+  Log := SynDBLog.Enter(self,'Disconnect');
   try
     inherited Disconnect; // flush any cached statement
   finally
@@ -2419,7 +2417,7 @@ end;
 procedure TOleDBConnection.Commit;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Commit'{$endif});
+  Log := SynDBLog.Enter(self,'Commit');
   if assigned(fTransaction) then begin
     inherited Commit;
     try
@@ -2434,7 +2432,7 @@ end;
 procedure TOleDBConnection.Rollback;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Rollback'{$endif});
+  Log := SynDBLog.Enter(self,'Rollback');
   if assigned(fTransaction) then begin
     inherited Rollback;
     OleDbCheck(nil,fTransaction.Abort(nil,False,False));
@@ -2444,7 +2442,7 @@ end;
 procedure TOleDBConnection.StartTransaction;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'StartTransaction'{$endif});
+  Log := SynDBLog.Enter(self,'StartTransaction');
   if assigned(fTransaction) then begin
     inherited StartTransaction;
     OleDbCheck(nil,fTransaction.StartTransaction(ISOLATIONLEVEL_READCOMMITTED,0,nil,nil));
@@ -2462,7 +2460,7 @@ var DataInitialize: IDataInitialize;
     tmp: PWideChar;
     Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'ConnectionStringDialog'{$endif});
+  Log := SynDBLog.Enter(self,'ConnectionStringDialog');
   result := false;
   if self<>nil then
   try
@@ -2484,19 +2482,20 @@ begin
         fConnectionString := tmp;
         if tmp<>nil then
           CoTaskMemFree(tmp);
-        Log.Log(sllDB,'New connection settings set',self);
+        if Log<>nil then
+          Log.Log(sllDB,'New connection settings set',self);
         result := true;
       end;
       DB_E_CANCELED:
-        Log.Log(sllDB,'Canceled',self);
+        if Log<>nil then
+          Log.Log(sllDB,'Canceled',self);
       else OleCheck(res);
       end;
     finally
       CoUninit;
     end;
   except
-    on E: Exception do
-      Log.Log(sllError,E);
+    result  := false;
   end;
 end;
 
@@ -2538,8 +2537,10 @@ begin
         DB := Catalog.Create(ConnectionString);
         result := true;
       except
+        result := false;
       end;
-    SynDBLog.Add.Log(sllDB,'CreateDatabase for [%] returned %',[ConnectionString,ord(result)]);
+    SynDBLog.Add.Log(sllDB,'CreateDatabase for [%] returned %',
+      [ConnectionString,ord(result)],self);
   finally
     DB := null;
     Catalog := nil;
@@ -2708,7 +2709,7 @@ begin
   end;
   res := 0;
   for i := 0 to high(fSchemaRec) do
-    if IsEqualGuid(fSchemaRec[i].SchemaGuid,aUID) then begin
+    if IsEqualGuid(@fSchemaRec[i].SchemaGuid,@aUID) then begin
       res := fSchemaRec[i].SupportedRestrictions;
       break;
     end;
@@ -2724,8 +2725,7 @@ begin
     C.OleDBCheck(nil,SRS.GetRowset(nil,aUID,length(Args),Args,IID_IRowset,0,nil,aResult));
     result := aResult<>nil; // mark some rows retrieved
   except
-    on E: Exception do
-      result := false;
+    result := false;
   end;
 end;
 
@@ -2793,6 +2793,7 @@ type
     bClass: byte;
     wLineNumber: word;
   end;
+  /// to retrieve enhanced Microsoft SQL Server error information
   ISQLServerErrorInfo = interface(IUnknown)
     ['{5CF4CA12-EF21-11d0-97E7-00C04FC2AD98}']
     function GetErrorInfo(out ppErrorInfo: PSSERRORINFO;
@@ -2942,6 +2943,17 @@ end;
 
 {$endif CPU64}
 
+{ TOleDBACEConnectionProperties }
+
+procedure TOleDBACEConnectionProperties.SetInternalProperties;
+begin
+  fProviderName := 'Microsoft.ACE.OLEDB.12.0';
+  fDBMS := dJet;
+  inherited SetInternalProperties;
+  if not FileExists(UTF8ToString(ServerName)) then
+    CreateDatabase;
+end;
+
 
 { TBaseAggregatingRowset }
 
@@ -3004,7 +3016,7 @@ function TBaseAggregatingRowset.QueryInterface({$IFDEF FPC_HAS_CONSTREF}constref
 function TBaseAggregatingRowset.QueryInterface(const IID: TGUID; out Obj): HResult;
 {$endif FPC}
 begin
-  if IsEqualGUID(IID, IID_IUnknown)then begin
+  if IsEqualGUID(@IID, @IID_IUnknown) then begin
     IUnknown(Obj) := Self;
   end else begin
     if not Assigned(fUnkInnerSQLNCLIRowset) then begin
@@ -3012,7 +3024,7 @@ begin
       Result := E_NOINTERFACE;
       Exit;
     end;
-    if IsEqualGUID(IID, IID_IRowset)then begin
+    if IsEqualGUID(@IID, @IID_IRowset)then begin
       IUnknown(Obj) := self;
     end else begin
       Result := fUnkInnerSQLNCLIRowset.QueryInterface(IID, Obj);
@@ -3178,6 +3190,7 @@ initialization
   {$ifndef CPU64} // Jet is not available on Win64
   TOleDBJetConnectionProperties.RegisterClassNameForDefinition;
   {$endif}
+  TOleDBACEConnectionProperties.RegisterClassNameForDefinition;
   TOleDBAS400ConnectionProperties.RegisterClassNameForDefinition;
   TOleDBODBCSQLConnectionProperties.RegisterClassNameForDefinition;
 

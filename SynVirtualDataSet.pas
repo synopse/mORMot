@@ -77,7 +77,7 @@ uses
 type
   {$ifndef UNICODE} // defined as TRecordBuffer = PByte in newer DB.pas
   TRecordBuffer = PChar;
-  {$endif}
+  {$endif UNICODE}
   PDateTimeRec = ^TDateTimeRec;
 
   /// read-only virtual TDataSet able to access any content
@@ -814,7 +814,7 @@ begin
         ftLongWord:
           W.AddU(TLongWordField(Data.Fields[f]).Value);
         ftExtended:
-          W.Add(AsFloat,DOUBLE_PRECISION);
+          W.AddDouble(AsFloat);
         ftSingle:
           W.Add(AsFloat,SINGLE_PRECISION);
         {$endif}
@@ -840,7 +840,7 @@ end;
 constructor TDocVariantArrayDataSet.Create(Owner: TComponent;
   const Data: TVariantDynArray; const ColumnNames: array of RawUTF8;
   const ColumnTypes: array of TSQLDBFieldType);
-var n,ndx,j: integer;
+var n,ndx,j: PtrInt;
     first: PDocVariantData;
 begin
   fValues := Data;

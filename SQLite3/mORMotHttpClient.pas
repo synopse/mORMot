@@ -431,6 +431,7 @@ type
   {$endif USEWININET}
   {$endif USELIBCURL}
   {$else ONLYUSEHTTPSOCKET}
+  {$ifdef USEWININET}
   /// HTTP/1.1 RESTful JSON default mORMot Client class
   // - under Windows, maps the TSQLHttpClientWinHTTP class
   TSQLHttpClient = TSQLHttpClientWinHTTP;
@@ -438,6 +439,10 @@ type
   // - under Windows, maps the TSQLHttpClientWinHTTP class, or TSQLHttpClientCurl
   // under Linux
   TSQLHttpsClient = TSQLHttpClientWinHTTP;
+  {$else}
+  TSQLHttpClient = TSQLHttpClientWinSock;
+  TSQLHttpsClient = TSQLHttpClientWinSock; // wouls use SChannel if available
+  {$endif USEWININET}
   {$endif ONLYUSEHTTPSOCKET}
 
 var
@@ -493,9 +498,10 @@ begin
   end else
     Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501 indicates not socket closed
 {$ifdef WITHLOG}
-  with Call do
-    log.Log(sllClient,'% % status=% len=% state=%',
-      [method,url,OutStatus,length(OutBody),OutInternalState],self);
+  if log<>nil then
+    with Call do
+      log.Log(sllClient,'% % status=% len=% state=%',
+        [method,url,OutStatus,length(OutBody),OutInternalState],self);
 {$endif}
 end;
 
@@ -861,9 +867,10 @@ begin
       end;
   end;
 {$ifdef WITHLOG}
-  if result<>'' then
-    log.Log(sllWarning,'[%] error upgrading %',[result,sockets],self) else
-    log.Log(sllHTTP,'HTTP link upgraded to WebSockets using %',[sockets],self);
+  if log<>nil then
+    if result<>'' then
+      log.Log(sllWarning,'[%] error upgrading %',[result,sockets],self) else
+      log.Log(sllHTTP,'HTTP link upgraded to WebSockets using %',[sockets],self);
 {$endif}
 end;
 
@@ -954,8 +961,7 @@ begin
     result.Lo := fRequest.Request(SockString(url),SockString(method),
       KeepAliveMS,SockString(Header),SockString(Data),SockString(DataType),
       SockString(OutHeader),SockString(OutData));
-    result.Hi := GetCardinal(pointer(
-      FindIniNameValue(pointer(OutHeader),'SERVER-INTERNALSTATE: ')));
+    result.Hi := GetCardinal(FindNameValue(pointer(OutHeader),'SERVER-INTERNALSTATE:'));
     Header := OutHeader;
     Data := OutData;
   end;

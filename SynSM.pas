@@ -1945,8 +1945,9 @@ end;
 
 function TSMValue.ToJSON(cx: PJSContext): RawUTF8;
 var W: TJSONWriter;
+    tmp: TTextWriterStackBuffer;
 begin
-  W := TJSONWriter.CreateOwnedStream;
+  W := TJSONWriter.CreateOwnedStream(tmp);
   try
     AddJSON(cx,W);
     W.SetText(result);
@@ -2492,23 +2493,20 @@ end;
 class procedure TSMVariant.New(const aObject: TSMObject;
   out aValue: variant);
 begin
-  if TVarData(aValue).VType and VTYPE_STATIC<>0 then
-    VarClear(aValue);
+  VarClear(aValue);
   TSMVariantData(aValue).Init(aObject);
 end;
 
 class procedure TSMVariant.New(cx: PJSContext; obj: PJSObject;
   out aValue: variant);
 begin
-  if TVarData(aValue).VType and VTYPE_STATIC<>0 then
-    VarClear(aValue);
+  VarClear(aValue);
   TSMVariantData(aValue).Init(cx,obj);
 end;
 
 class procedure TSMVariant.New(engine: TSMEngine; out aValue: variant);
 begin
-  if TVarData(aValue).VType and VTYPE_STATIC<>0 then
-    VarClear(aValue);
+  VarClear(aValue);
   TSMVariantData(aValue).InitNew(engine);
 end;
 

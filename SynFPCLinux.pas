@@ -51,10 +51,17 @@ unit SynFPCLinux;
 
 interface
 
+
+{$ifndef FPC}
+  'this unit is for FPC only - do not include it in any Delphi project!'
+{$endif FPC}
+
+
 {$I Synopse.inc} // set proper flags, and define LINUX for BSD and ANDROID
 
 uses
   {$ifdef LINUX}
+  BaseUnix,
   UnixType,
   {$endif LINUX}
   SysUtils;
@@ -143,6 +150,9 @@ var
 // - under Linux/FPC, this API truncates the name to 16 chars
 procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
 
+/// calls mprotect() syscall or clib
+function SynMProtect(addr:pointer; size:size_t; prot:integer): longint;
+
 {$ifdef BSD}
 function fpsysctlhwint(hwid: cint): Int64;
 function fpsysctlhwstr(hwid: cint; var temp: shortstring): pointer;
@@ -153,9 +163,16 @@ function fpsysctlhwstr(hwid: cint; var temp: shortstring): pointer;
 {$ifdef BSD}
 const // see https://github.com/freebsd/freebsd/blob/master/sys/sys/time.h
   CLOCK_REALTIME = 0;
+{$ifdef OpenBSD}
+  CLOCK_MONOTONIC = 3;
+  CLOCK_REALTIME_COARSE = CLOCK_REALTIME; // no faster alternative
+  CLOCK_MONOTONIC_COARSE = CLOCK_MONOTONIC;
+{$else}
   CLOCK_MONOTONIC = 4;
   CLOCK_REALTIME_COARSE = 10; // named CLOCK_REALTIME_FAST in FreeBSD 8.1+
   CLOCK_MONOTONIC_COARSE = 12;
+{$endif OPENBSD}
+
 {$else}
 const
   CLOCK_REALTIME = 0;
@@ -202,17 +219,114 @@ procedure SleepHiRes(ms: cardinal);
 function UnixKeyPending: boolean;
 
 
+{$ifdef LINUX}
+
+type
+  /// the libraries supported by TExternalLibrariesAPI
+  TExternalLibrary = (elPThread {$ifdef LINUXNOTBSD} , elSystemD {$endif});
+  /// set of libraries supported by TExternalLibrariesAPI
+  TExternalLibraries = set of TExternalLibrary;
+
+  /// implements late-binding of system libraries
+  // - about systemd: see https://www.freedesktop.org/wiki/Software/systemd
+  // and http://0pointer.de/blog/projects/socket-activation.html - to get headers
+  // on debian: `sudo apt install libsystemd-dev && cd /usr/include/systemd`
+  TExternalLibrariesAPI = object
+  private
+    Lock: TRTLCriticalSection;
+    Loaded: TExternalLibraries;
+    {$ifdef LINUX}
+    pthread: pointer;
+    {$ifdef LINUXNOTBSD}
+    systemd: pointer;
+    {$endif LINUXNOTBSD}
+    {$endif LINUX}
+    procedure Done;
+  public
+    {$ifdef LINUXNOTBSD}
+    /// customize the name of a thread (truncated to 16 bytes)
+    // - see https://stackoverflow.com/a/7989973
+    pthread_setname_np: function(thread: pointer; name: PAnsiChar): longint; cdecl;
+    /// systemd: returns how many file descriptors have been passed to process
+    // - if result=1 then socket for accepting connection is SD_LISTEN_FDS_START
+    sd_listen_fds: function(unset_environment: integer): integer; cdecl;
+    /// systemd: returns 1 if the file descriptor is an AF_UNIX socket of the specified type and path
+    sd_is_socket_unix: function(fd, typr, listening: integer;
+      var path: TFileName; pathLength: PtrUInt): integer; cdecl;
+    /// systemd: submit simple, plain text log entries to the system journal
+    // - priority value can be obtained using longint(LOG_TO_SYSLOG[logLevel])
+    // - WARNING: args strings processed using C printf semantic, so % is a printf
+    // placeholder and should be either escaped using %% or all formatting args must be passed
+    sd_journal_print: function(priority: longint; args: array of const): longint; cdecl;
+    /// systemd: submit array of iov structures instead of the format string to the system journal.
+    //  - each structure should reference one field of the entry to submit.
+    //  - the second argument specifies the number of structures in the array.
+    sd_journal_sendv: function(const iov: Piovec; n: longint): longint; cdecl;
+    /// systemd: sends notification to systemd
+    // - see https://www.freedesktop.org/software/systemd/man/sd_notify.html
+    // status notification sample: sd.notify(0, 'READY=1');
+    // watchdog notification: sd.notify(0, 'WATCHDOG=1');
+    sd_notify: function(unset_environment: longint; state: PUTF8Char): longint; cdecl;
+    /// systemd: check whether the service manager expects watchdog keep-alive
+    // notifications from a service
+    // - if result > 0 then usec contains the notification interval (app should
+    // notify every usec/2)
+    sd_watchdog_enabled: function(unset_environment: longint; usec: Puint64): longint; cdecl;
+    {$endif LINUXNOTBSD}
+    /// thread-safe loading of a system library
+    // - caller should then check the API function to be not nil
+    procedure EnsureLoaded(lib: TExternalLibrary);
+  end;
+
+var
+  /// late-binding of system libraries
+  ExternalLibraries: TExternalLibrariesAPI;
+
+{$ifdef LINUXNOTBSD} { the systemd API is Linux-specific }
+
+const
+  /// The first passed file descriptor is fd 3
+  SD_LISTEN_FDS_START = 3;
+
+  /// low-level libcurl library file name, depending on the running OS
+  LIBSYSTEMD_PATH = 'libsystemd.so.0';
+
+  ENV_INVOCATION_ID: PAnsiChar = 'INVOCATION_ID';
+
+type
+  /// low-level exception raised during systemd library access
+  ESystemd = class(Exception);
+
+/// returns true in case process is started by systemd
+// - For systemd v232+
+function ProcessIsStartedBySystemd: boolean;
+
+/// initialize the libsystemd API
+// - do nothing if the library has already been loaded
+// - will raise ESsytemd exception on any loading issue
+procedure LibSystemdInitialize;
+
+/// returns TRUE if a systemd library is available
+// - will load and initialize it, calling LibSystemdInitialize if necessary,
+// catching any exception during the process
+function SystemdIsAvailable: boolean; inline;
+
+{$endif LINUXNOTBSD}
+
+{$endif LINUX}
+
+
 implementation
 
 {$ifdef LINUX}
 uses
   Classes,
   Unix,
-  BaseUnix,
   {$ifdef BSD}
   sysctl,
   {$else}
   Linux,
+  SysCall,
   {$endif BSD}
   dl;
 {$endif LINUX}
@@ -226,6 +340,14 @@ procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
 begin
   {$ifdef LINUXNOTBSD}
   if cs.__m_kind<>0 then
+  {$else}
+  {$ifdef BSD}
+  {$ifdef Darwin}
+  if cs.sig<>0 then
+  {$else}
+  if Assigned(cs) then
+  {$endif Darwin}
+  {$endif BSD}
   {$endif LINUXNOTBSD}
     DoneCriticalSection(cs);
 end;
@@ -372,10 +494,23 @@ end;
 {$else}
 
 {$ifdef BSD}
+
 function clock_gettime(ID: cardinal; r: ptimespec): Integer;
   cdecl external 'libc.so' name 'clock_gettime';
 function clock_getres(ID: cardinal; r: ptimespec): Integer;
   cdecl external 'libc.so' name 'clock_getres';
+
+{$else}
+
+// libc's clock_gettime function uses vDSO (avoid syscall) while FPC by default
+// is compiled without FPC_USE_LIBC defined and do a syscall each time
+//   GetTickCount64 fpc    2 494 563 op/sec
+//   GetTickCount64 libc 119 919 893 op/sec
+// note: for high-resolution QueryPerformanceMicroSeconds, calling the kernel
+// is also slower
+function clock_gettime(clk_id : clockid_t; tp: ptimespec) : cint;
+  cdecl; external 'c' name 'clock_gettime';
+
 {$endif BSD}
 
 function GetTickCount64: Int64;
@@ -402,14 +537,14 @@ end;
 procedure QueryPerformanceCounter(out Value: Int64);
 var r : TTimeSpec;
 begin
-  clock_gettime(CLOCK_MONOTONIC,@r);
+  clock_gettime(CLOCK_MONOTONIC, @r);
   value := r.tv_nsec+r.tv_sec*C_BILLION; // returns nanoseconds resolution
 end;
 
 procedure QueryPerformanceMicroSeconds(out Value: Int64);
 var r : TTimeSpec;
 begin
-  clock_gettime(CLOCK_MONOTONIC,@r);
+  clock_gettime(CLOCK_MONOTONIC, @r);
   value := PtrUInt(r.tv_nsec) div C_THOUSAND+r.tv_sec*C_MILLION; // as microseconds
 end;
 
@@ -505,8 +640,8 @@ begin // not inlined to avoid try..finally UnicodeString protection
   if cchCount2<0 then
     cchCount2 := StrLen(lpString2);
   SetString(U2,lpString2,cchCount2);
-  result := widestringmanager.CompareUnicodeStringProc(U1,U2,TCompareOptions(dwCmpFlags));
-end;
+  result := widestringmanager.CompareUnicodeStringProc(U1,U2,TCompareOptions(dwCmpFlags))+2;
+end; // caller would make -2 to get regular -1/0/1 comparison values
 
 function GetFileSize(hFile: cInt; lpFileSizeHigh: PDWORD): DWORD;
 var FileInfo: TStat;
@@ -534,6 +669,25 @@ begin
   end;
   fpnanosleep(@timeout,nil)
   // no retry loop on ESysEINTR (as with regular RTL's Sleep)
+end;
+
+{$ifdef BSD}
+function mprotect(Addr: Pointer; Len: size_t; Prot: Integer): Integer;
+  {$ifdef Darwin} cdecl external 'libc.dylib' name 'mprotect';
+  {$else} cdecl external 'libc.so' name 'mprotect'; {$endif}
+{$endif BSD}
+
+function SynMProtect(addr: pointer; size: size_t; prot: integer): longint;
+begin
+  result := -1;
+  {$ifdef UNIX}
+    {$ifdef BSD}
+    result := mprotect(addr, size, prot);
+    {$else}
+    if Do_SysCall(syscall_nr_mprotect, PtrUInt(addr), size, prot) >= 0 then
+      result := 0;
+    {$endif BSD}
+  {$endif UNIX}
 end;
 
 procedure GetKernelRevision;
@@ -567,9 +721,11 @@ begin
   {$else}
   {$ifdef LINUX}
   // try Linux kernel 2.6.32+ or FreeBSD 8.1+ fastest clocks
-  if clock_gettime(CLOCK_REALTIME_COARSE, @tp) = 0 then
+  if (CLOCK_REALTIME_COARSE <> CLOCK_REALTIME_FAST) and
+     (clock_gettime(CLOCK_REALTIME_COARSE, @tp) = 0) then
     CLOCK_REALTIME_FAST := CLOCK_REALTIME_COARSE;
-  if clock_gettime(CLOCK_MONOTONIC_COARSE, @tp) = 0 then
+  if (CLOCK_MONOTONIC_COARSE <> CLOCK_MONOTONIC_FAST) and
+     (clock_gettime(CLOCK_MONOTONIC_COARSE, @tp) = 0) then
     CLOCK_MONOTONIC_FAST := CLOCK_MONOTONIC_COARSE;
   if (clock_gettime(CLOCK_REALTIME_FAST,@tp)<>0) or // paranoid check
      (clock_gettime(CLOCK_MONOTONIC_FAST,@tp)<>0) then
@@ -580,43 +736,70 @@ begin
 end;
 
 
-type
-  TExternalLibraries = object
-    Lock: TRTLCriticalSection;
-    Loaded: boolean;
-    {$ifdef LINUX}
-    pthread: pointer;
-    {$ifdef LINUXNOTBSD} // see https://stackoverflow.com/a/7989973
-    pthread_setname_np: function(thread: pointer; name: PAnsiChar): LongInt; cdecl;
-    {$endif LINUXNOTBSD}
-    {$endif LINUX}
-    procedure EnsureLoaded;
-    procedure Done;
-  end;
-var
-  ExternalLibraries: TExternalLibraries;
+{ TExternalLibrariesAPI }
 
-procedure TExternalLibraries.EnsureLoaded;
+procedure TExternalLibrariesAPI.EnsureLoaded(lib: TExternalLibrary);
+var
+  p: PPointer;
+  i, j: integer;
+const
+  NAMES: array[0..5] of PAnsiChar = (
+    'sd_listen_fds', 'sd_is_socket_unix', 'sd_journal_print', 'sd_journal_sendv',
+    'sd_notify', 'sd_watchdog_enabled');
 begin
+  if lib in Loaded then
+    exit;
   EnterCriticalSection(Lock);
-  if not Loaded then begin
-    {$ifdef LINUX}
-    pthread := dlopen({$ifdef ANDROID}'libc.so'{$else}'libpthread.so.0'{$endif}, RTLD_LAZY);
-    if pthread <> nil then begin
-      {$ifdef LINUXNOTBSD}
-      @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
-      {$endif LINUXNOTBSD}
-    end;
-    {$endif LINUX}
-    Loaded := true;
+  if not (lib in Loaded) then
+  case lib of
+    elPThread:
+      begin
+        {$ifdef LINUX}
+        pthread := dlopen({$ifdef ANDROID}'libc.so'{$else}'libpthread.so.0'{$endif}, RTLD_LAZY);
+        if pthread <> nil then
+        begin
+          {$ifdef LINUXNOTBSD}
+          @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
+          {$endif LINUXNOTBSD}
+        end;
+        {$endif LINUX}
+        include(Loaded, elPThread);
+      end;
+  {$ifdef LINUXNOTBSD}
+    elSystemD:
+      begin
+        systemd := dlopen(LIBSYSTEMD_PATH, RTLD_LAZY);
+        if systemd <> nil then
+        begin
+          p := @@sd_listen_fds;
+          for i := 0 to high(NAMES) do
+          begin
+            p^ := dlsym(systemd, NAMES[i]);
+            if p^ = nil then
+            begin
+              p := @@sd_listen_fds;
+              for j := 0 to i do
+              begin
+                p^ := nil;
+                inc(p);
+              end;
+              break;
+            end;
+            inc(p);
+          end;
+        end;
+        include(Loaded, elSystemD);
+      end;
+  {$endif LINUXNOTBSD}
   end;
   LeaveCriticalSection(Lock);
 end;
 
-procedure TExternalLibraries.Done;
+procedure TExternalLibrariesAPI.Done;
 begin
   EnterCriticalSection(Lock);
-  if Loaded then begin
+  if elPThread in Loaded then
+  begin
     {$ifdef LINUX}
     {$ifdef LINUXNOTBSD}
     @pthread_setname_np := nil;
@@ -625,6 +808,10 @@ begin
       dlclose(pthread);
     {$endif LINUX}
   end;
+  {$ifdef LINUXNOTBSD}
+  if (elSystemD in Loaded) and (systemd <> nil) then
+    dlclose(systemd);
+  {$endif LINUXNOTBSD}
   LeaveCriticalSection(Lock);
   DeleteCriticalSection(Lock);
 end;
@@ -633,6 +820,11 @@ procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
 var trunc: array[0..15] of AnsiChar; // truncated to 16 bytes (including #0)
     i,L: integer;
 begin
+  {$ifdef LINUXNOTBSD}
+  if not(elPThread in ExternalLibraries.Loaded) then
+    ExternalLibraries.EnsureLoaded(elPThread);
+  if not Assigned(ExternalLibraries.pthread_setname_np) then
+    exit;
   if Name = '' then
     exit;
   L := 0; // trim unrelevant spaces and prefixes when filling the 16 chars 
@@ -654,12 +846,37 @@ begin
   if L = 0 then
     exit;
   trunc[L] := #0;
-  {$ifdef LINUXNOTBSD}
-  ExternalLibraries.EnsureLoaded;
-  if Assigned(ExternalLibraries.pthread_setname_np) then
-    ExternalLibraries.pthread_setname_np(pointer(ThreadID), @trunc[0]);
+  ExternalLibraries.pthread_setname_np(pointer(ThreadID), @trunc[0]);
   {$endif LINUXNOTBSD}
 end;
+
+
+{$ifdef LINUXNOTBSD}
+
+function SystemdIsAvailable: boolean;
+begin
+  if not(elSystemD in ExternalLibraries.Loaded) then
+    ExternalLibraries.EnsureLoaded(elSystemD);
+  result := Assigned(ExternalLibraries.sd_listen_fds);
+end;
+
+function ProcessIsStartedBySystemd: boolean;
+begin
+  result := SystemdIsAvailable and
+    // note: for example on Ubuntu 20.04 INVOCATION_ID is always defined
+    // from the other side PPID 1 can be set if we run under docker and started
+    // by init.d so let's verify both
+    (fpgetppid() = 1) and (fpGetenv(ENV_INVOCATION_ID) <> nil);
+end;
+
+procedure LibSystemdInitialize;
+begin
+  if not SystemdIsAvailable then
+    raise ESystemd.Create('Impossible to load ' + LIBSYSTEMD_PATH);
+end;
+
+{$endif LINUXNOTBSD}
+
 
 initialization
   GetKernelRevision;

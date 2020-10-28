@@ -55,21 +55,28 @@ unit SynDBUniDAC;
 interface
 
 uses
-  Windows, SysUtils,
+  Windows,
+  SysUtils,
   {$IFNDEF DELPHI5OROLDER}
   Variants,
   {$ENDIF}
-  Classes, Contnrs,
+  Classes,
+  Contnrs,
   SynCommons,
+  SynTable,
   SynLog,
   SynDB,
   SynDBDataset,
+  SynOleDB, // for CoInit/CoUnInit
   Uni,
   UniProvider,
   UniScript;
 
 
 { -------------- UniDAC database access }
+
+const
+  cMSSQLProvider = 'prDirect';
 
 type
   /// Exception type associated to UniDAC database access
@@ -127,7 +134,6 @@ type
     /// retrieve the advanced indexed information of a specified Table
     // - this overridden method will use UniDAC metadata to retrieve the information
     procedure GetIndexes(const aTableName: RawUTF8; out Indexes: TSQLDBIndexDefineDynArray); override;
-
     /// allow to set the options specific to a UniDAC driver
     // - for instance, you can set for both SQLite3 and Firebird/Interbase:
     // ! Props.SpecificOptions.Values['ClientLibrary'] := ClientDllName;
@@ -175,6 +181,8 @@ type
     function DatasetPrepare(const aSQL: string): boolean; override;
     /// execute underlying TUniQuery.ExecSQL
     procedure DatasetExecSQL; override;
+    /// overriden by itSDS to properly handle UniDAC parameters
+    procedure DataSetBindSQLParam(const aArrayIndex, aParamIndex: integer; const aParam: TSQLDBParam); override;
   public
   end;
 
@@ -226,9 +234,21 @@ begin
     fSpecificOptions.Values['CharLength'] := '2';
     fSpecificOptions.Values['DescribeParams'] := 'true';
   end; // http://www.devart.com/unidac/docs/index.html?ibprov_article.htm
+  dOracle: begin
+    fSpecificOptions.Values['UseUnicode'] := 'true';
+    fSpecificOptions.Values['Direct'] := 'true';
+    fSpecificOptions.Values['HOMENAME'] := '';
+  end;
+  dMySQL: begin
+    // s.d. 30.11.19 Damit der Connect schneller geht ! CRVioTCP.pas WaitForConnect
+    fSpecificOptions.Values['MySQL.ConnectionTimeout'] := '0';
+  end;
   dMSSQL: begin
     if aUserID='' then
       fSpecificOptions.Values['Authentication'] := 'auWindows';
+      fSpecificOptions.Values['SQL Server.Provider'] := cMSSQLProvider;
+      // s.d. 30.11.19 Damit der Connect im Direct Mode so Schnell ist wie mit prAuto/OleDB
+      fSpecificOptions.Values['SQL Server.ConnectionTimeout'] := '0';
   end; // http://www.devart.com/unidac/docs/index.html?sqlprov_article.htm
   dPostgreSQL: begin  // thanks delphinium for the trick!
     fSpecificOptions.Values['CharSet'] := 'UTF8';
@@ -263,8 +283,11 @@ begin
       Table := Owner;
       Owner := '';
     end;
+    if Owner = '' then
+      Owner := MainConnection.Properties.DatabaseName; // itSDS
     if Owner<>'' then
-      meta.Restrictions.Values['TABLE_SCHEMA'] := UTF8ToString(UpperCase(Owner));
+      meta.Restrictions.Values['TABLE_SCHEMA'] := UTF8ToString(UpperCase(Owner)) else
+      meta.Restrictions.Values['SCOPE'] := 'LOCAL';
     meta.Restrictions.Values['TABLE_NAME'] := UTF8ToString(UpperCase(Table));
     meta.Open;
     hasSubType := meta.FindField('DATA_SUBTYPE')<>nil;
@@ -279,6 +302,7 @@ begin
       F.ColumnPrecision := meta.FieldByName('DATA_PRECISION').AsInteger;
       F.ColumnType := ColumnTypeNativeToDB(F.ColumnTypeNative,F.ColumnScale);
       if F.ColumnType=ftUnknown then begin // UniDAC metadata failed -> use SQL
+        Fields := nil;
         inherited GetFields(aTableName,Fields);
         exit;
       end;
@@ -345,8 +369,7 @@ begin
   { TODO : get FOREIGN KEYS from UniDAC metadata ? }
 end;
 
-procedure TSQLDBUniDACConnectionProperties.GetTableNames(
-  out Tables: TRawUTF8DynArray);
+procedure TSQLDBUniDACConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
 var List: TStringList;
 begin
   List := TStringList.Create;
@@ -378,7 +401,7 @@ begin
   if aLibraryLocation<>'' then begin
     result := result+'?ClientLibrary=';
     if aLibraryLocationAppendExePath then
-      result := result+StringToUTF8(ExtractFilePath(ParamStr(0)));
+      result := result+StringToUTF8(ExeVersion.ProgramFilePath);
     result := result+StringToUTF8(aLibraryLocation);
   end;
   if aServerName<>'' then begin
@@ -411,7 +434,10 @@ var options: TStrings;
     PortNumber, i: Integer;
 begin
   inherited Create(aProperties);
+  if (aProperties.DBMS = dMSSQL) and (not SameText(cMSSQLProvider, 'prDirect')) then
+    CoInit;
   fDatabase := TUniConnection.Create(nil);
+  fDatabase.LoginPrompt := false;
   fDatabase.ProviderName := UTF8ToString(fProperties.ServerName);
   case aProperties.DBMS of
   dSQLite, dFirebird, dPostgreSQL, dMySQL, dDB2, dMSSQL:
@@ -421,6 +447,14 @@ begin
   end;
   fDatabase.Username := UTF8ToString(fProperties.UserID);
   fDatabase.Password := UTF8ToString(fProperties.PassWord);
+  if aProperties.DBMS = dMySQL then
+    // s.d. 30.11.19 Damit der Connect schneller geht
+    fDatabase.SpecificOptions.Add('MySQL.ConnectionTimeout=0');
+  if aProperties.DBMS = dMSSQL then begin
+    fDatabase.SpecificOptions.Add('SQL Server.Provider='+cMSSQLProvider);
+    // s.d. 30.11.19 Damit der Connect im Direct Mode so Schnell ist wie mit prAuto/OleDB
+    fDatabase.SpecificOptions.Add('SQL Server.ConnectionTimeout=0');
+  end;
   // handle the options set by TSQLDBUniDACConnectionProperties.URI() 
   options := (fProperties as TSQLDBUniDACConnectionProperties).fSpecificOptions;
   if fDatabase.Server='' then 
@@ -484,6 +518,8 @@ destructor TSQLDBUniDACConnection.Destroy;
 begin
   try
    Disconnect;
+    if (fProperties.DBMS = dMSSQL) and (not SameText(cMSSQLProvider, 'prDirect')) then
+      CoUnInit;
   except
     on Exception do
   end;
@@ -515,6 +551,26 @@ end;
 
 
 { TSQLDBUniDACStatement }
+
+procedure TSQLDBUniDACStatement.DataSetBindSQLParam(const aArrayIndex,
+  aParamIndex: integer; const aParam: TSQLDBParam);
+var P: TDAParam;
+begin
+  P := TDAParam(fQueryParams[aParamIndex]);
+  if P.InheritsFrom(TDAParam) then
+    with aParam do
+      if (VinOut<>paramInOut) and (VType=SynTable.ftBlob) then begin
+        P.ParamType := SQLParamTypeToDBParamType(VInOut);
+        if aArrayIndex>=0 then
+{$ifdef UNICODE}
+          P.SetBlobData(Pointer(VArray[aArrayIndex]),Length(VArray[aArrayIndex])) else
+          P.SetBlobData(Pointer(VData),Length(VData));
+{$else}   P.AsString := VArray[aArrayIndex] else
+          P.AsString := VData;
+{$endif}exit;
+      end;
+  inherited DataSetBindSQLParam(aArrayIndex, aParamIndex, aParam);
+end;
 
 procedure TSQLDBUniDACStatement.DatasetCreate;
 begin

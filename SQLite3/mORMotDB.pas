@@ -187,7 +187,8 @@ type
     /// compute the INSERT or UPDATE statement as decoded from a JSON object
     function JSONDecodedPrepareToSQL(var Decoder: TJSONObjectDecoder;
       out ExternalFields: TRawUTF8DynArray; out Types: TSQLDBFieldTypeArray;
-      Occasion: TSQLOccasion; BatchOptions: TSQLRestBatchOptions): RawUTF8;
+      Occasion: TSQLOccasion; BatchOptions: TSQLRestBatchOptions;
+      BoundArray: boolean): RawUTF8;
     function GetConnectionProperties: TSQLDBConnectionProperties;
     /// check rpmClearPoolOnConnectionIssue in fStoredClassMapping.Options
     function HandleClearPoolOnConnectionIssue: boolean;
@@ -318,6 +319,8 @@ type
     // on exception, release fStatement and optionally clear the pool
     procedure HandleClearPoolOnConnectionIssue;
   public
+    /// finalize the external cursor by calling ReleaseRows
+    destructor Destroy; override;
     /// called to begin a search in the virtual table, creating a SQL query
     // - the TSQLVirtualTablePrepared parameters were set by
     // TSQLVirtualTable.Prepare and will contain both WHERE and ORDER BY statements
@@ -831,27 +834,26 @@ begin
   result := false;
   if SQL='' then
     exit;
-  Stmt := TSynTableStatement.Create(SQL,
-    fStoredClassRecordProps.Fields.IndexByName,
+  Stmt := TSynTableStatement.Create(SQL,fStoredClassRecordProps.Fields.IndexByName,
     fStoredClassRecordProps.SimpleFieldsBits[soSelect]);
   try
     if (Stmt.SQLStatement='') or // parsing failed
       not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then begin
-      InternalLog('%.AdaptSQLForEngineList: statement too complex -> '+
-        'would use SQLite3 virtual engine [%]',[ClassType,SQL],sllWarning);
+      InternalLog('AdaptSQLForEngineList: complex statement -> switch to '+
+        'SQLite3 virtual engine - check efficiency',[],sllDebug);
       exit;
     end;
     if Stmt.Offset<>0 then begin
-      InternalLog('%.AdaptSQLForEngineList: unsupported OFFSET for [%]',
-        [ClassType,SQL],sllWarning);
+      InternalLog('AdaptSQLForEngineList: unsupported OFFSET for [%]',
+        [SQL],sllWarning);
       exit;
     end;
     if Stmt.Limit=0 then
       limit.Position := posNone else begin
       limit := fProperties.SQLLimitClause(Stmt);
       if limit.Position=posNone then begin
-        InternalLog('%.AdaptSQLForEngineList: unknown % LIMIT syntax for [%]',
-          [ClassType,ToText(fProperties.DBMS)^,SQL],sllWarning);
+        InternalLog('AdaptSQLForEngineList: unknown % LIMIT syntax for [%]',
+          [ToText(fProperties.DBMS)^,SQL],sllWarning);
         exit;
       end;
       if  limit.Position = posOuter then
@@ -920,8 +922,8 @@ begin
         for f := 0 to n do
         with Stmt.Where[f] do begin
           if (FunctionName<>'') or (Operator>high(DB_SQLOPERATOR)) then begin
-            InternalLog('%.AdaptSQLForEngineList: unsupported function %() for [%]',
-              [ClassType,FunctionName,SQL],sllWarning);
+            InternalLog('AdaptSQLForEngineList: unsupported function %() for [%]',
+              [FunctionName,SQL],sllWarning);
             exit;
           end;
           if f>0 then
@@ -1077,7 +1079,8 @@ begin
             RecordVersionFieldHandle(Occasion,Decode);
             if Fields=nil then begin
               Decode.AssignFieldNamesTo(Fields);
-              SQL := JSONDecodedPrepareToSQL(Decode,ExternalFields,Types,Occasion,[]);
+              SQL := JSONDecodedPrepareToSQL(
+                Decode,ExternalFields,Types,Occasion,[],{array=}true);
               SetLength(Values,Decode.FieldCount);
               ValuesMax := fBatchCount-BatchBegin;
               if ValuesMax>max then
@@ -1101,8 +1104,12 @@ begin
         end;
       end;
       mDelete: begin
-        SQL := FormatUTF8('delete from % where %=?',
-          [fTableName,fStoredClassMapping^.RowIDFieldName]);
+        if cPostgreBulkArray in fProperties.BatchSendingAbilities then
+          // for SynDBPostgres array binding
+          SQL := 'delete from % where %=ANY(?)' else
+          // regular SQL
+          SQL := 'delete from % where %=?';
+        SQL := FormatUTF8(SQL,[fTableName,fStoredClassMapping^.RowIDFieldName]);
         n := BatchEnd-BatchBegin+1;
         if n+1>=max then begin
           n := max; // do not send too much items at once, for better speed
@@ -1132,6 +1139,7 @@ begin
             Query.BindArray(1,ftInt64,Values[0],n);
           end;
           Query.ExecutePrepared;
+          Query.ReleaseRows;
           Query := nil;
         end;
       except
@@ -1326,8 +1334,7 @@ begin // TableModelIndex is not useful here
   end;
 end;
 
-function TSQLRestStorageExternal.EngineExecute(
-  const aSQL: RawUTF8): boolean;
+function TSQLRestStorageExternal.EngineExecute(const aSQL: RawUTF8): boolean;
 begin
   if aSQL='' then
     result := false else
@@ -1372,6 +1379,7 @@ begin
   if (rows<>nil) and rows.Step then
   try
     BlobData := rows.ColumnBlob(0);
+    rows.ReleaseRows;
     rows := nil;
     result := true; // success
   except
@@ -1399,6 +1407,7 @@ begin
         rows.ColumnToSQLVar(f,data,temp);
         BlobFields[f].SetFieldSQLVar(Value,data);
       end;
+      rows.ReleaseRows;
       rows := nil;
       result := true; // success
     except
@@ -1428,6 +1437,7 @@ begin
           JSONEncodeNameSQLValue(SetFieldName,SetValue,JSON);
           while rows.Step do
             Owner.InternalUpdateEvent(seUpdate,TableModelIndex,rows.ColumnInt(0),JSON,nil);
+          rows.ReleaseRows;
         end;
         Owner.FlushInternalDBCache;
       end;
@@ -1557,6 +1567,8 @@ begin
     if ExpectResults and (sftDateTimeMS in fStoredClassRecordProps.HasTypeFields) then
       stmt.ForceDateWithMS := true;
     stmt.ExecutePrepared;
+    if not ExpectResults then
+      stmt.ReleaseRows;
     result := stmt;
   except
     stmt := nil;
@@ -1605,6 +1617,9 @@ begin
     if ExpectResults and (sftDateTimeMS in fStoredClassRecordProps.HasTypeFields) then
       stmt.ForceDateWithMS := true;
     stmt.ExecutePrepared;
+    if IdemPChar(SQLFormat, 'DROP TABLE ') then begin
+      fEngineLockedMaxID := 0;
+    end;
     result := stmt;
   except
     stmt := nil;
@@ -1656,9 +1671,11 @@ begin
     n := 0;
     rows := ExecuteDirect('select % from % where %=?',
       [fStoredClassMapping^.RowIDFieldName,fTableName,FieldName],FieldValue,true);
-    if rows<>nil then
+    if rows<>nil then begin
       while rows.Step do
         AddInt64(TInt64DynArray(ResultID),n,rows.ColumnInt(0));
+      rows.ReleaseRows;
+    end;
     SetLength(ResultID,n);
     result := n>0;
   except
@@ -1837,7 +1854,8 @@ begin
     end;
     RecordVersionFieldHandle(Occasion,Decoder);
     // compute SQL statement and associated bound parameters
-    SQL := JSONDecodedPrepareToSQL(Decoder,ExternalFields,Types,Occasion,[]);
+    SQL := JSONDecodedPrepareToSQL(
+      Decoder,ExternalFields,Types,Occasion,[],{array=}false);
     if Occasion=soUpdate then  // Int64ToUTF8(var) fails on D2007
       Decoder.FieldValues[Decoder.FieldCount-1] := Int64ToUTF8(UpdatedID);
     // execute statement
@@ -1880,7 +1898,7 @@ end;
 function TSQLRestStorageExternal.JSONDecodedPrepareToSQL(
   var Decoder: TJSONObjectDecoder; out ExternalFields: TRawUTF8DynArray;
   out Types: TSQLDBFieldTypeArray; Occasion: TSQLOccasion;
-  BatchOptions: TSQLRestBatchOptions): RawUTF8;
+  BatchOptions: TSQLRestBatchOptions; BoundArray: boolean): RawUTF8;
 var f,k: Integer;
 begin
   SetLength(ExternalFields,Decoder.FieldCount);
@@ -1896,6 +1914,9 @@ begin
   end;
   // compute SQL statement and associated bound parameters
   Decoder.DecodedFieldNames := pointer(ExternalFields);
+  if BoundArray and (cPostgreBulkArray in fProperties.BatchSendingAbilities) then
+    // SynDBPostgres array binding e.g. via 'insert into ... values (unnest...)'
+    Decoder.DecodedFieldTypesToUnnest := @Types;
   result := Decoder.EncodeAsSQLPrepared(fTableName,Occasion,
     fStoredClassMapping^.RowIDFieldName,BatchOptions);
   if Occasion=soUpdate then
@@ -1967,6 +1988,13 @@ begin
   fHasData := false;
   if (self<>nil) and (Table<>nil) and (Table.Static<>nil) then
     (Table.Static as TSQLRestStorageExternal).HandleClearPoolOnConnectionIssue;
+end;
+
+destructor TSQLVirtualTableCursorExternal.Destroy;
+begin
+  if fStatement <> nil then
+    fStatement.ReleaseRows;
+  inherited Destroy;
 end;
 
 function TSQLVirtualTableCursorExternal.Column(aColumn: integer;

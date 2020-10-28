@@ -209,6 +209,8 @@ const
   FIREDAC_PROVIDER: array[dOracle..high(TSQLDBDefinition)] of RawUTF8 = (
     'Ora','MSSQL','MSAcc','MySQL','SQLite','IB','','PG','DB2','Infx');
   {$endif}
+
+  
 implementation
 
 uses
@@ -246,15 +248,19 @@ begin
   fOnBatchInsert := nil; // MultipleValuesInsert is slower than FireDAC ArrayDML 
   fFireDACOptions := TStringList.Create;
   if ((fDBMS<low(FIREDAC_PROVIDER)) or (fDBMS>high(FIREDAC_PROVIDER))) and
-     (fDBMS<>dNexusDB) then begin
-    for p := Low(FIREDAC_PROVIDER) to high(FIREDAC_PROVIDER) do
-      namevalue := ' '+namevalue+FIREDAC_PROVIDER[p];
-    raise ESQLDBFireDAC.CreateUTF8('%.Create: unknown provider - available:%',
-      [self,namevalue]);
-  end;
+     (fDBMS<>dNexusDB) then
+    if SameTextU(server,'ASA') then
+      fDBMS := dMSSQL else begin
+      for p := Low(FIREDAC_PROVIDER) to high(FIREDAC_PROVIDER) do
+        namevalue := ' '+namevalue+FIREDAC_PROVIDER[p];
+      raise ESQLDBFireDAC.CreateUTF8('%.Create: unknown provider - available:%',
+        [self,namevalue]);
+    end;
+  if server='' then
+    server := FIREDAC_PROVIDER[fDBMS];
   fFireDACOptions.Text := UTF8ToString(FormatUTF8(
     'DriverID=%'#13#10'User_Name=%'#13#10'Password=%'#13#10'Database=%',
-    [FIREDAC_PROVIDER[fDBMS],fUserId,fPassWord,fDatabaseName]));
+    [server,fUserId,fPassWord,fDatabaseName]));
   opt := pointer(options);
   while opt<>nil do begin
     GetNextItem(opt,';',namevalue);

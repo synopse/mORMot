@@ -253,11 +253,12 @@ type
     // - optional aAdditionalURL parameter can be used e.g. to registry an URI
     // to server static file content, by overriding TSQLHttpServer.Request
     // - for THttpApiServer, you can specify an optional name for the HTTP queue
+    // - for THttpServer, you can force aHeadersUnFiltered flag
     constructor Create(const aPort: AnsiString;
       const aServers: array of TSQLRestServer; const aDomainName: AnsiString='+';
       aHttpServerKind: TSQLHttpServerOptions=HTTP_DEFAULT_MODE; ServerThreadPoolCount: Integer=32;
-      aHttpServerSecurity: TSQLHttpServerSecurity=secNone;
-      const aAdditionalURL: AnsiString=''; const aQueueName: SynUnicode=''); reintroduce; overload;
+      aHttpServerSecurity: TSQLHttpServerSecurity=secNone; const aAdditionalURL: AnsiString='';
+      const aQueueName: SynUnicode=''; aHeadersUnFiltered: boolean=false); reintroduce; overload;
     /// create a Server instance, binded and listening on a TCP port to HTTP requests
     // - raise a EHttpServer exception if binding failed
     // - specify one TSQLRestServer server class to be used
@@ -512,9 +513,10 @@ begin
     result := true;
   finally
     fSafe.UnLock;
-    log.Log(sllHttp,'AddServer(%,Root=%,Port=%,Public=%:%)=%',
-      [aServer,aServer.Model.Root,fPort,fPublicAddress,fPublicPort,
-       BOOL_STR[result]],self);
+    if log<>nil then
+      log.Log(sllHttp,'AddServer(%,Root=%,Port=%,Public=%:%)=%',
+        [aServer,aServer.Model.Root,fPort,fPublicAddress,fPublicPort,
+         BOOL_STR[result]],self);
   end;
 end;
 
@@ -560,8 +562,9 @@ begin
     end;
   finally
     fSafe.UnLock;
-    log.Log(sllHttp,'%.RemoveServer(Root=%)=%',
-      [self,aServer.Model.Root,BOOL_STR[result]],self);
+    if log<>nil then
+      log.Log(sllHttp,'%.RemoveServer(Root=%)=%',
+        [self,aServer.Model.Root,BOOL_STR[result]],self);
   end;
 end;
 
@@ -581,7 +584,7 @@ constructor TSQLHttpServer.Create(const aPort: AnsiString;
   const aServers: array of TSQLRestServer; const aDomainName: AnsiString;
   aHttpServerKind: TSQLHttpServerOptions; ServerThreadPoolCount: Integer;
   aHttpServerSecurity: TSQLHttpServerSecurity; const aAdditionalURL: AnsiString;
-  const aQueueName: SynUnicode);
+  const aQueueName: SynUnicode; aHeadersUnFiltered: boolean);
 var i,j: integer;
     ServersRoot: RawUTF8;
     ErrMsg: RawUTF8;
@@ -655,7 +658,8 @@ begin
       fHttpServer := TWebSocketServerRest.Create(
         fPort,HttpThreadStart,HttpThreadTerminate,GetDBServerNames) else
       fHttpServer := THttpServer.Create(fPort,HttpThreadStart,HttpThreadTerminate,
-        GetDBServerNames,ServerThreadPoolCount);
+        GetDBServerNames,ServerThreadPoolCount,30000,aHeadersUnFiltered);
+    THttpServer(fHttpServer).WaitStarted;
     {$ifdef USETCPPREFIX}
     THttpServer(fHttpServer).TCPPrefix := 'magic';
     {$endif}
@@ -697,9 +701,9 @@ end;
 destructor TSQLHttpServer.Destroy;
 var log: ISynLog;
 begin
-  log := fLog.Enter(self, 'Destroy');
-  fLog.Add.Log(sllHttp,'% finalized for %',[fHttpServer,
-    Plural('server',length(fDBServers))],self);
+  log := fLog.Enter(self,'Destroy');
+  if log<>nil then
+    log.Log(sllHttp,'% finalized for %',[fHttpServer,Plural('server',length(fDBServers))],self);
   Shutdown(true); // but don't call fDBServers[i].Server.Shutdown
   FreeAndNil(fHttpServer);
   inherited Destroy;
@@ -844,7 +848,7 @@ function TSQLHttpServer.Request(Ctxt: THttpServerRequest): cardinal;
 var call: TSQLRestURIParams;
     i,hostlen: integer;
     P: PUTF8Char;
-    hostroot,redirect: RawUTF8;
+    headers,hostroot,redirect: RawUTF8;
     match: TSQLRestModelMatch;
     serv: TSQLRestServer;
 begin
@@ -863,8 +867,8 @@ begin
   if Ctxt.Method='OPTIONS' then begin // handle CORS
     if fAccessControlAllowOrigin='' then
       Ctxt.OutCustomHeaders := 'Access-Control-Allow-Origin:' else begin
-      Ctxt.OutCustomHeaders := 'Access-Control-Allow-Headers: '+
-        FindIniNameValue(pointer(Ctxt.InHeaders),'ACCESS-CONTROL-REQUEST-HEADERS: ');
+      FindNameValue(Ctxt.InHeaders,'ACCESS-CONTROL-REQUEST-HEADERS:',headers);
+      Ctxt.OutCustomHeaders := 'Access-Control-Allow-Headers: '+headers;
       ComputeAccessControlHeader(Ctxt);
     end;
     result := HTTP_NOCONTENT;
@@ -881,7 +885,7 @@ begin
           include(call.LowLevelFlags,llfSecured);
     end;
     if fHosts.Count>0 then begin
-      hostroot := FindIniNameValue(pointer(Ctxt.InHeaders),'HOST: ');
+      FindNameValue(Ctxt.InHeaders,'HOST: ',hostroot);
       i := PosExChar(':',hostroot);
       if i>0 then
         SetLength(hostroot,i-1); // trim any port
@@ -1012,7 +1016,7 @@ end;
 procedure TSQLHttpServer.ComputeAccessControlHeader(Ctxt: THttpServerRequest);
 var origin: RawUTF8;
 begin // caller did ensure that fAccessControlAllowOrigin<>''
-  origin := trim(FindIniNameValue(pointer(Ctxt.InHeaders),'ORIGIN: '));
+  FindNameValue(Ctxt.InHeaders,'ORIGIN: ',origin);
   if origin='' then
     exit;
   if fAccessControlAllowOrigin='*' then

@@ -1,7 +1,7 @@
 /// DB.pas TDataset-based direct access classes (abstract TQuery-like)
 // - this unit is a part of the freeware Synopse framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
-unit SynDBDataset;
+unit SynDBDataset; 
 
 {
   This file is part of Synopse framework.
@@ -182,13 +182,15 @@ type
     // - raise an ESQLDBDataset on any error
     procedure Reset; override;
 
-    /// Access the next or first row of data from the SQL Statement result
+    /// access the next or first row of data from the SQL Statement result
     // - return true on success, with data ready to be retrieved by Column*() methods
     // - return false if no more row is available (e.g. if the SQL statement
     // is not a SELECT but an UPDATE or INSERT command)
     // - if SeekFirst is TRUE, will put the cursor on the first row of results
     // - raise an ESQLDBDataset on any error
     function Step(SeekFirst: boolean = false): boolean; override;
+    /// close the associated TQuery when ISQLDBStatement is back in cache
+    procedure ReleaseRows; override;
     /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: Integer): Int64; override;
     /// returns TRUE if the column contains NULL
@@ -361,30 +363,26 @@ begin
 end;
 
 procedure TSQLDBDatasetStatementAbstract.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
-var Log: ISynLog;
-    oSQL: RawUTF8;
+var oSQL: RawUTF8;
 begin
-  Log := SynDBLog.Enter(Self, 'Prepare');
+  SQLLogBegin(sllDB);
   if fPrepared then
     raise ESQLDBDataset.CreateUTF8('%.Prepare() shall be called once',[self]);
   inherited Prepare(aSQL,ExpectResults); // connect if necessary
   fPreparedParamsCount := ReplaceParamsByNames(aSQL,oSQL);
   fPrepared := DatasetPrepare(UTF8ToString(oSQL));
+  SQLLogEnd;
   if not fPrepared then
     raise ESQLDBDataset.CreateUTF8('%.DatasetPrepare not prepared',[self]);
 end;
 
 procedure TSQLDBDatasetStatementAbstract.ExecutePrepared;
-var Log: ISynLog;
-    i,p: Integer;
+var i,p: Integer;
     lArrayIndex: integer;
     Field: TField;
 begin
-  Log := SynDBLog.Enter(Self, 'ExecutePrepared');
+  SQLLogBegin(sllSQL);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
-  with Log.Instance do
-    if sllSQL in Family.Level then
-      Log(sllSQL,SQLWithInlinedParams,self,2048);
   // 1. bind parameters in fParams[] to fQuery.Params
   if fPreparedParamsCount<>fParamCount then
     raise ESQLDBDataset.CreateUTF8(
@@ -419,7 +417,6 @@ begin
     end else
       DatasetExecSQL;
   until fDatasetSupportBatchBinding or (lArrayIndex=fParamsArrayCount-1);
-
   // 3. handle out parameters
   if fParamCount>0 then
     if fParamsArrayCount>0 then
@@ -429,6 +426,7 @@ begin
       for p := 0 to fParamCount-1 do
         if fParams[p].VInOut<>paramIn then
           DataSetOutSQLParam(p,fParams[p]);
+  SQLLogEnd;
 end;
 
 function TSQLDBDatasetStatementAbstract.Step(SeekFirst: boolean): boolean;
@@ -447,8 +445,15 @@ end;
 
 procedure TSQLDBDatasetStatementAbstract.Reset;
 begin
-  fQuery.Close;
+  ReleaseRows;
   inherited Reset;
+end;
+
+procedure TSQLDBDatasetStatementAbstract.ReleaseRows;
+begin
+  if (fQuery<>nil) and fQuery.Active then
+    fQuery.Close;
+  inherited ReleaseRows;
 end;
 
 function TSQLDBDatasetStatementAbstract.SQLParamTypeToDBParamType(IO: TSQLDBParamInOutType): TParamType;
@@ -568,8 +573,8 @@ var P: TParam;
     I64: Int64;
     tmp: RawUTF8;
 begin
+  P := fQueryParams[aParamIndex];
   with aParam do begin
-    P := fQueryParams[aParamIndex];
     P.ParamType := SQLParamTypeToDBParamType(VInOut);
     if VinOut <> paramInOut then
       case VType of
@@ -626,12 +631,11 @@ begin
               P.Value := UTF8ToWideString(VData) else
               P.AsString := UTF8ToString(VData);
         SynTable.ftBlob:
-          {$ifdef UNICODE}
           if aArrayIndex>=0 then
+          {$ifdef UNICODE}
             P.SetBlobData(TValueBuffer(VArray[aArrayIndex]),Length(VArray[aArrayIndex])) else
             P.SetBlobData(TValueBuffer(VData),Length(VData));
           {$else}
-          if aArrayIndex>=0 then
             P.AsString := VArray[aArrayIndex] else
             P.AsString := VData;
           {$endif}
@@ -678,8 +682,7 @@ procedure TSQLDBDatasetStatement.Prepare(const aSQL: RawUTF8;
 begin
   inherited;
   if fPreparedParamsCount<>fQueryParams.Count then
-    raise ESQLDBDataset.CreateUTF8(
-      '%.Prepare expected % parameters in request, found % - [%]',
+    raise ESQLDBDataset.CreateUTF8('%.Prepare expected % parameters in request, found % - [%]',
       [self,fPreparedParamsCount,fQueryParams.Count,aSQL]);
 end;
 

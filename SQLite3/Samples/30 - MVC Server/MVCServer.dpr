@@ -11,7 +11,9 @@ program MVCServer;
   {$endif}
 {$endif}
 
-{$APPTYPE CONSOLE}
+{$ifdef MSWINDOWS}
+  {$APPTYPE CONSOLE}
+{$endif MSWINDOWS}
 
 {$I Synopse.inc} // define HASINLINE WITHLOG ONLYUSEHTTPSOCKET
 

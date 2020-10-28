@@ -63,6 +63,8 @@ unit SynMemoEx;
 
 }
 
+{$I Synopse.inc}
+
 interface
 
 {.$define CLIPBOARDPROTECT} // if defined, ClipProtect truncates clipboard to 2KB
@@ -102,14 +104,19 @@ uses
   StdCtrls,
   ClipBrd,
   Menus
-  {$ifdef UNICODE}, UITypes{$endif};
+  {$ifdef FPC}  // FPC compatibility by alf (alfred) - thanks for the patch!
+  , LCLType
+  {$endif FPC}
+  {$ifdef UNICODE}
+  , UITypes
+  {$endif UNICODE};
 
 const
   RAEditorCompletionChars: set of AnsiChar =
     [#8, '_', '0'..'9', 'A'..'Z', 'a'..'z'];
   Separators: set of AnsiChar =
     [#0, ' ', '-', #13, #10, '.', ',', '/', '\', ':', '+', '%', '*', '(', ')',
-    ';', '=', '{', '}', '[', ']', '{', '}', '|', '!', '@', '"'];
+    ';', '=', '{', '}', '[', ']',  '|', '!', '@', '"'];
   GutterRightMargin = 2;
 
   WM_EDITCOMMAND = WM_USER + $101;
@@ -835,7 +842,10 @@ type
     property Align;
     property Enabled;
     property Color;
+    {$ifndef FPC}
     property Ctl3D;
+    property OnCanResize;
+    {$endif FPC}
     property Font;
     property ParentColor;
     property ParentFont;
@@ -854,7 +864,6 @@ type
     property ParentBiDiMode;
     property WantTabs default true;
     property WordWrap default true;
-    property OnCanResize;
     property OnConstrainedResize;
     property OnDockDrop;
     property OnDockOver;
@@ -1106,10 +1115,12 @@ function Min(x, y: integer): integer; {$ifdef HASINLINE}inline;{$endif}
 implementation
 
 uses
+  {$ifndef FPC}
   Consts,
+  {$endif FPC}
   RTLConsts;
 
-{$ifdef UNICODE}
+{$ifndef CPUX86}
 function PosEx(const SubStr, S: string; Offset: Integer = 1): Integer; inline;
 begin
   Result := System.Pos(SubStr, S, Offset);
@@ -2765,6 +2776,11 @@ begin
     FCellRect.Width := Max(1, Size.cx);
     FCellRect.Height := Max(1, Size.cy);
     EditorClient.Canvas.Font := Font;
+    Size := EditorClient.Canvas.TextExtent(BiggestSymbol);
+    {
+    if FCellRect.Width <> Max(1, Size.cx) then
+      raise EMemoExError.CreateFmt('Font %s has inconsistent width vs style', [Font.Name]);
+    }
     FDrawBitmap.Canvas.Font.Assign(Font);
     FDrawBitmap.Canvas.Brush.Assign(EditorClient.Canvas.Brush);
     FDrawBitmap.Width := Width;
@@ -5945,7 +5961,7 @@ begin
   Add2(ecGotoBookmark8, ord('Q'), [ssCtrl], ord('8'), [ssCtrl]);
   Add2(ecGotoBookmark9, ord('Q'), [ssCtrl], ord('9'), []);
   Add2(ecGotoBookmark9, ord('Q'), [ssCtrl], ord('9'), [ssCtrl]);
-
+{
   Add2(ecInsertMacro0, ord('S'), [ssCtrl], ord('0'), [ssCtrl]);
   Add2(ecInsertMacro0, ord('S'), [ssCtrl], ord('0'), []);
   Add2(ecInsertMacro1, ord('S'), [ssCtrl], ord('1'), [ssCtrl]);
@@ -6018,7 +6034,7 @@ begin
   Add2(ecInsertMacroY, ord('S'), [ssCtrl], ord('Y'), []);
   Add2(ecInsertMacroZ, ord('S'), [ssCtrl], ord('Z'), [ssCtrl]);
   Add2(ecInsertMacroZ, ord('S'), [ssCtrl], ord('Z'), []);
-
+}
   {$IFDEF MEMOEX_UNDO}
   Add(ecUndo, ord('Z'), [ssCtrl]);
   Add(ecUndo, VK_BACK, [ssAlt]);
@@ -6056,7 +6072,7 @@ begin
 
   Add(ecRecordMacro, ord('R'), [ssCtrl, ssShift]);
   Add(ecPlayMacro, ord('P'), [ssCtrl]);
-
+{
   Add2(ecBlockOpA, ord('B'), [ssCtrl], ord('A'), [ssCtrl]);
   Add2(ecBlockOpA, ord('B'), [ssCtrl], ord('A'), []);
   Add2(ecBlockOpB, ord('B'), [ssCtrl], ord('B'), [ssCtrl]);
@@ -6109,6 +6125,7 @@ begin
   Add2(ecBlockOpY, ord('B'), [ssCtrl], ord('Y'), []);
   Add2(ecBlockOpZ, ord('B'), [ssCtrl], ord('Z'), [ssCtrl]);
   Add2(ecBlockOpZ, ord('B'), [ssCtrl], ord('Z'), []);
+}
 end;
 {$ENDIF MEMOEX_DEFLAYOUT}
 
@@ -7217,7 +7234,7 @@ end;
 
 procedure TCustomMemoEx.FontChanged(Sender: TObject);
 begin
-  UpdateEditorSize;
+  UpdateEditorSize({fullupdate=}true);
   Invalidate;
 end;
 

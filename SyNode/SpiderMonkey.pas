@@ -3549,9 +3549,8 @@ var
   str16: PCChar16;
   strL: size_t;
 begin
+  VarClear(Value);
   with TVarData(Value) do begin
-    if VType and VTYPE_STATIC<>0 then
-      VarClear(Value);
     VType := varSynUnicode;
     VAny := nil; // avoid GPF below
     if JS_StringHasLatin1Chars(@self) then begin

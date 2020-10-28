@@ -13,6 +13,7 @@ Contributors
   AlexPirate
   Alfred Glaenzer (alf)
   Andre Heider (dhewg)
+  Antoine Simard (AntoineGS)
   Arnaud Bouchez
   ASiwon
   Aweste
@@ -51,6 +52,7 @@ Contributors
   Marius Maximus (mariuszekpl)
   Martin Eckes
   Martin Suer
+  Mapes
   Maxim Masiutin
   Mazinsw
   MChaos
