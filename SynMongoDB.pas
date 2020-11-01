@@ -1860,7 +1860,7 @@ type
   // secondary members but if no secondary members are available, operations
   // read from the primary
   TMongoClientReplicaSetReadPreference = (
-    rpPrimary, rpPrimaryPreferred, rpSecondary, rpSecondaryPreferred);
+    rpPrimary, rpPrimaryPreferred, rpSecondary, rpSecondaryPreferred, rpNearest);
 
   /// define Write Concern property of a MongoDB connection
   // - Write concern describes the guarantee that MongoDB provides when
@@ -1924,12 +1924,11 @@ type
     fServerBuildInfo: variant;
     fServerBuildInfoNumber: cardinal;
     fLatestReadConnectionIndex: integer;
-    procedure AfterOpen; virtual;
-    function GetOneReadConnection: TMongoConnection;
+    procedure AfterOpen(ConnectionID: Integer = 0); virtual;
     function GetBytesReceived: Int64;
     function GetBytesSent: Int64;
     function GetBytesTransmitted: Int64;
-    procedure Auth(const DatabaseName,UserName,Digest: RawUTF8; ForceMongoDBCR: boolean);
+    procedure Auth(const DatabaseName,UserName,Digest: RawUTF8; ForceMongoDBCR: boolean; ConnectionID: Integer = 0);
     function ReOpen: boolean;
   public
     /// prepare a connection to a MongoDB server or Replica Set
@@ -1951,7 +1950,7 @@ type
     // is TRUE), and SCRAM-SHA-1 since MongoDB 3.x
     // - see http://docs.mongodb.org/manual/administration/security-access-control
     function OpenAuth(const DatabaseName,UserName,PassWord: RawUTF8;
-      ForceMongoDBCR: boolean=false): TMongoDatabase;
+      ForceMongoDBCR: boolean=false; ConnectionID: Integer = 0): TMongoDatabase;
     /// close the connection and release all associated TMongoDatabase,
     // TMongoCollection and TMongoConnection instances
     destructor Destroy; override;
@@ -1967,6 +1966,8 @@ type
     // - will create a string from ServerBuildInfo object, e.g. as
     // $ 'MongoDB 3.2.0 mozjs mmapv1,wiredTiger'
     function ServerBuildInfoText: RawUTF8;
+    // select Connection in dependence of ReadPreference
+    function GetOneReadConnection: TMongoConnection;
     /// retrieve the server version and build information
     // - return the content as a TDocVariant document, e.g.
     // ! ServerBuildInfo.version = '2.4.9'
@@ -5711,6 +5712,7 @@ begin
 end;
 
 function TMongoClient.GetOneReadConnection: TMongoConnection;
+var idx: Integer;
 function GetUnlockedSecondaryIndex: integer;
 var retry: integer;
 begin
@@ -5753,7 +5755,17 @@ begin
       result := fConnections[0];
   rpSecondary, rpSecondaryPreferred:
     result := fConnections[GetUnlockedSecondaryIndex];
-  else // rpPrimary:
+  rpNearest: begin
++     Randomize;
++     idx:= Random(Length(fConnections));
++     if fConnections[idx].Locked then
++       INC(idx);
++     if (idx = 0) or (idx > High(fConnections)) then begin
++       idx:= 0;
++       result:= fConnections[idx];
++     end else
++       result := fConnections[GetUnlockedSecondaryIndex];
++  end else // rpPrimary:
     result := fConnections[0];
   end;
 end;
@@ -5780,31 +5792,34 @@ begin
 end;
 
 function TMongoClient.OpenAuth(const DatabaseName,UserName,PassWord: RawUTF8;
-  ForceMongoDBCR: boolean): TMongoDatabase;
+  ForceMongoDBCR: boolean; ConnectionID: Integer = 0): TMongoDatabase;
 var digest: RawByteString;
+  i: Integer;
 begin
   if (self=nil) or (DatabaseName='') or (UserName='') or (PassWord='') then
     raise EMongoException.CreateUTF8('Invalid %.OpenAuth("%") call',[self,DatabaseName]);
   result := fDatabases.GetObjectFrom(DatabaseName);
   if result=nil then  // not already opened -> try now from primary host
   try // note: authentication works on a single database per socket connection
-    if not fConnections[0].Opened then
-    try
-      fConnections[0].Open; // socket connection
-      AfterOpen; // need ServerBuildInfoNumber just below
-      digest := PasswordDigest(UserName,Password);
-      Auth(DatabaseName,UserName,digest,ForceMongoDBCR);
-      with fGracefulReconnect do
-        if Enabled and (EncryptedDigest='') then begin
-          ForcedDBCR := ForceMongoDBCR;
-          User := UserName;
-          Database := DatabaseName;
-          EncryptedDigest := CryptDataForCurrentUser(digest,Database,true);
+    for i:= Low(fConnections) to High(fConnections) do begin
+      if not fConnections[i].Opened then
+        try
+          fConnections[i].Open; // socket connection
+          AfterOpen(i); // need ServerBuildInfoNumber just below
+          digest := PasswordDigest(UserName,Password);
+          Auth(DatabaseName,UserName,digest,ForceMongoDBCR, i);
+          with fGracefulReconnect do
+            if Enabled and (EncryptedDigest='') then begin
+              ForcedDBCR := ForceMongoDBCR;
+              User := UserName;
+              Database := DatabaseName;
+              EncryptedDigest := CryptDataForCurrentUser(digest,Database,true);
+            end;
+        except
+          fConnections[i].Close;
+          raise;
         end;
-    except
-      fConnections[0].Close;
-      raise;
-    end;
+    end;  
     result := TMongoDatabase.Create(Self,DatabaseName);
     fDatabases.AddObjectUnique(DatabaseName,@result);
   finally
@@ -5813,7 +5828,7 @@ begin
 end;
 
 procedure TMongoClient.Auth(const DatabaseName,UserName,Digest: RawUTF8;
-  ForceMongoDBCR: boolean);
+  ForceMongoDBCR: boolean; ConnectionID: Integer = 0);
 var res,bson: variant;
     err,nonce,first,key,user,msg,rnonce: RawUTF8;
     payload: RawByteString;
@@ -5840,7 +5855,7 @@ begin // caller should have made fConnections[0].Open
     // MONGODB-CR
     // http://docs.mongodb.org/meta-driver/latest/legacy/implement-authentication-in-driver
     bson := BSONVariant(['getnonce',1]);
-    err := fConnections[0].RunCommand(DatabaseName,bson,res);
+    err := fConnections[ConnectionID].RunCommand(DatabaseName,bson,res);
     if (err='') and not _Safe(res)^.GetAsRawUTF8('nonce',nonce) then
       err := 'missing returned nonce';
     if err<>'' then
@@ -5848,7 +5863,7 @@ begin // caller should have made fConnections[0].Open
         [self,DatabaseName,err,res]);
     key := MD5(nonce+UserName+Digest);
     bson := BSONVariant(['authenticate',1,'user',UserName,'nonce',nonce,'key',key]);
-    err := fConnections[0].RunCommand(DatabaseName,bson,res);
+    err := fConnections[ConnectionID].RunCommand(DatabaseName,bson,res);
     if err<>'' then
       raise EMongoException.CreateUTF8('%.OpenAuthCR("%") step2: % - res=%',
         [self,DatabaseName,err,res]);
@@ -5860,7 +5875,7 @@ begin // caller should have made fConnections[0].Open
     nonce := BinToBase64(@rnd,sizeof(rnd));
     FormatUTF8('n=%,r=%',[user,nonce],first);
     BSONVariantType.FromBinary('n,,'+first,bbtGeneric,bson);
-    err := fConnections[0].RunCommand(DatabaseName,BSONVariant([
+    err := fConnections[ConnectionID].RunCommand(DatabaseName,BSONVariant([
       'saslStart',1,'mechanism','SCRAM-SHA-1','payload',bson,'autoAuthorize',1]),res);
     CheckPayload;
     if err='' then begin
@@ -5882,7 +5897,7 @@ begin // caller should have made fConnections[0].Open
     HMAC_SHA1(server,msg,server);
     msg := key+',p='+BinToBase64(@client,SizeOf(client));
     BSONVariantType.FromBinary(msg,bbtGeneric,bson);
-    err := fConnections[0].RunCommand(DatabaseName,BSONVariant([
+    err := fConnections[ConnectionID].RunCommand(DatabaseName,BSONVariant([
       'saslContinue',1,'conversationId',res.conversationId,'payload',bson]),res);
     resp.Clear;
     CheckPayload;
@@ -5893,7 +5908,7 @@ begin // caller should have made fConnections[0].Open
         [self,DatabaseName,err,res]);
     if not res.done then begin
       // third empty challenge may be required
-      err := fConnections[0].RunCommand(DatabaseName,BSONVariant([
+      err := fConnections[ConnectionID].RunCommand(DatabaseName,BSONVariant([
         'saslContinue',1,'conversationId',res.conversationId,'payload','']),res);
      if (err='') and not res.done then
        err := 'SASL conversation failed to complete';
@@ -5904,10 +5919,10 @@ begin // caller should have made fConnections[0].Open
   end;
 end;
 
-procedure TMongoClient.AfterOpen;
+procedure TMongoClient.AfterOpen(ConnectionID: Integer = 0);
 begin
   if VarIsEmptyOrNull(fServerBuildInfo) then begin
-    fConnections[0].RunCommand('admin','buildinfo',fServerBuildInfo);
+    fConnections[ConnectionID].RunCommand('admin','buildinfo',fServerBuildInfo);
     with _Safe(fServerBuildInfo)^.A['versionArray']^ do
       if Count=4 then
         fServerBuildInfoNumber := // e.g. 2040900 for MongoDB 2.4.9
