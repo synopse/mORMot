@@ -1814,7 +1814,7 @@ type
     // - in case of any error, the error message is returned as text
     // - in case of success, this method will return ''
     function RunCommand(const aDatabaseName: RawUTF8;
-      const command: variant; var returnedValue: variant): RawUTF8; overload;
+      const command: variant; var returnedValue: variant; Flags: TMongoQueryFlags=[]): RawUTF8; overload;
     /// run a database command, supplied as a TDocVariant, TBSONVariant or a
     // string, and return the raw BSON document array of received items
     // - this overloaded method can be used on huge content to avoid the slower
@@ -5490,11 +5490,11 @@ begin
 end;
 
 function TMongoConnection.RunCommand(const aDatabaseName: RawUTF8;
-  const command: variant; var returnedValue: variant): RawUTF8;
+  const command: variant; var returnedValue: variant; Flags: TMongoQueryFlags=[]): RawUTF8;
 begin
   GetDocumentsAndFree(
-    TMongoRequestQuery.Create(aDatabaseName+'.$cmd',command,null,1),
-    returnedValue);
+    //if we want to allow reading from slaves
+    TMongoRequestQuery.Create(aDatabaseName+'.$cmd',command,null,1, 0, Flags),
   with _Safe(returnedValue)^ do
     if GetValueOrDefault('ok',1)<>0 then
       result := '' else
