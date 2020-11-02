@@ -5258,8 +5258,11 @@ begin
   begin
     result := sqlite3.prepare_v2(RequestDB, pointer(SQL), length(SQL)+1,
       fRequest, fNextSQL);
-    while (result=SQLITE_OK) and (Request=0) do // comment or white-space
+    while (result=SQLITE_OK) and (Request=0) do begin // comment or white-space
+      if fNextSQL^ = #0 then // statement contains only comment
+        raise ESQLite3Exception.Create(DB,SQLITE_EMPTY,SQL);
       result := sqlite3.prepare_v2(RequestDB, fNextSQL, -1, fRequest, fNextSQL);
+    end;
     fFieldCount := sqlite3.column_count(fRequest);
     if not NoExcept then
       sqlite3_check(RequestDB,result,SQL);
