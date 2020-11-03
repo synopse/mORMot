@@ -1863,7 +1863,7 @@ type
   // read from the primary
   // rpNearest: read from the member of the replica set with the least network
   // latency, irrespective of whether that member is a primary or secondary
-  // (in practice, we won't use latency, just use a random distribution)
+  // (in practice, we won't use latency, just a random distribution)
   TMongoClientReplicaSetReadPreference = (
     rpPrimary, rpPrimaryPreferred, rpSecondary, rpSecondaryPreferred, rpNearest);
 
