@@ -5908,6 +5908,7 @@ type
   // - consider inherit from TSQLRecordNoCase and TSQLRecordNoCaseExtended if
   // you expect regular NOCASE collation and smaller (but not standard JSON)
   // variant fields persistence
+  // - is called TOrm in mORMot 2
   TSQLRecord = class(TObject)
   { note that every TSQLRecord has an Instance size of 20 bytes for private and
     protected fields (such as fID or fProps e.g.) }
