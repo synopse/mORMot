@@ -16640,7 +16640,7 @@ var i: integer;
      if not withfreespace or not GetDiskInfo(p.mounted,av,fr,tot) then
        {$ifdef MSWINDOWS}
        FormatShort('%: % (%)',[p.mounted[1],p.name,KB(p.size,nospace)],result) else
-       FormatShort(F[nospace],[p.mounted[1],p.name,KB(p.size,nospace)],result);
+       FormatShort(F[nospace],[p.mounted[1],p.name,KB(fr,nospace),KB(tot,nospace)],result);
        {$else}
        FormatShort('% % (%)',[p.mounted,p.name,KB(p.size,nospace)],result) else
        FormatShort(F[nospace],[p.mounted,p.name,KB(fr,nospace),KB(tot,nospace)],result);
