@@ -8135,6 +8135,15 @@ var Data: TSHAContext absolute Context;
 begin
   if Buffer=nil then exit; // avoid GPF
   inc(Data.MLen,QWord(cardinal(Len)) shl 3);
+  {$ifdef CPUX64}
+  if (K256AlignedStore<>'') and (Data.Index=0) and (Len>=64) then begin
+    // use optimized Intel's sha256_sse4.asm for whole blocks
+    sha256_sse4(Buffer^,Data.Hash,Len shr 6);
+    inc(PByte(Buffer),Len);
+    Len := Len and 63;
+    dec(PByte(Buffer),Len);
+  end;
+  {$endif CPUX64}
   while Len>0 do begin
     aLen := 64-Data.Index;
     if aLen<=Len then begin
@@ -8145,7 +8154,7 @@ begin
       end else
         RawSha256Compress(Data.Hash,Buffer); // avoid temporary copy
       dec(Len,aLen);
-      inc(PtrInt(Buffer),aLen);
+      inc(PByte(Buffer),aLen);
     end else begin
       MoveFast(Buffer^,Data.Buffer[Data.Index],Len);
       inc(Data.Index,Len);
