@@ -2682,6 +2682,7 @@ type
     fBackupBackgroundInProcess: TSQLDatabaseBackupThread;
     fBackupBackgroundLastTime: RawUTF8;
     fBackupBackgroundLastFileName: TFileName;
+    fUseCacheSize: integer;
     {$ifdef WITHLOG}
     fLogResultMaximumSize: integer;
     fLog: TSynLogClass;
@@ -2786,7 +2787,8 @@ type
     // - initialize a internal mutex to ensure that all access to the database is atomic
     // - raise an ESQLite3Exception on any error
     constructor Create(const aFileName: TFileName; const aPassword: RawUTF8='';
-      aOpenV2Flags: integer=0; aDefaultCacheSize: integer=10000; aDefaultPageSize: integer=4096); reintroduce;
+      aOpenV2Flags: integer=0; aDefaultCacheSize: integer=10000;
+      aDefaultPageSize: integer=4096); reintroduce;
     /// close a database and free its memory and context
     //- if TransactionBegin was called but not commited, a RollBack is performed
     destructor Destroy; override;
@@ -3035,6 +3037,9 @@ type
     // - cache is consistent only if ExecuteJSON() Expand parameter is constant
     // - cache is used by TSQLDataBase.ExecuteJSON() and TSQLTableDB.Create()
     property UseCache: boolean read GetUseCache write SetUseCache;
+    /// cache size in JSON bytes, to be set before UseCache is set to true
+    // - default is 16MB
+    property UseCacheSize: integer read fUseCacheSize write fUseCacheSize;
     /// return TRUE if a Transaction begun
     property TransactionActive: boolean read fTransactionActive;
     /// sets a busy handler that sleeps for a specified amount of time
@@ -3905,6 +3910,7 @@ begin
     fIsMemory := true else
     fFileNameWithoutPath := ExtractFileName(fFileName);
   fPassword := aPassword;
+  fUseCacheSize := 16384*1024;
   fSQLFunctions := TSynObjectList.Create;
   result := DBOpen;
   if result<>SQLITE_OK then
@@ -4228,7 +4234,7 @@ begin
   if self<>nil then
     if Value<>UseCache then
       if Value then
-        fCache := TSynCache.Create(16384*1024,true) else
+        fCache := TSynCache.Create(fUseCacheSize,true) else
         FreeAndNil(fCache);
 end;
 
