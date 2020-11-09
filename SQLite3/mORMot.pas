@@ -112,7 +112,7 @@ unit mORMot;
   // - Setting NOGSSAPIAUTH conditional will disable this feature
   // Limitations:
   //  - no NTLM support - this is a deprecated and vulnerable protocol
-{$endif}
+{$endif MSWINDOWS}
 
 
 {$ifdef KYLIX3}
@@ -52685,7 +52685,7 @@ const
 
 function TSQLRestServerAuthenticationSSPI.Auth(
   Ctxt: TSQLRestServerURIContext): boolean;
-var i: integer;
+var i: PtrInt;
     UserName, InDataEnc: RawUTF8;
     ticks,ConnectionID: Int64;
     BrowserAuth: Boolean;
@@ -52821,7 +52821,7 @@ begin
 end;
 
 destructor TSQLRestServerAuthenticationSSPI.Destroy;
-var i: integer;
+var i: PtrInt;
 begin
   for i := 0 to High(fSSPIAuthContexts) do
     FreeSecContext(fSSPIAuthContexts[i]);
