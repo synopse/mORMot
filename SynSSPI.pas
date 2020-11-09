@@ -393,8 +393,6 @@ function CertCloseStore; external crypt32;
 function CertFindCertificateInStore; external crypt32;
 
 
-(* ========================= High-Level SSPI / SChannel API wrappers  === *)
-
 { TSecBuffer }
 
 procedure TSecBuffer.Init(aType: cardinal; aData: pointer;
@@ -404,6 +402,7 @@ begin
   pvBuffer := aData;
   cbBuffer := aSize;
 end;
+
 
 { TSecBufferDesc }
 
@@ -415,6 +414,9 @@ begin
   cBuffers := aBuffersCount;
 end;
 
+
+
+(* ========================= High-Level SSPI / SChannel API wrappers  === *)
 
 procedure InvalidateSecContext(var aSecContext: TSecContext; aConnectionID: Int64);
 begin

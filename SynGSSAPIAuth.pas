@@ -133,6 +133,8 @@ var
   // - use only if automatic conversion (truncate on first dot) do it wrong
   ServerDomainMap: TSynNameValue;
 
+
+
 implementation
 
 var
@@ -338,5 +340,5 @@ begin
 end;
 
 initialization
-  ServerDomainMap.Init(False);
+  ServerDomainMap.Init({casesensitive=}false);
 end.
