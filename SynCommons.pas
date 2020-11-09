@@ -1820,7 +1820,11 @@ procedure ResourceSynLZToRawByteString(const ResName: string;
 // e.g. by Delphi 2009+, to avoid two unnecessary conversions into UnicodeString
 // - in the middle of VCL code, consider using TrimU() which won't have name
 // collision ambiguity as with SysUtils' homonymous function
-function Trim(const S: RawUTF8): RawUTF8;
+function Trim(const S: RawUTF8): RawUTF8; overload;
+
+/// overloaded UnicodeString version of Trim()
+// - to avoid collision ambiguity in Delphi 2009+ VCL code
+function Trim(const S: SynUnicode): string; overload;
 
 /// fast dedicated RawUTF8 version of Trim()
 // - could be used if overloaded Trim() from SysUtils.pas is ambiguous
@@ -24035,6 +24039,22 @@ end;
 function TrimU(const S: RawUTF8): RawUTF8;
 begin
   result := Trim(s);
+end;
+
+
+function Trim(const S: SynUnicode): string;
+var I,L: PtrInt;
+begin
+  L := Length(S);
+  I := 1;
+  while (I<=L) and (S[I]<=' ') do inc(I);
+  if I>L then // void string
+    result := '' else
+  if (I=1) and (S[L]>' ') then // nothing to trim
+    result := S else begin
+    while S[L]<=' ' do dec(L); // allocated trimmed
+    result := Copy(S,I,L-I+1);
+  end;
 end;
 
 function FormatUTF8(const Format: RawUTF8; const Args: array of const): RawUTF8;
