@@ -1821,11 +1821,6 @@ procedure ResourceSynLZToRawByteString(const ResName: string;
 // - in the middle of VCL code, consider using TrimU() which won't have name
 // collision ambiguity as with SysUtils' homonymous function
 function Trim(const S: RawUTF8): RawUTF8;
-{$ifdef UNICODE} overload;
-/// overloaded UnicodeString version of Trim()
-// - to avoid collision ambiguity in Delphi 2009+ VCL code
-function Trim(const S: UnicodeString): string; overload;
-{$endif UNICODE}
 
 /// fast dedicated RawUTF8 version of Trim()
 // - could be used if overloaded Trim() from SysUtils.pas is ambiguous
@@ -34032,21 +34027,6 @@ begin
     PWord(UpperCopy255(UpperSection,Section))^ := ord(']');
     if FindSectionFirstLineW(P,UpperSection) then
       result := FindIniNameValueW(P,UpperName);
-  end;
-end;
-
-function Trim(const S: UnicodeString): string;
-var I,L: PtrInt;
-begin
-  L := Length(S);
-  I := 1;
-  while (I<=L) and (S[I]<=' ') do inc(I);
-  if I>L then // void string
-    result := '' else
-  if (I=1) and (S[L]>' ') then // nothing to trim
-    result := S else begin
-    while S[L]<=' ' do dec(L); // allocated trimmed
-    result := Copy(S,I,L-I+1);
   end;
 end;
 {$endif UNICODE}
