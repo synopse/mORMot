@@ -30,7 +30,7 @@ type
 implementation
 
 uses
-  SyNodeSimpleProto, SynOpenSSL, jsbutils;
+  SyNodeSimpleProto, SynOpenSSL, SynCrypto, jsbutils;
 
 type
 
@@ -133,6 +133,32 @@ begin
   end;
 end;
 
+// _randomBytes(buffer, offset, size)
+function randomBytes(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
+var
+  buflen: uint32;
+  offset, size: uint32;
+
+  bufData: pointer;
+begin
+  result := checkFuncArgs(cx, argc, vp, [atBuf, atI32, atI32]);
+  if not result then exit;
+  try
+    vp.argv^[0].asObject.GetBufferDataAndLength(bufData, bufLen);
+    offset := vp.argv^[1].asInteger;
+    size := vp.argv^[2].asInteger;
+    if (offset + size > bufLen) then
+      vp.rval := cx.NewJSString('offset + size > bufLen').ToJSVal
+    else begin
+      TAESPRNG.Main.FillRandom(PByte(bufData) + offset, size);
+      vp.rval := JSVAL_VOID;
+    end;
+    result := true;
+  except
+    on E: Exception do begin Result := false; JSError(cx, E); end;
+  end;
+end;
+
 function SyNodeBindingProc_crypto(const aEngine: TSMEngine; const bindingNamespaceName: SynUnicode): jsval;
 var
   obj: PJSRootedObject;
@@ -144,6 +170,7 @@ begin
   obj := cx.NewRootedObject(cx.NewObject(nil));
   try
     aEngine.defineClass(Hmac, THmacProtoObject, obj);
+    obj.ptr.DefineFunction(cx, 'randomBytes', randomBytes, 2, props);
 
     Result := obj.ptr.ToJSValue;
   finally

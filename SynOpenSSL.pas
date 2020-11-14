@@ -46,6 +46,9 @@ unit SynOpenSSL;
 
   ***** END LICENSE BLOCK *****
 
+  Version 1.18
+  - initial revision
+
 }
 
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER OPENSSL1_1
@@ -1015,7 +1018,7 @@ end;
 function TOpenSSLConnectionClient.Connect(const Read, Write: TOnOpenSSLData;
   Level: TOpenSSLConnectionLevel; Options: TOpenSSLConnectionOptions): boolean;
 begin
-  result := false;
+
 end;
 
 procedure TOpenSSLConnectionClient.Disconnect;
@@ -1030,7 +1033,7 @@ end;
 
 function TOpenSSLConnectionClient.SecureWrite(Buffer: pointer; Len: integer): boolean;
 begin
-  result := false;
+
 end;
 
 procedure TOpenSSLConnectionClient.SetNotify(States: TOpenSSLConnectionStates;
