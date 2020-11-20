@@ -29736,7 +29736,7 @@ begin
   {$endif}
 end;
 
-function TEnumType.GetCaptionStrings(UsedValuesBits: Pointer=nil): string;
+function TEnumType.GetCaptionStrings(UsedValuesBits: Pointer): string;
 var List: TStringList;
 begin
   List := TStringList.Create;
@@ -58075,7 +58075,7 @@ begin
       fImplementationClass.GetInterfaceEntry(fInterface.fInterfaceIID);
     if fImplementationClassInterfaceEntry=nil then
       raise EServiceException.CreateUTF8('%.Create: % does not implement I%',
-        [self,fImplementationClass,fInterfaceURI]) else
+        [self,fImplementationClass,fInterfaceURI]);
   end;
   if (fInterface.MethodIndexCallbackReleased>=0) and
      (InstanceCreation<>sicShared) then

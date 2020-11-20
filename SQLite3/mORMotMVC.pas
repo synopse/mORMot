@@ -105,7 +105,8 @@ type
     fViewGenerationTimeTag: RawUTF8;
     procedure SetViewTemplateFolder(const aFolder: TFileName);
     /// overriden implementations should return the rendered content
-    procedure Render(methodIndex: Integer; const Context: variant; var View: TMVCView); virtual; abstract;
+    procedure Render(methodIndex: Integer; const Context: variant;
+      var View: TMVCView); virtual; abstract;
     /// return the static file contents - from fViewStaticFolder by default
     // - called if cacheStatic has been defined
     function GetStaticFile(const aFileName: TFileName): RawByteString; virtual;
