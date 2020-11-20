@@ -9652,6 +9652,7 @@ begin
   CheckEqual(u,REGEX2);
 end;
 var o,od,o2,value: variant;
+    c: currency;
     d,d2: TDateTime;
     oid, oid2: TBSONObjectID;
     oids: array of TBSONObjectID;
@@ -9748,6 +9749,11 @@ begin
   check(json='{"double_params":[-12.12345678,-9.9E-15,-9.88E-15,-9E-15]}');
   {$endif}
   CheckSame(double(TDocVariantData(o).A['double_params'].Value[1]),-9.9E-15);
+  // floats are stored as varCurrency by default in _Json()
+  o := _Json('{"value":99.99}');
+  d :=  _Safe(o)^.D['value'];
+  CheckSame(d,99.99,DOUBLE_SAME,'99.99');
+  CheckEqual(DoubleToStr(d),'99.99');
   // see http://bsonspec.org/#/specification
   o := _JSON('{"hello": "world"}');
   bsonDat := BSON(TDocVariantData(o));
