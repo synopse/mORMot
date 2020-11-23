@@ -26,8 +26,8 @@
  const http = require('http')
  const assert = require('assert')
  const DOMParser = require('xmldom').DOMParser
- // set global proxy settings if client is behind a proxy
- // http.setGlobalProxyConfiguration('proxy.main:3249', 'localhost');
+ // To set global proxy settings if client is behind a proxy
+ // use http_proxy & no_proxy environment variables
  let resp = http.get('https://synopse.info/fossil/wiki/Synopse+OpenSource')
  // check we are actually behind a proxy
  // assert.ok(resp.headers('via').startsWith('1.1 proxy.main'), 'proxy used');
@@ -45,23 +45,25 @@ const EventEmitter = require('events').EventEmitter
 const util = require('util')
 const THTTPClient = process.binding('synode_http').THTTPClient
 
+
 /* Global http proxy configuration. 
-  Default value for proxy server getted form http_proxy environment variable.
-  Under Windows (Docker for Windows for example) HTTP_PROXY is used, so fallback to it also
+  On Windows
+    - proxy settings gets form http_proxy || HTTP_PROXY environment variable.
+    - use no_proxy for semicolon delimited no proxy hosts
+  Under Linux see libcurl proxy env vars doc - https://curl.se/libcurl/c/CURLOPT_PROXY.html
 */
-var
-  proxyConfig = {
-    server: process.env.http_proxy || process.env.HTTP_PROXY || '',
-    bypass: ''
-  },
-  connectionDefaults = {
-    useHTTPS: false,
-    useCompression: true,
-    keepAlive: false,
-    connectTimeout: 60000,
-    sendTimeout: 30000,
-    receiveTimeout: 30000
-  }
+const proxyConfig = {
+  server: process.platform = 'win32' ? process.env.http_proxy || process.env.HTTP_PROXY || '' : '',
+  bypass: process.platform = 'win32' ? process.env.no_proxy || process.env.NO_PROXY || '': ''
+}
+let connectionDefaults = {
+  useHTTPS: false,
+  useCompression: true,
+  keepAlive: false,
+  connectTimeout: 60000,
+  sendTimeout: 30000,
+  receiveTimeout: 30000
+}
 
 /**
  *  Configure global ( on the `http` module level) proxy server in case you can't configure it using
@@ -71,16 +73,13 @@ var
  *  Settings applied only for  newly created {ClientRequest} instances.
  *
  *  See for details <a href="http://msdn.microsoft.com/en-us/library/windows/desktop/aa383996(v=vs.85).aspx">this MS article</a>
- *
+ * @deprecated Use http_proxy & no_proxy environment variables. Under windows no_proxy should be semicolon delimited,
+ *              under linux - comma delimited, see https://curl.se/libcurl/c/CURLOPT_PROXY.html
  * @param {String} proxy     name of the proxy server to use in format `[[http|https]://]host[:port]` For example 'http://proxy.my.domain:3249'
  * @param {String|Array} [bypass]  semicolon delimited list jr array of host names or IP addresses, or host masks or both, that should not be routed through the proxy
  */
 exports.setGlobalProxyConfiguration = function setGlobalProxyConfiguration (proxy, bypass) {
-  proxyConfig.proxy = proxy || ''
-  if (Array.isArray(bypass)) {
-    bypass = bypass.join(';')
-  }
-  proxyConfig.bypass = bypass || ''
+  console.warn('setGlobalProxyConfiguration is obsolete. Use http_proxy & no_proxy env vars instead')
 }
 
 /**
@@ -109,7 +108,7 @@ exports.setGlobalConnectionDefaults = function setGlobalConnectionDefaults (defa
 }
 
 /**
- * Create new HTTP server connection. In case server behind the proxy - see {@link http.setGlobalProxyConfiguration} function.
+ * Create new HTTP server connection. In case server is behind the proxy - use http_proxy & no_proxy env vars (https_proxy for https on linux)
  * @param {Object|String} options Either URL string in format `protocol://host:port/path` or config
  * @param {String} [options.URL] Service URL in format `protocol://host:port/path`. Will override `useHTTPS`, `server`, `host`, `port` and `path` if passed
  * @param {String} [options.server] DEPRECATED. Server to connect in format 'host:port' or 'host' in case port == 80.
@@ -245,9 +244,9 @@ function ClientRequest (options) {
   this.options = Object.assign({}, options)
   const _http = this.connection = new THTTPClient()
   _http.initialize(options.host, options.port, options.useHTTPS, options.useCompression,
-        proxyConfig.proxy, proxyConfig.bypass, options.connectTimeout, options.sendTimeout,
-        options.receiveTimeout, options.strictSSL
-    )
+    proxyConfig.proxy, proxyConfig.bypass, options.connectTimeout, options.sendTimeout,
+    options.receiveTimeout, options.strictSSL
+  )
   _http.keepAlive = options.keepAlive ? 1 : 0
 
   // add EventEmitter for nodeJS compatibility
