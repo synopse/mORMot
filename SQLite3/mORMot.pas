@@ -9054,7 +9054,7 @@ type
 
   /// this base class will create a FTS3 table using the Unicode61 Stemming algorithm
   // - see http://sqlite.org/fts3.html#tokenizer
-  // - will generate tokenize=unicode64 by convention from the class name
+  // - will generate tokenize=unicode61 by convention from the class name
   TSQLRecordFTS3Unicode61 = class(TSQLRecordFTS3);
 
   /// a base record, corresponding to a FTS4 table, which is an enhancement to FTS3
@@ -9085,7 +9085,7 @@ type
 
   /// this base class will create a FTS4 table using the Unicode61 Stemming algorithm
   // - see http://sqlite.org/fts3.html#tokenizer
-  // - will generate tokenize=unicode64 by convention from the class name
+  // - will generate tokenize=unicode61 by convention from the class name
   TSQLRecordFTS4Unicode61 = class(TSQLRecordFTS4);
 
   /// a base record, corresponding to a FTS5 table, which is an enhancement to FTS4
@@ -9107,7 +9107,7 @@ type
 
   /// this base class will create a FTS5 table using the Unicode61 Stemming algorithm
   // - see https://sqlite.org/fts5.html#tokenizers
-  // - will generate tokenize=unicode64 by convention from the class name
+  // - will generate tokenize=unicode61 by convention from the class name
   TSQLRecordFTS5Unicode61 = class(TSQLRecordFTS5);
 
   /// class-reference type (metaclass) of a FTS3/FTS4/FTS5 virtual table
@@ -31242,15 +31242,17 @@ begin
       end;
       for i := 0 to fields.Count-1 do
         result := result+fields.List[i].Name+',';
-      tokenizer := 'simple';
+      if Props.Kind=rFTS5 then // FTS5 knows ascii/porter/unicode61
+        tokenizer := 'ascii' else
+        tokenizer := 'simple'; // FTS3-4 know simple/porter/unicode61
       c := self;
       repeat
         ToText(c,cname); // TSQLFTSTest = class(TSQLRecordFTS3Porter)
         if IdemPChar(pointer(cname),'TSQLRECORDFTS') and
            (cname[14] in ['3','4','5']) then begin
           if length(cname)>14 then
-            tokenizer := copy(cname,15,100); // e.g. TSQLRecordFTS3Porter -> 'Porter'
-          break;
+            tokenizer := copy(cname,15,100);
+          break; // e.g. TSQLRecordFTS3Porter -> 'Porter'
         end;
         c := GetClassParent(c);
       until c=TSQLRecord;
