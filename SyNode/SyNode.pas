@@ -829,14 +829,18 @@ begin
     process.ptr.defineProperty(cx, 'env', env.ptr.ToJSValue,
       JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY);
     {$IFDEF MSWINDOWS}
-    process.ptr.defineProperty(cx, 'platform', cx.NewJSString('win32').ToJSVal);
+    process.ptr.defineProperty(cx, 'platform', cx.NewJSString('win32').ToJSVal,
+      JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY);
     {$ELSE}
-    process.ptr.defineProperty(cx, 'platform', cx.NewJSString('nix').ToJSVal);
+    process.ptr.defineProperty(cx, 'platform', cx.NewJSString('nix').ToJSVal,
+      JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY);
     {$ENDIF}
     {$IFDEF CPU64}
-      process.ptr.defineProperty(cx, 'arch', cx.NewJSString('x64').ToJSVal);
+      process.ptr.defineProperty(cx, 'arch', cx.NewJSString('x64').ToJSVal,
+        JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY);
     {$ELSE}
-      process.ptr.defineProperty(cx, 'arch', cx.NewJSString('x32').ToJSVal);
+      process.ptr.defineProperty(cx, 'arch', cx.NewJSString('x32').ToJSValm
+        JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY);
     {$ENDIF}
     with ExeVersion.Version do
       process.ptr.DefineProperty(cx, 'version',
