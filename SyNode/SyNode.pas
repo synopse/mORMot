@@ -1557,6 +1557,7 @@ procedure remChar13FromScript(const Script: SynUnicode); {$IFDEF HASINLINE}inlin
 var
   c: PWideChar;
 begin
+  if Script='' then exit;
   c := pointer(script);
   while c^ <> #0 do begin
     if (c^ = #13) then
@@ -1569,6 +1570,7 @@ procedure remChar13FromScriptU(const Script: RawUTF8); {$IFDEF HASINLINE}inline;
 var
   c: PUTF8Char;
 begin
+  if Script='' then exit;
   c := pointer(script);
   while c^ <> #0 do begin
     if (c^ = #13) then
