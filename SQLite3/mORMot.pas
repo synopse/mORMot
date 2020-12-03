@@ -3441,7 +3441,7 @@ type
   end;
 
 var
-  /// acccess to Zip Deflate compression in level 6 as a TSynCompress class
+  /// acccess to Zip Deflate compression in level 6 as a TAlgoCompress class
   AlgoDeflate: TAlgoCompress;
   /// acccess to Zip Deflate compression in level 1 as a TAlgoCompress class
   AlgoDeflateFast: TAlgoCompress;
@@ -6907,6 +6907,9 @@ type
     // EORMException: in this case, you should use a TID / T*ID kind of
     // published property, and not a TSQLRecord, which is limited to the
     // pointer size
+    // - on FPC, if you get an Error: Incompatible types: got "Pointer" expected
+    // "T...", then you are missing a {$mode Delphi} conditional in your unit:
+    // the easiest is to include {$I Synopse.inc} at the top of your unit
     property AsTSQLRecord: pointer read GetIDAsPointer;
     /// this property is set to true, if any published property is a BLOB (TSQLRawBlob)
     property HasBlob: boolean read GetHasBlob;
@@ -41976,7 +41979,7 @@ begin
 end;
 
 procedure TSQLRestServer.Auth(Ctxt: TSQLRestServerURIContext);
-var i: integer;
+var i: PtrInt;
 begin
   if fSessionAuthentication=nil then
     exit;

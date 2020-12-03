@@ -1510,24 +1510,24 @@ type
     // the index in Text, not the glyphs index
     function MeasureText(const Text: PDFString; Width: Single): integer;
   public
-    /// retrieve or set the word Space attribute
+    /// retrieve or set the word Space attribute, in PDF coordinates of 1/72 inch
     property WordSpace: Single read FWordSpace write SetWordSpace;
-    /// retrieve or set the Char Space attribute
+    /// retrieve or set the Char Space attribute, in PDF coordinates of 1/72 inch
     property CharSpace: Single read FCharSpace write SetCharSpace;
-    /// retrieve or set the Horizontal Scaling attribute
+    /// retrieve or set the Horizontal Scaling attribute, in PDF coordinates of 1/72 inch
     property HorizontalScaling: Single read FHorizontalScaling write SetHorizontalScaling;
-    /// retrieve or set the text Leading attribute
+    /// retrieve or set the text Leading attribute, in PDF coordinates of 1/72 inch
     property Leading: Single read FLeading write SetLeading;
-    /// retrieve or set the font Size attribute
+    /// retrieve or set the font Size attribute, in system TFont.Size units
     property FontSize: Single read FFontSize write SetFontSize;
     /// retrieve the current used font
     // - for TPdfFontTrueType, this points not always to the WinAnsi version of
     // the Font, but can also point to the Unicode Version, if the last
     // drawn character by ShowText() was unicode - see TPdfWrite.AddUnicodeHexText
     property Font: TPdfFont read FFont write FFont;
-    /// retrieve or set the current page width
+    /// retrieve or set the current page width, in PDF coordinates of 1/72 inch
     property PageWidth: integer read GetPageWidth write SetPageWidth;
-    /// retrieve or set the current page height
+    /// retrieve or set the current page height, in PDF coordinates of 1/72 inch
     property PageHeight: integer read GetPageHeight write SetPageHeight;
     /// retrieve or set the paper orientation
     property PageLandscape: Boolean read GetPageLandscape write SetPageLandscape;
@@ -10747,7 +10747,7 @@ begin
   FResources.AddItem('ProcSet',TPdfArray.CreateNames(nil,['PDF','Text','ImageC']));
   FPage := TPdfPage.Create(nil);
   FCanvas := TPdfCanvas.Create(aDoc);
-  FCanvas.FPage:=FPage;
+  FCanvas.FPage := FPage;
   FCanvas.FPageFontList := FFontList;
   FCanvas.FContents := self;
   FCanvas.FFactor := 1;

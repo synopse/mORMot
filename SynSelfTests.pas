@@ -9652,7 +9652,6 @@ begin
   CheckEqual(u,REGEX2);
 end;
 var o,od,o2,value: variant;
-    c: currency;
     d,d2: TDateTime;
     oid, oid2: TBSONObjectID;
     oids: array of TBSONObjectID;
