@@ -37,6 +37,8 @@ begin
     encoding := LowerCase(vals[0].asJSString.ToUTF8(cx));
 
   if encoding = 'utf-8' then begin
+    if not IsValidUTF8(aStr) then
+      raise ESMException.CreateUTF8('Source is not a UTF8 encoded string', []);
     Result := cx.NewJSString(Pointer(aStr), length(aStr), CP_UTF8).ToJSVal
   end else if encoding = 'Windows-1251' then begin
     Result := cx.NewJSString(Pointer(aStr), length(aStr), 1251).ToJSVal
