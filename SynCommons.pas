@@ -62629,8 +62629,9 @@ var name: RawUTF8;
 begin
   FormatUTF8(Format,Args,name);
   name := StringReplaceAll(name,['TSQLRest','', 'TSQL','', 'TWebSocket','WS',
-    'TSyn','', 'Thread','', 'Process','', 'Background','Bgd', 'Server','Svr',
-    'Client','Clt', 'WebSocket','WS', 'Timer','Tmr', 'Thread','Thd']);
+    'TServiceFactory','SF', 'TSyn','', 'Thread','', 'Process','',
+    'Background','Bgd', 'Server','Svr', 'Client','Clt', 'WebSocket','WS',
+    'Timer','Tmr', 'Thread','Thd']);
   SetThreadNameInternal(ThreadID,name);
 end;
 
