@@ -680,8 +680,8 @@ begin
   end;
 end;
 
-/// write Object to file using specifien encoding.
-//  internaly use SyNodeReadWrite.write
+/// write Object to file using specified encoding.
+//  internally use SyNodeReadWrite.write
 function fs_writeFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
   in_argv: PjsvalVector;

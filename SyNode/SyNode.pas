@@ -107,7 +107,7 @@ uses
   SyNodeBinding_worker;
 
 const
-  /// default stack growning size
+  /// default stack growing size
   STACK_CHUNK_SIZE: Cardinal = 8192;
 
 type
@@ -122,7 +122,7 @@ type
 
   /// implements a ThreadSafe JavaScript engine
   // - use TSMEngineManager.ThreadSafeEngine to retrieve the Engine instance
-  // corresponding to the current thread, in multithread application
+  // corresponding to the current thread, in the multithreading application
   // - contains JSRuntime + JSContext (to be ready for new SpiderMonkey version where
   // context and runtime is the same)
   // - contains also one "global" JavaScript object. From script it is
@@ -140,7 +140,7 @@ type
     fManager: TSMEngineManager;
 
     fGlobalObject: PJSRootedObject;
-    // gloal._timerLoop function used to emulate setTimeout/setInterval
+    // global._timerLoop function used to emulate setTimeout/setInterval
     // event loop. Implemented in WindowsTimer.js
     FGlobalTimerLoopFunc: PJSRootedValue;
     fGlobalObjectDbg: PJSRootedObject;
@@ -159,7 +159,7 @@ type
     fWebAppRootDir: RawUTF8;
     fTag: PtrInt;
     /// called from SpiderMonkey callback. Do not raise exception here
-    // instead use CheckJSError metod after JSAPI compile/evaluate call
+    // instead use CheckJSError method after JSAPI compile/evaluate call
     procedure DoProcessJSError(report: PJSErrorReport); virtual;
     /// called from SpiderMonkey callback
     // If returns true then SM engine will interrupt script execution
@@ -167,11 +167,11 @@ type
     procedure SetPrivateDataForDebugger(const Value: Pointer);
   protected
     fCx: PJSContext;
-    // used by OperationCallback to interrupt script excution (Engine.CancelExecution)
+    // used by OperationCallback to interrupt script execution (Engine.CancelExecution)
     fInterruptRequested: Boolean;
     fCreatedAtTick: Int64;
   public
-    /// create one threadsafe JavaScript Engine instance
+    /// create one thread-safe JavaScript Engine instance
     // - initialize internal JSRuntime, JSContext, and global objects and
     // standard JavaScript classes
     // - do not create Engine directly via this constructor, but instead call
@@ -197,7 +197,7 @@ type
     procedure ClearLastError;
 
     /// trigger Garbage Collection
-    // - all unrooted things (JSString, JSObject, VSVal) will be released
+    // - all un-rooted things (JSString, JSObject, VSVal) will be released
     procedure GarbageCollect;
     /// Offer the JavaScript engine an opportunity to perform garbage collection if needed
     // - Tries to determine whether garbage collection in would free up enough
@@ -224,7 +224,7 @@ type
     procedure Evaluate(const script: RawUTF8; const scriptName: RawUTF8;
       lineNo: Cardinal); overload;
 
-    /// evaluate script embadedd into application resources
+    /// evaluate script embedded into application resources
     procedure EvaluateRes(const ResName: string; out result: jsval);
 
     /// evaluate a JavaScript script as Module
@@ -289,7 +289,7 @@ type
     /// Add a set of classes with the same delphi binding implementation:
     //    engine.defineClasses([TubEntity, TubDomain, TubEntityAttribute], TSMNewRTTIProtoObject);
     procedure defineClasses(const AClasses: array of TClass; AProto: TSMCustomProtoObjectClass; aParent: PJSRootedObject = nil);
-    /// define JS object for enumeratin type
+    /// define JS object for enumerating type
     //  for TMyEnum = (etA, etB); will create in JS aObj.TMyEnum = {etA: 0, etB: 1);
     procedure defineEnum(ti: PTypeInfo; aObj: PJSRootedObject);
 
@@ -340,6 +340,7 @@ type
   end;
   PDllModuleRec = ^TDllModuleRec;
 
+  TJSGSEnumCb = procedure(i: integer; engine: TSMEngine; v: uint32);
   /// main access point to the SpiderMonkey per-thread scripting engines
   // - allow thread-safe access to an internal per-thread TSMEngine instance list
   // - contains runtime-level properties shared between thread-safe engines
@@ -456,6 +457,9 @@ type
     procedure ClearWorkers;
     /// Thread UNSAFE main engine
     property mainEngine: TSMEngine read getMainEngine;
+    /// get a SUM of specified GC parameter across all allocated engine
+    // if cb <> nil - call it for each engine
+    function getGCTotal(key: JSGCParamKey; const cb: TJSGSEnumCb = nil): UInt64;
   published
     /// max amount of memory (in bytes) for a single SpiderMonkey instance
     // - this parameter will be set only at Engine start, i.e. it  must be set
@@ -481,19 +485,19 @@ type
    property EngineExpireTimeOutMinutes: cardinal
       read GetEngineExpireTimeOutMinutes write SetEngineExpireTimeOutMinutes default 0;
     /// Path to synode core modules.
-    // Not used in case core modules are embadded as resources (CORE_MODULES_IN_RES is defined)
+    // Not used in case core modules are embedded as resources (CORE_MODULES_IN_RES is defined)
     property CoreModulesPath: RawUTF8 read FCoreModulesPath;
     /// event triggered every time a new Engine is created
-    // event trigered before OnDebuggerInit and OnNewEngine events
+    // event triggered before OnDebuggerInit and OnNewEngine events
     // Result of this method is Engine's name for debug
     property OnGetName: TEngineNameEvent read FOnGetName write FOnGetName;
     /// event triggered every time a new Engine is created
-    // event trigered before OnDebuggerInit and OnNewEngine events
-    // Result og this method is Engine's web app root path
+    // event triggered before OnDebuggerInit and OnNewEngine events
+    // Result of this method is Engine's web app root path used for Debugger
     property OnGetWebAppRootPath: TEngineNameEvent read FOnGetWebAppRootPath write FOnGetWebAppRootPath;
 
     /// event triggered every time a internal debugger process connected to Engine
-    // - event trigered in debugger's compartment
+    // - event triggered in debuggers compartment
     // - here your code can change the initial state of the debugger
     property OnDebuggerInit: TEngineEvent read FOnDebuggerInit write FOnDebuggerInit;
 
@@ -502,7 +506,7 @@ type
     property OnNewEngine: TEngineEvent read FOnNewEngine write FOnNewEngine;
 
     /// event triggered every time a new remote debugger(Firefox) connect to Engine
-    // - Warning!!! event trigered in debugger's communication thread(not thread of Engine)
+    // - Warning!!! event triggered in debuggers communication thread(not thread of Engine)
     // so you cannot use Engine's Javascript in this method, but only Engine's properties
     property OnDebuggerConnected: TEngineEvent read FOnDebuggerConnected write FOnDebuggerConnected;
 
@@ -516,7 +520,7 @@ type
 var
   /// define the TSynLog class used for logging for all our SynSM related units
   // - you may override it with TSQLLog, if available from mORMot.pas
-  // - since not all exceptions are handled specificaly by this unit, you
+  // - since not all exceptions are handled specifically by this unit, you
   // may better use a common TSynLog class for the whole application or module
   SynSMLog: TSynLogClass=TSynLog;
 
@@ -1121,6 +1125,27 @@ begin
   FMaxNurseryBytes := AMaxNurseryBytes;
 end;
 
+function TSMEngineManager.getGCTotal(key: JSGCParamKey; const cb: TJSGSEnumCb): UInt64;
+var
+  i: PtrInt;
+  v: uint32;
+begin
+  Result := 0;
+  if self = nil then
+    exit;
+  Lock;
+  try
+    for i := 0 to FEnginePool.Count-1 do begin
+      v := TSMEngine(FEnginePool.List[i]).cx.GCParameter[key];
+      Result := Result + v;
+      if Assigned(cb) then
+        cb(i, TSMEngine(FEnginePool.List[i]), v);
+    end;
+  finally
+    Unlock;
+  end;
+end;
+
 function TSMEngineManager.ThreadEngineIndex(ThreadID: TThreadID): Integer;
 begin
   if self <> nil then
@@ -1172,7 +1197,7 @@ begin
   end;
 end;
 
-function TSMEngineManager.EngineForThread(ThreadID: TThreadID): TSMEngine;
+function TSMEngineManager.EngineForThread(ThreadID: TTHreadID): TSMEngine;
 var
   i: integer;
 begin
