@@ -86,10 +86,10 @@ type
 {$ifdef FPC}
   PBytes = PAnsiChar;
 {$else}
-  PtrUInt = {$ifdef CPUX64} NativeUInt {$else} cardinal {$endif};
+  PtrUInt = {$ifdef UNICODE} NativeUInt {$else} cardinal {$endif};
   TBytes = array[0..maxInt-1] of byte;
   PBytes = ^TBytes;
-{$endif}
+{$endif FPC}
 
 function SynLZcomp(src: pointer; size: cardinal; dst: pointer): cardinal;
 var dst_beg,          // initial dst value
