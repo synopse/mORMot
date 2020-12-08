@@ -190,7 +190,7 @@ function SynLZdecomp(src: pointer; size: cardinal; dst: pointer): cardinal;
 var last_hashed, // initial src and dst value
     src_end: PtrUInt;
     CW, CWbit: cardinal;
-    v, t, h, o: cardinal;
+    v, t, h, o: PtrUInt;
     i: integer;
     offset: array[0..4095] of PtrUInt; // 16KB hashing code
 label nextCW;
