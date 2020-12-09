@@ -35850,7 +35850,7 @@ procedure TSQLRest.EndCurrentThread(Sender: TThread);
 begin // most will be done e.g. in TSQLRestServer.EndCurrentThread
   {$ifdef WITHLOG}
   fLogFamily.OnThreadEnded(Sender);
-  {$endif}
+  {$endif WITHLOG}
 end;
 
 procedure TSQLRest.WriteLock;

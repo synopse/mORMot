@@ -6637,7 +6637,12 @@ var r64: QWord;
 begin
   r64 := 0;
   for i := 0 to high(value.c) do begin
-    r64 := r64 shl 32;   // adjust remainder to match value of next dividend
+    {$ifdef FPC_32} // circumvent bug at least with FPC 3.2
+    Int64Rec(r).Hi := Int64Rec(r).Lo;
+    Int64Rec(r).Lo := 0;
+    {$else}
+    r := r shl 32;    // adjust remainder to match value of next dividend
+    {$endif FPC_32}
     inc(r64,value.c[i]); // add the divided to _rem
     if r64=0 then
       continue;

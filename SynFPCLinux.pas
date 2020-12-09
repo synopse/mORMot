@@ -990,10 +990,7 @@ begin
   if not (elICU in Loaded) then
     EnsureLoaded(elICU);
   if not Assigned(ucnv_open) then
-  begin
-    result := nil;
-    exit;
-  end;
+    exit(nil);
   err := 0;
   str(codepage, s);
   Move(s[1], s[3], ord(s[0]));
