@@ -120,10 +120,16 @@ function GetLastError: longint; inline;
 procedure SetLastError(error: longint); inline;
 
 /// compatibility function, wrapping Win32 API text comparison
-// - somewhat slow by using two temporary UnicodeString - but seldom called,
-// unless our proprietary WIN32CASE collation is used in SynSQLite3
+// - will use the system ICU library if available, or the widestringmanager
+// - seldom called, unless our proprietary WIN32CASE collation is used in SynSQLite3
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: PWideChar;
   cchCount1: integer; lpString2: PWideChar; cchCount2: integer): integer;
+
+/// compatibility function, wrapping Win32 API text case conversion
+function CharUpperBuffW(W: PWideChar; WLen: integer): integer;
+
+/// compatibility function, wrapping Win32 API text case conversion
+function CharLowerBuffW(W: PWideChar; WLen: integer): integer;
 
 /// compatibility function, wrapping Win32 MultiByteToWideChar API conversion
 // - will use the system ICU library for efficient conversion
@@ -719,6 +725,42 @@ begin
       result := CompareStringRTL(lpString1, lpString2, cchCount1, cchCount2, dwCmpFlags);
   end;
   inc(result, 2); // caller would make -2 to get regular -1/0/1 comparison values
+end;
+
+function CharUpperBuffW(W: PWideChar; WLen: integer): integer;
+var
+  err: SizeInt;
+begin
+  with ExternalLibraries do
+  begin
+    if not (elICU in Loaded) then
+      EnsureLoaded(elICU);
+    if Assigned(ucnv_open) then
+    begin
+      err := 0;
+      result := u_strToUpper(W, WLen, W, WLen, nil, err);
+    end
+    else
+      result := WLen;
+  end;
+end;
+
+function CharLowerBuffW(W: PWideChar; WLen: integer): integer;
+var
+  err: SizeInt;
+begin
+  with ExternalLibraries do
+  begin
+    if not (elICU in Loaded) then
+      EnsureLoaded(elICU);
+    if Assigned(ucnv_open) then
+    begin
+      err := 0;
+      result := u_strToLower(W, WLen, W, WLen, nil, err);
+    end
+    else
+      result := WLen;
+  end;
 end;
 
 function AnsiToWideRTL(codepage: cardinal; Source: PAnsiChar; Dest: PWideChar;

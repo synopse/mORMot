@@ -5821,7 +5821,7 @@ var W: TFileBufferWriter;
     i: integer;
     V: double;
     u: SynUnicode;
-    a: WinAnsiString;
+    a: RawUTF8;
     {$endif NOVARIANTS}
 begin
   T := TSynTable.Create('Test');
@@ -5871,10 +5871,10 @@ begin
       for i := 1 to 100 do begin
         u := RandomUnicode(i*2);
         data.Field['text'] := u;
-        check(data.Field['text']=u);
+        check(SynUnicode(data.Field['text'])=u);
         a := RandomAnsi7(i*2);
         data.Field['ansi'] := a;
-        check(data.Field['ansi']=a);
+        check(SynUnicode(data.Field['ansi'])=SynUnicode(a));
         // here, ansi is more efficent than text for storage size
       end;
       check(data.Field['bool']=true);
@@ -5889,8 +5889,8 @@ begin
         CheckSame(data.Field['double'],V);
       end;
       check(data.Field['bool']=true);
-      check(data.Field['text']=u);
-      check(data.Field['ansi']=a);
+      check(SynUnicode(data.Field['text'])=u);
+      check(SynUnicode(data.Field['ansi'])=SynUnicode(a));
       check(data.Field['ID']=1);
       // test TSynTableVariantType
       rec := T.Data;
@@ -5912,10 +5912,11 @@ begin
       CheckSame(rec.double,3.141592654);
       for i := 1 to 100 do begin
         a := RandomAnsi7(i*2);
+        u := SynUnicode(a);
         rec.text := a;
-        check(rec.text=a,'rec.text');
+        check(SynUnicode(rec.text)=u,'rec.text');
         rec.ansi := a;
-        check(rec.ansi=a,'rec.ansi');
+        check(SynUnicode(rec.ansi)=u,'rec.ansi');
       end;
       check(rec.bool=true,'rec.bool');
       check(rec.varint=100);
@@ -5929,8 +5930,8 @@ begin
         CheckSame(rec.double,V);
       end;
       check(rec.bool=true);
-      check(rec.text=a);
-      check(rec.ansi=a);
+      check(SynUnicode(rec.text)=u);
+      check(SynUnicode(rec.ansi)=u);
       check(rec.ID=1);
     except
       on E: Exception do // variant error could raise exceptions
