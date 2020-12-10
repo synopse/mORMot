@@ -19519,7 +19519,7 @@ smlu32: Res.Text := pointer(SmallUInt32UTF8[result]);
     vtPointer,vtInterface: begin
       Res.Text := @Res.Temp;
       Res.Len := SizeOf(pointer)*2;
-      BinToHexDisplayLower(V.VPointer,@Res.Temp,SizeOf(Pointer));
+      BinToHexDisplayLower(@V.VPointer,@Res.Temp,SizeOf(Pointer));
       result := SizeOf(pointer)*2;
       exit;
     end;
