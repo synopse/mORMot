@@ -397,7 +397,7 @@ type
 
 {$ifndef DELPHI5OROLDER}
 
-/// this test case will test some generic classes
+  /// this test case will test some generic classes
   // defined and implemented in the mORMot.pas unit
   TTestBasicClasses = class(TSynTestCase)
   published

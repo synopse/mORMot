@@ -770,7 +770,7 @@ var
 begin
   widestringmanager.Ansi2UnicodeMoveProc(Source, codepage, tmp, SourceChars);
   result := length(tmp);
-  Move(pointer(tmp)^, Dest, result * 2);
+  Move(pointer(tmp)^, Dest^, result * 2);
 end;
 
 function AnsiToWideICU(codepage: cardinal; Source: PAnsiChar; Dest: PWideChar;
@@ -799,7 +799,7 @@ var
 begin
   widestringmanager.Unicode2AnsiMoveProc(Source, tmp, codepage, SourceChars);
   result := length(tmp);
-  Move(pointer(tmp)^, Dest, result);
+  Move(pointer(tmp)^, Dest^, result);
 end;
 
 function WideToAnsiICU(codepage: cardinal; Source: PWideChar; Dest: PAnsiChar;
@@ -991,7 +991,6 @@ begin
     EnsureLoaded(elICU);
   if not Assigned(ucnv_open) then
     exit(nil);
-  err := 0;
   str(codepage, s);
   Move(s[1], s[3], ord(s[0]));
   PWord(@s[1])^ := ord('c') + ord('p') shl 8;
@@ -1001,9 +1000,11 @@ begin
   mask := GetMXCSR;
   SetMXCSR(mask or $0080 {MM_MaskInvalidOp} or $1000 {MM_MaskPrecision});
   {$endif CPUINTEL}
+  err := 0;
   result := ucnv_open(@s[1], err);
   if result <> nil then
   begin
+    err := 0;
     ucnv_setSubstChars(result, '?', 1, err);
     ucnv_setFallback(result, true);
   end;
