@@ -3433,7 +3433,8 @@ begin
       while (L>0) and (fSQLPrepared[L]<=' ') do // trim right
         dec(L);
       // allow one trailing ';' by writing ';;' or allows 'END;' at the end of a statement
-      if (L>5) and (fSQLPrepared[L]=';') and not IdemPChar(@fSQLPrepared[L-3],'END') then
+      if (L>5) and (fSQLPrepared[L]=';') and not
+         (IdemPChar(@fSQLPrepared[L-3],'END') and (fSQLPrepared[L-4]<='A')) then
         dec(L);
       if L<>Length(fSQLPrepared) then
         SetLength(fSQLPrepared,L); // trim trailing spaces or ';' if needed
