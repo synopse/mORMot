@@ -34744,11 +34744,15 @@ end;
 function TSQLRest.Retrieve(const SQLWhere: RawUTF8; Value: TSQLRecord;
   const aCustomFieldsCSV: RawUTF8): boolean;
 var T: TSQLTable;
+    sql: RawUTF8;
 begin
   result := false;
   if (self=nil) or (Value=nil) then
     exit;
-  T := MultiFieldValues(PSQLRecordClass(Value)^,aCustomFieldsCSV,SQLWhere);
+  sql := Trim(SQLWhere);
+  if not EndWith(sql,' LIMIT 1') then
+    sql := sql+' LIMIT 1'; // we keep a single record below
+  T := MultiFieldValues(PSQLRecordClass(Value)^,aCustomFieldsCSV,sql);
   if T<>nil then
     try
       if T.fRowCount>=1 then begin
