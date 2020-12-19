@@ -55,8 +55,8 @@ unit mORMotHttpServer;
  - can be called by any JSON-aware AJAX application
  - can optionaly compress the returned data to optimize Internet bandwidth
  - speed is very high: more than 20MB/sec R/W localy on a 1.8GHz Sempron,
-   i.e. 400Mb/sec of duplex raw IP data, with about 200 µs only elapsed
-   by request (direct call is 50 µs, so bottle neck is the Win32 API),
+   i.e. 400Mb/sec of duplex raw IP data, with about 200 Âµs only elapsed
+   by request (direct call is 50 Âµs, so bottle neck is the Win32 API),
    i.e. 5000 requests per second, with 113 result rows (i.e. 4803 bytes
    of JSON data each)... try to find a faster JSON HTTP server! ;)
 
@@ -705,6 +705,8 @@ begin
   if log<>nil then
     log.Log(sllHttp,'% finalized for %',[fHttpServer,Plural('server',length(fDBServers))],self);
   Shutdown(true); // but don't call fDBServers[i].Server.Shutdown
+  while Length(fDBServers) > 0 do
+    RemoveServer(fDBServers[0].Server);  
   FreeAndNil(fHttpServer);
   inherited Destroy;
   fAccessControlAllowOriginsMatch.Free;
