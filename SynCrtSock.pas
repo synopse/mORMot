@@ -8999,6 +8999,8 @@ begin
     end;
     fReqQueue := 0;
     for i := 0 to length(fClones)-1 do
+      fClones[i].WaitFor; // weirdly needed on FPC
+    for i := 0 to length(fClones)-1 do
       fClones[i].Free;
     fClones := nil;
     Http.Terminate(HTTP_INITIALIZE_SERVER);
