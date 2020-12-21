@@ -3426,12 +3426,12 @@ begin
   with TVarData(fValue) do
   case VType of
     varNull:     result := '';
-    varInt64:    result := UTF8ToSynUnicode(Int64ToUtf8(VInt64));
-    varString:   result := UTF8ToSynUnicode(RawUTF8(VAny));
+    varInt64:    UTF8ToSynUnicode(Int64ToUtf8(VInt64),result);
+    varString:   UTF8ToSynUnicode(RawUTF8(VAny),result);
     {$ifdef HASVARUSTRING}
     varUString:  result := UnicodeString(VAny);
     {$endif}
-  else Result := SynUnicode(fValue);
+  else result := SynUnicode(fValue);
   end;
 end;
 
