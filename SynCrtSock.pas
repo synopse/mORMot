@@ -8997,8 +8997,10 @@ begin
       CloseHandle(fReqQueue); // will break all THttpApiServer.Execute
     end;
     fReqQueue := 0;
+    {$ifdef FPC}
     for i := 0 to length(fClones)-1 do
-      WaitForSingleObject(fClones[i].Handle,1000); // sometimes needed on FPC
+      WaitForSingleObject(fClones[i].Handle,30000); // sometimes needed on FPC
+    {$endif FPC}
     for i := 0 to length(fClones)-1 do
       fClones[i].Free;
     fClones := nil;
@@ -9012,7 +9014,9 @@ begin
   try
     if (fOwner=nil) and (Http.Module<>0) then // fOwner<>nil for cloned threads
       DestroyMainThread;
-    WaitForSingleObject(Handle,5000); // wait the main Execute method on FPC
+    {$ifdef FPC}
+    WaitForSingleObject(Handle,30000); // wait the main Execute method on FPC
+    {$endif FPC}
   finally
     inherited Destroy;
   end;
