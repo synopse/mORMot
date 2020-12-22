@@ -12102,7 +12102,7 @@ begin
   else
     try
       if (fHttp = nil) or (fHttp.Server <> Uri.Server) or
-         (fHttp.Port <> Uri.Port) then begin
+         (fHttp.Port <> Uri.Port) or (connectionClose in fHttp.HeaderFlags) then begin
         FreeAndNil(fHttps);
         FreeAndNil(fHttp); // need a new HTTP connection
         fHttp := THttpClientSocket.Open(Uri.Server,Uri.Port,cslTCP,5000,Uri.Https);

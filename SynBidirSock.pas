@@ -1342,6 +1342,11 @@ begin
     headin := headin+fTokenHeader;
   end;
   if fSocket<>nil then begin
+    if connectionClose in fSocket.HeaderFlags then begin
+      // server may close after a few requests (e.g. nginx keepalive_requests)
+      FreeAndNil(fSocket);
+      fSocket := THttpClientSocket.Open(fURI.Server,fURI.Port)
+    end;
     status := fSocket.Get(aAddress,fKeepAlive,headin);
     result := fSocket.Content;
   end else
