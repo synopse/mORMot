@@ -8998,19 +8998,24 @@ begin
 end;
 
 destructor THttpApiServer.Destroy;
+{$ifdef FPC}
 var endtix: Int64;
+{$endif}
 begin
   Terminate; // for Execute to be notified about end of process
   try
     if (fOwner=nil) and (Http.Module<>0) then // fOwner<>nil for cloned threads
       DestroyMainThread;
+    {$ifdef FPC}
     WaitFor;
+    {$else}
     if fExecuting then begin
       endtix := GetTick64+5000; // never wait forever
       repeat
         sleep(1);
       until not fExecuting or (GetTick64>endtix); // ensure Execute has ended
     end;
+    {$endif}
   finally
     inherited Destroy;
   end;
