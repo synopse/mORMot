@@ -1354,7 +1354,6 @@ type
     fRegisteredUnicodeUrl: array of SockUnicode;
     fServerSessionID: HTTP_SERVER_SESSION_ID;
     fUrlGroupID: HTTP_URL_GROUP_ID;
-    fExecuting: boolean;
     fLogData: pointer;
     fLogDataStorage: array of byte;
     fLoggingServiceName: SockString;
@@ -8987,7 +8986,7 @@ begin
        Http.CloseUrlGroup(fUrlGroupID);
        fUrlGroupID := 0;
      end;
-     CloseHandle(FReqQueue);
+     CloseHandle(fReqQueue);
      if fServerSessionID<>0 then begin
        Http.CloseServerSession(fServerSessionID);
        fServerSessionID := 0;
@@ -8999,7 +8998,7 @@ begin
     end;
     fReqQueue := 0;
     for i := 0 to length(fClones)-1 do
-      fClones[i].WaitFor; // weirdly needed on FPC
+      WaitForSingleObject(fClones[i].Handle,1000); // sometimes needed on FPC
     for i := 0 to length(fClones)-1 do
       fClones[i].Free;
     fClones := nil;
@@ -9008,18 +9007,12 @@ begin
 end;
 
 destructor THttpApiServer.Destroy;
-var endtix: Int64;
 begin
   Terminate; // for Execute to be notified about end of process
   try
     if (fOwner=nil) and (Http.Module<>0) then // fOwner<>nil for cloned threads
       DestroyMainThread;
-    if fExecuting then begin
-      endtix := GetTick64+5000; // never wait forever
-      repeat
-        sleep(1);
-      until not fExecuting or (GetTick64>endtix); // ensure Execute has ended
-    end;
+    WaitForSingleObject(Handle,5000); // wait the main Execute method on FPC
   finally
     inherited Destroy;
   end;
@@ -9234,7 +9227,6 @@ var Req: PHTTP_REQUEST;
 begin
   if Terminated then
      exit;
-  fExecuting := true;
   Context := nil;
   try
     // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
@@ -9420,7 +9412,6 @@ begin
     until Terminated;
   finally
     Context.Free;
-    fExecuting := false;
   end;
 end;
 
