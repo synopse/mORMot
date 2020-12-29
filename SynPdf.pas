@@ -41,6 +41,7 @@ unit SynPdf;
    Harald Simon
    Josh Kelley (joshkel)
    Karel (vandrovnik)
+   Kukhtin Igor
    LoukaO
    Marsh
    MChaos
@@ -69,7 +70,7 @@ unit SynPdf;
   Sponsors: https://synopse.info/fossil/wiki?name=HelpDonate
   Ongoing development and maintenance of the SynPDF library was sponsored
   in part by:
-   http://www.helpndoc.com
+   https://www.helpndoc.com
     Easy to use yet powerful help authoring environment which can generate
     various documentation formats from a single source.
   Thanks for your contribution!
@@ -1580,7 +1581,8 @@ type
     // = XOff,YOff parameters specified in RenderMetaFile()
     FOffsetXDef, FOffsetYDef: Single;
     // WorldTransform factor and offs
-    FWorldFactorX, FWorldFactorY, FWorldOffsetX, FWorldOffsetY: single;
+    FWorldFactorX, FWorldFactorY, FWorldOffsetX, FWorldOffsetY, FAngle,
+    FWorldCos, FWorldSin: single;
     FDevScaleX, FDevScaleY: single;
     FWinSize, FViewSize: TSize;
     FWinOrg, FViewOrg: TPoint;
@@ -10108,11 +10110,44 @@ begin
       end;
     end;
     // use transformation
-    ScaleXForm := WorldTransform;
-    FWorldFactorX := WorldTransform.eM11;
-    FWorldFactorY := WorldTransform.eM22;
-    FWorldOffsetX := WorldTransform.eDx;
-    FWorldOffsetY := WorldTransform.eDy;
+    if Custom <> nil then
+      ScaleXForm := Custom^
+    else
+      ScaleXForm := WorldTransform;
+    if (ScaleXForm.eM11 > 0) and
+       (ScaleXForm.eM22 > 0) and
+       (ScaleXForm.eM12 = 0) and
+       (ScaleXForm.eM21 = 0) then
+    begin //Scale
+      FWorldFactorX := ScaleXForm.eM11;
+      FWorldFactorY := ScaleXForm.eM22;
+      FWorldOffsetX := WorldTransform.eDx;
+      FWorldOffsetY := WorldTransform.eDy;
+    end
+    else
+    if (ScaleXForm.eM22 = ScaleXForm.eM11) and
+       (ScaleXForm.eM21 = -ScaleXForm.eM12) then
+    begin //Rotate
+      FAngle := ArcSin(ScaleXForm.eM12) * c180divPI;
+      FWorldCos := ScaleXForm.eM11;
+      FWorldSin := ScaleXForm.eM12;
+    end
+    else
+    if (ScaleXForm.eM11 = 0) and
+       (ScaleXForm.eM22 = 0) and
+       ((ScaleXForm.eM12 <> 0) or
+       (ScaleXForm.eM21 <> 0)) then
+    begin //Shear
+
+    end
+    else
+    if ((ScaleXForm.eM11 < 0) or
+        (ScaleXForm.eM22 < 0)) and
+       (ScaleXForm.eM12 = 0) and
+       (ScaleXForm.eM21 = 0) then
+    begin //Reflection
+
+    end;
   end;
 end;
 
@@ -10433,7 +10468,25 @@ begin
       Canvas.SetTextMatrix(acos, asin, -asin, acos,
         Canvas.I2X(Posi.X-Round(W*acos+H*asin)),
         Canvas.I2Y(Posi.Y-Round(H*acos-W*asin)));
-    end else begin
+    end else
+    if (WorldTransform.eM11 = WorldTransform.eM22) and
+       (WorldTransform.eM12 = -WorldTransform.eM21) and
+       not SameValue(ArcCos(WorldTransform.eM11), 0, 0.0001) then
+    begin
+      PosX := 0;
+      PosY := 0;
+      if SameValue(ArcCos(WorldTransform.eM11), 0, 0.0001) or       //0deg
+         SameValue(ArcCos(WorldTransform.eM11), cPI, 0.0001) then   //180deg
+        Canvas.SetTextMatrix(WorldTransform.eM11, WorldTransform.eM12, WorldTransform.eM21, WorldTransform.eM22,
+          Canvas.I2X(posi.X * WorldTransform.eM11 + posi.Y * WorldTransform.eM21 + WorldTransform.eDx),
+          Canvas.I2y(posi.X * WorldTransform.eM12 + posi.Y * WorldTransform.eM22 + WorldTransform.eDy))
+      else
+        Canvas.SetTextMatrix(-WorldTransform.eM11, -WorldTransform.eM12, -WorldTransform.eM21, -WorldTransform.eM22,
+          Canvas.I2X(posi.X * WorldTransform.eM11 + posi.Y * WorldTransform.eM21 + WorldTransform.eDx),
+          Canvas.I2y(posi.X * WorldTransform.eM12 + posi.Y * WorldTransform.eM22 + WorldTransform.eDy));
+    end
+    else
+    begin
       acos := 0;
       asin := 0;
       if Canvas.fViewSize.cx>0 then
