@@ -2944,6 +2944,13 @@ function ScriptApplyDigitSubstitution(
 
 implementation
 
+const
+  // those constants are not defined in earlier Delphi revisions
+  cPI: Single = 3.141592654;
+  cPIdiv180: Single = 0.017453292;
+  c180divPI: Single = 57.29577951;
+  c2PI: Single = 6.283185307;
+  cPIdiv2: Single = 1.570796326;
 
 function RGBA(r, g, b, a: cardinal): COLORREF; {$ifdef HASINLINE}inline;{$endif}
 begin
@@ -3236,7 +3243,6 @@ type
   TCoeff = array[0..3] of double;
   TCoeffArray = array[0..1, 0..3] of TCoeff;
 const
-  twoPi = 2 * PI;
   // coefficients for error estimation
   // while using cubic Bezier curves for approximation
   // 0 < b/a < 1/4
@@ -3294,11 +3300,11 @@ begin
   feta1 := ArcTan2(sin(lambda1) / fbRad, cos(lambda1) / faRad);
   feta2 := ArcTan2(sin(lambda2) / fbRad, cos(lambda2) / faRad);
   // make sure we have eta1 <= eta2 <= eta1 + 2 PI
-  feta2 := feta2 - (twoPi * floor((feta2 - feta1) / twoPi));
+  feta2 := feta2 - (c2PI * floor((feta2 - feta1) / c2PI));
   // the preceding correction fails if we have exactly et2 - eta1 = 2 PI
   // it reduces the interval to zero length
   if SameValue(feta1, feta2) then
-    feta2 := feta2 + twoPi;
+    feta2 := feta2 + c2PI;
   // start point
   fx1 := fcx + (faRad * cos(feta1));
   fy1 := fcy + (fbRad * sin(feta1));
@@ -3362,7 +3368,7 @@ begin
   n := 1;
   while (not found) and (n < 1024) do begin
     dEta := (feta2 - feta1) / n;
-    if dEta <= 0.5 * PI then begin
+    if dEta <= cPIdiv2 then begin
       etaB := feta1;
       found := true;
       for i := 0 to n - 1 do begin
@@ -10118,7 +10124,7 @@ begin
        (ScaleXForm.eM22 > 0) and
        (ScaleXForm.eM12 = 0) and
        (ScaleXForm.eM21 = 0) then
-    begin //Scale
+    begin // Scale
       FWorldFactorX := ScaleXForm.eM11;
       FWorldFactorY := ScaleXForm.eM22;
       FWorldOffsetX := WorldTransform.eDx;
@@ -10127,7 +10133,7 @@ begin
     else
     if (ScaleXForm.eM22 = ScaleXForm.eM11) and
        (ScaleXForm.eM21 = -ScaleXForm.eM12) then
-    begin //Rotate
+    begin // Rotate
       FAngle := ArcSin(ScaleXForm.eM12) * c180divPI;
       FWorldCos := ScaleXForm.eM11;
       FWorldSin := ScaleXForm.eM12;
@@ -10460,7 +10466,7 @@ begin
 {$endif}
     Canvas.BeginText;
     if font.spec.angle<>0 then begin
-      a := font.spec.angle*(PI/180);
+      a := font.spec.angle*cPIdiv180;
       acos := cos(a);
       asin := sin(a);
       PosX := 0;
