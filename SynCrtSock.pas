@@ -2532,7 +2532,8 @@ function OpenHttp(const aURI: SockString; aAddress: PSockString=nil): THttpClien
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket: if you want
-// something able to use your computer proxy, take a look at TWinINet.Get()
+// something able to use your computer proxy, take a look at TWinINet.Get() or
+// the overloaded HttpGet() methods
 function HttpGet(const server, port: SockString; const url: SockString;
   const inHeaders: SockString; outHeaders: PSockString=nil;
   aLayer: TCrtSocketLayer = cslTCP): SockString; overload;

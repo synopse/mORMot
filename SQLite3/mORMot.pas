@@ -16017,6 +16017,13 @@ type
     // - will perform any needed clean-up, and log the event
     // - this method is not thread-safe: caller should use Sessions.Lock/Unlock
     procedure SessionDelete(aSessionIndex: integer; Ctxt: TSQLRestServerURIContext);
+    /// SessionAccess will detect and delete outdated sessions, but you can call
+    // this method to force checking for deprecated session now
+    // - may be used e.g. from OnSessionCreate to limit the number of active sessions
+    // - this method is not thread-safe: caller should use Sessions.Lock/Unlock
+    // - you can call it often: it will seek for outdated sessions once per second
+    // - returns the current system Ticks number (at second resolution)
+    function SessionDeleteDeprecated: cardinal;
     /// returns TRUE if this table is worth caching (e.g. already in memory)
     // - this overridden implementation returns FALSE for TSQLRestStorageInMemory
     function CacheWorthItForTable(aTableIndex: cardinal): boolean; override;
@@ -42033,7 +42040,7 @@ end;
 procedure TSQLRestServer.SessionDelete(aSessionIndex: integer;
   Ctxt: TSQLRestServerURIContext);
 var sess: TAuthSession;
-begin
+begin // caller made fSessions.Safe.Lock
   if (self<>nil) and (cardinal(aSessionIndex)<cardinal(fSessions.Count)) then begin
     sess := fSessions.List[aSessionIndex];
     if Services<>nil then
@@ -42050,38 +42057,50 @@ begin
   end;
 end;
 
+function TSQLRestServer.SessionDeleteDeprecated: cardinal;
+var i: PtrInt;
+begin // caller made fSessions.Safe.Lock
+  result := GetTickCount64 shr 10;
+  if (self<>nil) and (fSessions<>nil) then begin
+    if result<>fSessionsDeprecatedTix then begin
+      fSessionsDeprecatedTix := result; // check sessions every second
+      for i := fSessions.Count-1 downto 0 do
+        if result>TAuthSession(fSessions.List[i]).TimeOutTix then begin
+          SessionDelete(i,nil);
+          inc(result);
+        end;
+    end;
+  end;
+end;
+
 function TSQLRestServer.SessionAccess(Ctxt: TSQLRestServerURIContext): TAuthSession;
 var i: integer;
     tix, session: cardinal;
     sessions: ^TAuthSession;
-begin // caller of RetrieveSession() made fSessions.Safe.Lock
+begin // caller made fSessions.Safe.Lock
   if (self<>nil) and (fSessions<>nil) then begin
-    tix := GetTickCount64 shr 10;
-    if tix<>fSessionsDeprecatedTix then begin
-      fSessionsDeprecatedTix := tix; // check deprecated sessions every second
-      for i := fSessions.Count-1 downto 0 do
-        if tix>TAuthSession(fSessions.List[i]).TimeOutTix then
-          SessionDelete(i,nil);
-    end;
+    // check deprecated sessions every second
+    tix := SessionDeleteDeprecated;
     // retrieve session from its ID
     sessions := pointer(fSessions.List);
     session := Ctxt.Session;
-    for i := 1 to fSessions.Count do
-      if sessions^.IDCardinal=session then begin
-        result := sessions^;
-        result.fTimeOutTix := tix+result.TimeoutShr10;
-        Ctxt.fSession := result; // for TSQLRestServer internal use
-        // make local copy of TAuthSession information
-        Ctxt.SessionUser := result.User.fID;
-        Ctxt.SessionGroup := result.User.GroupRights.fID;
-        Ctxt.SessionUserName := result.User.LogonName;
-        if (result.RemoteIP<>'') and (Ctxt.fRemoteIP='') then
-          Ctxt.fRemoteIP := result.RemoteIP;
-        Ctxt.fSessionAccessRights := result.fAccessRights;
-        Ctxt.Call^.RestAccessRights := @Ctxt.fSessionAccessRights;
-        exit;
-      end else
-        inc(sessions);
+    if session<>0 then
+      for i := 1 to fSessions.Count do
+        if sessions^.IDCardinal=session then begin
+          result := sessions^;
+          result.fTimeOutTix := tix+result.TimeoutShr10;
+          Ctxt.fSession := result; // for TSQLRestServer internal use
+          // make local copy of TAuthSession information
+          Ctxt.SessionUser := result.User.fID;
+          Ctxt.SessionGroup := result.User.GroupRights.fID;
+          Ctxt.SessionUserName := result.User.LogonName;
+          if (result.RemoteIP<>'') and (Ctxt.fRemoteIP='') then
+            Ctxt.fRemoteIP := result.RemoteIP;
+          Ctxt.fSessionAccessRights := result.fAccessRights;
+          Ctxt.Call^.RestAccessRights := @Ctxt.fSessionAccessRights;
+          exit;
+        end else
+          inc(sessions);
   end;
   result := nil;
 end;
