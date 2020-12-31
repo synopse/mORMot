@@ -42065,10 +42065,8 @@ begin // caller made fSessions.Safe.Lock
     if result<>fSessionsDeprecatedTix then begin
       fSessionsDeprecatedTix := result; // check sessions every second
       for i := fSessions.Count-1 downto 0 do
-        if result>TAuthSession(fSessions.List[i]).TimeOutTix then begin
+        if result>TAuthSession(fSessions.List[i]).TimeOutTix then
           SessionDelete(i,nil);
-          inc(result);
-        end;
     end;
   end;
 end;
@@ -42084,7 +42082,7 @@ begin // caller made fSessions.Safe.Lock
     // retrieve session from its ID
     sessions := pointer(fSessions.List);
     session := Ctxt.Session;
-    if session<>0 then
+    if session>CONST_AUTHENTICATION_NOT_USED then
       for i := 1 to fSessions.Count do
         if sessions^.IDCardinal=session then begin
           result := sessions^;
