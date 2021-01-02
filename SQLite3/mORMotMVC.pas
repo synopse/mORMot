@@ -84,7 +84,7 @@ type
   TMVCViewFlags = set of (viewHasGenerationTimeTag);
 
   /// define a particular rendered View
-  // - as rendered by TMVCViewsAbtract.Render() method
+  // - as rendered by TMVCViewsAbstract.Render() method
   TMVCView = record
     /// the low-level content of this View
     Content: RawByteString;
@@ -95,7 +95,7 @@ type
   end;
 
   /// an abstract class able to implement Views
-  TMVCViewsAbtract = class
+  TMVCViewsAbstract = class
   protected
     fFactory: TInterfaceFactory;
     fLogClass: TSynLogClass;
@@ -149,7 +149,7 @@ type
   end;
 
   /// a class able to implement Views using Mustache templates
-  TMVCViewsMustache = class(TMVCViewsAbtract)
+  TMVCViewsMustache = class(TMVCViewsAbstract)
   protected
     fViewTemplateFileTimestampMonitor: cardinal;
     fViewPartials: TSynMustachePartials;
@@ -401,7 +401,7 @@ type
 
   TMVCApplication = class;
 
-  /// abtract MVC rendering execution context
+  /// abstract MVC rendering execution context
   // - you shoud not execute this abstract class, but any of the inherited class
   // - one instance inherited from this class would be allocated for each event
   // - may return some data (when inheriting from TMVCRendererReturningData), or
@@ -512,7 +512,7 @@ type
   // an optional simple in-memory cache
   TMVCRunWithViews = class(TMVCRun)
   protected
-    fViews: TMVCViewsAbtract;
+    fViews: TMVCViewsAbstract;
     fCacheLocker: IAutoLocker;
     fCache: array of record
       Policy: TMVCRendererCachePolicy;
@@ -524,7 +524,7 @@ type
   public
     /// link this runner class to a specified MVC application
     constructor Create(aApplication: TMVCApplication;
-      aViews: TMVCViewsAbtract=nil); reintroduce;
+      aViews: TMVCViewsAbstract=nil); reintroduce;
     /// method called to flush the caching mechanism for a MVC command
     procedure NotifyContentChangedForMethod(aMethodIndex: integer); override;
     /// defines the caching policy for a given MVC command
@@ -538,7 +538,7 @@ type
     /// finalize this instance
     destructor Destroy; override;
     /// read-write access to the associated MVC Views instance
-    property Views: TMVCViewsAbtract read fViews;
+    property Views: TMVCViewsAbstract read fViews;
   end;
 
   /// the kinds of optional content which may be published
@@ -588,7 +588,7 @@ type
     // - aPublishOptions could be used to specify integration with the server
     constructor Create(aApplication: TMVCApplication;
       aRestServer: TSQLRestServer=nil; const aSubURI: RawUTF8='';
-      aViews: TMVCViewsAbtract=nil; aPublishOptions: TMVCPublishOptions=
+      aViews: TMVCViewsAbstract=nil; aPublishOptions: TMVCPublishOptions=
         [low(TMVCPublishOption)..high(TMVCPublishOption)]); reintroduce;
     /// define some content for a static file
     // - only used if cacheStatic has been defined
@@ -646,7 +646,7 @@ type
   // - you should inherit from this class, then implement an interface inheriting
   // from IMVCApplication to define the various commands of the application
   // - here the Model would be a TSQLRest instance, Views will be defined by
-  // TMVCViewsAbtract (e.g. TMVCViewsMustache), and the ViewModel/Controller
+  // TMVCViewsAbstract (e.g. TMVCViewsMustache), and the ViewModel/Controller
   // will be implemented with IMVCApplication methods of the inherited class
   // - inherits from TInjectableObject, so that you could resolve dependencies
   // via services or stubs, following the IoC pattern
@@ -727,9 +727,9 @@ const
 implementation
 
 
-{ TMVCViewsAbtract }
+{ TMVCViewsAbstract }
 
-constructor TMVCViewsAbtract.Create(aInterface: PTypeInfo; aLogClass: TSynLogClass);
+constructor TMVCViewsAbstract.Create(aInterface: PTypeInfo; aLogClass: TSynLogClass);
 begin
   inherited Create;
   fFactory := TInterfaceFactory.Get(aInterface);
@@ -740,13 +740,13 @@ begin
   fViewGenerationTimeTag := '[[GENERATION_TIME_TAG]]';
 end;
 
-procedure TMVCViewsAbtract.SetViewTemplateFolder(const aFolder: TFileName);
+procedure TMVCViewsAbstract.SetViewTemplateFolder(const aFolder: TFileName);
 begin
   fViewTemplateFolder := IncludeTrailingPathDelimiter(aFolder);
   fViewStaticFolder := IncludeTrailingPathDelimiter(fViewTemplateFolder+STATIC_URI);
 end;
 
-function TMVCViewsAbtract.GetStaticFile(const aFileName: TFileName): RawByteString;
+function TMVCViewsAbstract.GetStaticFile(const aFileName: TFileName): RawByteString;
 begin
   result := StringFromFile(fViewStaticFolder + aFileName);
 end;
@@ -1739,7 +1739,7 @@ end;
 { TMVCRunWithViews }
 
 constructor TMVCRunWithViews.Create(aApplication: TMVCApplication;
-  aViews: TMVCViewsAbtract);
+  aViews: TMVCViewsAbstract);
 begin
   inherited Create(aApplication);
   fViews := aViews;
@@ -1793,7 +1793,7 @@ end;
 
 constructor TMVCRunOnRestServer.Create(aApplication: TMVCApplication;
   aRestServer: TSQLRestServer; const aSubURI: RawUTF8;
-  aViews: TMVCViewsAbtract; aPublishOptions: TMVCPublishOptions);
+  aViews: TMVCViewsAbstract; aPublishOptions: TMVCPublishOptions);
 var m: integer;
     bypass: boolean;
     method: RawUTF8;

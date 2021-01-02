@@ -2946,11 +2946,11 @@ implementation
 
 const
   // those constants are not defined in earlier Delphi revisions
-  cPI: Single = 3.141592654;
-  cPIdiv180: Single = 0.017453292;
-  c180divPI: Single = 57.29577951;
-  c2PI: Single = 6.283185307;
-  cPIdiv2: Single = 1.570796326;
+  cPI: single = 3.141592654;
+  cPIdiv180: single = 0.017453292;
+  c180divPI: single = 57.29577951;
+  c2PI: double = 6.283185307;
+  cPIdiv2: double = 1.570796326;
 
 function RGBA(r, g, b, a: cardinal): COLORREF; {$ifdef HASINLINE}inline;{$endif}
 begin
