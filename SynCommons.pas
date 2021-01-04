@@ -16333,6 +16333,9 @@ type
   end;
 
   /// simple reference-counted storage for local objects
+  // - WARNING: both FPC and Delphi 10.4+ don't keep the IAutoFree instance
+  // up to the end-of-method -> you should not use TAutoFree for new projects
+  // :( - see https://quality.embarcadero.com/browse/RSP-30050
   // - be aware that it won't implement a full ARC memory model, but may be
   // just used to avoid writing some try ... finally blocks on local variables
   // - use with caution, only on well defined local scope
@@ -16366,6 +16369,8 @@ type
     // !end; // here myVar will be released
     // - warning: under FPC, you should assign the result of this method to a local
     // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
+    // - Delphi 10.4 also did change it and release the IAutoFree before the
+    // end of the current method, so you should better use a local variable
     class function One(var localVariable; obj: TObject): IAutoFree;
     /// protect several local TObject variable instances life time
     // - specified as localVariable/objectInstance pairs
@@ -16379,6 +16384,8 @@ type
     // !end; // here var1 and var2 will be released
     // - warning: under FPC, you should assign the result of this method to a local
     // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
+    // - Delphi 10.4 also did change it and release the IAutoFree before the
+    // end of the current method, so you should better use a local variable
      class function Several(const varObjPairs: array of pointer): IAutoFree;
     /// protect another TObject variable to an existing IAutoFree instance life time
     // - you may write:
