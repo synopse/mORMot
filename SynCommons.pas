@@ -23542,7 +23542,7 @@ var from: PUTF8Char;
 begin
   if P<>nil then begin
     P := SQLBegin(P);
-    case IdemPCharArray(P, ['SELECT','EXPLAIN ','VACUUM','PRAGMA','WITH']) of
+    case IdemPCharArray(P, ['SELECT','EXPLAIN ','VACUUM','PRAGMA','WITH','EXECUTE']) of
     0: if P[6]<=' ' then begin
          if SelectClause<>nil then begin
            inc(P,7);
@@ -23558,6 +23558,10 @@ begin
     2,3: result := P[6] in [#0..' ',';'];
     4:   result := (P[4]<=' ') and not (StrPosI('INSERT',P+5)<>nil) or
            (StrPosI('UPDATE',P+5)<>nil) or (StrPosI('DELETE',P+5)<>nil);
+    5: begin // FireBird specific
+        P := GotoNextNotSpace(P+7);
+        result := IdemPChar(P,'BLOCK') and IdemPChar(GotoNextNotSpace(P+5),'RETURNS');
+      end
     else result := false;
     end;
   end else
