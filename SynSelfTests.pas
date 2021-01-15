@@ -826,15 +826,15 @@ type
     {$ifdef MSWINDOWS}
     /// test external DB using the JET engine
     procedure JETDatabase;
-    {$endif}
-    {$endif}
-    {$endif}
+    {$endif MSWINDOWS}
+    {$endif LVCL}
+    {$endif CPU64}
     {$ifdef MSWINDOWS}
     {$ifdef USEZEOS}
     /// test external Firebird embedded engine via Zeos/ZDBC (if available)
     procedure FirebirdEmbeddedViaZDBCOverHTTP;
-    {$endif}
-    {$endif}
+    {$endif USEZEOS}
+    {$endif MSWINDOWS}
   end;
 
   /// a test case for multi-threading abilities of the framework
@@ -15501,6 +15501,8 @@ type
     {$endif}
   end;
 
+{ TSQLRecordCustomProps }
+
 class procedure TSQLRecordCustomProps.InternalRegisterCustomProperties(Props: TSQLRecordProperties);
 begin
   Props.RegisterCustomPropertyFromTypeName(self,'TGUID','GUID',
@@ -15800,6 +15802,9 @@ begin
         Test(dJet,true,'select top 2 id,firstname from SampleRecord order by firstname');
         Test(dMySQL,true,'select id,firstname from SampleRecord order by firstname limit 2');
         Test(dSQLite,true,'select id,firstname from SampleRecord order by firstname limit 2');
+        SqlOrigin := 'SELECT RowID,firstname FROM PeopleExt WHERE :(3001): '+
+          'BETWEEN firstname AND RowID LIMIT 1';
+        Test(dSQLite,false);
       finally
         Ext.Free;
       end;

@@ -7708,7 +7708,7 @@ lim2: if IdemPropNameU(Prop,'LIMIT') then
         end else
         exit; // incorrect SQL statement
       end else
-      if Prop<>'' then
+      if (Prop<>'') or not(GotoNextNotSpace(P)^ in [#0, ';']) then
         exit else // incorrect SQL statement
         break; // reached the end of the statement
     end;
