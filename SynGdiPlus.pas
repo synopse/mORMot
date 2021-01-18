@@ -3106,6 +3106,8 @@ initialization
 {$ifndef NOTSYNPICTUREREGISTER}
   Gdip.RegisterPictures; // will initialize the Gdip library if necessary
 //  GdipTest('d:\Data\Pictures\Sample Pictures\Tree.jpg');
+{$else}
+  Gdip := nil;
 {$endif}
 
 finalization
