@@ -692,6 +692,8 @@ type
   end;
 
   /// abstract write-only access for creating a .zip archive
+  // - update can be done manualy by using a TZipRead instance and the
+  // AddFromZip() method
   TZipWriteAbstract = class
   protected
     fAppendOffset: cardinal;
@@ -723,6 +725,8 @@ type
     // - by default, the 1st of January, 2010 is used if not date is supplied
     procedure AddStored(const aZipName: TFileName; Buf: pointer; Size: integer;
       FileAge: integer=1+1 shl 5+30 shl 9);
+    /// add a file from an already compressed zip entry
+    procedure AddFromZip(const ZipEntry: TZipEntry);
     /// append a file content into the destination file
     // - useful to add the initial Setup.exe file, e.g.
     procedure Append(const Content: ZipString);
@@ -732,8 +736,6 @@ type
 
   /// write-only access for creating a .zip archive file
   // - not to be used to update a .zip file, but to create a new one
-  // - update can be done manualy by using a TZipRead instance and the
-  // AddFromZip() method
   TZipWrite = class(TZipWriteAbstract)
   protected
     fFileName: TFileName;
@@ -759,8 +761,6 @@ type
     // - if Recursive is TRUE, would include files from nested sub-folders
     procedure AddFolder(const FolderName: TFileName; const Mask: TFileName=ZIP_FILES_ALL;
       Recursive: boolean=true; CompressLevel: integer=6);
-    /// add a file from an already compressed zip entry
-    procedure AddFromZip(const ZipEntry: TZipEntry);
     /// release associated memory, and close destination file
     destructor Destroy; override;
   end;
@@ -935,6 +935,18 @@ begin
   end;
 end;
 
+procedure TZipWriteAbstract.AddFromZip(const ZipEntry: TZipEntry);
+begin
+  if self=nil then
+    exit;
+  if Count>=length(Entry) then
+    SetLength(Entry,length(Entry)+20);
+  with Entry[Count] do begin
+    fhr.fileInfo := ZipEntry.infoLocal^;
+    InternalAdd(ZipEntry.zipName,ZipEntry.data,fhr.fileInfo.zzipSize);
+  end;
+end;
+
 procedure TZipWriteAbstract.Append(const Content: ZipString);
 begin
   if (self=nil) or (fAppendOffset<>0) then
@@ -1071,18 +1083,6 @@ begin
     end;
   finally
     S.Free;
-  end;
-end;
-
-procedure TZipWrite.AddFromZip(const ZipEntry: TZipEntry);
-begin
-  if (self=nil) or (Handle<=0) then
-    exit;
-  if Count>=length(Entry) then
-    SetLength(Entry,length(Entry)+20);
-  with Entry[Count] do begin
-    fhr.fileInfo := ZipEntry.infoLocal^;
-    InternalAdd(ZipEntry.zipName,ZipEntry.data,fhr.fileInfo.zzipSize);
   end;
 end;
 
