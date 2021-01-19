@@ -30,6 +30,7 @@ unit SynZip;
 
   Contributor(s):
    - Alf
+   - Andre Heider (dhewg)
    - ehansen
    - jpdk
    - Gigo
