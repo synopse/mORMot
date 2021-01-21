@@ -949,6 +949,8 @@ begin
     if hostroot<>'' then begin
       if ((result=HTTP_MOVEDPERMANENTLY) or (result=HTTP_TEMPORARYREDIRECT)) then begin
         redirect := FindIniNameValue(P,'LOCATION: ');
+        if (redirect<>'') and (redirect[1]='/') then
+          delete(redirect,1,1); // what is needed for real URI doesn't help here
         hostlen := length(hostroot);
         if (length(redirect)>hostlen) and (redirect[hostlen+1]='/') and
            IdemPropNameU(hostroot,pointer(redirect),hostlen) then
