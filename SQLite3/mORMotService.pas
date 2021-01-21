@@ -2006,9 +2006,6 @@ begin
   fLogRotateFileCount := 2;
   fServiceName := UTF8ToString(ExeVersion.ProgramName);
   fServiceDisplayName := fServiceName;
-  {$ifndef MSWINDOWS}
-  fLogPath := GetSystemPath(spLog); // /var/log or $home
-  {$endif MSWINDOWS}
 end;
 
 function TSynDaemonSettings.ServiceDescription: string;
