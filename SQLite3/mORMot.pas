@@ -30256,7 +30256,7 @@ end;
 
 function SQLWhereIsEndClause(const Where: RawUTF8): boolean;
 begin
-  result := IdemPCharArray(pointer(Where),['ORDER BY ','GROUP BY ',
+  result := IdemPCharArray(GotoNextNotSpace(pointer(Where)),['ORDER BY ','GROUP BY ',
     'LIMIT ','OFFSET ','LEFT ','RIGHT ','INNER ','OUTER ','JOIN '])>=0;
 end;
 
