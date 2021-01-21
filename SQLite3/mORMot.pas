@@ -15842,6 +15842,7 @@ type
   // unless rsoGetUserRetrieveNoBlobData is defined
   // - rsoNoInternalState could be state to avoid transmitting the
   // 'Server-InternalState' header, e.g. if the clients wouldn't need it
+  // - rsoNoTableURI will disable any /root/tablename URI for safety
   TSQLRestServerOption = (
     rsoNoAJAXJSON,
     rsoGetAsJsonNotAsString,
@@ -15857,7 +15858,8 @@ type
     rsoTimestampInfoURIDisable,
     rsoHttpHeaderCheckDisable,
     rsoGetUserRetrieveNoBlobData,
-    rsoNoInternalState);
+    rsoNoInternalState,
+    rsoNoTableURI);
   /// allow to customize the TSQLRestServer process via its Options property
   TSQLRestServerOptions = set of TSQLRestServerOption;
 
@@ -38210,7 +38212,7 @@ begin
   aMethodName := trim(aMethodName);
   if aMethodName='' then
     raise EServiceException.CreateUTF8('%.ServiceMethodRegister('''')',[self]);
-  if Model.GetTableIndex(aMethodName)>=0 then
+  if not(rsoNoTableURI in fOptions) and (Model.GetTableIndex(aMethodName)>=0) then
     raise EServiceException.CreateUTF8('Published method name %.% '+
       'conflicts with a Table in the Model!',[self,aMethodName]);
   with PSQLRestServerMethod(fPublishedMethods.AddUniqueName(aMethodName,
@@ -39503,7 +39505,9 @@ end;
 procedure TSQLRestServerURIContext.InternalSetTableFromTableName(TableName: PUTF8Char);
 begin
   TableEngine := Server;
-  InternalSetTableFromTableIndex(Server.Model.GetTableIndexPtr(TableName));
+  if rsoNoTableURI in Server.Options then
+    TableIndex := -1 else
+    InternalSetTableFromTableIndex(Server.Model.GetTableIndexPtr(TableName));
   if TableIndex<0 then
     exit;
   Static := Server.GetStaticTableIndex(TableIndex,StaticKind);

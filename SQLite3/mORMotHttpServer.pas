@@ -577,7 +577,6 @@ begin
   if aURI='' then
     fHosts.Delete(aDomain) else
     fHosts.Add(aDomain,aURI); // e.g. Add('project1.com','root1')
-
 end;
 
 constructor TSQLHttpServer.Create(const aPort: AnsiString;
