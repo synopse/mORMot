@@ -96,6 +96,7 @@ type
     OrderID: TIntegerDynArray;
     procedure Init(aRest: TSQLRest);
     function Get(tagID: integer): RawUTF8;
+    function GetIDFromIdent(const Ident: RawUTF8): integer;
     procedure SaveOccurence(aRest: TSQLRest);
     procedure SortTagsByIdent(var Tags: TIntegerDynArray);
     function GetAsDocVariantArray: Variant;
@@ -106,6 +107,7 @@ type
     fAbstract: RawUTF8;
     fPublishedMonth: Integer;
     fTags: TIntegerDynArray;
+    fLegacyHash: Int64;
   public
     class function CurrentPublishedMonth: Integer;
     class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
@@ -118,6 +120,8 @@ type
     property Abstract: RawUTF8 read fAbstract write fAbstract;
     // "index 1" below to allow writing e.g. aArticle.DynArray(1).Delete(aIndex)
     property Tags: TIntegerDynArray index 1 read fTags write fTags;
+    // xxhash32 of legacy post_url
+    property LegacyHash: Int64 read fLegacyHash write fLegacyHash;
   end;
 
   TSQLArticleSearch = class(TSQLRecordFTS4Porter)
@@ -156,6 +160,8 @@ function CreateModel: TSQLModel;
 procedure DotClearFlatImport(Rest: TSQLRest; const aFlatFile: RawUTF8;
   var aTagsLookup: TSQLTags; const aDotClearRoot: RawUTF8;
   const aStaticFolder: TFileName);
+
+function ComputeLegacyHash(url: PUTF8Char): cardinal;
 
 
 implementation
@@ -233,6 +239,8 @@ begin
   inherited;
   if (FieldName='') or (FieldName='PublishedMonth') then
     Server.CreateSQLIndex(TSQLArticle,'PublishedMonth',false);
+  if (FieldName='') or (FieldName='LegacyHash') then
+    Server.CreateSQLIndex(TSQLArticle,'LegacyHash',false);
 end;
 
 procedure TSQLArticle.SetPublishedMonth(FromTime: TTimeLog);
@@ -260,8 +268,20 @@ begin
     result := '';
 end;
 
+function TSQLTags.GetIDFromIdent(const Ident: RawUTF8): integer;
+var i: PtrInt;
+begin
+  if Ident<>'' then
+    for i := 0 to length(Lookup)-1 do
+      if IdemPropNameU(Lookup[i].Ident,Ident) then begin
+        result := i+1;
+        exit;
+      end;
+  result := 0;
+end;
+
 function TSQLTags.GetAsDocVariantArray: Variant;
-var i,ndx: Integer;
+var i,ndx: PtrInt;
 begin
   TDocVariant.NewFast(result);
   with Lock.ProtectMethod do
@@ -438,21 +458,46 @@ begin
   until P=nil;
 end;
 
+{function HttpGet2(const aURI: SockString; outHeaders: PSockString=nil;
+  forceNotSocket: boolean=false; outStatus: PInteger=nil): SockString; overload;
+begin
+  result := '';
+  if outStatus<>nil then
+    outStatus^ := 404;
+end;}
+
+function ComputeLegacyHash(url: PUTF8Char): cardinal;
+var c: ansichar;
+begin
+  result := 0;
+  if url<>nil then
+    repeat
+      case url^ of
+      #0: exit;
+      'a'..'z', 'A'..'Z', '0'..'9': begin
+        c := upcase(url^);
+        result := crc32c(result, @c, 1);
+      end;
+      end;
+      inc(url);
+    until false;
+end;
+
 procedure DotClearFlatImport(Rest: TSQLRest; const aFlatFile: RawUTF8;
   var aTagsLookup: TSQLTags; const aDotClearRoot: RawUTF8;
   const aStaticFolder: TFileName);
 var T,tagTable,postTable: TDotClearTable;
-    data,urls: TRawUTF8List;
+    data: TRawUTF8List;
+    urls: TIntegerDynArray;
     info: TSQLBlogInfo;
     article: TSQLArticle;
     comment: TSQLComment;
     tag: TSQLTag;
-    tags: TRawUTF8DynArray;
+    tags, notfound: TRawUTF8DynArray;
     tagID: TIDDynArray;
     tagsCount: integer;
     batch: TSQLRestBatch;
     PublicFolder: TFileName;
-    notfound: TRawUTF8DynArray;
     r,ndx,post_url,meta_id,meta_type,tag_post_id,postID,post_id: integer;
 
   function FixLinks(P: PUTF8Char): RawUTF8;
@@ -501,13 +546,20 @@ var T,tagTable,postTable: TDotClearTable;
           continue;
         AddNoJSONEscape(B,H-B);
         P := H;
+        if IdemPChar(P,'HTTP://BLOG.SYNOPSE.INFO/') then
+          inc(P,24)
+        else if IdemPChar(P,'HTTPS://BLOG.SYNOPSE.INFO/') then
+          inc(P,25);
         if IdemPChar(P,'HTTP://SYNOPSE.INFO') then begin
           AddShort('https://synopse.info');
           inc(P,19);
         end else if P^='/' then begin
+          if P[1]='?' then
+            inc(P);
           if IdemPChar(P+1,'POST/') then begin
             GetUrl(P+6);
-            i := urls.IndexOf(urlnoparam);
+            i := IntegerScanIndex(pointer(urls),length(urls),
+              ComputeLegacyHash(pointer(urlnoparam)));
             if i>=0 then begin
               AddShort('articleView?id=');
               Add(i+1);
@@ -582,7 +634,6 @@ begin
   end;
   auto1 := TAutoFree.Several([
     @data,TDotClearTable.Parse(aFlatFile),
-    @urls,TRawUTF8ListHashed.Create,
     @batch,TSQLRestBatch.Create(Rest,TSQLTag,5000)]);
   auto2 := TSQLRecord.AutoFree([ // avoid several try..finally
     @info,TSQLBlogInfo, @article,TSQLArticle, @comment,TSQLComment, @tag,TSQLTag]);
@@ -614,7 +665,7 @@ begin
   post_url := postTable.FieldIndexExisting('post_url');
   if postTable.Step(true) then
     repeat
-      urls.Add(postTable.FieldBuffer(post_url));
+      AddInteger(urls,ComputeLegacyHash(postTable.FieldBuffer(post_url)));
     until not postTable.Step;
   article.Author := TSQLAuthor(1);
   article.AuthorName := 'synopse';
@@ -631,6 +682,7 @@ begin
     article.ModifiedAt := Iso8601ToTimeLog(postTable.GetU(r,'post_upddt'));
     article.SetPublishedMonth(article.CreatedAt);
     postID := postTable.GetAsInteger(r,post_id);
+    article.LegacyHash := ComputeLegacyHash(postTable.Get(r,post_url));
     article.Tags := nil;
     if tagTable.Step(true) then
       repeat

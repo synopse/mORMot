@@ -45,10 +45,12 @@ begin
     try
       aServer.DB.Synchronous := smNormal;
       aServer.DB.LockingMode := lmExclusive;
+      aServer.Options := aServer.Options+[rsoNoTableURI];
       aServer.CreateMissingTables;
       aApplication := TBlogApplication.Create;
       try
         aApplication.Start(aServer);
+        aServer.ServiceMethodRegisterPublishedMethods('', aApplication);
         aHTTPServer := TSQLHttpServer.Create('8092',aServer
           {$ifndef ONLYUSEHTTPSOCKET},'+',useHttpApiRegisteringURI{$endif});
         try

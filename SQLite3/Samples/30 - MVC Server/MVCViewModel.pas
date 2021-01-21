@@ -12,6 +12,7 @@ uses
   SynCommons,
   SynLog,
   SynTests,
+  SynCrtSock,
   mORMot,
   mORMotMVC,
   MVCModel;
@@ -71,7 +72,11 @@ type
     procedure TagToText(const Value: variant; out result: variant);
   public
     procedure Start(aServer: TSQLRestServer); reintroduce;
+  published
+    procedure Post(Ctxt: TSQLRestServerURIContext);
+    procedure Tag(Ctxt: TSQLRestServerURIContext);
   public
+    // IBlogApplication implemented methods
     procedure Default(var Scope: variant);
     procedure ArticleView(ID: TID;
       var WithComments: boolean; Direction: integer; var Scope: variant;
@@ -172,7 +177,7 @@ begin
   auto := TSQLRecord.AutoFree([ // avoid several try..finally
     @info,TSQLBlogInfo, @article,TSQLArticle, @comment,TSQLComment, @tag,TSQLTag]);
   if not RestModel.Retrieve('',info) then begin // retrieve first item
-    tmp := StringFromFile('/home/ab/Downloads/2020-06-16-a8003957c2ae6bde5be6ea279c9c9ce4-backup.txt');
+    tmp := StringFromFile(ExeVersion.ProgramFilePath+'2021-01-20-16-37-default-backup.txt');
     info.Language := 'en';
     if tmp<>'' then begin
       info.Title := 'Synopse Blog';
@@ -194,7 +199,7 @@ begin
   if RestModel.TableHasRows(TSQLArticle) then
     exit;
   if tmp<>'' then begin
-    DotClearFlatImport(RestModel,tmp,fTagsLookup,'http://blog.synopse.info',
+    DotClearFlatImport(RestModel,tmp,fTagsLookup,'https://blog.synopse.info',
       (TMVCRunOnRestServer(fMainRunner).Views as TMVCViewsMustache).ViewStaticFolder);
     exit;
   end;  
@@ -480,6 +485,24 @@ begin
         RestModel.Update(Article);
   end;
 end;
+
+procedure TBlogApplication.Post(Ctxt: TSQLRestServerURIContext);
+var hash, id: Int64;
+begin
+  hash := ComputeLegacyHash(pointer(UrlDecode(Ctxt.URIAfterRoot,5,-1)));
+  id := RestModel.OneFieldValueInt64(TSQLArticle,'ID',
+    FormatUTF8('LegacyHash=:(%):', [hash]));
+  Ctxt.Redirect(FormatUTF8('/%/articleview?id=%',[RestModel.Model.Root,id]));
+end;
+
+procedure TBlogApplication.Tag(Ctxt: TSQLRestServerURIContext);
+var
+  id: integer;
+begin
+  id := fTagsLookup.GetIDFromIdent(copy(Ctxt.UriAfterRoot, 5, 100));
+  Ctxt.Redirect(FormatUTF8('/%/default?scope={tag:%}',[RestModel.Model.Root,id]));
+end;
+
 
 initialization
   {$ifndef DELPHI2010}
