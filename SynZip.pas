@@ -914,7 +914,7 @@ begin
       tmpsize := (Int64(Size)*11) div 10+12;
       Getmem(tmp,tmpSize);
       zzipSize := CompressMem(Buf,tmp,Size,tmpSize,CompressLevel);
-      InternalAdd(aZipName,tmp,zzipSize); // write stored data
+      InternalAdd(aZipName,tmp,zzipSize); // write deflated data and inc(Count)
       Freemem(tmp);
     end;
   end;
@@ -932,7 +932,7 @@ begin
     zfullSize := Size;
     zzipSize := Size;
     zlastMod := FileAge;
-    InternalAdd(aZipName,Buf,Size);
+    InternalAdd(aZipName,Buf,Size); // write stored data and inc(Count)
   end;
 end;
 
@@ -1053,7 +1053,7 @@ begin
       raise ESynZipException.CreateFmt('%s file too big for .zip',[aFileName]);
     if Count>=length(Entry) then
       SetLength(Entry,length(Entry)+20);
-    OffsHead := InternalAdd(ZipName,nil,0);
+    OffsHead := InternalAdd(ZipName,nil,0); // write data and inc(Count)
     D := THandleStream.Create(Handle);
     Z := TSynZipCompressor.Create(D,CompressLevel);
     try
