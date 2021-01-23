@@ -38,7 +38,12 @@ var aModel: TSQLModel;
     aApplication: TBlogApplication;
     aHTTPServer: TSQLHttpServer;
 begin
-  //with TSQLLog.Family do Level := LOG_VERBOSE;
+  with TSQLLog.Family do begin
+    Level := LOG_VERBOSE;
+    PerThreadLog := ptIdentifiedInOnFile;
+    RotateFileCount := 10;
+    RotateFileSizeKB := 10240;
+  end;
   aModel := CreateModel;
   try
     aServer := TSQLRestServerDB.Create(aModel,ChangeFileExt(ExeVersion.ProgramFileName,'.db'));

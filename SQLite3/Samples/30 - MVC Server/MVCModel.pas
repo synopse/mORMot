@@ -19,12 +19,14 @@ type
     fTitle: RawUTF8;
     fLanguage: RawUTF8;
     fAbout: RawUTF8;
+    fLink: RawUTF8;
   published
     property Title: RawUTF8 index 80 read fTitle write fTitle;
     property Language: RawUTF8 index 3 read fLanguage write fLanguage;
     property Description: RawUTF8 index 120 read fDescription write fDescription;
     property Copyright: RawUTF8 index 80 read fCopyright write fCopyright;
     property About: RawUTF8 read fAbout write fAbout;
+    property Link: RawUTF8 index 60 read fLink write fLink;
   end;
 
   TSQLRecordTimeStamped = class(TSQLRecord)
@@ -46,6 +48,7 @@ type
     fHashedPassword: RawUTF8;
     fLogonName: RawUTF8;
   public
+    function ComputeHash(const PlainPassword: RawUTF8): RawUTF8; virtual;
     procedure SetPlainPassword(const PlainPassword: RawUTF8);
     function CheckPlainPassword(const PlainPassword: RawUTF8): boolean;
     function Name: RawUTF8; 
@@ -182,12 +185,16 @@ end;
 
 { TSQLSomeone }
 
-const
-  SALT = 'mORMot';
+function TSQLSomeone.ComputeHash(const PlainPassword: RawUTF8): RawUTF8;
+var dig: THash256;
+begin
+  PBKDF2_SHA3(SHA3_224,PlainPassword,LogonName+'@mORMot',30,@dig);
+  BinToHexLower(@dig,28,result);
+end;
 
 function TSQLSomeone.CheckPlainPassword(const PlainPassword: RawUTF8): boolean;
 begin
-  result := fHashedPassword=SHA256(SALT+LogonName+PlainPassword);
+  result := fHashedPassword=ComputeHash(PlainPassword);
 end;
 
 function TSQLSomeone.Name: RawUTF8;
@@ -197,7 +204,7 @@ end;
 
 procedure TSQLSomeone.SetPlainPassword(const PlainPassword: RawUTF8);
 begin
-  fHashedPassword := SHA256(SALT+LogonName+PlainPassword);
+  fHashedPassword := ComputeHash(PlainPassword);
 end;
 
 
@@ -458,13 +465,13 @@ begin
   until P=nil;
 end;
 
-{function HttpGet2(const aURI: SockString; outHeaders: PSockString=nil;
-  forceNotSocket: boolean=false; outStatus: PInteger=nil): SockString; overload;
+function HttpGet(const aURI: SockString; outHeaders: PSockString=nil;
+  forceNotSocket: boolean=false; outStatus: PInteger=nil): SockString;
 begin
   result := '';
   if outStatus<>nil then
     outStatus^ := 404;
-end;}
+end;
 
 function ComputeLegacyHash(url: PUTF8Char): cardinal;
 var c: ansichar;
