@@ -12445,8 +12445,8 @@ type
   // - FPC's TSystemTime in datih.inc does NOT match Windows TSystemTime fields!
   // - also used to store a Date/Time in TSynTimeZone internal structures, or
   // for fast conversion from TDateTime to its ready-to-display members
-  // - DayOfWeek field is not handled by most methods by default, but could be
-  // filled on demand via ComputeDayOfWeek
+  // - DayOfWeek field is not handled by most methods by default (left as 0),
+  // but could be filled on demand via ComputeDayOfWeek into its 1..7 value
   // - some Delphi revisions have trouble with "object" as own method parameters
   // (e.g. IsEqual) so we force to use "record" type if possible
   {$ifdef USERECORDWITHMETHODS}TSynSystemTime = record{$else}
@@ -16611,6 +16611,8 @@ type
     procedure Clear;
     /// save the stored values as UTF-8 encoded JSON Object
     function ToJSON(HumanReadable: boolean=false): RawUTF8;
+    /// low-level access to the associated thread-safe mutex
+    function Lock: TAutoLocker;
     /// the document fields would be safely accessed via this property
     // - this is the main entry point of this storage
     // - will raise an EDocVariant exception if Name does not exist at reading
@@ -16675,6 +16677,8 @@ type
     /// save the stored value as UTF-8 encoded JSON Object
     // - implemented as just a wrapper around VariantSaveJSON()
     function ToJSON(HumanReadable: boolean=false): RawUTF8;
+    /// low-level access to the associated thread-safe mutex
+    function Lock: TAutoLocker;
     /// the document fields would be safely accessed via this property
     // - will raise an EDocVariant exception if Name does not exist
     // - result variant is returned as a copy, not as varByRef, since a copy
@@ -59042,6 +59046,11 @@ destructor TLockedDocVariant.Destroy;
 begin
   inherited;
   fLock.Free;
+end;
+
+function TLockedDocVariant.Lock: TAutoLocker;
+begin
+  result := fLock;
 end;
 
 function TLockedDocVariant.Exists(const Name: RawUTF8; out Value: Variant): boolean;
