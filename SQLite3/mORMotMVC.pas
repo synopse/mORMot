@@ -1491,6 +1491,7 @@ begin
           [self,aRestModel,fFactory.InterfaceTypeInfo^.Name,URI]) else
         // TServiceCustomAnswer maps TMVCAction in TMVCApplication.RunOnRestServer
         ArgsResultIsServiceCustomAnswer := true;
+  FlushAnyCache;
 end;
 
 destructor TMVCApplication.Destroy;
