@@ -402,10 +402,12 @@ begin
   newpwd := Trim(NewPlainPassword1);
   if newpwd<>'' then begin
     if (newpwd<>NewPlainPassword2) or
-       (newpwd=PlainPassword) then begin
-       GotoError(result,HTTP_NOTACCEPTABLE);
-       exit;
-     end;
+       (newpwd=PlainPassword) or
+       (CurrentSession.CheckAndRetrieve(@SessionInfo,TypeInfo(TCookieData))=0) or
+       (SessionInfo.AuthorName<>LogonName) then begin
+      GotoError(result,HTTP_NOTACCEPTABLE);
+      exit;
+    end;
   end else if CurrentSession.CheckAndRetrieve<>0 then begin
     GotoError(result,'Already Logged In',HTTP_BADREQUEST);
     exit;

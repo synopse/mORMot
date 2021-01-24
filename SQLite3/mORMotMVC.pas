@@ -514,7 +514,7 @@ type
   protected
     fViews: TMVCViewsAbstract;
     fCacheLocker: IAutoLocker;
-    fCache: array of record
+    fCache: array of record // fCache[MethodIndex]
       Policy: TMVCRendererCachePolicy;
       TimeOutSeconds: cardinal;
       RootValue: RawUTF8;

@@ -42,7 +42,8 @@ begin
     Level := LOG_VERBOSE;
     PerThreadLog := ptIdentifiedInOnFile;
     RotateFileCount := 10;
-    RotateFileSizeKB := 10240;
+    RotateFileSizeKB := 20 shl 10;
+    FileExistsAction := acAppend; // as expected by rotation
   end;
   aModel := CreateModel;
   try
