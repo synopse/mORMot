@@ -339,7 +339,8 @@ begin
       aObj := p;
       Result := true;
     end else
-      raise ESMException.Create('Incorrect IsMagicCorrect');
+      //raise ESMException.Create('Incorrect IsMagicCorrect');
+      Result := false;
 end;
 
 function IsSMObject(cx: PJSContext; jval: jsval; out aObj: PSMObjectRecord): boolean; overload;
