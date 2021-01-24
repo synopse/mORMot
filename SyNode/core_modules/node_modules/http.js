@@ -109,6 +109,34 @@ exports.setGlobalConnectionDefaults = function setGlobalConnectionDefaults (defa
 
 /**
  * Create new HTTP server connection. In case server is behind the proxy - use http_proxy & no_proxy env vars (https_proxy for https on linux)
+ *
+ * In case of multiple request to the same host better to reuse existed request.
+ * Reusing a request: parse URL once, share the DNS cache, TLS connection and TCP connection (if possible).
+ *
+ * Under Unix one request object uses one curl easy handle - see [Curl DNS cache](https://everything.curl.dev/libcurl/names#caching)
+ * 
+ * @example
+
+ const http = require('http')
+ // create a request object
+ let request = http.request({
+    //alternative to host/port/path is
+    //URL: 'http://localhost:8881/getAppInfo',
+    host: 'localhost', port: '80', path: '/getAppInfo',
+    method: 'POST',
+    sendTimeout: 30000, receiveTimeout: 30000,
+    keepAlive: true,
+    compressionEnable: true
+ })
+ // reuse it several times
+ for (let i = 0; i < 100; i++) {
+   request.setPath(`/getAppInfo?nc=${i}`)
+   request.write('Add string to response')
+   request.write(fileContent, 'base64') // write file content as base64 encoded string
+   let response = request.end()
+   console.log(response.statusCode)
+ }
+
  * @param {Object|String} options Either URL string in format `protocol://host:port/path` or config
  * @param {String} [options.URL] Service URL in format `protocol://host:port/path`. Will override `useHTTPS`, `server`, `host`, `port` and `path` if passed
  * @param {String} [options.server] DEPRECATED. Server to connect in format 'host:port' or 'host' in case port == 80.
