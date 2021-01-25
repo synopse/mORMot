@@ -13,3 +13,5 @@ If this folder is void (e.g. when retrieved from https://synopse.info/fossil), y
 
 Ensure you keep in synch these binaries with the main framework source code.
 Otherwise, SynSQLite3Static will complain about invalid versions, and some random/unexpected errors may occur.
+
+See SQlite3/amalgamation/ReadMe.md for instructions about how to compile the SQlite3 static files after a release from https://sqlite.org
