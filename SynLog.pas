@@ -1763,8 +1763,12 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
       end;
     end;
     procedure ReadSymbols;
-    var Beg: PAnsiChar;
+    var Beg: PUtf8Char;
         Sym: TSynMapSymbol;
+        {$ifdef ISDELPHI2005ANDUP}
+        u, l: PtrInt;
+        LastUnitUp: RawUTF8; // e.g. 'MORMOT.CORE.DATA.'
+        {$endif ISDELPHI2005ANDUP}
     begin
       NextLine;
       NextLine;
@@ -1772,36 +1776,35 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
         if GetCode(Sym.Start) then begin
           while (P<PEnd) and (P^=' ') do inc(P);
           Beg := pointer(P);
+          while (P<PEnd) and (P^>' ') do inc(P);
           {$ifdef ISDELPHI2005ANDUP}
           // trim left 'UnitName.' for each symbol (since Delphi 2005)
-          case PWord(P)^ of // ignore RTL namespaces
-          ord('S')+ord('y') shl 8:
-            if IdemPChar(P+2,'STEM.') then
-              if IdemPChar(P+7,'WIN.') then inc(P,9) else
-              if IdemPChar(P+7,'RTTI.') then inc(P,10) else
-              if IdemPChar(P+7,'TYPES.') then inc(P,10) else
-              if IdemPChar(P+7,'ZLIB.') then inc(P,10) else
-              if IdemPChar(P+7,'CLASSES.') then inc(P,10) else
-              if IdemPChar(P+7,'SYSUTILS.') then inc(P,10) else
-              if IdemPChar(P+7,'VARUTILS.') then inc(P,10) else
-              if IdemPChar(P+7,'STRUTILS.') then inc(P,10) else
-              if IdemPChar(P+7,'SYNCOBJS.') then inc(P,10) else
-              if IdemPChar(P+7,'GENERICS.') then inc(P,16) else
-              if IdemPChar(P+7,'CHARACTER.') then inc(P,10) else
-              if IdemPChar(P+7,'TYPINFO.') then inc(P,10) else
-              if IdemPChar(P+7,'VARIANTS.') then inc(P,10);
-          ord('W')+ord('i') shl 8: if IdemPChar(P+2,'NAPI.') then inc(P,7);
-          ord('F')+ord('m') shl 8: if IdemPChar(P+2,'X.') then inc(P,7);
-          ord('V')+ord('c') shl 8: if IdemPChar(P+2,'L.') then inc(P,7);
+          if (LastUnitUp <> '') and
+             IdemPChar(Beg, pointer(LastUnitUp)) then
+            // most common case since symbols are grouped address, i.e. by unit
+            inc(Beg, length(LastUnitUp))
+          else
+          begin
+            // manual unit name search
+            LastUnitUp := '';
+            for u := 0 to fUnits.Count - 1 do
+              with fUnit[u].Symbol do
+              begin
+                l := length(Name);
+                if (Beg[l] = '.') and
+                   (l > length(LastUnitUp)) and
+                   IdemPropNameU(Name, Beg, l) then
+                  LastUnitUp := UpperCase(Name); // find longest match
+              end;
+            if LastUnitUp <> '' then
+            begin
+              l := length(LastUnitUp);
+              SetLength(LastUnitUp, l + 1);
+              LastUnitUp[l] := '.';
+              inc(Beg, l + 1);
+            end;
           end;
-          while (P<PEnd) and (P^<>'.') do if P^<=' ' then break else inc(P);
-          if P^='.' then begin
-            while (P<PEnd) and (P^='.') do inc(P);
-            Beg := pointer(P);
-          end else
-            P := pointer(Beg); // no '.' found
           {$endif ISDELPHI2005ANDUP}
-          while (P<PEnd) and (P^>' ') do inc(P);
           FastSetString(Sym.Name,Beg,P-Beg);
           if (Sym.Name<>'') and not (Sym.Name[1] in ['$','?']) then
             fSymbols.Add(Sym);
