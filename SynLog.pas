@@ -121,7 +121,7 @@ type
     fUnit: TSynMapUnitDynArray;
     fSymbols: TDynArray;
     fUnits: TDynArrayHashed;
-    fUnitSynLogIndex,fUnitSystemIndex: integer;
+    fSymCount, fUnitCount, fUnitSynLogIndex,fUnitSystemIndex: integer;
     fCodeOffset: PtrUInt;
     fHasDebugInfo: boolean;
   public
@@ -1779,25 +1779,19 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
           while (P<PEnd) and (P^>' ') do inc(P);
           {$ifdef ISDELPHI2005ANDUP}
           // trim left 'UnitName.' for each symbol (since Delphi 2005)
-          if (LastUnitUp <> '') and
-             IdemPChar(Beg, pointer(LastUnitUp)) then
-            // most common case since symbols are grouped address, i.e. by unit
+          if (LastUnitUp <> '') and IdemPChar(Beg, pointer(LastUnitUp)) then
+            // common case since symbols are grouped by address, i.e. by unit
             inc(Beg, length(LastUnitUp))
-          else
-          begin
-            // manual unit name search
+          else begin // manual unit name search
             LastUnitUp := '';
             for u := 0 to fUnits.Count - 1 do
-              with fUnit[u].Symbol do
-              begin
+              with fUnit[u].Symbol do begin
                 l := length(Name);
-                if (Beg[l] = '.') and
-                   (l > length(LastUnitUp)) and
+                if (Beg[l] = '.') and (l > length(LastUnitUp)) and
                    IdemPropNameU(Name, Beg, l) then
                   LastUnitUp := UpperCase(Name); // find longest match
               end;
-            if LastUnitUp <> '' then
-            begin
+            if LastUnitUp <> '' then begin
               l := length(LastUnitUp);
               SetLength(LastUnitUp, l + 1);
               LastUnitUp[l] := '.';
@@ -1934,13 +1928,13 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
     end;
   end;
 
-var SymCount, UnitCount, i: integer;
+var i: integer;
     MabFile: TFileName;
     MapAge, MabAge: TDateTime;
     U: RawUTF8;
 begin
-  fSymbols.Init(TypeInfo(TSynMapSymbolDynArray),fSymbol,@SymCount);
-  fUnits.Init(TypeInfo(TSynMapUnitDynArray),fUnit,nil,nil,nil,@UnitCount);
+  fSymbols.Init(TypeInfo(TSynMapSymbolDynArray),fSymbol,@fSymCount);
+  fUnits.Init(TypeInfo(TSynMapUnitDynArray),fUnit,nil,nil,nil,@fUnitCount);
   fUnitSynLogIndex := -1;
   fUnitSystemIndex := -1;
   // 1. search for an external .map file matching the running .exe/.dll name
@@ -1964,19 +1958,19 @@ begin
     if (MapAge>0) and (MabAge<MapAge) then
       LoadMap; // if no faster-to-load .mab available and accurate
     // 2. search for a .mab file matching the running .exe/.dll name
-    if (SymCount=0) and (MabAge<>0) then
+    if (fSymCount=0) and (MabAge<>0) then
       LoadMab(MabFile);
     // 3. search for an embedded compressed .mab file appended to the .exe/.dll
-    if SymCount=0 then
+    if fSymCount=0 then
       if aExeName='' then
         LoadMab(GetModuleName(hInstance)) else
         LoadMab(aExeName);
     // finalize symbols
-    if SymCount>0 then begin
-      for i := 1 to SymCount-1 do
+    if fSymCount>0 then begin
+      for i := 1 to fSymCount-1 do
         assert(fSymbol[i].Start>fSymbol[i-1].Stop);
-      SetLength(fSymbol,SymCount);
-      SetLength(fUnit,UnitCount);
+      SetLength(fSymbol,fSymCount);
+      SetLength(fUnit,fUnitCount);
       fSymbols.Init(TypeInfo(TSynMapSymbolDynArray),fSymbol);
       fUnits.Init(TypeInfo(TSynMapUnitDynArray),fUnit);
       if MabCreate then
