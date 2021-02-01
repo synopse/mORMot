@@ -3,7 +3,7 @@
 FPCARCH=x86_64-linux
 GCC=gcc-7
 DST=../../static/$FPCARCH/sqlite3.o
-DST2=../../../lib2/static/$ARCH/sqlite3.o
+DST2=../../../lib2/static/$FPCARCH/sqlite3.o
 
 rm $DST
 rm $DST2

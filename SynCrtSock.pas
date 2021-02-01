@@ -6,7 +6,7 @@ unit SynCrtSock;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2021 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynCrtSock;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2020
+  Portions created by the Initial Developer are Copyright (C) 2021
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -2532,7 +2532,8 @@ function OpenHttp(const aURI: SockString; aAddress: PSockString=nil): THttpClien
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket: if you want
-// something able to use your computer proxy, take a look at TWinINet.Get()
+// something able to use your computer proxy, take a look at TWinINet.Get() or
+// the overloaded HttpGet() methods
 function HttpGet(const server, port: SockString; const url: SockString;
   const inHeaders: SockString; outHeaders: PSockString=nil;
   aLayer: TCrtSocketLayer = cslTCP): SockString; overload;
@@ -7012,7 +7013,7 @@ begin
         PWord(@line[len])^ := 13+10 shl 8; // CR + LF
         SockSend(@line,len+2);
       end else
-        SockSend(s);
+        SockSend(s); // SockSend() internal buffer is used as temporary buffer
   until false;
   Headers := copy(fSndBuf, 1, fSndBufLen);
   fSndBufLen := 0;
@@ -8978,7 +8979,7 @@ begin
        Http.CloseUrlGroup(fUrlGroupID);
        fUrlGroupID := 0;
      end;
-     CloseHandle(FReqQueue);
+     CloseHandle(fReqQueue);
      if fServerSessionID<>0 then begin
        Http.CloseServerSession(fServerSessionID);
        fServerSessionID := 0;
@@ -11897,6 +11898,8 @@ begin
   if not IsAvailable then
     raise ECrtSocket.CreateFmt('No available %s',[LIBCURL_DLL]);
   fHandle := curl.easy_init;
+  if curl.globalShare <> nil then
+    curl.easy_setopt(fHandle,coShare,curl.globalShare);
   ConnectionTimeOut := ConnectionTimeOut div 1000; // curl expects seconds
   if ConnectionTimeOut=0 then
     ConnectionTimeOut := 1;
@@ -12094,7 +12097,7 @@ begin
   else
     try
       if (fHttp = nil) or (fHttp.Server <> Uri.Server) or
-         (fHttp.Port <> Uri.Port) then begin
+         (fHttp.Port <> Uri.Port) or (connectionClose in fHttp.HeaderFlags) then begin
         FreeAndNil(fHttps);
         FreeAndNil(fHttp); // need a new HTTP connection
         fHttp := THttpClientSocket.Open(Uri.Server,Uri.Port,cslTCP,5000,Uri.Https);

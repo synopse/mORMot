@@ -6,7 +6,7 @@ unit SynWinSock;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2021 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -27,7 +27,7 @@ unit SynWinSock;
   Portions created by Lukas Gebauer are Copyright (C) 2003.
   All Rights Reserved.
 
-  Portions created by Arnaud Bouchez are Copyright (C) 2020 Arnaud Bouchez.
+  Portions created by Arnaud Bouchez are Copyright (C) 2021 Arnaud Bouchez.
   All Rights Reserved.
 
   Contributor(s):
@@ -915,7 +915,8 @@ const
   ISC_REQ_FLAGS =
     ISC_REQ_SEQUENCE_DETECT or ISC_REQ_REPLAY_DETECT or
     ISC_REQ_CONFIDENTIALITY or ISC_REQ_EXTENDED_ERROR or
-    ISC_REQ_ALLOCATE_MEMORY or ISC_REQ_STREAM;
+    ISC_REQ_ALLOCATE_MEMORY or ISC_REQ_STREAM or
+    ISC_REQ_MANUAL_CRED_VALIDATION;
 
   SECBUFFER_VERSION = 0;
   SECBUFFER_EMPTY = 0;
@@ -927,6 +928,7 @@ const
 
   SEC_E_OK = 0;
   SEC_I_CONTINUE_NEEDED = $00090312;
+  SEC_I_INCOMPLETE_CREDENTIALS = $00090320;
   SEC_I_RENEGOTIATE = $00090321;
   SEC_I_CONTEXT_EXPIRED	= $00090317;
   SEC_E_INCOMPLETE_MESSAGE = $80090318;
@@ -1737,6 +1739,10 @@ begin
     buf.buf[0].pvBuffer := pointer(tmp);
     res := InitializeSecurityContext(@Cred, @Ctxt, nil, ISC_REQ_FLAGS, 0,
       SECURITY_NATIVE_DREP, @buf.input, 0, @Ctxt, @buf.output, @f, nil);
+    if res = SEC_I_INCOMPLETE_CREDENTIALS then
+      // check https://stackoverflow.com/a/47479968/458259
+      res := InitializeSecurityContext(@Cred, @Ctxt, nil, ISC_REQ_FLAGS, 0,
+        SECURITY_NATIVE_DREP, @buf.input, 0, @Ctxt, @buf.output, @f, nil);
     if (res = SEC_E_OK) or (res = SEC_I_CONTINUE_NEEDED) or
        ((f and ISC_REQ_EXTENDED_ERROR) <> 0) then begin
       if (buf.buf[2].cbBuffer <> 0) and (buf.buf[2].pvBuffer <> nil) then begin

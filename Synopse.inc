@@ -1,7 +1,7 @@
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2021 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -20,7 +20,7 @@
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2020
+  Portions created by the Initial Developer are Copyright (C) 2021
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -425,7 +425,7 @@
     {$define OWNNORMTOUPPER} // NormToUpper[] exists only in our enhanced RTL
     {$define NOVARIANTS} // LVCL does not support variants
     {$define EXTENDEDTOSHORT_USESTR} // no FloatToText implemented in LVCL
-  {$endif}
+  {$endif LVCL}
 
   {$ifdef UNICODE}
     {$undef ENHANCEDRTL} // Delphi 2009 and up don't have our Enhanced Runtime library
@@ -437,7 +437,7 @@
       since TDynArrayHashed = object(TDynArray) fails to initialize
       http://blog.synopse.info/post/2011/01/29/record-and-object-issue-in-Delphi-2010 }
     {$define UNDIRECTDYNARRAY}
-  {$endif}
+  {$endif UNICODE}
 
   {$ifndef PUREPASCAL}
     {$define CPUINTEL} // Delphi only for Intel by now

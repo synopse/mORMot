@@ -6,7 +6,7 @@ unit SynDB;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2021 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2020
+  Portions created by the Initial Developer are Copyright (C) 2021
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -3426,12 +3426,12 @@ begin
   with TVarData(fValue) do
   case VType of
     varNull:     result := '';
-    varInt64:    result := UTF8ToSynUnicode(Int64ToUtf8(VInt64));
-    varString:   result := UTF8ToSynUnicode(RawUTF8(VAny));
+    varInt64:    UTF8ToSynUnicode(Int64ToUtf8(VInt64),result);
+    varString:   UTF8ToSynUnicode(RawUTF8(VAny),result);
     {$ifdef HASVARUSTRING}
     varUString:  result := UnicodeString(VAny);
     {$endif}
-  else Result := SynUnicode(fValue);
+  else result := SynUnicode(fValue);
   end;
 end;
 

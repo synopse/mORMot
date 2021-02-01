@@ -6,7 +6,7 @@ unit SynSelfTests;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2021 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynSelfTests;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2020
+  Portions created by the Initial Developer are Copyright (C) 2021
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -397,7 +397,7 @@ type
 
 {$ifndef DELPHI5OROLDER}
 
-/// this test case will test some generic classes
+  /// this test case will test some generic classes
   // defined and implemented in the mORMot.pas unit
   TTestBasicClasses = class(TSynTestCase)
   published
@@ -826,15 +826,15 @@ type
     {$ifdef MSWINDOWS}
     /// test external DB using the JET engine
     procedure JETDatabase;
-    {$endif}
-    {$endif}
-    {$endif}
+    {$endif MSWINDOWS}
+    {$endif LVCL}
+    {$endif CPU64}
     {$ifdef MSWINDOWS}
     {$ifdef USEZEOS}
     /// test external Firebird embedded engine via Zeos/ZDBC (if available)
     procedure FirebirdEmbeddedViaZDBCOverHTTP;
-    {$endif}
-    {$endif}
+    {$endif USEZEOS}
+    {$endif MSWINDOWS}
   end;
 
   /// a test case for multi-threading abilities of the framework
@@ -1359,8 +1359,8 @@ uses
 {$else}
   Graphics,
 {$endif}
-{$endif}
-{$endif}
+{$endif FPC}
+{$endif MSWINDOWS}
   SynCrypto,
   SynZip,
   SynLZO,
@@ -5821,7 +5821,7 @@ var W: TFileBufferWriter;
     i: integer;
     V: double;
     u: SynUnicode;
-    a: WinAnsiString;
+    a: RawUTF8;
     {$endif NOVARIANTS}
 begin
   T := TSynTable.Create('Test');
@@ -5871,10 +5871,10 @@ begin
       for i := 1 to 100 do begin
         u := RandomUnicode(i*2);
         data.Field['text'] := u;
-        check(data.Field['text']=u);
+        check(SynUnicode(data.Field['text'])=u);
         a := RandomAnsi7(i*2);
         data.Field['ansi'] := a;
-        check(data.Field['ansi']=a);
+        check(SynUnicode(data.Field['ansi'])=SynUnicode(a));
         // here, ansi is more efficent than text for storage size
       end;
       check(data.Field['bool']=true);
@@ -5889,8 +5889,8 @@ begin
         CheckSame(data.Field['double'],V);
       end;
       check(data.Field['bool']=true);
-      check(data.Field['text']=u);
-      check(data.Field['ansi']=a);
+      check(SynUnicode(data.Field['text'])=u);
+      check(SynUnicode(data.Field['ansi'])=SynUnicode(a));
       check(data.Field['ID']=1);
       // test TSynTableVariantType
       rec := T.Data;
@@ -5912,10 +5912,11 @@ begin
       CheckSame(rec.double,3.141592654);
       for i := 1 to 100 do begin
         a := RandomAnsi7(i*2);
+        u := SynUnicode(a);
         rec.text := a;
-        check(rec.text=a,'rec.text');
+        check(SynUnicode(rec.text)=u,'rec.text');
         rec.ansi := a;
-        check(rec.ansi=a,'rec.ansi');
+        check(SynUnicode(rec.ansi)=u,'rec.ansi');
       end;
       check(rec.bool=true,'rec.bool');
       check(rec.varint=100);
@@ -5929,8 +5930,8 @@ begin
         CheckSame(rec.double,V);
       end;
       check(rec.bool=true);
-      check(rec.text=a);
-      check(rec.ansi=a);
+      check(SynUnicode(rec.text)=u);
+      check(SynUnicode(rec.ansi)=u);
       check(rec.ID=1);
     except
       on E: Exception do // variant error could raise exceptions
@@ -9748,6 +9749,11 @@ begin
   check(json='{"double_params":[-12.12345678,-9.9E-15,-9.88E-15,-9E-15]}');
   {$endif}
   CheckSame(double(TDocVariantData(o).A['double_params'].Value[1]),-9.9E-15);
+  // floats are stored as varCurrency by default in _Json()
+  o := _Json('{"value":99.99}');
+  d :=  _Safe(o)^.D['value'];
+  CheckSame(d,99.99,DOUBLE_SAME,'99.99');
+  CheckEqual(DoubleToStr(d),'99.99');
   // see http://bsonspec.org/#/specification
   o := _JSON('{"hello": "world"}');
   bsonDat := BSON(TDocVariantData(o));
@@ -11665,7 +11671,7 @@ begin
     Free;
   end;
 end;
-{$ifdef MSWINDOWS}
+{$ifdef MSWINDOWS} // PasZip.TZipRead uses memory mapped API
 procedure TestPasZipRead(const FN: TFileName; Count: integer);
 var pasZR: PasZip.TZipRead;
 begin
@@ -11679,7 +11685,7 @@ begin
   end;
 end;
 var pasZW: PasZip.TZipWrite;
-{$endif}
+{$endif MSWINDOWS}
 var i: integer;
 begin
   ExeName := ExtractFileName(ExeVersion.ProgramFileName);
@@ -15495,6 +15501,8 @@ type
     {$endif}
   end;
 
+{ TSQLRecordCustomProps }
+
 class procedure TSQLRecordCustomProps.InternalRegisterCustomProperties(Props: TSQLRecordProperties);
 begin
   Props.RegisterCustomPropertyFromTypeName(self,'TGUID','GUID',
@@ -15794,6 +15802,9 @@ begin
         Test(dJet,true,'select top 2 id,firstname from SampleRecord order by firstname');
         Test(dMySQL,true,'select id,firstname from SampleRecord order by firstname limit 2');
         Test(dSQLite,true,'select id,firstname from SampleRecord order by firstname limit 2');
+        SqlOrigin := 'SELECT RowID,firstname FROM PeopleExt WHERE :(3001): '+
+          'BETWEEN firstname AND RowID LIMIT 1';
+        Test(dSQLite,false);
       finally
         Ext.Free;
       end;

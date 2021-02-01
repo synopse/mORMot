@@ -8,7 +8,7 @@ unit SynCrypto;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2021 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -27,7 +27,7 @@ unit SynCrypto;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2020
+  Portions created by the Initial Developer are Copyright (C) 2021
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -8135,6 +8135,15 @@ var Data: TSHAContext absolute Context;
 begin
   if Buffer=nil then exit; // avoid GPF
   inc(Data.MLen,QWord(cardinal(Len)) shl 3);
+  {$ifdef CPUX64}
+  if (K256AlignedStore<>'') and (Data.Index=0) and (Len>=64) then begin
+    // use optimized Intel's sha256_sse4.asm for whole blocks
+    sha256_sse4(Buffer^,Data.Hash,Len shr 6);
+    inc(PByte(Buffer),Len);
+    Len := Len and 63;
+    dec(PByte(Buffer),Len);
+  end;
+  {$endif CPUX64}
   while Len>0 do begin
     aLen := 64-Data.Index;
     if aLen<=Len then begin
@@ -8145,7 +8154,7 @@ begin
       end else
         RawSha256Compress(Data.Hash,Buffer); // avoid temporary copy
       dec(Len,aLen);
-      inc(PtrInt(Buffer),aLen);
+      inc(PByte(Buffer),aLen);
     end else begin
       MoveFast(Buffer^,Data.Buffer[Data.Index],Len);
       inc(Data.Index,Len);
@@ -14198,42 +14207,42 @@ function TAESPRNG.Random32: cardinal;
 var block: THash128Rec;
 begin
   FillRandom(block.b);
-  result := block.c0 xor block.c1 xor block.c2 xor block.c3;
+  result := block.c0; // no need to XOR with c1, c2, c3 with a permutation algo
 end;
 
 function TAESPRNG.Random32(max: cardinal): cardinal;
 var block: THash128Rec;
 begin
   FillRandom(block.b);
-  result := (Qword(block.c0 xor block.c1 xor block.c2 xor block.c3)*max) shr 32;
+  result := (Qword(block.c0)*max) shr 32; // no need to XOR with c1, c2, c3
 end;
 
 function TAESPRNG.Random64: QWord;
 var block: THash128Rec;
 begin
   FillRandom(block.b);
-  result := block.L xor block.H;
+  result := block.L; // no need to XOR with H
 end;
 
 function Hash128ToExt({$ifdef FPC}constref{$else}const{$endif} r: THash128): TSynExtended;
 const
   COEFF64: TSynExtended = (1.0/$80000000)/$100000000;  // 2^-63
 begin
-  result := ((THash128Rec(r).Lo xor THash128Rec(r).Hi) and $7fffffffffffffff)*COEFF64;
+  result := (THash128Rec(r).Lo and $7fffffffffffffff)*COEFF64;
 end;
 
 function Hash128ToDouble({$ifdef FPC}constref{$else}const{$endif} r: THash128): double;
 const
   COEFF64: double = (1.0/$80000000)/$100000000;  // 2^-63
 begin
-  result := ((THash128Rec(r).Lo xor THash128Rec(r).Hi) and $7fffffffffffffff)*COEFF64;
+  result := (THash128Rec(r).Lo and $7fffffffffffffff)*COEFF64;
 end;
 
 function Hash128ToSingle({$ifdef FPC}constref{$else}const{$endif} r: THash128): double;
 const
   COEFF64: single = (1.0/$80000000)/$100000000;  // 2^-63
 begin
-  result := ((THash128Rec(r).Lo xor THash128Rec(r).Hi) and $7fffffffffffffff)*COEFF64;
+  result := (THash128Rec(r).Lo and $7fffffffffffffff)*COEFF64;
 end;
 
 function TAESPRNG.RandomExt: TSynExtended;

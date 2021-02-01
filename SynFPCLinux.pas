@@ -6,7 +6,7 @@ unit SynFPCLinux;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2021 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynFPCLinux;
 
   The Initial Developer of the Original Code is Alfred Glaenzer.
 
-  Portions created by the Initial Developer are Copyright (C) 2020
+  Portions created by the Initial Developer are Copyright (C) 2021
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -120,10 +120,26 @@ function GetLastError: longint; inline;
 procedure SetLastError(error: longint); inline;
 
 /// compatibility function, wrapping Win32 API text comparison
-// - somewhat slow by using two temporary UnicodeString - but seldom called,
-// unless our proprietary WIN32CASE collation is used in SynSQLite3
-function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
-  cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
+// - will use the system ICU library if available, or the widestringmanager
+// - seldom called, unless our proprietary WIN32CASE collation is used in SynSQLite3
+function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: PWideChar;
+  cchCount1: integer; lpString2: PWideChar; cchCount2: integer): integer;
+
+/// compatibility function, wrapping Win32 API text case conversion
+function CharUpperBuffW(W: PWideChar; WLen: integer): integer;
+
+/// compatibility function, wrapping Win32 API text case conversion
+function CharLowerBuffW(W: PWideChar; WLen: integer): integer;
+
+/// compatibility function, wrapping Win32 MultiByteToWideChar API conversion
+// - will use the system ICU library for efficient conversion
+function AnsiToWideICU(codepage: cardinal; Source: PAnsiChar; Dest: PWideChar;
+  SourceChars: PtrInt): PtrInt;
+
+/// compatibility function, wrapping Win32 WideCharToMultiByte API conversion
+// - will use the system ICU library for efficient conversion
+function WideToAnsiICU(codepage: cardinal; Source: PWideChar; Dest: PAnsiChar;
+  SourceChars: PtrInt): PtrInt;
 
 /// returns the current UTC time
 // - will convert from clock_gettime(CLOCK_REALTIME_COARSE) if available
@@ -223,7 +239,8 @@ function UnixKeyPending: boolean;
 
 type
   /// the libraries supported by TExternalLibrariesAPI
-  TExternalLibrary = (elPThread {$ifdef LINUXNOTBSD} , elSystemD {$endif});
+  TExternalLibrary = (
+    elPThread, elICU {$ifdef LINUXNOTBSD} , elSystemD {$endif});
   /// set of libraries supported by TExternalLibrariesAPI
   TExternalLibraries = set of TExternalLibrary;
 
@@ -241,6 +258,8 @@ type
     systemd: pointer;
     {$endif LINUXNOTBSD}
     {$endif LINUX}
+    icu, icudata, icui18n: pointer;
+    procedure LoadIcuWithVersion;
     procedure Done;
   public
     {$ifdef LINUXNOTBSD}
@@ -273,6 +292,45 @@ type
     // notify every usec/2)
     sd_watchdog_enabled: function(unset_environment: longint; usec: Puint64): longint; cdecl;
     {$endif LINUXNOTBSD}
+    /// Initialize an ICU text converter for a given encoding
+    ucnv_open: function (converterName: PAnsiChar; var err: SizeInt): pointer; cdecl;
+    /// finalize the ICU text converter for a given encoding
+    ucnv_close: procedure (converter: pointer); cdecl;
+    /// customize the ICU text converter substitute char
+    ucnv_setSubstChars: procedure (converter: pointer;
+      subChars: PAnsiChar; len: byte; var err: SizeInt); cdecl;
+    /// enable the ICU text converter fallback
+    ucnv_setFallback: procedure (cnv: pointer; usesFallback: LongBool); cdecl;
+    /// ICU text conversion from UTF-16 to a given encoding
+    ucnv_fromUChars: function (cnv: pointer; dest: PAnsiChar; destCapacity: cardinal;
+      src: PWideChar; srcLength: cardinal; var err: SizeInt): cardinal; cdecl;
+    /// ICU text conversion from a given encoding to UTF-16
+    ucnv_toUChars: function (cnv: pointer; dest: PWideChar; destCapacity: cardinal;
+      src: PAnsiChar; srcLength: cardinal; var err: SizeInt): cardinal; cdecl;
+    /// ICU UTF-16 text conversion to uppercase
+    u_strToUpper: function (dest: PWideChar; destCapacity: cardinal;
+      src: PWideChar; srcLength: cardinal; locale: PAnsiChar;
+      var err: SizeInt): cardinal; cdecl;
+    /// ICU UTF-16 text conversion to lowercase
+    u_strToLower: function (dest: PWideChar; destCapacity: cardinal;
+      src: PWideChar; srcLength: cardinal; locale: PAnsiChar;
+      var err: SizeInt): cardinal; cdecl;
+    /// ICU UTF-16 text comparison
+    u_strCompare: function (s1: PWideChar; length1: cardinal;
+      s2: PWideChar; length2: cardinal; codePointOrder: LongBool): cardinal; cdecl;
+    /// ICU UTF-16 text comparison with options, e.g. for case-insensitive
+    u_strCaseCompare: function (s1: PWideChar; length1: cardinal;
+      s2: PWideChar; length2: cardinal; options: cardinal;
+      var err: SizeInt): cardinal; cdecl;
+    /// get the ICU data folder
+    u_getDataDirectory: function: PAnsiChar; cdecl;
+    /// set the ICU data folder
+    u_setDataDirectory: procedure(directory: PAnsiChar); cdecl;
+    /// initialize the ICU library
+    u_init: procedure(var status: SizeInt); cdecl;
+    /// Initialize an ICU text converter for a given codepage
+    // - returns nil if ICU is not available on this system
+    function ucnv(codepage: cardinal): pointer;
     /// thread-safe loading of a system library
     // - caller should then check the API function to be not nil
     procedure EnsureLoaded(lib: TExternalLibrary);
@@ -630,18 +688,140 @@ begin
   fpseterrno(error);
 end;
 
-function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
-  cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
-var U1,U2: UnicodeString; // (may be?) faster than WideString
-begin // not inlined to avoid try..finally UnicodeString protection
-  if cchCount1<0 then
+function CompareStringRTL(a, b: PWideChar; al, bl, flags: integer): integer;
+var
+  U1, U2: UnicodeString;
+begin
+  SetString(U1,a,al);
+  SetString(U2,b,bl);
+  result := widestringmanager.CompareUnicodeStringProc(U1,U2,TCompareOptions(flags));
+end;
+
+function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: PWideChar;
+  cchCount1: integer; lpString2: PWideChar; cchCount2: integer): integer;
+const
+  U_COMPARE_CODE_POINT_ORDER = $8000;
+var
+  err: SizeInt;
+begin
+  if cchCount1 < 0 then
     cchCount1 := StrLen(lpString1);
-  SetString(U1,lpString1,cchCount1);
-  if cchCount2<0 then
+  if cchCount2 < 0 then
     cchCount2 := StrLen(lpString2);
-  SetString(U2,lpString2,cchCount2);
-  result := widestringmanager.CompareUnicodeStringProc(U1,U2,TCompareOptions(dwCmpFlags))+2;
-end; // caller would make -2 to get regular -1/0/1 comparison values
+  with ExternalLibraries do
+  begin
+    if not (elICU in Loaded) then
+      EnsureLoaded(elICU);
+    if Assigned(ucnv_open) then
+    begin
+      err := 0;
+      if dwCmpFlags and NORM_IGNORECASE <> 0 then
+        result := u_strCaseCompare(lpString1, cchCount1, lpString2, cchCount2,
+          U_COMPARE_CODE_POINT_ORDER, err)
+      else
+        result := u_strCompare(lpString1, cchCount1, lpString2, cchCount2, true);
+    end
+    else
+      result := CompareStringRTL(lpString1, lpString2, cchCount1, cchCount2, dwCmpFlags);
+  end;
+  inc(result, 2); // caller would make -2 to get regular -1/0/1 comparison values
+end;
+
+function CharUpperBuffW(W: PWideChar; WLen: integer): integer;
+var
+  err: SizeInt;
+begin
+  with ExternalLibraries do
+  begin
+    if not (elICU in Loaded) then
+      EnsureLoaded(elICU);
+    if Assigned(ucnv_open) then
+    begin
+      err := 0;
+      result := u_strToUpper(W, WLen, W, WLen, nil, err);
+    end
+    else
+      result := WLen;
+  end;
+end;
+
+function CharLowerBuffW(W: PWideChar; WLen: integer): integer;
+var
+  err: SizeInt;
+begin
+  with ExternalLibraries do
+  begin
+    if not (elICU in Loaded) then
+      EnsureLoaded(elICU);
+    if Assigned(ucnv_open) then
+    begin
+      err := 0;
+      result := u_strToLower(W, WLen, W, WLen, nil, err);
+    end
+    else
+      result := WLen;
+  end;
+end;
+
+function AnsiToWideRTL(codepage: cardinal; Source: PAnsiChar; Dest: PWideChar;
+  SourceChars: PtrInt): PtrInt;
+var
+  tmp: UnicodeString;
+begin
+  widestringmanager.Ansi2UnicodeMoveProc(Source, codepage, tmp, SourceChars);
+  result := length(tmp);
+  Move(pointer(tmp)^, Dest^, result * 2);
+end;
+
+function AnsiToWideICU(codepage: cardinal; Source: PAnsiChar; Dest: PWideChar;
+  SourceChars: PtrInt): PtrInt;
+var
+  cnv: pointer;
+  err: SizeInt;
+begin
+  if codepage = CP_UTF8 then
+    exit(Utf8ToUnicode(Dest, Source, SourceChars));
+  cnv := ExternalLibraries.ucnv(codepage);
+  if cnv = nil then
+    exit(AnsiToWideRTL(codepage, Source, Dest, SourceChars));
+  err := 0;
+  result := ExternalLibraries.ucnv_toUChars(
+    cnv, Dest, SourceChars, Source, SourceChars, err);
+  if result < 0 then
+    result := 0;
+  ExternalLibraries.ucnv_close(cnv);
+end;
+
+function WideToAnsiRTL(codepage: cardinal; Source: PWideChar; Dest: PAnsiChar;
+  SourceChars: PtrInt): PtrInt;
+var
+  tmp: RawByteString;
+begin
+  widestringmanager.Unicode2AnsiMoveProc(Source, tmp, codepage, SourceChars);
+  result := length(tmp);
+  Move(pointer(tmp)^, Dest^, result);
+end;
+
+function WideToAnsiICU(codepage: cardinal; Source: PWideChar; Dest: PAnsiChar;
+  SourceChars: PtrInt): PtrInt;
+var
+  cnv: pointer;
+  err: SizeInt;
+begin
+  if codepage = CP_UTF8 then
+    // fallback to RTL
+    exit(UnicodeToUTF8(Dest, Source, SourceChars));
+  cnv := ExternalLibraries.ucnv(codepage);
+  if cnv = nil then
+    exit(WideToAnsiRTL(codepage, Source, Dest, SourceChars));
+  err := 0;
+  result := ExternalLibraries.ucnv_fromUChars(
+    cnv, Dest, SourceChars * 3, Source, SourceChars, err);
+  if result < 0 then
+    result := 0;
+  ExternalLibraries.ucnv_close(cnv);
+end;
+
 
 function GetFileSize(hFile: cInt; lpFileSizeHigh: PDWORD): DWORD;
 var FileInfo: TStat;
@@ -738,6 +918,101 @@ end;
 
 { TExternalLibrariesAPI }
 
+procedure TExternalLibrariesAPI.LoadIcuWithVersion;
+const
+  NAMES: array[0..12] of string = (
+    'ucnv_open', 'ucnv_close', 'ucnv_setSubstChars', 'ucnv_setFallback',
+    'ucnv_fromUChars', 'ucnv_toUChars', 'u_strToUpper', 'u_strToLower',
+    'u_strCompare', 'u_strCaseCompare', 'u_getDataDirectory',
+    'u_setDataDirectory', 'u_init');
+{$ifdef ANDROID}
+// from https://developer.android.com/guide/topics/resources/internationalization
+  ICU_VER: array[1..13] of string = (
+    '_3_8', '_4_2', '_44', '_46', '_48', '_50', '_51', '_53', '_55', '_56', '_58', '_60', '_63');
+  SYSDATA: PAnsiChar = '/system/usr/icu';
+{$else}
+  SYSDATA: PAnsiChar = '';
+{$endif ANDROID}
+var
+  i, j: integer;
+  err: SizeInt;
+  P: PPointer;
+  v, vers: string;
+  data: PAnsiChar;
+begin
+  {$ifdef ANDROID}
+  for i := high(ICU_VER) downto 1 do
+  begin
+    if dlsym(icu, pointer(NAMES[0] + ICU_VER[i])) <> nil then
+    begin
+      vers := ICU_VER[i];
+      break;
+    end;
+  end;
+  if vers <> '' then
+  {$endif ANDROID}
+  if dlsym(icu, 'ucnv_open') = nil then
+    for i := 80 downto 44 do
+    begin
+      str(i, v);
+      if dlsym(icu, pointer('ucnv_open_' + v)) <> nil then
+      begin
+        vers := '_' + v;
+        break;
+      end;
+    end;
+  P := @@ucnv_open;
+  for i := 0 to high(NAMES) do
+  begin
+    P[i] := dlsym(icu, pointer(NAMES[i] + vers));
+    if P[i] = nil then
+    begin
+      @ucnv_open := nil;
+      exit;
+    end;
+  end;
+  data := u_getDataDirectory;
+  if (data = nil) or (data^ = #0) then
+    if SYSDATA <> '' then
+      u_setDataDirectory(SYSDATA);
+  err := 0;
+  u_init(err);
+end;
+
+function TExternalLibrariesAPI.ucnv(codepage: cardinal): pointer;
+var
+  s: shortstring;
+  err: SizeInt;
+  {$ifdef CPUINTEL}
+  mask: cardinal;
+  {$endif CPUINTEL}
+begin
+  if not (elICU in Loaded) then
+    EnsureLoaded(elICU);
+  if not Assigned(ucnv_open) then
+    exit(nil);
+  str(codepage, s);
+  Move(s[1], s[3], ord(s[0]));
+  PWord(@s[1])^ := ord('c') + ord('p') shl 8;
+  inc(s[0], 3);
+  s[ord(s[0])] := #0;
+  {$ifdef CPUINTEL}
+  mask := GetMXCSR;
+  SetMXCSR(mask or $0080 {MM_MaskInvalidOp} or $1000 {MM_MaskPrecision});
+  {$endif CPUINTEL}
+  err := 0;
+  result := ucnv_open(@s[1], err);
+  if result <> nil then
+  begin
+    err := 0;
+    ucnv_setSubstChars(result, '?', 1, err);
+    ucnv_setFallback(result, true);
+  end;
+  {$ifdef CPUINTEL}
+  SetMXCSR(mask);
+  {$endif CPUINTEL}
+end;
+
 procedure TExternalLibrariesAPI.EnsureLoaded(lib: TExternalLibrary);
 var
   p: PPointer;
@@ -764,6 +1039,34 @@ begin
         end;
         {$endif LINUX}
         include(Loaded, elPThread);
+      end;
+    elICU:
+      begin
+        {$ifdef DARWIN}
+        icu := dlopen('libicuuc.dylib', RTLD_LAZY);
+        if icu <> nil then
+          icui18n := dlopen('libicui18n.dylib', RTLD_LAZY);
+        {$else}
+        // libicudata should be loaded first because other two depend on it
+        icudata := dlopen('libicudata.so', RTLD_LAZY);
+        if icudata <> nil then
+        begin
+          icu := dlopen('libicuuc.so', RTLD_LAZY);
+          if icu <> nil then
+            icui18n := dlopen('libicui18n.so', RTLD_LAZY);
+        end;
+        {$endif DARWIN}
+        if icui18n = nil then
+        begin
+          if icu <> nil then
+            dlclose(icu);
+          if icudata <> nil then
+            dlclose(icudata);
+        end
+        else
+          // ICU append a version prefix to all its functions e.g. ucnv_open_66
+          LoadIcuWithVersion;
+        include(Loaded, elICU);
       end;
   {$ifdef LINUXNOTBSD}
     elSystemD:
@@ -807,6 +1110,16 @@ begin
     if pthread <> nil then
       dlclose(pthread);
     {$endif LINUX}
+  end;
+  if elICU in Loaded then
+  begin
+    if icui18n <> nil then
+      dlclose(icui18n);
+    if icu <> nil then
+      dlclose(icu);
+    if icudata <> nil then
+      dlclose(icudata);
+    @ucnv_open := nil;
   end;
   {$ifdef LINUXNOTBSD}
   if (elSystemD in Loaded) and (systemd <> nil) then

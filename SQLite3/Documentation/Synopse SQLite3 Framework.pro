@@ -16430,6 +16430,7 @@ For this task, don't download an existing binary release of FPC / Lazarus, but u
 - Download the latest release of the tool from @https://github.com/LongDirtyAnimAlf/fpcupdeluxe/releases
 - Unpack it in a dedicated folder, and run its executable.
 - On the main screen, locate on the left the two versions listboxes. Select "3.2" for {\i FPC version} and "2.0.10" for {\i Lazarus version}.
+- Important note: if you want to cross-compile from Windows to other systems, e.g. install a Linux cross-compiler on Windows, ensure you installed the {\i Win32} FPC compiler and Lazarus, {\i not the Win64} version, which is known to have troubles with {\f1\fs20 currency} support;
 - Then build the FPC and Lazarus binaries directly from the latest sources, by clicking on "Install/update FPC+Laz".
 Those branches are currently used for building our production projects, so are expected to be properly tested and supported. \line At the time of the writing of this documentation, our Lazarus IDE (on Linux) reports using:
 - FPC SVN 45643 (3.2.0)

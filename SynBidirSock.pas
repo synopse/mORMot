@@ -6,7 +6,7 @@ unit SynBidirSock;
 {
     This file is part of the Synopse framework.
 
-    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2021 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynBidirSock;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2020
+  Portions created by the Initial Developer are Copyright (C) 2021
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -1342,6 +1342,11 @@ begin
     headin := headin+fTokenHeader;
   end;
   if fSocket<>nil then begin
+    if connectionClose in fSocket.HeaderFlags then begin
+      // server may close after a few requests (e.g. nginx keepalive_requests)
+      FreeAndNil(fSocket);
+      fSocket := THttpClientSocket.Open(fURI.Server,fURI.Port)
+    end;
     status := fSocket.Get(aAddress,fKeepAlive,headin);
     result := fSocket.Content;
   end else
