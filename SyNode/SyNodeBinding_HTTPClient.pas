@@ -1,5 +1,5 @@
-/// `http` module support bindings for SyNode
-// TODO - current implemenattion is not filly compartible with nodeJS
+/// `http` module bindings for SyNode
+// TODO - current implementation is not filly compatible with nodeJS
 // - this unit is a part of the freeware Synopse framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 //
@@ -31,8 +31,8 @@ type
     fConnectTimeout: integer;
     fSendTimeout: integer;
     fReceiveTimeout: integer;
+    fRespAlreadyRead: boolean;
   protected
-    function GetRespText: RawUTF8;
     function GetRespHeaders: RawUTF8;
     function sendFile(const URL: RawUTF8; aFileName: string): boolean;
   public
@@ -52,7 +52,6 @@ type
     property keepAlive: cardinal read FKeepAlive write FKeepAlive default 1;
     property headers: RawUTF8 read fInHeaders write fInHeaders;
 
-    property responseText: RawUTF8 read GetRespText;
     property responseHeaders: RawUTF8 read GetRespHeaders;
     property responseStatus: integer read FResponseStatus;
   end;
@@ -173,6 +172,7 @@ begin
       raise ESMException.Create('usage doRequest(URL: string)');
     URL := in_argv[0].asJSString.ToAnsi(cx);
     try
+      fRespAlreadyRead := false;
       FResponseStatus := fClient.Request(URL, FMethod, keepAlive, fInHeaders, FInData, '', FRespHeaders, FRespText);
     except
       on E: EOSError do
@@ -192,6 +192,9 @@ function THTTPClient.read(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolea
 begin
   Result := true;
   try
+    if (fRespAlreadyRead) then
+      raise ESMException.Create('IncomingMessage.read() can be called only once');
+    fRespAlreadyRead := true;
     vp.rval := SyNodeReadWrite.SMRead_impl(cx, argc, vp.argv, FRespText);
   except
     on E: Exception do begin
@@ -199,6 +202,7 @@ begin
       JSError(cx, E);
     end;
   end;
+  FRespText := ''; // Free memory allocated for response text ASAP
 end;
 
 function THTTPClient.sendFile(const URL: RawUTF8; aFileName: string): boolean;
@@ -253,11 +257,6 @@ begin
   FInData := data;
 
   FreeAndNil(FWriter);
-end;
-
-function THTTPClient.GetRespText: RawUTF8;
-begin
-  Result := FRespText;
 end;
 
 function THTTPClient.GetRespHeaders: RawUTF8;
