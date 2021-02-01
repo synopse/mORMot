@@ -11907,7 +11907,7 @@ begin
     raise ECrtSocket.CreateFmt('No available %s',[LIBCURL_DLL]);
   fHandle := curl.easy_init;
   if curl.globalShare <> nil then
-    curl.easy_setopt(fHandle, coShare, curl.globalShare);
+    curl.easy_setopt(fHandle,coShare,curl.globalShare);
   ConnectionTimeOut := ConnectionTimeOut div 1000; // curl expects seconds
   if ConnectionTimeOut=0 then
     ConnectionTimeOut := 1;

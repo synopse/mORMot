@@ -491,7 +491,7 @@ var
     share_cleanup: function(share_handle: TCurlShare): CURLSHcode; cdecl;
     /// set options for a shared object
     share_setopt: function(share: TCurlShare; option: CURLSHoption): CURLSHcode; cdecl varargs;
-    /// return string describing error code
+    /// return the text description of an error code
     share_strerror: function(code: CURLSHcode): PAnsiChar; cdecl;
     {$ifdef LIBCURLMULTI}                               12
     /// add an easy handle to a multi session
@@ -548,17 +548,18 @@ function CurlIsAvailable: boolean;
 function CurlWriteRawByteString(buffer: PAnsiChar; size,nitems: integer;
   opaque: pointer): integer; cdecl;
 
-/// This function enable multiple easy handles share data between them.
-// Shared objects are - DNS cache, TLS session cache and connection cache
-// This way, each single transfer will take advantage from data updates made by the other transfer(s)
-// see https://curl.se/libcurl/c/libcurl-share.html for details
+/// enable libcurl multiple easy handles to share data
+// - Shared objects are - DNS cache, TLS session cache and connection cache
+// - this way, each single transfer will take advantage from data updates 
+//made by the  other transfer(s) 
+// - see https://curl.se/libcurl/c/libcurl-share.html for details
 function CurlEnableGlobalShare: boolean;
 
-/// Disable a global share for libcurtl.
-// This function is called automatically in finalization section.
-// In case it called manually ensure there is no active HTTP requests
-// to prevent CURLSHE_IN_USE error
-function CurlDisableGlbalShare: CURLSHcode;
+/// disable a global share for libcurl
+// - is called automatically in finalization section
+// - can be called on purpose, to ensure there is no active HTTP requests
+// and prevent CURLSHE_IN_USE error
+function CurlDisableGlobalShare: CURLSHcode;
 
 implementation
 
@@ -816,14 +817,11 @@ begin
   Result := false;
   if not CurlIsAvailable then
     exit;
-
   curl.globalShare := curl.share_init;
   if curl.globalShare = nil then
     exit; // something went wrong (out of memory, etc.) and therefore the share object was not created
-
   for i := 0 to Ord(CURL_LOCK_DATA_PSL) do
     InitializeCriticalSection(curl.share_cs[i]);
-
   curl.share_setopt(curl.globalShare, CURLSHOPT_LOCKFUNC, @curlShareLock);
   curl.share_setopt(curl.globalShare, CURLSHOPT_UNLOCKFUNC, @curlShareUnLock);
   curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
@@ -832,7 +830,7 @@ begin
   Result := true;
 end;
 
-function CurlDisableGlbalShare: CURLSHcode;
+function CurlDisableGlobalShare: CURLSHcode;
 var
   i: PtrInt;
 begin
