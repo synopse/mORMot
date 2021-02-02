@@ -11782,9 +11782,9 @@ var s,t,rle: RawByteString;
     i,j, complen2: integer;
     comp2,dec1: array of byte;
     {$ifdef CPUINTEL}
-    comp1,dec2: array of byte;
+    comp1, dec2: array of byte;
     complen1: integer;
-    {$endif}
+    {$endif CPUINTEL}
 begin
   for i := 1 to 200 do begin
     s := SynLZCompress(StringOfChar(AnsiChar(i),i));

@@ -1265,7 +1265,9 @@ begin
   LogToTextFile(error); // annoyning enough on all platforms
   // SynSQLite3Log.Add.Log() would do nothing: we are in .exe initialization
   {$ifdef MSWINDOWS} // PITA popup
-  MessageBoxA(0,pointer(error),' WARNING: deprecated SQLite3 engine',MB_OK or MB_ICONWARNING);
+  // better than a MessageBox() especially for services
+  raise Exception.CreateFmt('Deprecated SQLite3 engine: %s',
+    [error, ExeVersion.ProgramName]);
   {$endif MSWINDOWS}
 end;
 
