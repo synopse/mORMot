@@ -14,51 +14,42 @@ object MainLogView: TMainLogView
   OnCreate = FormCreate
   OnKeyDown = FormKeyDown
   OnShow = FormShow
-  LCLVersion = '2.0.8.0'
-  object Splitter2: TSplitter
-    Cursor = crVSplit
-    Left = 0
-    Height = 4
-    Top = 635
-    Width = 860
-    Align = alBottom
-    ResizeAnchor = akBottom
-  end
+  LCLVersion = '2.0.11.0'
   object Splitter3: TSplitter
     Left = 837
-    Height = 635
+    Height = 583
     Top = 0
     Width = 4
     Visible = False
   end
   object Splitter1: TSplitter
     Left = 829
-    Height = 635
+    Height = 583
     Top = 0
     Width = 4
     Visible = False
   end
   object Splitter4: TSplitter
     Left = 833
-    Height = 635
+    Height = 583
     Top = 0
     Width = 4
     Visible = False
   end
   object PanelLeft: TPanel
     Left = 257
-    Height = 635
+    Height = 583
     Top = 0
     Width = 150
     Align = alLeft
-    ClientHeight = 635
+    ClientHeight = 583
     ClientWidth = 150
     Constraints.MinWidth = 150
     TabOrder = 0
     object ImageLogo: TImage
       Left = 8
       Height = 32
-      Top = 591
+      Top = 539
       Width = 137
       Anchors = [akLeft, akRight, akBottom]
       Center = True
@@ -421,9 +412,27 @@ object MainLogView: TMainLogView
       TopIndex = -1
     end
   end
+  object Splitter2: TSplitter
+    Cursor = crVSplit
+    Left = 0
+    Height = 4
+    Top = 583
+    Width = 860
+    Align = alBottom
+    ResizeAnchor = akBottom
+  end
+  object PanelBottom: TPanel
+    Left = 0
+    Height = 52
+    Top = 587
+    Width = 860
+    Align = alBottom
+    TabOrder = 9
+    OnResize = PanelBottomResize
+  end
   object List: TDrawGrid
     Left = 841
-    Height = 635
+    Height = 583
     Top = 0
     Width = 19
     Align = alClient
@@ -447,7 +456,7 @@ object MainLogView: TMainLogView
   end
   object ProfileList: TDrawGrid
     Left = 407
-    Height = 635
+    Height = 583
     Top = 0
     Width = 274
     Align = alLeft
@@ -468,17 +477,17 @@ object MainLogView: TMainLogView
   end
   object PanelThread: TPanel
     Left = 681
-    Height = 635
+    Height = 583
     Top = 0
     Width = 148
     Align = alLeft
-    ClientHeight = 635
+    ClientHeight = 583
     ClientWidth = 148
     TabOrder = 3
     Visible = False
     object ThreadListBox: TCheckListBox
       Left = 1
-      Height = 593
+      Height = 541
       Top = 1
       Width = 146
       Align = alClient
@@ -492,7 +501,7 @@ object MainLogView: TMainLogView
     object pnlThreadBottom: TPanel
       Left = 1
       Height = 40
-      Top = 594
+      Top = 542
       Width = 146
       Align = alBottom
       ClientHeight = 40
@@ -512,11 +521,11 @@ object MainLogView: TMainLogView
   end
   object PanelBrowse: TPanel
     Left = 0
-    Height = 635
+    Height = 583
     Top = 0
     Width = 257
     Align = alLeft
-    ClientHeight = 635
+    ClientHeight = 583
     ClientWidth = 257
     Constraints.MinWidth = 80
     TabOrder = 4
