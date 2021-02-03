@@ -57887,7 +57887,7 @@ begin
 end;
 
 procedure RemoveCommentsFromJSON(P: PUTF8Char);
-var  PComma: PUTF8Char;
+var PComma: PUTF8Char;
 begin // replace comments by ' ' characters which will be ignored by parser
   if P<>nil then
   while P^<>#0 do begin
@@ -57906,7 +57906,7 @@ begin // replace comments by ' ' characters which will be ignored by parser
           P := TryRemoveComment(P);
         while (P^<=' ') and (P^<>#0) do inc(P);
         if P^ in ['}', ']'] then
-          PComma^ := ' ';
+          PComma^ := ' '; // see https://github.com/synopse/mORMot/pull/349
       end;
     else
       inc(P);
