@@ -8806,6 +8806,14 @@ check(IsValidJSON(J));
   check(IsValidJSON('['+J));
   J := GetJSONObjectAsSQL(J,false,true);
   CheckEqual(J,U);
+  J := '{'#10'"httpServer": {'#10'"host": "*",'#10'"port": "8881",'#10 +
+    '"serverType": "Socket",'#10'/*"reverseProxy": {'#10'"kind": "nginx",'#10 +
+    '"sendFileLocationRoot": "snake-ukrpatent-local"'#10'}*/'#10'} //eol'#10'}';
+  check(not IsValidJSON(J));
+  RemoveCommentsFromJSON(UniqueRawUTF8(J));
+  CheckUTF8(IsValidJSON(J),J);
+  J := JSONReformat(J,jsonCompact);
+  CheckEqual(J,'{"httpServer":{"host":"*","port":"8881","serverType":"Socket"}}');
   J := '{"RowID":  210 ,"Name":"Alice","Role":"User","Last Login":null, // comment'#13#10+
     '"First Login" : /* to be ignored */  null  ,  "Department"  :  "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
   check(not IsValidJSON(J));
