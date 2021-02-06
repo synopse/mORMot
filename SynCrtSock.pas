@@ -4828,7 +4828,7 @@ function WSAIsFatalError(anothernonfatal: integer=NO_ERROR): boolean;
 var err: integer;
 begin
   err := WSAGetLastError;
-  result := (err<>NO_ERROR) and (err<>WSATRY_AGAIN) and (err<>WSAEINTR) and
+  result := (err<>NO_ERROR) and (err<>WSATRY_AGAIN) and
     {$ifdef MSWINDOWS}(err<>WSAETIMEDOUT) and (err<>WSAEWOULDBLOCK) and{$endif}
     (err<>anothernonfatal); // allow WSAEADDRNOTAVAIL from OpenBind()
 end;
