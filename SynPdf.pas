@@ -10986,12 +10986,14 @@ procedure TPdfEncryptionRC4MD5.EncodeBuffer(const BufIn; var BufOut; Count: card
     fLastObjectNumber := fDoc.fCurrentObjectNumber;
     fLastGenerationNumber := fDoc.fCurrentGenerationNumber;
   end;
+var work: TRC4; // Encrypt() changes the RC4 state -> local copy for reuse
 begin
   if (fDoc.fCurrentObjectNumber<>fLastObjectNumber) or
      (fDoc.fCurrentGenerationNumber<>fLastGenerationNumber) then
     // a lot of string encodings have the same context
     ComputeNewRC4Key;
-  fLastRC4Key.Encrypt(BufIn,BufOut,Count); // RC4 allows in-place encryption :)
+  work := fLastRC4Key;
+  work.Encrypt(BufIn,BufOut,Count); // RC4 allows in-place encryption :)
 end;
 
 {$endif USE_PDFSECURITY}
