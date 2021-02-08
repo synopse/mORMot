@@ -855,6 +855,7 @@ type
     function PopPendingContext: pointer;
     function QueueLength: integer; virtual;
     {$endif USE_WINIOCP}
+    function GetSubThread(index: integer): TSynThreadPoolSubThread;
     /// end thread on IO error
     function NeedStopOnIOError: boolean; virtual;
     /// process to be executed after notification
@@ -889,6 +890,10 @@ type
     /// parameter as supplied to Create constructor
     property QueuePendingContext: boolean read fQueuePendingContext;
     {$endif USE_WINIOCP}
+    /// available worker threads count
+    property WorkerThreadsCount: integer read fSubThreadCount;
+    /// direct access to the worker threads from the pool
+    property WorkerThreads[index: integer]: TSynThreadPoolSubThread read GetSubThread;
   published
     /// how many threads are currently running in this thread pool
     property RunningThreads: integer read fRunningThreads;
@@ -7468,6 +7473,11 @@ begin
   result := 10000; // lazy high value
 end;
 {$endif USE_WINIOCP}
+
+function TSynThreadPool.GetSubThread(index: integer): TSynThreadPoolSubThread;
+begin
+  result := fSubThread[index];
+end;
 
 function TSynThreadPool.NeedStopOnIOError: boolean;
 begin
