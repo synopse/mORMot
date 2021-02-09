@@ -779,7 +779,7 @@ begin
           W.AddDateTime(AsDateTime);
           W.Add('"');
         end;
-        ftString, ftFixedChar, ftMemo: begin
+        ftString, ftFixedChar, ftMemo, ftGuid: begin
           W.Add('"');
           W.AddAnsiString({$ifdef UNICODE}AsAnsiString{$else}AsString{$endif},
             twJSONEscape);

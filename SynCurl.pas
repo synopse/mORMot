@@ -779,8 +779,6 @@ begin
         inc(P);
       end;
       curl.Module := h;
-      curl.globalShare := nil;
-      CurlEnableGlobalShare; // won't hurt, and may benefit even for the OS
     except
       on E: Exception do begin
         if h<>0 then
@@ -795,6 +793,8 @@ begin
     curl.infoText := format('%s version %s',[LIBCURL_DLL,curl.info.version]);
     if curl.info.ssl_version<>nil then
       curl.infoText := format('%s using %s',[curl.infoText,curl.info.ssl_version]);
+    curl.globalShare := nil;
+    CurlEnableGlobalShare; // won't hurt, and may benefit even for the OS
 //   api := 0; with curl.info do while protocols[api]<>nil do begin
 //     write(protocols[api], ' '); inc(api); end; writeln(#13#10,curl.infoText);
   finally
@@ -856,7 +856,7 @@ initialization
 finalization
   {$ifdef LIBCURLSTATIC}
   if curl_static_initialized then begin
-    CurlDisableGlbalShare;
+    CurlDisableGlobalShare;
     curl.global_cleanup;
   end;
   {$else}
