@@ -3112,9 +3112,9 @@ function TrimLeft(const S: RawUTF8): RawUTF8;
 // newline, space, and tab characters
 function TrimRight(const S: RawUTF8): RawUTF8;
 
-// single-allocation (therefore faster) alternative to Trim(copy())
+/// single-allocation (therefore faster) alternative to Trim(copy())
 procedure TrimCopy(const S: RawUTF8; start,count: PtrInt;
-  out result: RawUTF8);
+  var result: RawUTF8);
 
 /// fast WinAnsi comparison using the NormToUpper[] array for all 8 bits values
 function AnsiIComp(Str1, Str2: pointer): PtrInt;
@@ -29341,27 +29341,30 @@ begin
   FastSetString(result,pointer(S),i);
 end;
 
-procedure TrimCopy(const S: RawUTF8; start,count: PtrInt;
-  out result: RawUTF8);
+procedure TrimCopy(const S: RawUTF8; start, count: PtrInt;
+  var result: RawUTF8);
 var L: PtrInt;
 begin
-  if count<=0 then
-    exit;
-  if start<=0 then
-    start := 1;
-  L := Length(S);
-  while (start<=L) and (S[start]<=' ') do begin
-    inc(start); dec(count); end;
-  dec(start);
-  dec(L,start);
-  if count<L then
-    L := count;
-  while L>0 do
-    if S[start+L]<=' ' then
-      dec(L) else
-      break;
-  if L>0 then
-    FastSetString(result,@PByteArray(S)[start],L);
+  if count>0 then begin
+    if start<=0 then
+      start := 1;
+    L := Length(S);
+    while (start<=L) and (S[start]<=' ') do begin
+      inc(start); dec(count); end;
+    dec(start);
+    dec(L,start);
+    if count<L then
+      L := count;
+    while L>0 do
+      if S[start+L]<=' ' then
+        dec(L) else
+        break;
+    if L>0 then begin
+      FastSetString(result,@PByteArray(S)[start],L);
+      exit;
+    end;
+  end;
+  result := '';
 end;
 
 type
