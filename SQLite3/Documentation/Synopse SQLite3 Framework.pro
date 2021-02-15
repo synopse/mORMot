@@ -4610,7 +4610,7 @@ In the above query expression, the {\f1\fs20 rank()} function is used over the d
 In any database, there is a need to define how column data is to be compared. It is needed for proper search and ordering of the data. This is the purpose of so-called {\i @**collation@s}.
 By default, when {\i SQLite} compares two strings, it uses a collating sequence or collating function (two words for the same thing) to determine which string is greater or if the two strings are equal. {\i SQLite} has three built-in collating functions: BINARY, NOCASE, and RTRIM:
 - BINARY - Compares string data using {\f1\fs20 memcmp()}, regardless of text encoding.
-- NOCASE - The same as binary, except the 26 upper case characters of ASCII are folded to their lower case equivalents before the comparison is performed. Note that only ASCII characters are case folded. Plain {\i SQLite} does not attempt to do full @*Unicode@ case folding due to the size of the tables required - but you could use {\i mORMot}'s SYSTEMNOCASE or WIN32CASE/WIN32NOCASE custom collations for enhanced case folding support (see below);
+- NOCASE - The same as binary, except the 26 upper case characters of ASCII are folded to their lower case equivalents before the comparison is performed. Note that only ASCII characters are case folded. Plain {\i SQLite} does not attempt to do full @*Unicode@ case folding due to the size of the tables required - but you could use {\i mORMot}'s SYSTEMNOCASE, or WIN32CASE/WIN32NOCASE custom collations for enhanced case folding support (see below);
 - RTRIM - The same as binary, except that trailing space characters are ignored.
 In the {\i mORMot} ORM, we defined some additional kind of collations, via some internal calls to the {\f1\fs20 sqlite3_create_collation()} API:
 |%25%60
@@ -4632,6 +4632,7 @@ The following collations are therefore available when using {\i SQLite3} within 
 |NOCASE|Default ASCII 7 bit comparison
 |RTRIM|Default {\f1\fs20 memcmp()} comparison with right trim
 |SYSTEMNOCASE|{\i mORMot}'s Win-1252 8 bit comparison
+;|UNICODENOCASE|{\i mORMot}'s Unicode 10.0 comparison
 |ISO8601|{\i mORMot}'s date/time comparison
 |WIN32CASE|{\i mORMot}'s comparison using case-insensitive Windows API
 |WIN32NOCASE|{\i mORMot}'s comparison using not case-insensitive Windows API
@@ -4639,17 +4640,17 @@ The following collations are therefore available when using {\i SQLite3} within 
 Note that WIN32CASE/WIN32NOCASE will be slower than the others, but will handle properly any kind of complex scripting. For instance, if you want to use the Unicode-ready Windows API at database level, you can set for each database model:
 ! aModel.SetCustomCollationForAll(sftUTF8Text,'WIN32CASE');
 ! aModel.SetCustomCollationForAll(sftDateTime,'NOCASE');
+On non-Windows platform, it will either use the system ICU library (if available), or fallback to the FPC RTL with temporary {\f1\fs20 UnicodeString} values - which requires to include `cwstrings` in your project uses clause. Note that depending on the library used, the results may not be consistent: so if you move a {\i SQLite3} database file e.g. from a Windows system to a Linux system with WIN32CASE collation, you should better regenerate all your indexes!
 If you use non-default collations (i.e. SYSTEMNOCASE/ISO8601/WIN32CASE/WIN32NOCASE), you may have trouble running requests with "plain" {\i SQLite3} tools. But you can use our {\f1\fs20 @*SynDBExplorer@} safely, since it will declare all the above collations.
 When using external databases - see @27@, if the content is retrieved directly from the database driver and by-passes the virtual table mechanism - see @20@, returned data may not match your expectations according to the custom collations: you will need to customize the external tables definition by hand, with the proper SQL statement of each external DB engine.
+Note that {\i @*mORMot 2@} offers a new UNICODENOCASE collation, which follows Unicode 10.0 without any Windows or ICU API call, so is consistent on all systems - and is also faster.
 :  REGEXP operator
-Our {\i SQLite3} engine can use {\i @**regular expression@} within its SQL queries, by enabling the {\f1\fs20 @**REGEXP@} operator in addition to standard SQL operators ({\f1\fs20 =  == != <> IS IN LIKE GLOB MATCH}). It will use the Open Source PCRE library to perform the queries.
-In order to enable the operator, you should include unit {\f1\fs20 SynSQLite3RegEx.pas} to your uses clause, and register the {\f1\fs20 RegExp()} SQL function to a given {\i SQLite3} database instance, as such:
-!uses SynCommons, mORmot, mORMotSQLite3,
-!!  SynSQLite3RegEx;
-! ...
+Our {\i SQLite3} engine can use {\i @**regular expression@} within its SQL queries, by enabling the {\f1\fs20 @**REGEXP@} operator in addition to standard SQL operators ({\f1\fs20 =  == != <> IS IN LIKE GLOB MATCH}).
+:   Default REGEXP Engine
+By default, and since mORMot 1.18.6218 (25 January 2021), our static {\i SQlite3} engine includes a compact and efficient enough C extension, as available from the official {\i SQLite3} project source code tree. It is included with the official amalgamation file during our compilation phase.
+So you don't need to do anything to be able to use the REGEX operator in your queries:
 !Server := TSQLRestServerDB.Create(Model,'test.db3');
 !try
-!!  CreateRegExpFunction(Server.DB.DB);
 !  with TSQLRecordPeople.CreateAndFillPrepare(Client,
 !!    'FirstName REGEXP ?',['\bFinley\b']) do
 !  try
@@ -4667,6 +4668,20 @@ The above code will execute the following SQL statement (with a prepared paramet
 ! SELECT * from People WHERE Firstname REGEXP '\bFinley\b';
 That is, it will find all objects where {\f1\fs20 TSQLRecordPeople.FirstName} will contain the {\f1\fs20 'Finley'} word - in a regular expression, {\f1\fs20 \\b} defines a word {\f1\fs20 b}oundary search.
 In fact, the {\f1\fs20 REGEXP} operator is a special syntax for the {\f1\fs20 regexp()} user function. No {\f1\fs20 regexp()} user function is defined by default and so use of the {\f1\fs20 REGEXP} operator will normally result in an error message. Calling {\f1\fs20 CreateRegExFunction()} for a given connection will add a SQL function named "{\f1\fs20 regexp()}" at run-time, which will be called in order to implement the {\f1\fs20 REGEXP} operator.
+:   PCRE REGEXP Engine
+If you want to use the Open Source PCRE library to perform the searches, instead of this default C extension, you should include the {\f1\fs20 SynSQLite3RegEx.pas} unit to your uses clause, and register the {\f1\fs20 RegExp()} SQL function to a given {\i SQLite3} database instance, as such:
+!uses SynCommons, mORmot, mORMotSQLite3,
+!!  SynSQLite3RegEx;
+! ...
+!Server := TSQLRestServerDB.Create(Model,'test.db3');
+!try
+!!  CreateRegExpFunction(Server.DB.DB);
+!  with TSQLRecordPeople.CreateAndFillPrepare(Client,
+!!    'FirstName REGEXP ?',['\bFinley\b']) do
+!  try
+!    while FillOne do begin
+!      Check(LastName='Morse');
+! ...
 It will use the statically linked PCRE library as available since {\i Delphi} XE, or will rely on the {\f1\fs20 PCRE.pas} wrapper unit as published at @http://www.regular-expressions.info/download/TPerlRegEx.zip for older versions of {\i Delphi}.
 This unit will call directly the @*UTF-8@ API of the PCRE library, and maintain a per-connection cache of compiled regular expressions to ensure the best performance possible.
 :60  ACID and speed
@@ -13659,7 +13674,7 @@ By default, the following security groups are created on a void database:
 |%14%12%14%11%11%12%12%12
 |\b Group|POST SQL|SELECT SQL|Auth R|Auth W|Tables R|Tables W|Services\b0
 |Admin|Yes|Yes|Yes|Yes|Yes|Yes|Yes
-|Supervisor|Yes|No|Yes|No|Yes|Yes|Yes
+|Supervisor|No|Yes|No|Yes|Yes|Yes|Yes
 |User|No|No|No|No|Yes|Yes|Yes
 |Guest|No|No|No|No|Yes|No|No
 |%
@@ -16233,7 +16248,7 @@ Some part of the library (e.g. {\f1\fs20 SynCommons.pas}, {\f1\fs20 SynTests.pas
 If you want to compile {\i mORMot} unit into @**packages@, to avoid an obfuscated {\i [DCC Error] @*E2201@ Need imported data reference ($G) to access 'VarCopyProc'} error at compilation, you should defined the {\f1\fs20 USEPACKAGES} conditional in your project's options. Open {\f1\fs20 SynCommons.inc} for a description of this conditional, and all over definitions global to all {\i mORMot} units - see @45@. To avoid related {\i @*E1025@ Unsupported language feature: 'Object'} compilation error, you should probably also set "{\i Generate DCUs only}" in project's options "{\i C/C++ output file generator}".
 The framework source code implementation and design tried to be as cross-platform and cross-compiler as possible, since the beginning. It is a lot of work to maintain compatibility towards so many tools and platforms, but we think it is always worth it - especially if you try not depend on {\i Delphi} only, which as shown some backward compatibility issues during its lifetime.
 For HTML5 and Mobile clients, our main platform is {\i Smart Mobile Studio}, which is a great combination of ease of use, a powerful {\i SmartPascal} dialect, small applications (much smaller than FMX), with potential packaging as native iOS or {\i Android} applications (via {\i @*PhoneGap@}).
-The latest versions of the {\i FreePascal Compiler} together with its great {\i Lazarus} IDE, are now very stable and easy to work with. We don't support {\i CodeTyphon}, since we found some licensing issue with some part of it (e.g. {\i Orca} GUI library origin is doubtful). So we recommend using {\i @*fpcupdeluxe@} - see @203@ - which is maintained by Alfred, a {\i mORMot} contributor. This is amazing to build the whole set of compilers and IDE, with a lot of components, for several platforms (this is a cross-platform project), just from the sources. I like {\i Lazarus} stability and speed much more than {\i Delphi} (did you ever tried to browse and debug {\i included} {\f1\fs20 $I ...} files in the {\i Delphi} IDE? with Lazarus, it is painless), even if the compiler is slower than {\i Delphi}'s, and if the debugger is less integrated and even more unstable than {\i Delphi}'s under Windows (yes, it is possible!). At least, it works, and the {\i Lazarus} IDE is small and efficient. Official {\i @*Linux@} support is available for {\i mORMot} servers, with full features in the {\i FPC} 3.2 branch - we use it on producing on {\i Linux} 64-bit since years.
+The latest versions of the {\i FreePascal Compiler} together with its great {\i Lazarus} IDE, are now very stable and easy to work with. We don't support {\i CodeTyphon}, since we found some licensing issue with some part of it (e.g. {\i Orca} GUI library origin is doubtful). So we recommend using {\i @*fpcupdeluxe@} - see @203@ - which is maintained by Alfred, a {\i mORMot} contributor. This is amazing to build the whole set of compilers and IDE, with a lot of components, for several platforms (this is a cross-platform project), just from the sources. I like {\i Lazarus} stability and speed much more than {\i Delphi} (did you ever tried to browse and debug {\i included} {\f1\fs20 $I ...} files in the {\i Delphi} IDE? with Lazarus, it is painless), even if the compiler is slower than {\i Delphi}'s, and if the debugger is less integrated and even more unstable than {\i Delphi}'s under Windows (yes, it is possible!). At least, it works, and the {\i Lazarus} IDE is small and efficient. Official {\i @*Linux@} support is available for {\i mORMot} servers, with full features in the {\i FPC} 3.2 branch - we use it on production with {\i Linux} 64-bit since years.
 :  SQLite3 static linking for Delphi and FPC
 {\i Preliminary note}: if you retrieved the source code from @https://github.com/synopse/mORMot you will have all the needed {\f1\fs20 .obj/.o} static files available in the expected folders. Just ignore this chapter.
 In order to maintain our @https://synopse.info/fossil/timeline source code repository in a decent size, we excluded the {\f1\fs20 sqlite3.obj/.o} storage in it, but provide the full source code of the {\i @*SQlite3@} engine in a custom {\f1\fs20 sqlite3.c} file, ready to be compiled with all conditional defined as expected by {\f1\fs20 SynSQlite3Static.pas}. You need to add the official {\i SQlite3} amalgamation file from @https://www.sqlite.org/download.html and put its content into a {\f1\fs20 SQLite3\\amalgamation} sub-folder, for proper compilation. Our custom {\f1\fs20 sqlite3.c} file will add encryption feature to the engine. Also look into {\f1\fs20 SynSQlite3Static.pas} comments if there is any manual patch needed for proper compilation of the amalgamation sourece.
@@ -16429,7 +16444,7 @@ But since the FPC trunk may be unstable, we will propose to put in place a stabl
 For this task, don't download an existing binary release of FPC / Lazarus, but use the {\i @**fpcupdeluxe@} tool, as published at @http://wiki.freepascal.org/fpcupdeluxe - it will allow to build your environment directly from the sources, and install it in a dedicated folder. Several FPC / Lazarus installations, with dedicated revision numbers, may coexist on the same computer: just ensure you run Lazarus from the shortcut created by {\i fpcupdeluxe}.
 - Download the latest release of the tool from @https://github.com/LongDirtyAnimAlf/fpcupdeluxe/releases
 - Unpack it in a dedicated folder, and run its executable.
-- On the main screen, locate on the left the two versions listboxes. Select "3.2" for {\i FPC version} and "2.0.10" for {\i Lazarus version}.
+- On the main screen, locate on the left the two versions listboxes. Select "{\f1\fs20 3.2}" for {\i FPC version} and "{\f1\fs20 2.0.10}" for {\i Lazarus version}.
 - Important note: if you want to cross-compile from Windows to other systems, e.g. install a Linux cross-compiler on Windows, ensure you installed the {\i Win32} FPC compiler and Lazarus, {\i not the Win64} version, which is known to have troubles with {\f1\fs20 currency} support;
 - Then build the FPC and Lazarus binaries directly from the latest sources, by clicking on "Install/update FPC+Laz".
 Those branches are currently used for building our production projects, so are expected to be properly tested and supported. \line At the time of the writing of this documentation, our Lazarus IDE (on Linux) reports using:
