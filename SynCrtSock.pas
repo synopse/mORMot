@@ -5746,7 +5746,8 @@ function THttpClientSocket.Request(const url, method: SockString;
       result := Error else begin
       Close; // close this connection
       try
-        OpenBind(Server,Port,false); // retry this request with a new socket
+        HeaderFlags := [];
+        OpenBind(Server,Port,false,-1,cslTcp,fTLS); // retry with a new socket
         result := Request(url,method,KeepAlive,Header,Data,DataType,true);
       except
         on Exception do
@@ -5760,8 +5761,9 @@ begin
   if SockIn=nil then // done once
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   Content := '';
-  if SockReceivePending(0)=cspSocketError then begin
-    DoRetry(STATUS_NOTFOUND,'connection broken (keepalive timeout?)');
+  if (connectionClose in HeaderFlags) or
+     (SockReceivePending(0)=cspSocketError) then begin
+    DoRetry(STATUS_NOTFOUND,'connection broken (kepepalive timeout or too many requests)');
     exit;
   end;
   try
