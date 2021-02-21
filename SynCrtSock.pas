@@ -4992,16 +4992,15 @@ begin
   if self=nil then
     exit;
   fSndBufLen := 0; // always reset (e.g. in case of further Open)
-  if (SockIn<>nil) or (SockOut<>nil) then begin
-    ioresult; // reset ioresult value if SockIn/SockOut were used
-    if SockIn<>nil then begin
-      PTextRec(SockIn)^.BufPos := 0;  // reset input buffer
-      PTextRec(SockIn)^.BufEnd := 0;
-    end;
-    if SockOut<>nil then begin
-      PTextRec(SockOut)^.BufPos := 0; // reset output buffer
-      PTextRec(SockOut)^.BufEnd := 0;
-    end;
+  fSockInEofError := 0;
+  ioresult; // reset ioresult value if SockIn/SockOut were used
+  if SockIn<>nil then begin
+    PTextRec(SockIn)^.BufPos := 0;  // reset input buffer
+    PTextRec(SockIn)^.BufEnd := 0;
+  end;
+  if SockOut<>nil then begin
+    PTextRec(SockOut)^.BufPos := 0; // reset output buffer
+    PTextRec(SockOut)^.BufEnd := 0;
   end;
   if fSock<=0 then
     exit; // no opened connection, or Close already executed
