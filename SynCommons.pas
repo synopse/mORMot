@@ -10634,9 +10634,10 @@ function JSONRetrieveStringField(P: PUTF8Char; out Field: PUTF8Char;
 /// efficient JSON field in-place decoding, within a UTF-8 encoded buffer
 // - this function decodes in the P^ buffer memory itself (no memory allocation
 // or copy), for faster process - so take care that P^ is not shared
-// - PDest points to the next field to be decoded, or nil when end is reached
+// - PDest points to the next field to be decoded, or nil on JSON parsing error
 // - EndOfObject (if not nil) is set to the JSON value char (',' ':' or '}' e.g.)
 // - optional wasString is set to true if the JSON value was a JSON "string"
+// - returns a PUTF8Char to the decoded value, with its optional length in Len^
 // - '"strings"' are decoded as 'strings', with wasString=true, properly JSON
 // unescaped (e.g. any \u0123 pattern would be converted into UTF-8 content)
 // - null is decoded as nil, with wasString=false
@@ -56804,7 +56805,9 @@ label slash,num,lit;
 begin // see http://www.ietf.org/rfc/rfc4627.txt
   if wasString<>nil then
     wasString^ := false; // not a string by default
-  PDest := nil; // PDest=nil indicates error or unexpected end (#0)
+  if Len<>nil then
+    Len^ := 0; // avoid buffer overflow on parsing error
+  PDest := nil; // PDest=nil indicates parsing error (e.g. unexpected #0 end)
   result := nil;
   if P=nil then exit;
   if P^<=' ' then repeat inc(P); if P^=#0 then exit; until P^>' ';
