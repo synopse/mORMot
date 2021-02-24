@@ -4767,7 +4767,8 @@ Note that the virtual table module name is retrieved from the class name. For in
 To handle external databases, two dedicated classes, named {\f1\fs20 TSQLVirtualTableExternal} and {\f1\fs20 TSQLVirtualTableCursorExternal} will be defined in a similar manner - see @%%HierExternalTables@ @30@.
 As you probably have already stated, all those Virtual Table mechanism is implemented in {\f1\fs20 mORMot.pas}. Therefore, it is independent from the {\i @*SQLite3@} engine, even if, to my knowledge, there is no other SQL database engine around able to implement this pretty nice feature.
 :  Defining a Virtual Table module
-Here is how the {\f1\fs20 TSQLVirtualTableLog} class type is defined, which will implement a @*Virtual Table@ module named "{\f1\fs20 Log}". Adding a new module is just made by overriding some {\i Delphi} methods:
+Here is how the {\f1\fs20 TSQLVirtualTableLog} class type is defined, which will implement a @*Virtual Table@ module named "{\f1\fs20 Log}". Note that the {\i SQLite3} virtual table module name will be computed from the class name, trimming its first characters, e.g. {\f1\fs20 TSQLVirtualTable{\b Log}} will trim trailing {\f1\fs20 TSQLVirtualTable} and define a {\f1\fs20 'Log'} virtual module.
+Adding a new module is just made by overriding some {\i Delphi} methods:
 !  TSQLVirtualTableLog = class(TSQLVirtualTable)
 !  protected
 !    fLogFile: TSynLogFile;
