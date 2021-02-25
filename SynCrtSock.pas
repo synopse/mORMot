@@ -571,8 +571,8 @@ type
     /// same as HeaderGetValue('X-POWERED-BY'), but retrieved during Request
     XPoweredBy: SockString;
     /// map the presence of some HTTP headers, but retrieved during Request
-    HeaderFlags: set of(transferChuked, connectionClose, connectionUpgrade,
-      connectionKeepAlive, hasRemoteIP);
+    HeaderFlags: set of(transferChuked,
+     connectionClose, connectionUpgrade, connectionKeepAlive, hasRemoteIP);
     /// retrieve the HTTP headers into Headers[] and fill most properties below
     // - only relevant headers are retrieved, unless HeadersUnFiltered is set
     procedure GetHeader(HeadersUnFiltered: boolean=false);
@@ -5814,7 +5814,8 @@ begin
         exit;
       end;
       GetHeader(false); // read all other headers
-      if (result<>STATUS_NOCONTENT) and
+      if (result>=STATUS_SUCCESS) and (result<>STATUS_NOCONTENT) and
+         (result<>STATUS_NOTMODIFIED) and
          (IdemPCharArray(pointer(method),['HEAD','OPTIONS'])<0) then
         GetBody; // get content if necessary (HEAD or OPTIONS have no body)
     except
@@ -6896,9 +6897,9 @@ begin
     SetLength(Content,ContentLength); // not chuncked: direct read
     SockInRead(pointer(Content),ContentLength); // works with SockIn=nil or not
   end else
-  if ContentLength<0 then begin // ContentLength=-1 if no Content-Length
-    // no Content-Length nor Chunked header -> read until eof()
-    if SockIn<>nil then
+  if (ContentLength<0) and IdemPChar(pointer(Command),'HTTP/1.0 200') then begin
+    // body = either Content-Length or Transfer-Encoding (HTTP/1.1 RFC 4.3)
+    if SockIn<>nil then // client loop for compatibility with old servers
       while not eof(SockIn^) do begin
         readln(SockIn^,Line);
         if Content='' then
