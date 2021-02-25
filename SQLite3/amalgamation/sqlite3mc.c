@@ -76,6 +76,9 @@
 // enable Sessions https://sqlite.org/sessionintro.html
 // - not used/published yet in pascal code
 
+#define SQLITE_ENABLE_NORMALIZE
+// enable all https://sqlite.org/c3ref/expanded_sql.html functions
+// - not used/published yet in pascal code
 
 /*
 ** Disabled conditionals / extensions
