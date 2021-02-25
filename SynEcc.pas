@@ -5077,7 +5077,7 @@ begin
     exit; // mandatory parameter
   sw.ValueEnum('k',TypeInfo(TECDHEKDF),algo.kdf);
   sw.ValueEnum('e',TypeInfo(TECDHEEF),algo.ef);
-  sw.ValueEnum('m',TypeInfo(TECDHEEF),algo.mac);
+  sw.ValueEnum('m',TypeInfo(TECDHEMAC),algo.mac);
   // compute ca: TECCCertificateChain
   ca := nil;
   c := sw.Str['ca'];
