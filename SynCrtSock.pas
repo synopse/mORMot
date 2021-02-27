@@ -571,8 +571,8 @@ type
     /// same as HeaderGetValue('X-POWERED-BY'), but retrieved during Request
     XPoweredBy: SockString;
     /// map the presence of some HTTP headers, but retrieved during Request
-    HeaderFlags: set of(transferChuked, connectionClose, connectionUpgrade,
-      connectionKeepAlive, hasRemoteIP);
+    HeaderFlags: set of(transferChuked,
+     connectionClose, connectionUpgrade, connectionKeepAlive, hasRemoteIP);
     /// retrieve the HTTP headers into Headers[] and fill most properties below
     // - only relevant headers are retrieved, unless HeadersUnFiltered is set
     procedure GetHeader(HeadersUnFiltered: boolean=false);
@@ -4992,16 +4992,15 @@ begin
   if self=nil then
     exit;
   fSndBufLen := 0; // always reset (e.g. in case of further Open)
-  if (SockIn<>nil) or (SockOut<>nil) then begin
-    ioresult; // reset ioresult value if SockIn/SockOut were used
-    if SockIn<>nil then begin
-      PTextRec(SockIn)^.BufPos := 0;  // reset input buffer
-      PTextRec(SockIn)^.BufEnd := 0;
-    end;
-    if SockOut<>nil then begin
-      PTextRec(SockOut)^.BufPos := 0; // reset output buffer
-      PTextRec(SockOut)^.BufEnd := 0;
-    end;
+  fSockInEofError := 0;
+  ioresult; // reset ioresult value if SockIn/SockOut were used
+  if SockIn<>nil then begin
+    PTextRec(SockIn)^.BufPos := 0;  // reset input buffer
+    PTextRec(SockIn)^.BufEnd := 0;
+  end;
+  if SockOut<>nil then begin
+    PTextRec(SockOut)^.BufPos := 0; // reset output buffer
+    PTextRec(SockOut)^.BufEnd := 0;
   end;
   if fSock<=0 then
     exit; // no opened connection, or Close already executed
@@ -5746,7 +5745,8 @@ function THttpClientSocket.Request(const url, method: SockString;
       result := Error else begin
       Close; // close this connection
       try
-        OpenBind(Server,Port,false); // retry this request with a new socket
+        HeaderFlags := [];
+        OpenBind(Server,Port,false,-1,cslTcp,fTLS); // retry with a new socket
         result := Request(url,method,KeepAlive,Header,Data,DataType,true);
       except
         on Exception do
@@ -5760,8 +5760,9 @@ begin
   if SockIn=nil then // done once
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   Content := '';
-  if SockReceivePending(0)=cspSocketError then begin
-    DoRetry(STATUS_NOTFOUND,'connection broken (keepalive timeout?)');
+  if (connectionClose in HeaderFlags) or
+     (SockReceivePending(0)=cspSocketError) then begin
+    DoRetry(STATUS_NOTFOUND,'connection broken (kepepalive timeout or too many requests)');
     exit;
   end;
   try
@@ -5813,7 +5814,8 @@ begin
         exit;
       end;
       GetHeader(false); // read all other headers
-      if (result<>STATUS_NOCONTENT) and
+      if (result>=STATUS_SUCCESS) and (result<>STATUS_NOCONTENT) and
+         (result<>STATUS_NOTMODIFIED) and
          (IdemPCharArray(pointer(method),['HEAD','OPTIONS'])<0) then
         GetBody; // get content if necessary (HEAD or OPTIONS have no body)
     except
@@ -6895,10 +6897,18 @@ begin
     SetLength(Content,ContentLength); // not chuncked: direct read
     SockInRead(pointer(Content),ContentLength); // works with SockIn=nil or not
   end else
-    // no transferChuked or Content-Length - no body
-    // see https://greenbytes.de/tech/webdav/rfc7230.html#message.body.length
-    // TODO Transfer-Encoding: gzip, chunked
-    ContentLength := 0;
+  if (ContentLength<0) and IdemPChar(pointer(Command),'HTTP/1.0 200') then begin
+    // body = either Content-Length or Transfer-Encoding (HTTP/1.1 RFC 4.3)
+    if SockIn<>nil then // client loop for compatibility with old servers
+      while not eof(SockIn^) do begin
+        readln(SockIn^,Line);
+        if Content='' then
+          Content := Line else
+          Content := Content+#13#10+Line;
+      end;
+    ContentLength := length(Content); // update Content-Length
+    exit;
+  end;
   // optionaly uncompress content
   if cardinal(fContentCompress)<cardinal(length(fCompress)) then
     if fCompress[fContentCompress].Func(Content,false)='' then
