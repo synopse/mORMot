@@ -170,6 +170,9 @@ uses
   {$if defined(ENABLE_ASA) and not defined(ZEOS_DISABLE_ASA)}
   ZDbcASA,
   {$ifend}
+  {$if defined(ENABLE_SQLANY) and not defined(ZEOS_DISABLE_SQLANY)}
+  ZDbcSQLAnywhere,
+  {$ifend}
   {$if defined(ENABLE_POOLED) and not defined(ZEOS_DISABLE_POOLED)}
   ZDbcPooled,
   {$ifend}
