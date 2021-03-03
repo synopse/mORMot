@@ -45,47 +45,47 @@
 #define SQLITE_MAX_EXPR_DEPTH 0
 // no SQL depth limit, since we trust the input and expect the best performance
 
-#define SQLITE_OMIT_COMPILEOPTION_DIAGS 1
-// we don't need Compilation Options Diagnostics in our embedded engine
-
-#define SQLITE_OMIT_PROGRESS_CALLBACK 1
-// we don't need sqlite3_progress_handler() API function
-
-#define SQLITE_OMIT_LOAD_EXTENSION 1
-// we don't need/allow extension in an embedded engine
-
 #define SQLITE_ENABLE_DESERIALIZE
 // enable sqlite3_serialize() and sqlite3_deserialize()
 
 #define SQLITE_ENABLE_RTREE 1
 // enable RTREE https://sqlite.org/rtree.html
 
-#define SQLITE_ENABLE_GEOPOLY
+#define SQLITE_ENABLE_GEOPOLY 1
 // enable GeoJSON over RTREE https://sqlite.org/geopoly.html 
 
-#define SQLITE_ENABLE_REGEXP
+#define SQLITE_ENABLE_REGEXP 1
 // enable the compact https://www.sqlite.org/src/file?name=ext/misc/regexp.c
 // - can be overloaded with any other implementation
 
 #define SQLITE_ENABLE_RBU 1
 // enable "Resumable Bulk Update" (or OTA) https://www.sqlite.org/rbu.html
-// - not used/published yet in pascal code
 
-#define SQLITE_ENABLE_SESSION
-#define SQLITE_ENABLE_PREUPDATE_HOOK
+#define SQLITE_ENABLE_SESSION 1
+#define SQLITE_ENABLE_PREUPDATE_HOOK 1
 // enable Sessions https://sqlite.org/sessionintro.html
-// - not used/published yet in pascal code
 
-#define SQLITE_ENABLE_NORMALIZE
+#define SQLITE_ENABLE_NORMALIZE 1
 // enable all https://sqlite.org/c3ref/expanded_sql.html functions
-// - not used/published yet in pascal code
+
+#define YYTRACKMAXSTACKDEPTH 1
+// enable SQLITE_STATUS_PARSER_STACK support
+
+#define SQLITE_ENABLE_COLUMN_METADATA 1
+//enable column_database_name, column_table_name and column_origin_name support
+
+#define SQLITE_ENABLE_STMT_SCANSTATUS 1
+// enable stmt_scanstatus and stmt_scanstatus_reset support
+
+#define SQLITE_ENABLE_SNAPSHOT 1
+// support the sqlite3_snapshot object
+
+#define SQLITE_ENABLE_UNLOCK_NOTIFY 1
+// enable sqlite3_unlock_notify
 
 /*
 ** Disabled conditionals / extensions
 */
-
-// #define SQLITE_ENABLE_SNAPSHOT
-// support the sqlite3_snapshot object
 
 // #define SQLITE_ENABLE_ICU
 // disabled because induces a huge dependency - use WIN32NOCASE (which calls
