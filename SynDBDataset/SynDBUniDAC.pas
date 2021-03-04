@@ -82,7 +82,6 @@ type
   /// Exception type associated to UniDAC database access
   ESQLDBUniDAC = class(ESQLDBDataset);
 
-
   ///	connection properties definition using UniDAC database access
   TSQLDBUniDACConnectionProperties = class(TSQLDBDatasetConnectionProperties)
   protected
@@ -175,6 +174,7 @@ type
   ///	implements a statement via a UniDAC connection
   TSQLDBUniDACStatement = class(TSQLDBDatasetStatement)
   protected
+    fBatchExecute: Boolean;
     /// initialize and set fQuery: TUniQuery internal field as expected
     procedure DatasetCreate; override;
     /// set fQueryParams internal field as expected
@@ -213,6 +213,7 @@ begin
       break;
     end;
   inherited Create(provider,aDatabaseName,aUserID,aPassWord);
+  fOnBatchInsert := nil; // MultipleValuesInsert is slower
   fSpecificOptions := TStringList.Create;
   opt := pointer(options);
   while opt<>nil do begin
@@ -223,6 +224,7 @@ begin
   case fDBMS of
   dSQLite: begin // UniDAC support of SQLite3 is just buggy
     fSpecificOptions.Values['ForceCreateDatabase'] := 'true';
+    fSpecificOptions.Values['UseUnicode'] := 'true';
     fSQLCreateField[ftInt64] := ' BIGINT'; // SQLite3 INTEGER = 32bit for UniDAC
   end;
   dFirebird: begin
@@ -555,39 +557,170 @@ end;
 procedure TSQLDBUniDACStatement.DataSetBindSQLParam(const aArrayIndex,
   aParamIndex: integer; const aParam: TSQLDBParam);
 var P: TDAParam;
+    i: Integer;
+    tmp: RawUTF8;
+    StoreVoidStringAsNull: boolean;
 begin
   P := TDAParam(fQueryParams[aParamIndex]);
-  if P.InheritsFrom(TDAParam) then
-    with aParam do
-      if (VinOut<>paramInOut) and (VType=SynTable.ftBlob) then begin
-        P.ParamType := SQLParamTypeToDBParamType(VInOut);
-        if aArrayIndex>=0 then
-{$ifdef UNICODE}
-          P.SetBlobData(Pointer(VArray[aArrayIndex]),Length(VArray[aArrayIndex])) else
-          P.SetBlobData(Pointer(VData),Length(VData));
-{$else}   P.AsString := VArray[aArrayIndex] else
-          P.AsString := VData;
-{$endif}exit;
+  if not P.InheritsFrom(TDAParam) then begin
+    inherited DataSetBindSQLParam(aArrayIndex, aParamIndex, aParam);
+    Exit;
+  end;
+  if fDatasetSupportBatchBinding then
+    fBatchExecute := (aArrayIndex<0) and (fParamsArrayCount>0) else
+    fBatchExecute := false;
+  if fBatchExecute then
+    P.ValueCount := fParamsArrayCount else
+    P.ValueCount := 1;
+  with aParam do begin
+    P.ParamType := SQLParamTypeToDBParamType(VInOut);
+    if VinOut <> paramInOut then
+      case VType of
+        SynTable.ftNull:
+          if fBatchExecute then
+            for i := 0 to fParamsArrayCount-1 do
+              P.Values[i].Clear else
+            P.Clear;
+        SynTable.ftInt64: begin
+          if fBatchExecute then
+            for i := 0 to fParamsArrayCount-1 do
+              if VArray[i]='null' then
+                P.Values[i].Clear else
+                P.Values[i].AsLargeInt := GetInt64(pointer(VArray[i])) else
+          if aArrayIndex>=0 then
+            if VArray[aArrayIndex]='null' then
+              P.Clear else
+              P.AsLargeInt := GetInt64(pointer(VArray[aArrayIndex])) else
+            P.AsLargeInt := VInt64;
+        end;
+        SynTable.ftDouble:
+          if fBatchExecute then
+            for i := 0 to fParamsArrayCount-1 do
+              if VArray[i]='null' then
+                P.Values[i].Clear else
+                P.Values[i].AsFloat := GetExtended(pointer(VArray[i])) else
+          if aArrayIndex>=0 then
+            if VArray[aArrayIndex]='null' then
+              P.Clear else
+              P.AsFloat := GetExtended(pointer(VArray[aArrayIndex])) else
+            P.AsFloat := PDouble(@VInt64)^;
+        SynTable.ftCurrency:
+          if fBatchExecute then
+            for i := 0 to fParamsArrayCount-1 do
+              if VArray[i]='null' then
+                P.Values[i].Clear else
+                P.Values[i].AsCurrency := StrToCurrency(pointer(VArray[i])) else
+          if aArrayIndex>=0 then
+            if VArray[aArrayIndex]='null' then
+              P.Clear else
+              P.AsCurrency := StrToCurrency(pointer(VArray[aArrayIndex])) else
+            P.AsCurrency := PCurrency(@VInt64)^;
+        SynTable.ftDate:
+          if fBatchExecute then
+            for i := 0 to fParamsArrayCount-1 do
+            if VArray[i]='null' then
+              P.Values[i].Clear else begin
+              UnQuoteSQLStringVar(pointer(VArray[i]),tmp);
+              P.Values[i].AsDateTime := Iso8601ToDateTime(tmp);
+            end else
+          if aArrayIndex>=0 then
+            if VArray[aArrayIndex]='null' then
+              P.Clear else begin
+              UnQuoteSQLStringVar(pointer(VArray[aArrayIndex]),tmp);
+              P.AsDateTime := Iso8601ToDateTime(tmp);
+            end else
+              P.AsDateTime := PDateTime(@VInt64)^;
+        SynTable.ftUTF8:
+          if fBatchExecute then begin
+            StoreVoidStringAsNull := fConnection.Properties.StoreVoidStringAsNull;
+            for i := 0 to fParamsArrayCount-1 do
+              if (VArray[i]='null') or
+                 (StoreVoidStringAsNull and (VArray[i]=#39#39)) then
+                P.Values[i].Clear else begin
+              UnQuoteSQLStringVar(pointer(VArray[i]),tmp);
+              {$ifdef UNICODE} // for FireDAC: TADWideString=UnicodeString
+              P.Values[i].AsWideString := UTF8ToString(tmp);
+              {$else}
+              if fForceUseWideString then
+                P.AsWideStrings[i] := UTF8ToWideString(tmp) else
+                P.AsStrings[i] := UTF8ToString(tmp);
+              {$endif}
+            end
+          end else
+          if aArrayIndex>=0 then
+            if (VArray[aArrayIndex]='null') or
+               (fConnection.Properties.StoreVoidStringAsNull and
+                (VArray[aArrayIndex]=#39#39)) then
+              P.Clear else begin
+              UnQuoteSQLStringVar(pointer(VArray[aArrayIndex]),tmp);
+              {$ifdef UNICODE}
+              P.AsWideString := UTF8ToString(tmp); // TADWideString=string
+              {$else}
+              if fForceUseWideString then
+                P.AsWideString := UTF8ToWideString(tmp) else
+                P.AsString := UTF8ToString(tmp);
+              {$endif}
+          end else
+            if (VData='') and fConnection.Properties.StoreVoidStringAsNull then
+              P.Clear else
+              {$ifdef UNICODE}
+              P.AsWideString := UTF8ToString(VData); // TADWideString=string
+              {$else}
+              if (not fForceUseWideString) {or IsAnsiCompatible(VData)} then
+                P.AsString := UTF8ToString(VData) else
+                P.AsWideString := UTF8ToWideString(VData);
+              {$endif}
+        SynTable.ftBlob:
+          if fBatchExecute then
+            for i := 0 to fParamsArrayCount-1 do
+              if VArray[i]='null' then
+                P.Values[i].Clear else begin
+                {$ifdef UNICODE}
+                P.Values[i].AsBlobRef.Clear;
+                P.Values[i].AsBlobRef.Write(0, Length(VArray[aArrayIndex]), Pointer(VArray[aArrayIndex])); end else
+                {$else}
+                P.Values[i].AsString := VArray[aArrayIndex] else
+                {$endif}
+          if aArrayIndex>=0 then
+            if VArray[aArrayIndex]='null' then
+              P.Clear else begin
+              {$ifdef UNICODE}
+              P.AsBlobRef.Clear;
+              P.AsBlobRef.Write(0, Length(VArray[aArrayIndex]), Pointer(VArray[aArrayIndex])); end else begin
+              P.AsBlobRef.Clear;
+              P.AsBlobRef.Write(0, Length(VData), Pointer(VData)); end;
+              {$else}
+              P.AsString := VArray[aArrayIndex] end else
+              P.AsString := VData;
+              {$endif}
+        else
+          raise ESQLDBUniDAC.CreateUTF8(
+            '%.DataSetBindSQLParam: invalid type % on bound parameter #%',
+            [Self,ord(VType),aParamIndex+1]);
       end;
-  inherited DataSetBindSQLParam(aArrayIndex, aParamIndex, aParam);
+  end;
 end;
 
 procedure TSQLDBUniDACStatement.DatasetCreate;
 begin
   fQuery := TUniQuery.Create(nil);
   TUniQuery(fQuery).Connection := (fConnection as TSQLDBUniDACConnection).Database;
+  fDatasetSupportBatchBinding := true;
 end;
 
 function TSQLDBUniDACStatement.DatasetPrepare(const aSQL: string): boolean;
 begin
   (fQuery as TUniQuery).SQL.Text := aSQL;
+  TUniQuery(fQuery).Prepare;
   fQueryParams := TUniQuery(fQuery).Params;
   result := fQueryParams<>nil;
 end;
 
 procedure TSQLDBUniDACStatement.DatasetExecSQL;
 begin
-  (fQuery as TUniQuery).Execute;
+  if fBatchExecute then
+    (fQuery as TUniQuery).Execute(fParamsArrayCount) else
+    (fQuery as TUniQuery).Execute;
 end;
 
 
