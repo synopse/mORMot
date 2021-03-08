@@ -54006,8 +54006,12 @@ begin
 end;
 
 procedure TTextWriter.Add(Value: boolean);
+var PS: PShortString;
 begin
-  AddShort(BOOL_STR[Value]);
+  if Value then // normalize: boolean may not be in the expected [0,1] range
+    PS := @BOOL_STR[true] else
+    PS := @BOOL_STR[false];
+  AddShort(PS^);
 end;
 
 procedure TTextWriter.AddFloatStr(P: PUTF8Char);
