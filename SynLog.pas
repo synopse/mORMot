@@ -4033,7 +4033,6 @@ begin
       end;
       {$endif}
       {$endif}
-
       Instance := aInstance;
       MethodName := aMethodName;
       if aMethodNameLocal then
@@ -4065,7 +4064,6 @@ begin
       MethodName := nil; // avoid GPF in RawUTF8(pointer(MethodName)) below
       FormatUTF8(TextFmt,TextArgs,RawUTF8(pointer(MethodName)));
       MethodNameLocal := mnEnterOwnMethodName;
-      Caller := 0; // No stack trace needed here
     finally
       {$ifndef NOEXCEPTIONINTERCEPT}
       GlobalCurrentHandleExceptionSynLog := aSynLog.fThreadHandleExceptionBackup;
