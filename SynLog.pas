@@ -747,6 +747,7 @@ type
     /// if the method name is local, i.e. shall not be displayed at Leave()
     MethodNameLocal: (mnAlways, mnEnter, mnLeave, mnEnterOwnMethodName);
   end;
+  PSynLogThreadRecursion = ^TSynLogThreadRecursion;
 
   /// thread-specific internal context used during logging
   // - this structure is a hashed-per-thread variable
@@ -853,6 +854,7 @@ type
     procedure AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
     procedure LockAndGetThreadContext; {$ifdef HASINLINENOTX86}inline;{$endif}
     procedure GetThreadContextInternal;
+    function NewRecursion: PSynLogThreadRecursion;
     procedure ThreadContextRehash;
     function Instance: TSynLog;
     function ConsoleEcho(Sender: TTextWriter; Level: TSynLogInfo;
@@ -1037,6 +1039,14 @@ type
     // be added to the log content (to be used e.g. with '--' for SQL statements)
     procedure LogLines(Level: TSynLogInfo; LinesToLog: PUTF8Char; aInstance: TObject=nil;
       const IgnoreWhenStartWith: PAnsiChar=nil);
+    /// manual low-level TSynLog.Enter execution without the ISynLog
+    // - may be used to log Enter/Leave stack from non-pascal code
+    // - each call to ManualEnter should be followed by a matching ManualLeave
+    // - aMethodName should be a not nil constant text
+    procedure ManualEnter(aMethodName: PUtf8Char; aInstance: TObject = nil);
+    /// manual low-level ISynLog release after TSynLog.Enter execution
+    // - each call to ManualEnter should be followed by a matching ManualLeave
+    procedure ManualLeave;
     /// allow to temporary disable remote logging
     // - to be used within a try ... finally section:
     // ! log.DisableRemoteLog(true);
@@ -3732,6 +3742,20 @@ begin // should match TSynLog.ThreadContextRehash
   fThreadContext^.ID := fThreadID;
 end;
 
+function TSynLog.NewRecursion: PSynLogThreadRecursion;
+begin
+  with fThreadContext^ do begin
+    if RecursionCount = RecursionCapacity then begin
+      RecursionCapacity := NextGrow(RecursionCapacity);
+      SetLength(Recursion, RecursionCapacity);
+    end;
+    result := @Recursion[RecursionCount];
+    result^.Caller := 0; // no stack trace by default
+    result^.RefCount := 0;
+    inc(RecursionCount);
+  end;
+end;
+
 procedure TSynLog.ThreadContextRehash;
 var i: integer;
     id, hash: PtrUInt;
@@ -3805,7 +3829,7 @@ begin
         inc(RefCount);
         result := RefCount;
       end else
-      result := 1; // should never be 0 (mark release of TSynLog instance)
+      result := 1; // should never be 0 (would release of TSynLog instance)
   finally
     {$ifndef NOEXCEPTIONINTERCEPT}
     GlobalCurrentHandleExceptionSynLog := fThreadHandleExceptionBackup;
@@ -3868,7 +3892,7 @@ begin
         result := RefCount;
       end;
     end else
-      result := 1; // should never be 0 (mark release of TSynLog)
+      result := 1; // should never be 0 (would release TSynLog instance)
   finally
     {$ifndef NOEXCEPTIONINTERCEPT}
     GlobalCurrentHandleExceptionSynLog := fThreadHandleExceptionBackup;
@@ -3987,12 +4011,8 @@ begin
   // recursively store parameters
   if sllEnter in aSynLog.fFamily.fLevel then begin
     aSynLog.LockAndGetThreadContext;
-    with aSynLog.fThreadContext^ do
+    with aSynLog.NewRecursion^ do
     try
-      if RecursionCount=RecursionCapacity then begin
-        RecursionCapacity := NextGrow(RecursionCapacity);
-        SetLength(Recursion,RecursionCapacity);
-      end;
       {$ifdef CPU64}
       {$ifdef MSWINDOWS}
       if RtlCaptureStackBackTrace(1,1,@aStackFrame,nil)=0 then
@@ -4013,16 +4033,12 @@ begin
       end;
       {$endif}
       {$endif}
-      with Recursion[RecursionCount] do begin
-        Instance := aInstance;
-        MethodName := aMethodName;
-        if aMethodNameLocal then
-          MethodNameLocal := mnEnter else
-          MethodNameLocal := mnAlways;
-        Caller := aStackFrame;
-        RefCount := 0;
-      end;
-      inc(RecursionCount);
+      Instance := aInstance;
+      MethodName := aMethodName;
+      if aMethodNameLocal then
+        MethodNameLocal := mnEnter else
+        MethodNameLocal := mnAlways;
+      Caller := aStackFrame;
     finally
       {$ifndef NOEXCEPTIONINTERCEPT}
       GlobalCurrentHandleExceptionSynLog := aSynLog.fThreadHandleExceptionBackup;
@@ -4042,21 +4058,12 @@ begin
   aSynLog := Family.SynLog;
   if (aSynLog<>nil) and (sllEnter in aSynLog.fFamily.fLevel) then begin
     aSynLog.LockAndGetThreadContext;
-    with aSynLog.fThreadContext^ do
+    with aSynLog.NewRecursion^ do
     try
-      if RecursionCount=RecursionCapacity then begin
-        RecursionCapacity := NextGrow(RecursionCapacity);
-        SetLength(Recursion,RecursionCapacity);
-      end;
-      with Recursion[RecursionCount] do begin
-        Instance := aInstance;
-        MethodName := nil; // avoid GPF in RawUTF8(pointer(MethodName)) below
-        FormatUTF8(TextFmt,TextArgs,RawUTF8(pointer(MethodName)));
-        MethodNameLocal := mnEnterOwnMethodName;
-        Caller := 0; // No stack trace needed here
-        RefCount := 0;
-      end;
-      inc(RecursionCount);
+      Instance := aInstance;
+      MethodName := nil; // avoid GPF in RawUTF8(pointer(MethodName)) below
+      FormatUTF8(TextFmt,TextArgs,RawUTF8(pointer(MethodName)));
+      MethodNameLocal := mnEnterOwnMethodName;
     finally
       {$ifndef NOEXCEPTIONINTERCEPT}
       GlobalCurrentHandleExceptionSynLog := aSynLog.fThreadHandleExceptionBackup;
@@ -4066,6 +4073,38 @@ begin
   end;
   // copy to ISynLog interface -> will call TSynLog._AddRef
   result := aSynLog;
+end;
+
+procedure TSynLog.ManualEnter(aMethodName: PUtf8Char; aInstance: TObject);
+begin
+  if (self = nil) or
+     (fFamily.fLevel * [sllEnter, sllLeave] = []) then
+    exit;
+  if aMethodName = nil then
+    aMethodName := ' '; // something non void (call stack is irrelevant)
+  LockAndGetThreadContext;
+  try
+    with NewRecursion^ do begin
+      // inlined TSynLog.Enter
+      Instance := aInstance;
+      MethodName := aMethodName;
+      MethodNameLocal := mnEnter;
+      // inlined TSynLog._AddRef
+      if sllEnter in fFamily.Level then begin
+        LogHeaderLock(sllEnter, true);
+        AddRecursion(fThreadContext^.RecursionCount - 1, sllEnter);
+      end;
+      inc(RefCount);
+    end;
+  finally
+    LeaveCriticalSection(GlobalThreadLock);
+  end;
+end;
+
+procedure TSynLog.ManualLeave;
+begin
+  if self <> nil then
+    _Release;
 end;
 
 class function TSynLog.FamilyCreate: TSynLogFamily;
@@ -4780,7 +4819,8 @@ begin
 end;
 
 procedure TSynLog.AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
-begin // aLevel = sllEnter,sllLeave or sllNone
+begin
+  // at entry, aLevel is sllEnter, sllLeave or sllNone (from LogHeaderBegin)
   with fThreadContext^ do
   if cardinal(aIndex)<cardinal(RecursionCount) then
   with Recursion[aIndex] do begin
