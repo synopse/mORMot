@@ -158,6 +158,9 @@ uses
   {$if defined(ENABLE_INTERBASE) and not defined(ZEOS_DISABLE_INTERBASE)}
   ZDbcInterbase6,
   {$ifend}
+  {$if defined(ENABLE_FIREBIRD) and not defined(ZEOS_DISABLE_FIREBIRD)}
+  ZDbcFirebird,
+  {$ifend}
   {$if defined(ENABLE_SQLITE) and not defined(ZEOS_DISABLE_SQLITE)}
   ZDbcSqLite,
   {$ifend}
@@ -166,6 +169,9 @@ uses
   {$ifend}
   {$if defined(ENABLE_ASA) and not defined(ZEOS_DISABLE_ASA)}
   ZDbcASA,
+  {$ifend}
+  {$if defined(ENABLE_SQLANY) and not defined(ZEOS_DISABLE_SQLANY)}
+  ZDbcSQLAnywhere,
   {$ifend}
   {$if defined(ENABLE_POOLED) and not defined(ZEOS_DISABLE_POOLED)}
   ZDbcPooled,
@@ -176,10 +182,13 @@ uses
   {$if defined(ENABLE_ODBC) and not defined(ZEOS_DISABLE_ODBC)}
   ZDbcODBCCon,
   {$ifend}
+
   // main ZDBC units
   ZCompatibility,
   ZVariant,
+  {$ifndef ZEOS80UP}
   ZURL,
+  {$endif ZEOS80UP}
   ZDbcIntfs,
   ZDbcResultSet,
   // mORMot units after ZDBC due to some name conflicts (e.g. UTF8ToString)
@@ -728,7 +737,8 @@ begin
     sSchema := UTF8ToString(Schema);
     { mormot does not create the Tables casesensitive but gives mixed cased strings as tablename
       so we normalize the identifiers to database defaults : }
-    sTableName := meta.GetIdentifierConvertor.ExtractQuote(UTF8ToString(TableName));
+    sTableName :=  meta.{$ifdef ZEOS80UP}GetIdentifierConverter{$else}GetIdentifierConvertor{$endif}.
+      ExtractQuote(Utf8ToString(TableName));
     sTableName := meta.AddEscapeCharToWildcards(sTableName); //do not use "like" search patterns ['_','%'] so they need to be escaped
     res := meta.GetColumns('',sSchema,sTableName,'');
     FA.InitSpecific(TypeInfo(TSQLDBColumnDefineDynArray),Fields,djRawUTF8,@n,true);
