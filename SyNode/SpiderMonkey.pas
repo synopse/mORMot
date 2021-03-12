@@ -920,6 +920,7 @@ type
     function NewJSString(TextWide: PWideChar; TextLen: integer): PJSString; overload; {$ifdef HASINLINE}inline;{$endif}
     function NewJSString(TextAnsi: PAnsiChar; TextLen, CodePage: integer): PJSString; overload;
     function NewExternalString(const Value: SynUnicode): PJSString; {$ifdef HASINLINE}inline;{$endif}
+    //function AtomizeAndPinString(const Value: SynUnicode): PJSString; {$ifdef HASINLINE}inline;{$endif}
 
     /// create a new JavaScript Date object instance
     function NewDateObject(year, mon, mday, hour, min, sec: int32): PJSObject; {$ifdef HASINLINE}inline;{$endif}
@@ -2558,11 +2559,18 @@ type TJS_NewStringCopyN = function (cx: PJSContext; s: PCChar;
   n: size_t): PJSString; cdecl;
 var JS_NewStringCopyN: TJS_NewStringCopyN external SpiderMonkeyLib name 'SM_NewStringCopyN';
 
+// TODO - recompile libsynsm with exported SM_AtomizeAndPinStringN
+//type TJS_AtomizeAndPinStringN = function (cx: PJSContext; s: PCChar;
+//  n: size_t): PJSString; cdecl;
+//var JS_AtomizeAndPinStringN: TJS_AtomizeAndPinStringN external SpiderMonkeyLib name 'SM_AtomizeAndPinStringN';
+
+
 /// Allocate space for a JavaScript string and its underlying storage,
 // and copy characters from NULL TERMINATED! UTF8 character array
 type TJS_NewStringCopyUTF8Z = function (cx: PJSContext;
   pNullTerminatedUTF8: PUTF8Char): PJSString; cdecl;
 var JS_NewStringCopyUTF8Z: TJS_NewStringCopyUTF8Z external SpiderMonkeyLib name 'SM_NewStringCopyUTF8Z';
+
 
 /// Returns the empty JSString as a JS value
 type TJS_GetEmptyStringValue = function (cx: PJSContext): jsval; cdecl;
@@ -3969,6 +3977,11 @@ function JSContext.NewExternalString(const Value: SynUnicode): PJSString;
 begin
   Result := JS_NewExternalString(@Self,  pointer(Value), length(Value), @strFinalizer);
 end;
+
+//function JSContext.AtomizeAndPinString(const Value: SynUnicode): PJSString; {$ifdef HASINLINE}inline;{$endif}
+//begin
+//  Result := JS_AtomizeAndPinStringN(@Self,  pointer(Value), length(Value));
+//end;
 
 function JSContext.NewFloat32Array(nelements: uint32): PJSObject;
 begin
