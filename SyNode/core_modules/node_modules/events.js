@@ -35,7 +35,6 @@
 
  *
  * @class EventEmitter
- * @mixin
  */
 
 function EventEmitter() {
@@ -46,12 +45,6 @@ module.exports = EventEmitter;
 // Backwards-compat with node 0.10.x
 EventEmitter.EventEmitter = EventEmitter;
 
-/*
- * @deprecated This property not used (===false) in UB. Also deprecated in Node
- */
-EventEmitter.usingDomains = false;
-
-//UB EventEmitter.prototype.domain = undefined;
 /**
  * Private collection of events.
  * @private
@@ -71,15 +64,6 @@ EventEmitter.defaultMaxListeners = 10;
  * @private
  */
 EventEmitter.init = function() {
-  //UB this.domain = null;
-  //if (EventEmitter.usingDomains) {
-  //  // if there is an active domain, then attach to it.
-  //  domain = domain || require('domain');
-  //  if (domain.active && !(this instanceof domain.Domain)) {
-  //    this.domain = domain.active;
-  //  }
-  //}
-
   if (!this._events || this._events === Object.getPrototypeOf(this)._events) {
     this._events = {};
     this._eventsCount = 0;
@@ -181,7 +165,6 @@ function emitMany(handler, isFn, self, args) {
  */
 EventEmitter.prototype.emit = function emit(type) {
   var er, handler, len, args, i, events/*UB domain*/;
-  //UB var needDomainExit = false;
   var doError = (type === 'error');
 
   events = this._events;
@@ -190,20 +173,10 @@ EventEmitter.prototype.emit = function emit(type) {
   else if (!doError)
     return false;
 
-    //UB domain = this.domain;
-
   // If there is no 'error' event listener then throw.
   if (doError) {
     er = arguments[1];
-    //UB
-    //if (domain) {
-    //  if (!er)
-    //    er = new Error('Uncaught, unspecified "error" event.');
-    //  er.domainEmitter = this;
-    //  er.domain = domain;
-    //  er.domainThrown = false;
-    //  domain.emit('error', er);
-    //} else
+
     if (er instanceof Error) {
       throw er; // Unhandled 'error' event
     } else {
@@ -219,12 +192,6 @@ EventEmitter.prototype.emit = function emit(type) {
 
   if (!handler)
     return false;
-
-  //UB
-  //if (domain && this !== process) {
-  //  domain.enter();
-  //  needDomainExit = true;
-  //}
 
   var isFn = typeof handler === 'function';
   len = arguments.length;
@@ -250,11 +217,70 @@ EventEmitter.prototype.emit = function emit(type) {
       emitMany(handler, isFn, this, args);
   }
 
-  //UB if (needDomainExit)
-  //  domain.exit();
-
   return true;
 };
+
+function checkListener (listener) {
+  if (typeof listener !== 'function')
+    throw new TypeError('listener must be a function');
+}
+
+function _addListener(target, type, listener, prepend) {
+  var m;
+  var events;
+  var existing;
+
+  checkListener(listener)
+
+  events = target._events;
+  if (!events) {
+    events = target._events = {};
+    target._eventsCount = 0;
+  } else {
+    // To avoid recursion in the case that type === "newListener"! Before
+    // adding it to the listeners, first emit "newListener".
+    if (events.newListener) {
+      /** @fires  newListener */
+      target.emit('newListener', type,
+        listener.listener ? listener.listener : listener);
+
+      // Re-assign `events` because a newListener handler could have caused the
+      // this._events to be assigned to a new object
+      events = target._events;
+    }
+    existing = events[type];
+  }
+
+  if (!existing) {
+    // Optimize the case of one listener. Don't need the extra array object.
+    existing = events[type] = listener;
+    ++target._eventsCount;
+  } else {
+    if (typeof existing === 'function') {
+      // Adding the second element, need to change to array.
+      existing = events[type] = prepend ? [listener, existing] : [existing, listener]
+    } else if (prepend) {
+      existing.unshift(listener);
+    } else {
+      existing.push(listener);
+    }
+
+    // Check for listener leak
+    if (!existing.warned) {
+      m = $getMaxListeners(target);
+      if (m && m > 0 && existing.length > m) {
+        existing.warned = true;
+        console.error('(node) warning: possible EventEmitter memory ' +
+          'leak detected. %d %s listeners added. ' +
+          'Use emitter.setMaxListeners() to increase limit.',
+          existing.length, type);
+        console.trace();
+      }
+    }
+  }
+
+  return target;
+}
 
 /**
  * Adds a listener to the end of the listeners array for the specified event.
@@ -273,60 +299,7 @@ EventEmitter.prototype.emit = function emit(type) {
  * @return {EventEmitter}
  */
 EventEmitter.prototype.addListener = function addListener(type, listener) {
-  var m;
-  var events;
-  var existing;
-
-  if (typeof listener !== 'function')
-    throw new TypeError('listener must be a function');
-
-  events = this._events;
-  if (!events) {
-    events = this._events = {};
-    this._eventsCount = 0;
-  } else {
-    // To avoid recursion in the case that type === "newListener"! Before
-    // adding it to the listeners, first emit "newListener".
-    if (events.newListener) {
-      /** @fires  newListener */
-      this.emit('newListener', type,
-                listener.listener ? listener.listener : listener);
-
-      // Re-assign `events` because a newListener handler could have caused the
-      // this._events to be assigned to a new object
-      events = this._events;
-    }
-    existing = events[type];
-  }
-
-  if (!existing) {
-    // Optimize the case of one listener. Don't need the extra array object.
-    existing = events[type] = listener;
-    ++this._eventsCount;
-  } else {
-    if (typeof existing === 'function') {
-      // Adding the second element, need to change to array.
-      existing = events[type] = [existing, listener];
-    } else {
-      // If we've already got an array, just append.
-      existing.push(listener);
-    }
-
-    // Check for listener leak
-    if (!existing.warned) {
-      m = $getMaxListeners(this);
-      if (m && m > 0 && existing.length > m) {
-        existing.warned = true;
-        console.error('(node) warning: possible EventEmitter memory ' +
-                      'leak detected. %d %s listeners added. ' +
-                      'Use emitter.setMaxListeners() to increase limit.',
-                      existing.length, type);
-        console.trace();
-      }
-    }
-  }
-
-  return this;
+  return _addListener(this, type, listener, false);
 };
 
 /**
@@ -339,32 +312,64 @@ EventEmitter.prototype.addListener = function addListener(type, listener) {
 EventEmitter.prototype.on = EventEmitter.prototype.addListener;
 
 /**
+ * By default, event listeners are invoked in the order they are added.
+ * The emitter.prependOnceListener() method can be used as an alternative to add the event listener to the beginning of the listeners array.
+ *
+ * @method
+ * @param {String} type Event name
+ * @param {Function} listener
+ * @return {EventEmitter}
+ */
+EventEmitter.prototype.prependListener =
+  function prependListener(type, listener) {
+    return _addListener(this, type, listener, true);
+  };
+
+function onceWrapper() {
+  if (!this.fired) {
+    this.target.removeListener(this.type, this.wrapFn);
+    this.fired = true;
+    if (arguments.length === 0)
+      return this.listener.call(this.target);
+    return this.listener.apply(this.target, arguments);
+  }
+}
+
+function _onceWrap(target, type, listener) {
+  const state = { fired: false, wrapFn: undefined, target, type, listener };
+  const wrapped = onceWrapper.bind(state);
+  wrapped.listener = listener;
+  state.wrapFn = wrapped;
+  return wrapped;
+}
+
+/**
  * Adds a one time listener for the event. This listener is invoked only the next time the event is fired, after which it is removed.
  * @param {String} type Event name
  * @param {Function} listener
  * @return {EventEmitter}
  */
 EventEmitter.prototype.once = function once(type, listener) {
-  if (typeof listener !== 'function')
-    throw new TypeError('listener must be a function');
+  checkListener(listener);
 
-  var fired = false;
-
-  function g() {
-    this.removeListener(type, g);
-
-    if (!fired) {
-      fired = true;
-      listener.apply(this, arguments);
-    }
-  }
-
-  g.listener = listener;
-  this.on(type, g);
-
+  this.on(type, _onceWrap(this, type, listener));
   return this;
 };
 
+/**
+ * Adds a one-time listener function for the event named eventName to the beginning of the listeners array.
+ * The next time eventName is triggered, this listener is removed, and then invoked.
+ * @param {String} type Event name
+ * @param {Function} listener
+ * @return {EventEmitter}
+ */
+EventEmitter.prototype.prependOnceListener =
+  function prependOnceListener(type, listener) {
+    checkListener(listener);
+
+    this.prependListener(type, _onceWrap(this, type, listener));
+    return this;
+  };
 
 /**
  * Remove a listener from the listener array for the specified event.
