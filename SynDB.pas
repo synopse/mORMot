@@ -538,7 +538,9 @@ type
     // - if ReturnedRowCount points to an integer variable, it will be filled with
     // the number of row data returned (excluding field names)
     // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
-    function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt=nil): RawUTF8;
+    // - should raise an exception if maxLength>0 and serialized result exceed maxLength
+    function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt=nil;
+      maxLength: PtrInt=0): RawUTF8;
     // append all rows content as a JSON stream
     // - JSON data is added to the supplied TStream, with UTF-8 encoding
     // - if Expanded is true, JSON data is an array of objects, for direct use
@@ -550,7 +552,8 @@ type
     // format and contains true BLOB data
     // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
     // - returns the number of row data returned (excluding field names)
-    function FetchAllToJSON(JSON: TStream; Expanded: boolean): PtrInt;
+    // - should raise an exception if maxLength>0 and serialized result exceed maxLength
+    function FetchAllToJSON(JSON: TStream; Expanded: boolean; maxLength: PtrInt=0): PtrInt;
     /// append all rows content as binary stream
     // - will save the column types and name, then every data row in optimized
     // binary format (faster and smaller than JSON)
@@ -2149,7 +2152,8 @@ type
     // - returns the number of row data returned (excluding field names)
     // - warning: TSQLRestStorageExternal.EngineRetrieve in mORMotDB unit
     // expects the Expanded=true format to return '[{...}]'#10
-    function FetchAllToJSON(JSON: TStream; Expanded: boolean): PtrInt;
+    // - will raise an exception if maxLength>0 and serialized result exceed maxLength
+    function FetchAllToJSON(JSON: TStream; Expanded: boolean; maxLength: PtrInt=0): PtrInt;
     // Append all rows content as a CSV stream
     // - CSV data is added to the supplied TStream, with UTF-8 encoding
     // - if Tab=TRUE, will use TAB instead of ',' between columns
@@ -2173,7 +2177,8 @@ type
     // - if ReturnedRowCount points to an integer variable, it will be filled with
     // the number of row data returned (excluding field names)
     // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
-    function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt=nil): RawUTF8;
+    // - will raise an exception if maxLength>0 and serialized result exceed maxLength
+    function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt=nil; maxLength: PtrInt=0): RawUTF8;
     /// append all rows content as binary stream
     // - will save the column types and name, then every data row in optimized
     // binary format (faster and smaller than JSON)
@@ -6968,7 +6973,8 @@ begin
   end;
 end;
 
-function TSQLDBStatement.FetchAllToJSON(JSON: TStream; Expanded: boolean): PtrInt;
+function TSQLDBStatement.FetchAllToJSON(JSON: TStream; Expanded: boolean;
+  maxLength: PtrInt): PtrInt;
 var W: TJSONWriter;
     col: integer;
     tmp: TTextWriterStackBuffer;
@@ -6992,11 +6998,9 @@ begin
       ColumnsToJSON(W);
       W.Add(',');
       inc(result);
+      if ((maxLength>0) and (JSON.Size>maxLength)) then
+        raise ESQLDBException.CreateUTF8('Maximum fetch size (%) exceed', [maxLength]);
     end;
-    {$ifdef SYNDB_SILENCE}
-    fSQLLogTimer.Pause;
-    {$endif}
-    ReleaseRows;
     if (result=0) and W.Expand then begin
       // we want the field names at least, even with no data (RowCount=0)
       W.Expand := false; //  {"FieldCount":2,"Values":["col1","col2"]}
@@ -7007,6 +7011,10 @@ begin
     end;
     W.EndJSONObject(0,result);
   finally
+    {$ifdef SYNDB_SILENCE}
+    fSQLLogTimer.Pause;
+    {$endif}
+    ReleaseRows;
     W.Free;
     Connection.InternalProcess(speNonActive);
   end;
@@ -7092,13 +7100,13 @@ begin
 end;
 
 function TSQLDBStatement.FetchAllAsJSON(Expanded: boolean;
-  ReturnedRowCount: PPtrInt): RawUTF8;
+  ReturnedRowCount: PPtrInt; maxLength: PtrInt): RawUTF8;
 var Stream: TRawByteStringStream;
     RowCount: PtrInt;
 begin
   Stream := TRawByteStringStream.Create;
   try
-    RowCount := FetchAllToJSON(Stream,Expanded);
+    RowCount := FetchAllToJSON(Stream,Expanded,maxLength);
     if ReturnedRowCount<>nil then
       ReturnedRowCount^ := RowCount;
     result := Stream.DataString;
