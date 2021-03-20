@@ -15766,6 +15766,10 @@ begin
               'select count(*) from SampleRecord');
         Test2('select count(*) from PeopleExt where rowid=2',
               'select count(*) from SampleRecord where id=2');
+        Test2('select count(*) from PeopleExt where rowid=2 /*tobeignored*/',
+              'select count(*) from SampleRecord where id=2');
+        Test2('select count(*) from PeopleExt where /*tobeignored*/ rowid=2',
+              'select count(*) from SampleRecord where id=2');
         Test2('select Distinct(firstname) , max(lastchange)+100 from PeopleExt where rowid >= :(2):',
               'select Distinct(FirstName),max(Changed)+100 as LastChange from SampleRecord where ID>=:(2):');
         Test2('select Distinct(lastchange) , max(rowid)-100 as newid from PeopleExt where rowid >= :(2):',

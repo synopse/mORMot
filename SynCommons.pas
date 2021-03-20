@@ -13802,6 +13802,7 @@ function IsRowIDShort(const FieldName: shortstring): boolean;
 
 /// retrieve the next SQL-like identifier within the UTF-8 buffer
 // - will also trim any space (or line feeds) and trailing ';'
+// - any comment like '/*nocache*/' will be ignored
 // - returns true if something was set to Prop
 function GetNextFieldProp(var P: PUTF8Char; var Prop: RawUTF8): boolean;
 
@@ -61082,16 +61083,33 @@ begin
        ord('I')+ord('D')shl 8));
 end;
 
+function GotoNextSqlIdentifier(P: PUtf8Char; tab: PTextCharSet): PUtf8Char;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  while tcCtrlNot0Comma in tab[P^] do inc(P); // in [#1..' ', ';']
+  if PWord(P)^=ord('/')+ord('*') shl 8 then begin // ignore e.g. '/*nocache*/'
+    repeat
+      inc(P);
+      if PWord(P)^ = ord('*')+ord('/') shl 8 then begin
+        inc(P, 2);
+        break;
+      end;
+    until P^ = #0;
+    while tcCtrlNot0Comma in tab[P^] do inc(P);
+  end;
+  result := P;
+end;
+
 function GetNextFieldProp(var P: PUTF8Char; var Prop: RawUTF8): boolean;
 var B: PUTF8Char;
     tab: PTextCharSet;
 begin
   tab := @TEXT_CHARS;
-  while tcCtrlNot0Comma in tab[P^] do inc(P);
+  P := GotoNextSqlIdentifier(P, tab);
   B := P;
   while tcIdentifier in tab[P^] do inc(P); // go to end of field name
   FastSetString(Prop,B,P-B);
-  while tcCtrlNot0Comma in tab[P^] do inc(P);
+  P := GotoNextSqlIdentifier(P, tab);
   result := Prop<>'';
 end;
 
