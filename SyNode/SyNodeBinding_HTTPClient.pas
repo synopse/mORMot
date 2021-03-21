@@ -45,6 +45,7 @@ type
     function write(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;
     function writeEnd(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;
     function read(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;
+    function readAsJson(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;
 
     function doRequest(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;
 
@@ -193,9 +194,35 @@ begin
   Result := true;
   try
     if (fRespAlreadyRead) then
-      raise ESMException.Create('IncomingMessage.read() can be called only once');
+      raise ESMException.Create('IncomingMessage.read() or IncomingMessage.json() can be called only once');
     fRespAlreadyRead := true;
     vp.rval := SyNodeReadWrite.SMRead_impl(cx, argc, vp.argv, FRespText);
+  except
+    on E: Exception do begin
+      Result := False;
+      JSError(cx, E);
+    end;
+  end;
+  FRespText := ''; // Free memory allocated for response text ASAP
+end;
+
+function THTTPClient.readAsJson(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;
+var
+ resUnicode: SynUnicode;
+ res: jsval;
+begin
+  try
+    if (fRespAlreadyRead) then
+      raise ESMException.Create('IncomingMessage.read() or IncomingMessage.json() can be called only once');
+    fRespAlreadyRead := true;
+    if length(FRespText) = 0 then begin
+      vp.rval := jsval.NullValue;
+      Result := true;
+    end else begin
+      UTF8ToSynUnicode(FRespText, resUnicode);
+      Result := JS_ParseJSON(cx, pointer(resUnicode), length(resUnicode), res);
+      vp.rval := res;
+    end;
   except
     on E: Exception do begin
       Result := False;

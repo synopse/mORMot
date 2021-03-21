@@ -444,6 +444,15 @@ IncomingMessage.prototype.read = function (encoding) {
 }
 
 /**
+ * Read a response body and parse it as JSON. Expect body in UTF8 encoding.
+ * Faster and uses less memory compared to `JSON.parse(req.read('utf8'))`
+ * @returs {Object}
+ */
+IncomingMessage.prototype.json = function() {
+  return this._http.readAsJson()
+}
+
+/**
  * Internal function for parse response headers
  * TODO - improve node compatibility - some headers MUST me merged. See https://nodejs.org/api/http.html#http_message_headers
  * @private
