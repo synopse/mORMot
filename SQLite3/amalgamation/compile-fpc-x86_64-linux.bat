@@ -16,7 +16,10 @@ del sqlite3-%FPCARCH%.o
 echo.
 echo ---------------------------------------------------
 echo Compiling for FPC on %FPCARCH% using %GCC%
-%GCC% -static -w -O2 -fno-pic -fno-stack-protector -m64 -DNDEBUG -DNO_TCL -D_CRT_SECURE_NO_DEPRECATE -c sqlite3mc.c -o sqlite3-%FPCARCH%.o
+%GCC% -static -w -O2 -fno-pic -fno-stack-protector -fomit-frame-pointer -fno-exceptions -fno-asynchronous-unwind-tables -fno-unwind-tables -m64 -DNDEBUG -DNO_TCL -D_CRT_SECURE_NO_DEPRECATE -c sqlite3mc.c -o sqlite3-%FPCARCH%.o
+
+%FPCARCH%-strip -x sqlite3-%FPCARCH%.o
+
 copy sqlite3-%FPCARCH%.o %DST%
 copy sqlite3-%FPCARCH%.o %DST2%
 
