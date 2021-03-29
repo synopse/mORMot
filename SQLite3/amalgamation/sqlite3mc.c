@@ -15,11 +15,15 @@
 #define SQLITE_DEFAULT_MEMSTATUS 0
 // don't need any debug here, and don't even define sqlite3_status()
 
-#define SQLITE_THREADSAFE 1
 // assuming multi-thread safety is made by caller - in our framework, there is
 // only one thread using the database connection at the same time, but there could
-// be multiple database connection at the same time (previous was 0 could be unsafe)
-// - this option is also needed by codecext.c
+// be multiple database connection at the same time
+// - on Windows + gcc, no threading is forced to ease static linking with FPC
+#if SQLITE_NO_THREAD
+# define SQLITE_THREADSAFE 0
+#else  
+# define SQLITE_THREADSAFE 1
+#endif
 
 #define SQLITE_OMIT_SHARED_CACHE 1
 // no need of shared cache in a threadsafe calling model
@@ -29,6 +33,7 @@
 
 #define SQLITE_OMIT_DEPRECATED 1
 // spare some code size
+
 
 #define SQLITE_LIKE_DOESNT_MATCH_BLOBS 1
 // historical function, never used

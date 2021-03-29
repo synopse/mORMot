@@ -3886,7 +3886,7 @@ begin
   req := Trim(StringToUTF8(SQL.Text));
   P := pointer(req);
   if P=nil then
-    ESQLQueryException.Create('No SQL statement');
+    raise ESQLQueryException.Create('No SQL statement');
   col := 0;
   repeat
     B := P;

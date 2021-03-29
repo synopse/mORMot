@@ -48,7 +48,7 @@ unit SynSQLite3;
   ***** END LICENSE BLOCK *****
 
 
-     SQLite3 3.34.1 database engine
+     SQLite3 3.35.3 database engine
     ********************************
 
    Brand new SQLite3 library to be used with Delphi/FPC
@@ -1187,7 +1187,7 @@ type
     close: function(DB: TSQLite3DB): integer; cdecl;
 
     /// Return the version of the SQLite database engine, in ascii format
-    // - currently returns '3.34.1', when used with our SynSQLite3Static unit
+    // - currently returns '3.35.3', when used with our SynSQLite3Static unit
     // - if an external SQLite3 library is used, version may vary
     // - you may use the VersionText property (or Version for full details) instead
     libversion: function: PUTF8Char; cdecl;

@@ -39805,6 +39805,7 @@ procedure TSQLRestServerURIContext.ExecuteSOAByMethod;
 var timeStart,timeEnd: Int64;
     sessionstat: TSynMonitorInputOutput;
 begin
+  if MethodIndex >= 0 then
   with Server.fPublishedMethod[MethodIndex] do begin
     if mlMethods in Server.StatLevels then begin
       {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(timeStart);
@@ -40313,7 +40314,7 @@ var OK: boolean;
     Blob: PPropInfo;
     SQLSelect, SQLWhere, SQLSort, SQLDir: RawUTF8;
 begin
-  if MethodIndex=Server.fPublishedMethodBatchIndex then begin
+  if (MethodIndex>=0) and (MethodIndex=Server.fPublishedMethodBatchIndex) then begin
     ExecuteSOAByMethod; // run the BATCH process in execORMWrite context
     exit;
   end;
@@ -51009,11 +51010,12 @@ var Added: boolean;
       {$endif NOVARIANTS}
       tkClass: begin
         Obj := P^.GetObjProp(Value);
-        if not(woDontStore0 in Options) or not IsObjectDefaultOrVoid(Obj) then
+        if Obj<>nil then
           if PropIsIDTypeCastedField(P,IsObj,Value) then begin
             HR(P);
             Add(PtrInt(Obj)); // not true instances, but ID
-          end else if Obj<>nil then begin
+          end else
+          if not(woDontStore0 in Options) or not IsObjectDefaultOrVoid(Obj) then begin
             HR(P); // TPersistent or any class defined with $M+
             WriteObject(Obj,Options);
           end;

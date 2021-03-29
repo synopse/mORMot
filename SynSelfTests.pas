@@ -11272,7 +11272,7 @@ begin
 {$ifndef LVCL}
     s := ObjectToJSON(T);
     Check(s='{"ID":0,"Int":0,"Test":"","Unicode":"","Ansi":"","ValFloat":0,'+
-      '"ValWord":0,"ValDate":"","Next":0,"Data":"","ValVariant":null}');
+      '"ValWord":0,"ValDate":"","Data":"","ValVariant":null}');
 {$endif}
     T.ValDate := 39882.888612; // a fixed date and time
     T.Ansi := 'abcde6ef90';
@@ -11330,7 +11330,7 @@ begin
     s := ObjectToJSON(T);
     Check(s='{"ID":10,"Int":0,"Test":"'+T.Test+'","Unicode":"'+T.Test+
       '","Ansi":"'+T.Test+'","ValFloat":3.141592653,"ValWord":1203,'+
-      '"ValDate":"2009-03-10T21:19:36","Next":0,"Data":""'{$ifndef NOVARIANTS}
+      '"ValDate":"2009-03-10T21:19:36","Data":""'{$ifndef NOVARIANTS}
         +',"ValVariant":3.1416'{$endif}+'}');
     T2.ClearProperties;
     Check(not T.SameValues(T2));
@@ -11383,7 +11383,8 @@ begin
     Check(s=StringReplaceAll(s2,', ',',')+',ValVariant=''{"name":"John","int":1234}''');
     s := ObjectToJSON(T);
     delete(s1,3,3); // "RowID":10 -> "ID":10
-    Check(s=s1+',"Data":"","ValVariant":{"name":"John","int":1234}}');
+    s1 := StringReplaceAll(s1,',"Next":0','');
+    CheckEqual(s,s1+',"Data":"","ValVariant":{"name":"John","int":1234}}');
     bin := T.GetBinary;
     T2.ClearProperties;
     Check(T2.SetBinary(pointer(bin),PAnsiChar(pointer(bin))+length(bin)));
@@ -15765,6 +15766,10 @@ begin
         Test2('   select    COUNT(*)  from   PeopleExt   ',
               'select count(*) from SampleRecord');
         Test2('select count(*) from PeopleExt where rowid=2',
+              'select count(*) from SampleRecord where id=2');
+        Test2('select count(*) from PeopleExt where rowid=2 /*tobeignored*/',
+              'select count(*) from SampleRecord where id=2');
+        Test2('select count(*) from PeopleExt where /*tobeignored*/ rowid=2',
               'select count(*) from SampleRecord where id=2');
         Test2('select Distinct(firstname) , max(lastchange)+100 from PeopleExt where rowid >= :(2):',
               'select Distinct(FirstName),max(Changed)+100 as LastChange from SampleRecord where ID>=:(2):');
