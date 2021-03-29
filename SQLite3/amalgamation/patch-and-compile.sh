@@ -49,3 +49,11 @@ echo Use Native fpcupdeluxe cross-compilers for FPC OpenBSD i386/x64
 
 ./compile-fpc-i386-openbsd.sh
 ./compile-fpc-x86_64-openbsd.sh
+
+echo
+echo Use Native fpcupdeluxe cross-compilers for FPC Android arm/aarch64/i386/x64-android
+
+./compile-fpc-arm-android.sh
+./compile-fpc-aarch64-android.sh
+./compile-fpc-i386-android.sh
+./compile-fpc-x86_64-android.sh

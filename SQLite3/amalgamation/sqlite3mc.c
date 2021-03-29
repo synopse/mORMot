@@ -18,7 +18,7 @@
 // assuming multi-thread safety is made by caller - in our framework, there is
 // only one thread using the database connection at the same time, but there could
 // be multiple database connection at the same time
-// - on Windows + gcc, no threading is forced to ease static linking with FPC
+// * the 1 value is good enough for our purpose - 0 may be needed
 #if SQLITE_NO_THREAD
 # define SQLITE_THREADSAFE 0
 #else  

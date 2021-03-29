@@ -15,7 +15,7 @@ rm sqlite3-$ARCH.o
 echo
 echo ---------------------------------------------------
 echo Compiling for FPC on $ARCH using $GCC
-$GCC-clang -static -target i386-apple-darwin15 -O2 -m32 -DNDEBUG -DNO_TCL -D_CRT_SECURE_NO_DEPRECATE -I$SDK/include -c sqlite3mc.c -o sqlite3-$ARCH.o
+$GCC-clang -static -target i386-apple-darwin15 -Wno-pointer-sign -O2 -m32 -DNDEBUG -DNO_TCL -D_CRT_SECURE_NO_DEPRECATE -I$SDK/include -c sqlite3mc.c -o sqlite3-$ARCH.o
 cp sqlite3-$ARCH.o $DST
 cp sqlite3-$ARCH.o $DST2
 
