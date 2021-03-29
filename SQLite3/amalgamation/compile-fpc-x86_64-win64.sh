@@ -16,8 +16,8 @@ rm sqlite3-$ARCH.o
 echo
 echo ---------------------------------------------------
 echo Compiling static for FPC on $ARCH using $GCC
-$GCC -O2 -static -DWIN64 -DNO_TCL -D_CRT_SECURE_NO_DEPRECATE -DSQLITE_NO_THREAD -DSQLITE_OMIT_LOCALTIME -m64 -DNDEBUG -D_WINDOWS -c sqlite3mc.c -o sqlite3-$ARCH.o
-# SQLITE_OMIT_LOCALTIME and SQLITE_NO_THREAD to allow proper linking 
+$GCC -O2 -static -DWIN64 -DNO_TCL -D_CRT_SECURE_NO_DEPRECATE -DSQLITE_OMIT_LOCALTIME -m64 -DNDEBUG -D_WINDOWS -c sqlite3mc.c -o sqlite3-$ARCH.o
+# SQLITE_OMIT_LOCALTIME (and SQLITE_NO_THREAD) to allow proper linking 
 
 x86_64-w64-mingw32-strip -d -x sqlite3-$ARCH.o  
 
