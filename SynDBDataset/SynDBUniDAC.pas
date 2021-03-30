@@ -224,42 +224,46 @@ begin
   end;
   case fDBMS of
   dSQLite: begin // UniDAC support of SQLite3 is just buggy
-    {$ifndef FPC}
+    {$ifdef FPC}
+    fSpecificOptions.Values['UseUnicode'] := 'true'; // FPC strings do like UTF8 
+    {$else}
     {$ifndef UNICODE}
     fForceUseWideString := true; // for non-unicode Delphi
     {$endif}
-    fSpecificOptions.Values['UseUnicode'] := 'true'; // FPC strings have UTF8 encoding alays
     {$endif}
     fSpecificOptions.Values['ForceCreateDatabase'] := 'true';
     fSQLCreateField[ftInt64] := ' BIGINT'; // SQLite3 INTEGER = 32bit for UniDAC
   end;
   dFirebird: begin
-    {$ifndef FPC}
+    {$ifdef FPC}
+    fSpecificOptions.Values['UseUnicode'] := 'true'; // FPC strings do like UTF8 
+    {$else}
     {$ifndef UNICODE}
     fForceUseWideString := true; // for non-unicode Delphi
     {$endif}
-    fSpecificOptions.Values['UseUnicode'] := 'true'; // FPC strings have UTF8 encoding alays
     {$endif}
     fSpecificOptions.Values['CharSet'] := 'UTF8';
     fSpecificOptions.Values['CharLength'] := '2';
     fSpecificOptions.Values['DescribeParams'] := 'true';
   end; // http://www.devart.com/unidac/docs/index.html?ibprov_article.htm
   dOracle: begin
-    {$ifndef FPC}
+    {$ifdef FPC}
+    fSpecificOptions.Values['UseUnicode'] := 'true'; // FPC strings do like UTF8 
+    {$else}
     {$ifndef UNICODE}
     fForceUseWideString := true; // for non-unicode Delphi
     {$endif}
-    fSpecificOptions.Values['UseUnicode'] := 'true'; // FPC strings have UTF8 encoding alays
     {$endif}
     fSpecificOptions.Values['Direct'] := 'true';
     fSpecificOptions.Values['HOMENAME'] := '';
   end;
   dMySQL: begin
-    {$ifndef FPC}
+    {$ifdef FPC}
+    fSpecificOptions.Values['UseUnicode'] := 'true'; // FPC strings do like UTF8 
+    {$else}
     {$ifndef UNICODE}
     fForceUseWideString := true; // for non-unicode Delphi
     {$endif}
-    fSpecificOptions.Values['UseUnicode'] := 'true'; // FPC strings have UTF8 encoding alays
     {$endif}
     // s.d. 30.11.19 Damit der Connect schneller geht ! CRVioTCP.pas WaitForConnect
     fSpecificOptions.Values['MySQL.ConnectionTimeout'] := '0';
@@ -277,11 +281,12 @@ begin
     fSpecificOptions.Values['SQL Server.ConnectionTimeout'] := '0';
   end; // http://www.devart.com/unidac/docs/index.html?sqlprov_article.htm
   dPostgreSQL: begin  // thanks delphinium for the trick!
-    {$ifndef FPC}
+    {$ifdef FPC}
+    fSpecificOptions.Values['UseUnicode'] := 'true'; // FPC strings do like UTF8 
+    {$else}
     {$ifndef UNICODE}
     fForceUseWideString := true; // for non-unicode Delphi
     {$endif}
-    fSpecificOptions.Values['UseUnicode'] := 'true'; // FPC strings have UTF8 encoding alays
     {$endif}
     fSpecificOptions.Values['CharSet'] := 'UTF8';
   end;
