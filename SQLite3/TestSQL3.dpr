@@ -127,6 +127,7 @@ uses
         SynZipFiles in '..\SynZipFiles.pas',
       {$endif LVCL}
       {$ifdef MSWINDOWS}
+        Windows,
         {$ifndef CPU64}
           SynSMAPI in '..\SynSMAPI.pas',
           SynSM in '..\SynSM.pas',
@@ -169,6 +170,7 @@ uses
         SynDBZeos in '..\SynDBZeos.pas',
       {$endif}
       {$ifndef DELPHI5OROLDER}
+        // SynDBVCL in '..\SynDBVCL.pas',
         SynDBRemote in '..\SynDBRemote.pas',
         mORMotDB in 'mORMotDB.pas',
         mORMotMongoDB in 'mORMotMongoDB.pas',
