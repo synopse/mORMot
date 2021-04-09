@@ -1,4 +1,4 @@
-/// SQLite3 3.35.3 Database engine - statically linked for Windows/Linux
+/// SQLite3 3.35.4 Database engine - statically linked for Windows/Linux
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSQLite3Static;
@@ -47,7 +47,7 @@ unit SynSQLite3Static;
   ***** END LICENSE BLOCK *****
 
 
-    Statically linked SQLite3 3.35.3 engine with optional AES encryption
+    Statically linked SQLite3 3.35.4 engine with optional AES encryption
    **********************************************************************
 
   To be declared in your project uses clause:  will fill SynSQlite3.sqlite3
@@ -210,13 +210,21 @@ implementation
   {$ifdef ANDROID}
     const _PREFIX = '';
     {$ifdef CPUAARCH64}
-      {$L .\static\aarch64-android\libsqlite3.a}
-      {$L .\static\aarch64-android\libgcc.a}
+      {$L ..\..\static\aarch64-android\sqlite3.o}
+      {$L ..\..\static\aarch64-android\libgcc.a}
     {$endif CPUAARCH64}
     {$ifdef CPUARM}
-      {$L .\static\arm-android\libsqlite3.a}
-      {$L .\static\arm-android\libgcc.a}
+      {$L ..\..\static\arm-android\sqlite3.o}
+      {$L ..\..\static\arm-android\libgcc.a}
     {$endif CPUARM}
+    {$ifdef CPUX86}
+      {$L ..\..\static\i386-android\sqlite3.o}
+    {$endif CPUX86}
+    {$ifdef CPUX64}
+      {$L ..\..\static\x86_64-android\sqlite3.o}
+      // x86_64-linux-android-ld.bfd: final link failed
+      // (Nonrepresentable section on output)
+    {$endif CPUX64}
   {$endif ANDROID}
 
   {$ifdef FREEBSD}
@@ -1143,7 +1151,7 @@ function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCall
 const
   // error message if statically linked sqlite3.o(bj) does not match this
   // - Android may be a little behind, so we don't check exact version
-  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.35.3'{$endif};
+  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.35.4'{$endif};
 
 constructor TSQLite3LibraryStatic.Create;
 var error: RawUTF8;
