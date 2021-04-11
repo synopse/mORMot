@@ -1654,7 +1654,7 @@ type
 
   { JSCompileOptions }
   JSCompileOptions = object
-    procedure SetFileLineAndUtf8(const f: PChar; l: cardinal; isUtf8: boolean);
+    procedure SetFileLineAndUtf8(const fn: RawUTF8; l: cardinal; isUtf8: boolean);
   end;
 
   // internal alignment of JSCompileOptions is a HACK and depends on C++ pragma
@@ -3442,10 +3442,10 @@ end;
 
 { JSCompileOptions }
 
-procedure JSCompileOptions.SetFileLineAndUtf8(const f: PChar; l: cardinal;
+procedure JSCompileOptions.SetFileLineAndUtf8(const fn: RawUTF8; l: cardinal;
   isUtf8: boolean);
 begin
-  JS_SetCompileOptionsFileLineAndUtf8(@Self, f, l, isUtf8);
+  JS_SetCompileOptionsFileLineAndUtf8(@Self, pointer(fn), l, isUtf8);
 end;
 
 { JSString }

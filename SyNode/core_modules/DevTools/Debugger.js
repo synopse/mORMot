@@ -1,7 +1,9 @@
 // original FireFox implementation is in:
 // git clone https://github.com/mozilla/gecko-dev.git
 // cd gecko-dev/devtools/server 
-// FF debugger Protocol: https://searchfox.org/mozilla-central/source/devtools/docs/backend/protocol.md
+// FF debugger Protocol docs:
+//   - https://searchfox.org/mozilla-central/source/devtools/docs/backend/protocol.md
+//   - https://firefox-source-docs.mozilla.org/devtools/backend/protocol.html
 import * as DevToolsUtils from 'DevTools/DevToolsUtils.js';
 import {JSPropertyProvider} from 'DevTools/js-property-provider.js';
 import {ObjectActorPreviewers} from 'DevTools/ObjectActorPreviewers.js';
@@ -18,7 +20,7 @@ class ActorManager {
     }
     init(){
         this.console = new ConsoleActor('console' + this.threadID);
-        this.addon = new AddonActor('thread_' + dbg_binding.threadId);
+        this.addon = new AddonActor('t' + dbg_binding.threadId);
     }
     getActor(actorName){
         let actor = this;
@@ -268,12 +270,12 @@ class ConsoleActor extends Actor {
     _evalWithDebugger(aString, aOptions = {}){
         let trimmedString = aString.trim();
         // The help function needs to be easy to guess, so we make the () optional.
-        if (trimmedString == "help" || trimmedString == "?") {
+        if (trimmedString === "help" || trimmedString === "?") {
             aString = "help()";
         }
 
         // Add easter egg for console.mihai().
-        if (trimmedString == "console.mihai()" || trimmedString == "console.mihai();") {
+        if (trimmedString === "console.mihai()" || trimmedString === "console.mihai();") {
             aString = "\"http://incompleteness.me/blog/2015/02/09/console-dot-mihai/\"";
         }
 
@@ -537,6 +539,56 @@ class ThreadActor extends Actor {
             frames: resp
         };
     }
+    // WebStorm sends this event, VSCode - not
+    releaseMany(aRequest) {
+        if (!aRequest.actors) {
+            return { error: "missingParameter",
+                message: "no actors were specified" };
+        }
+
+        let res;
+        for (let actorID of aRequest.actors) {
+            let actor = actorManager.getActor(actorID);
+            if (!actor) {
+                if (!res) {
+                    res = { error: "notReleasable",
+                        message: "Only thread-lifetime actors can be released." };
+                }
+                continue;
+            }
+            actor.release();
+        }
+        return res ? res : {};
+    }
+
+    /**
+     * TODO - implement a _pausePool. This method is called only by WebStorm
+     * Handle a protocol request to promote multiple pause-lifetime grips to
+     * thread-lifetime grips.
+     *
+     * @param aRequest object
+     *        The protocol request object.
+     */
+    threadGrips (aRequest) {
+        if (this.state != "paused") {
+            return { error: "wrongState" };
+        }
+
+        if (!aRequest.actors) {
+            return { error: "missingParameter",
+                message: "no actors were specified" };
+        }
+
+        // TODO - implement a _pausePool
+        // for (let actorID of aRequest.actors) {
+        //     let actor = this._pausePool.get(actorID);
+        //     if (actor) {
+        //         this.threadObjectGrip(actor);
+        //     }
+        // }
+        return {};
+    }
+
     reconfigure(aRequest) {
         return {};
     }
@@ -725,10 +777,10 @@ class ThreadActor extends Actor {
             frame.onPop = undefined;
         }
         return {
-            "type": "paused",
-            "frame": frameActor ? frameActor._resp : undefined,
-            "poppedFrames": [],
-            "why": why
+            type: "paused",
+            frame: frameActor ? frameActor._resp : undefined,
+            poppedFrames: [],
+            why: why
         };
     }
     _onNewScript(script, global) {
@@ -914,18 +966,6 @@ class SourceActor extends Actor {
             return null;
         }
     }
-    getProperPath(p) {
-        let res = p;
-        // replace single backslash with url slash (every occurrence)
-        res = res.replace(/\\/g, '/');
-        if (res.startsWith('//')) {
-            res = 'file:' + res
-        }
-        else if (res.charAt(1) == ':') {
-            res = 'file:///' + res
-        } 
-        return res;
-    }
     findSourceMapData(data) {
         let result = undefined;
         let searchResult = new RegExp('\/\/# ?sourceMappingURL ?= ?(.*)', 'i').exec(data);
@@ -943,29 +983,23 @@ class SourceActor extends Actor {
         if (source && source.introductionScript) {
             introductionUrl = source.introductionScript.source.url;
         }
-        let addonPath = undefined;
         let url = this._source.url;
         if (!url || url === 'debugger eval code') {
             url = undefined;
         } else {
-            url = this.getProperPath(url.split(" -> ").pop());
-            if (url.startsWith('file:')) {
-                let webAppRootPath = this.getProperPath(dbg_binding.webAppRootPath);
-                if (url.startsWith(webAppRootPath)) {
-                    addonPath = url.substr(webAppRootPath.length);
-                }
+            url = url.replace(/\\/g, '/') // windows path to unix path
+            if (!url.startsWith('file:')) {
+                url = (url.startsWith('/') ? 'file://' : 'file:///') + url
             }
         }
         return {
-            "actor": this.fullActor,
-            "url": url,
-            "addonPath" : addonPath,
-            "addonID": addonPath ? dbg_binding.addonID : undefined,
-            "isBlackBoxed": false,
-            "isPrettyPrinted": false,
-            "introductionUrl": introductionUrl ? introductionUrl.split(' -> ').pop() : undefined,
+            actor: this.fullActor,
+            url: url,
+            isBlackBoxed: false,
+            isPrettyPrinted: false,
+            introductionUrl: introductionUrl ? introductionUrl.split(' -> ').pop() : undefined,
             introductionType: source ? source.introductionType : '',
-            "sourceMapURL": this.findSourceMapData(source.text)
+            sourceMapURL: this.findSourceMapData(source.text)
         }
     }
 }
@@ -1059,7 +1093,7 @@ class BreakpointActor extends Actor{
 
 class LStrActor extends Actor {
     constructor (str, parent) {
-        super('_grip'+ parent._grips++, parent);
+        super('g'+ parent._grips++, parent);
         this._str = str;
     }
     substring(aRequest) {
@@ -1084,7 +1118,7 @@ class LStrActor extends Actor {
 
 class ObjectActor extends Actor {
     constructor(obj, parent) {
-        super('_grip'+ parent._grips++, parent);
+        super('g'+ parent._grips++, parent);
         this._obj = obj;
     }
     get _resp(){
@@ -1120,6 +1154,11 @@ class ObjectActor extends Actor {
         }
         this._parent._gripDepth--;
         return resp;
+    }
+    prototype(aRequest) {
+        return {
+            prototype: this.getGrip(this._obj.proto)
+        };
     }
     prototypeAndProperties(aRequest) {
         let ownProperties = {},//Object.create(null),
@@ -1601,7 +1640,7 @@ class FrameActor extends Actor {
 class AddonActor extends Actor {
     constructor(actorName) {
         let serverActor = new Actor(dbg_binding.debuggerName),
-            connActor = new Actor('conn1', serverActor);
+            connActor = new Actor('c1', serverActor);
         super(actorName, connActor);
         new ThreadActor();
     }

@@ -1635,7 +1635,7 @@ begin
     ClearLastError;
     isFirst := not cx.IsRunning;
     opts := cx.NewCompileOptions;
-    opts.SetFileLineAndUtf8(Pointer(ResName), 1, false);
+    opts.SetFileLineAndUtf8(ResName, 1, false);
 
     if not getResCharsAndLength(ResName, pScript, scriptLength) then
       raise ESMException.CreateUTF8('Resource "%" not found', [ResName]);
@@ -1661,7 +1661,7 @@ begin
     ClearLastError;
     isFirst := not cx.IsRunning;
     opts := cx.NewCompileOptions;
-    opts.SetFileLineAndUtf8(Pointer(scriptName), 1, false);
+    opts.SetFileLineAndUtf8(scriptName, 1, false);
     //opts.filename := Pointer(scriptName);
 
     remChar13FromScript(script);
@@ -1689,7 +1689,7 @@ begin
       ClearLastError;
       isFirst := not cx.IsRunning;
       opts := cx.NewCompileOptions;
-      opts.SetFileLineAndUtf8(Pointer(scriptName), 1, true);
+      opts.SetFileLineAndUtf8(scriptName, 1, true);
 
       remChar13FromScriptU(script);
       r := cx.EvaluateScript(
@@ -1840,7 +1840,7 @@ begin
     global := cx.NewRootedObject(cx.CurrentGlobalOrNull);
     try
       options := cx.NewCompileOptions;
-      options.SetFileLineAndUtf8(Pointer(FileName), 1, false);
+      options.SetFileLineAndUtf8(FileName, 1, false);
       //options.filename := Pointer(FileName);
       res := cx.NewRootedObject(cx.CompileModule(global.ptr, options, Pointer(Script), Length(Script)));
       result := res <> nil;
@@ -1894,7 +1894,7 @@ begin
     global := cx.NewRootedObject(cx.CurrentGlobalOrNull);
     try
       options := cx.NewCompileOptions;
-      options.SetFileLineAndUtf8(Pointer(FileName), 1, false);
+      options.SetFileLineAndUtf8(FileName, 1, false);
       //options.filename := Pointer(FileName);
       res := cx.NewRootedObject(cx.CompileModule(global.ptr, options, pScript, scriptLength));
       result := res <> nil;
@@ -1970,7 +1970,7 @@ begin
     pScriptString := cx.NewRootedString(in_argv[0].asJSString);
     try
       opts := cx.NewCompileOptions;
-      opts.SetFileLineAndUtf8(Pointer(FileName), 1, false);
+      opts.SetFileLineAndUtf8(FileName, 1, false);
       //opts.filename := Pointer(FileName);
       if pScriptString.ptr.HasLatin1Chars then begin
         pScriptContent := pScriptString.ptr.GetLatin1StringCharsAndLength(cx, scriptLength);
@@ -2027,7 +2027,7 @@ begin
     cx.BeginRequest;
     try
       opts := cx.NewCompileOptions;
-      opts.SetFileLineAndUtf8(Pointer(FileName), 1, false);
+      opts.SetFileLineAndUtf8(FileName, 1, false);
       //opts.filename := Pointer(FileName);
       Result := cx.EvaluateUCScript(opts, pScript, scriptLength, res);
       cx.FreeCompileOptions(opts);

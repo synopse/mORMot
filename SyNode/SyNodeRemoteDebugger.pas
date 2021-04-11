@@ -378,7 +378,13 @@ var
 begin
   inherited;
   repeat
-    Send('{"from":"root","applicationType":"synode","traits" : {"debuggerSourceActors":true, "conditionalBreakpoints": true}}');
+    // conditionalBreakpoints - Whether conditional breakpoints are supported
+    // debuggerSourceActors- Whether the server supports full source actors (breakpoints on
+    // eval scripts, etc)
+    // see `devtools/server/actors/root.js` for details
+    Send('{"from":"root","applicationType":"synode","traits" : ' +
+     '{"debuggerSourceActors":true, "conditionalBreakpoints": true, ' +
+     '"bulk": true, "webConsoleCommands": true, "sources": true}}');
     tickCountsForSelectEngine := GetTickCount64 + timeForSelectThreadInSeconds * 1000;
     fNeedClose := false;
     repeat
@@ -428,7 +434,7 @@ begin
     Writer := TTextWriter.CreateOwnedStream;
     try
       if {$IFDEF FPC}request.&type{$ELSE}request.type{$ENDIF} = 'listAddons' then begin
-        // till 2019-06-01 SyNode represent itself as a firefor addon
+        // till 2019-06-01 SyNode represent itself as a firefox addon
         // after latest update to VSCode FF debugger plugin addons is not supported,
         // so now SyNode represent itself as a regular browser tab with empty HTML
 
@@ -445,7 +451,6 @@ begin
         //        Writer.AddShort('{"actor":"');
         //        Writer.AddShort(debugger.fDebuggerName);
         //        Writer.AddShort('.conn1.thread_');
-        //        { TODO : check that in multithread mode this field equal thread id with js context that we debug, otherwire replace with proper assigment }
         //        Writer.Add(debugger.fSmThreadID);
         //        // id should be addon id, value from DoOnGetEngineName event
         //        // Writer.AddShort('","id":"server1.conn1.addon');
@@ -457,7 +462,6 @@ begin
         //        // url most likly should be addon folder in format: file:///drive:/path/
         //        // Writer.AddShort('","url":"server1.conn1.addon');
         //        // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
-        //        { TODO : replace with path generation, should be context home dir in format file:///drive:/path/ }
         //        Writer.AddShort('","url":"file:///' + StringReplaceAll(debugger.fWebAppRootPath, '\', '/'));
         //        Writer.AddShort('","debuggable":');
         //        Writer.Add(debugger.fCommunicationThread = nil);
@@ -472,7 +476,10 @@ begin
         //  Writer.CancelLastComma;
         //  Writer.AddShort(']}');
         Writer.AddShort('{"from":"root","addons":[]}');
-      end else if {$IFDEF FPC}request.&type{$ELSE}request.type{$ENDIF} = 'listTabs' then begin
+      end else if ({$IFDEF FPC}request.&type{$ELSE}request.type{$ENDIF} = 'listTabs') or
+        ({$IFDEF FPC}request.&type{$ELSE}request.type{$ENDIF} = 'getRoot')
+
+      then begin
         fParent.fDebuggers.Safe.Lock;
         try
           Writer.AddShort('{"from":"root","tabs":[');
@@ -482,9 +489,11 @@ begin
             if engine <> nil then begin
               Writer.AddShort('{"actor":"');
                 Writer.AddShort(debugger.fDebuggerName);
-                Writer.AddShort('.conn1.thread_'); Writer.Add(debugger.fSmThreadID);
+                Writer.AddShort('.c1.t'); Writer.Add(debugger.fSmThreadID);
               Writer.AddShort('","title":"'); Writer.AddString(debugger.fNameForDebug);
-              Writer.AddShort('","url":"file:///' + StringReplaceAll(debugger.fWebAppRootPath, '\', '/')); Writer.Add('"');
+              // on Windows expected format is file:///drive:/path/, on Linux file:///path/
+              Writer.AddShort({$ifdef MSWINDOWS}'","url":"file:///'{$else}'","url":"file://'{$endif}
+                + StringReplaceAll(debugger.fWebAppRootPath, '\', '/')); Writer.Add('"');
               Writer.AddShort(',"debuggable":');
               Writer.Add(debugger.fCommunicationThread = nil);
               Writer.AddShort(',"consoleActor":"console');
@@ -625,7 +634,7 @@ begin
   fMessagesQueue := TRawUTF8ListLocked.Create();
   fLogQueue := TRawUTF8ListLocked.Create();
   fNameForDebug := aEng.nameForDebug;
-  fDebuggerName := 'synode_debPort_' + aParent.fPort;
+  fDebuggerName := 'snd';
   fWebAppRootPath := aEng.webAppRootDir;
   fJsonWriter := TJSONWriter.CreateOwnedStream(1024*50);
 
