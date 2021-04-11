@@ -59781,6 +59781,7 @@ end;
 procedure TRawUTF8List.SetText(const aText: RawUTF8; const Delimiter: RawUTF8);
 begin
   SetTextPtr(pointer(aText),PUTF8Char(pointer(aText))+length(aText),Delimiter);
+  fCount := FValues.Count;
 end;
 
 procedure TRawUTF8List.LoadFromFile(const FileName: TFileName);
