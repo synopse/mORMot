@@ -523,8 +523,11 @@ class ThreadActor extends Actor {
             res = [];
         this.dbg.findScripts().forEach(function (script) {
             let resp = sources._addSource(script.source);
-            if (resp)
+            // WebStorm debugger do not understand any url's except `file://`
+            // VSCode fetch missing sources using "source" request later
+            if (resp && resp.url && resp.url.startsWith('file:')) {
                 res.push(resp);
+            }
         });
         return {"sources": res};
     }
@@ -974,6 +977,9 @@ class SourceActor extends Actor {
         }
         return result;
     }
+    unblackbox () {
+        return {}
+    }
     get _resp(){
         let source = this._source;// || this.generatedSource;
         // This might not have a source or a generatedSource because we
@@ -984,18 +990,20 @@ class SourceActor extends Actor {
             introductionUrl = source.introductionScript.source.url;
         }
         let url = this._source.url;
+        let isAbsolute = false
         if (!url || url === 'debugger eval code') {
             url = undefined;
         } else {
             url = url.replace(/\\/g, '/') // windows path to unix path
-            if (!url.startsWith('file:')) {
+            isAbsolute = url.startsWith('/') || url.charAt(1) === ':' // either Unix absolute path or Windows C:
+            if (isAbsolute && !url.startsWith('file:')) {
                 url = (url.startsWith('/') ? 'file://' : 'file:///') + url
             }
         }
         return {
             actor: this.fullActor,
             url: url,
-            isBlackBoxed: false,
+            isBlackBoxed: !isAbsolute, // blackbox scripts what not available in the file system - an internal scripts
             isPrettyPrinted: false,
             introductionUrl: introductionUrl ? introductionUrl.split(' -> ').pop() : undefined,
             introductionType: source ? source.introductionType : '',
