@@ -739,8 +739,8 @@ begin
       so we normalize the identifiers to database defaults : }
     sTableName :=  meta.{$ifdef ZEOS80UP}GetIdentifierConverter{$else}GetIdentifierConvertor{$endif}.
       ExtractQuote(Utf8ToString(TableName));
-    sTableName := meta.AddEscapeCharToWildcards(sTableName); //do not use "like" search patterns ['_','%'] so they need to be escaped
-    res := meta.GetColumns('',sSchema,sTableName,'');
+    // do not escape sTableName - https://synopse.info/forum/viewtopic.php?pid=34896#p34896
+    res := meta.GetColumns('',sSchema,meta.AddEscapeCharToWildcards(sTableName),'');
     FA.InitSpecific(TypeInfo(TSQLDBColumnDefineDynArray),Fields,djRawUTF8,@n,true);
     FillChar(F,sizeof(F),0);
     while res.Next do begin
