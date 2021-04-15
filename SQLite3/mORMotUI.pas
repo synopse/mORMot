@@ -2347,7 +2347,7 @@ end;
 
 procedure TUIComponentsPersist.TrackControls(const ctrls: array of TComponent);
 var
-  i: integer;
+  i: PtrInt;
 begin
   for i := 0 to high(ctrls) do
     ObjArrayAddOnce(fTracked, ctrls[i]);
@@ -2358,6 +2358,13 @@ procedure Register;
 begin
   RegisterComponents('Synopse',[TSynLabeledEdit]);
 end;
+
+
+initialization
+  {$ifdef FPC}
+  // LCL/Lazarus components expect UTF-8 encoding for strings
+  CurrentAnsiConvert := UTF8AnsiConvert;
+  {$endif FPC}
 
 end.
 
