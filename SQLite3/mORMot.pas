@@ -50933,7 +50933,7 @@ var Added: boolean;
             AddDateTime(D64);
             if woDateTimeWithZSuffix in Options then
               if frac(D64)=0 then // FireFox can't decode short form "2017-01-01Z"
-                AddShort('T00:00Z') else
+                AddShort('T00:00:00Z') else // the same pattern for date and dateTime
                 Add('Z');
             Add('"');
           end;
