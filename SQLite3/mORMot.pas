@@ -32446,10 +32446,14 @@ begin
   for i := 0 to (length(InternalExternalPairs) shr 1)-1 do begin
     int := fProps.Fields.IndexByNameOrExcept(InternalExternalPairs[i*2]);
     if int<0 then begin
-      fRowIDFieldName := InternalExternalPairs[i*2+1];
-      if IdemPropNameU(fRowIDFieldName,'ID') then
-        include(fFieldNamesMatchInternal,0) else     // [0]=ID
-        exclude(fFieldNamesMatchInternal,0);
+      if fProps.Fields.IndexByName(InternalExternalPairs[i*2+1]) <> -1 then
+        raise EModelException.CreateUTF8('Mapping failed: ' +
+        '%.% is defined as "published" and cannot be mapped as ID.',[fTableName, InternalExternalPairs[i*2+1]])
+      else
+        fRowIDFieldName := InternalExternalPairs[i*2+1];
+        if IdemPropNameU(fRowIDFieldName,'ID') then
+          include(fFieldNamesMatchInternal,0) else     // [0]=ID
+          exclude(fFieldNamesMatchInternal,0);
     end else begin
       fExtFieldNames[int] := InternalExternalPairs[i*2+1];
       fExtFieldNamesUnQuotedSQL[int] := UnQuotedSQLSymbolName(fExtFieldNames[int]);
