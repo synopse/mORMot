@@ -1747,8 +1747,8 @@ begin
     ClearLastError;
     isFirst := not cx.IsRunning;
     r := obj.ptr.CallFunctionValue(cx, funcVal.ptr, high(args) + 1, @args[0], Result);
-    if withTimerLoop and r and isFirst and GlobalObject.ptr.HasProperty(cx, '_timerLoop') then
-      r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
+    if withTimerLoop and r and isFirst and (FGlobalTimerLoopFunc <> nil) then
+      r := GlobalObject.ptr.CallFunctionValue(cx, FGlobalTimerLoopFunc.ptr, 0, nil, rval);
     CheckJSError(r);
   end;
 end;
@@ -1763,8 +1763,8 @@ begin
     ClearLastError;
     isFirst := not cx.IsRunning;
     r := obj.ptr.CallFunctionName(cx, funcName, high(args) + 1, @args[0], Result);
-    if r and isFirst and GlobalObject.ptr.HasProperty(cx, '_timerLoop') then
-      r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
+    if r and isFirst and (FGlobalTimerLoopFunc <> nil) then
+      r := GlobalObject.ptr.CallFunctionValue(cx, FGlobalTimerLoopFunc.ptr, 0, nil, rval);
     CheckJSError(r);
   end;
 end;
