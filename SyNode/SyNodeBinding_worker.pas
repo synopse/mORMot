@@ -148,7 +148,7 @@ var
   msg, exc: PJSRootedValue;
 begin
   FNeedCallInterrupt := false;
-  FEng := fSMManager.ThreadSafeEngine(nil);
+  FEng := fSMManager.ThreadSafeEngine(nil, 1{SM_ENGINE_TYPE_WORKER});
   try
     cx := FEng.cx;
 

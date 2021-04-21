@@ -739,7 +739,8 @@ begin
       FGlobalTimerLoopFunc := nil;
     end;
 
-    FGlobalObjectDbg := cx.NewRootedObject(cx.NewGlobalObject(@jsglobal_class));
+    if Manager.FRemoteDebuggerThread <> nil then
+      FGlobalObjectDbg := cx.NewRootedObject(cx.NewGlobalObject(@jsglobal_class));
   finally
     cx.EndRequest;
   end;
