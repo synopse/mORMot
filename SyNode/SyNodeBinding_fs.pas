@@ -670,7 +670,7 @@ begin
     end;
 
     stream := TFileStream.Create(filePath, fmOpenReadWrite);
-    stream.Seek(0, soFromEnd);
+    stream.Seek(0, soEnd);
     writer := SynCommons.TTextWriter.Create(stream, 65536);
     try
       vp.rval := SyNodeReadWrite.SMWrite_impl(cx, argc - 1, @in_argv[1], writer);

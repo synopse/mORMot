@@ -5081,7 +5081,7 @@ constructor TPdfWrite.Create(Destination: TPdfDocument; DestStream: TStream);
 begin
   fDoc := Destination;
   fDestStream := DestStream;
-  fDestStreamPosition := fDestStream.Seek(0,soFromCurrent);
+  fDestStreamPosition := fDestStream.Seek(0,soCurrent);
   fCodePage := fDoc.CodePage;
   B := @Tmp;
   Bend := B+high(Tmp);
@@ -5111,7 +5111,7 @@ begin
     Save;
     result := '';
     SetLength(result,fDestStreamPosition);
-    fDestStream.Seek(0,soFromBeginning);
+    fDestStream.Seek(0,soBeginning);
     fDestStream.Read(pointer(result)^,fDestStreamPosition);
   end;
 end;
@@ -10659,7 +10659,7 @@ begin
       {$endif}
         SaveToStream(FWriter.fDestStream); // with CompressionQuality recompress
       end;
-    FWriter.fDestStreamPosition := FWriter.fDestStream.Seek(0,soFromCurrent);
+    FWriter.fDestStreamPosition := FWriter.fDestStream.Seek(0,soCurrent);
   end else begin
     if aImage.InheritsFrom(TBitmap) then
       B := TBitmap(aImage) else
@@ -10743,7 +10743,7 @@ begin
     jpeg.Read(b,1);
     case b of
       $C0..$C3: begin
-        jpeg.Seek(3,soFromCurrent);
+        jpeg.Seek(3,soCurrent);
         jpeg.Read(w,2);
         height := swap(w);
         jpeg.Read(w,2);
@@ -10756,12 +10756,12 @@ begin
       $FF:
         jpeg.Read(b,1);
       $D0..$D9, $01: begin
-        jpeg.Seek(1,soFromCurrent);
+        jpeg.Seek(1,soCurrent);
         jpeg.Read(b,1);
       end;
       else begin
         jpeg.Read(w,2);
-        jpeg.Seek(swap(w)-2, soFromCurrent);
+        jpeg.Seek(swap(w)-2, soCurrent);
         jpeg.Read(b,1);
       end;
     end;
@@ -10781,7 +10781,7 @@ begin
   FFilter := 'DCTDecode';
   FWriter.Save; // flush to allow direct access to fDestStream
   FWriter.Add(aJpegFile.Memory,Len);
-  FWriter.fDestStreamPosition := FWriter.fDestStream.Seek(0,soFromCurrent);
+  FWriter.fDestStreamPosition := FWriter.fDestStream.Seek(0,soCurrent);
   FAttributes.AddItem('Width',fPixelWidth);
   FAttributes.AddItem('Height',fPixelHeight);
   case BitDepth of

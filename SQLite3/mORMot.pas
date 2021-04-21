@@ -31181,9 +31181,9 @@ begin
     // no simple field to write -> quick return
     result := '' else
   if UsingStream<>nil then begin
-    UsingStream.Seek(0,soFromBeginning);
+    UsingStream.Seek(0,soBeginning);
     GetJSONValues(UsingStream,Expand,withID,Occasion,SQLRecordOptions);
-    FastSetString(result,UsingStream.Memory,UsingStream.Seek(0,soFromCurrent));
+    FastSetString(result,UsingStream.Memory,UsingStream.Seek(0,soCurrent));
   end else begin
     J := TRawByteStringStream.Create;
     try
@@ -35567,7 +35567,7 @@ begin
     exit;
   if BlobStream.Write(pointer(BlobData)^,length(BlobData))<>length(BlobData) then
     result := false;
-  BlobStream.Seek(0,soFromBeginning); // rewind
+  BlobStream.Seek(0,soBeginning); // rewind
 end;
 
 function TSQLRest.UpdateBlob(Table: TSQLRecordClass; aID: TID;
@@ -35578,9 +35578,9 @@ begin
   result := false;
   if (self=nil) or (BlobData=nil) then
     exit;
-  L := BlobData.Seek(0,soFromEnd);
+  L := BlobData.Seek(0,soEnd);
   SetLength(Blob,L);
-  BlobData.Seek(0,soFromBeginning);
+  BlobData.Seek(0,soBeginning);
   if BlobData.Read(pointer(Blob)^,L)<>L then
     exit;
   result := UpdateBlob(Table,aID,BlobFieldName,Blob);
@@ -47343,7 +47343,7 @@ begin
     FreeAndNil(fLogTableStorage);
     exit;
   end;
-  fLogTableStorage.Seek(0,soFromBeginning);
+  fLogTableStorage.Seek(0,soBeginning);
   fLogTableStorage.WriteBuffer(Pointer(aJSON)^,L-2);
 end;
 
