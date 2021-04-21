@@ -778,7 +778,6 @@ var process: PJSRootedObject;
     I, Cnt: Integer;
     EnvStr: RawUTF8;
     eName, eVal: RawUTF8;
-    uName: SynUnicode;
     {$ELSE}
     L: PtrInt;
     EnvBlock, P, pEq: PWideChar;
@@ -1377,12 +1376,12 @@ begin
     FEnginePool.Safe.UnLock;
   end;
 
-  //if not WorkersManager.curThreadIsWorker then begin
+  if not WorkersManager.curThreadIsWorker then begin // workers do not supports debugger yet
     if (FRemoteDebuggerThread <> nil) and not FDebugMainThread then
       TSMRemoteDebuggerThread(FRemoteDebuggerThread).startDebugCurrentThread(result);
     if WorkersManager.curThreadIsWorker then
       Result.doInteruptInOwnThread := WorkersManager.DoInteruptInOwnThreadhandlerForCurThread;
-  //end;
+  end;
   DoOnNewEngine(Result);
 end;
 
