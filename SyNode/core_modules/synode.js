@@ -86,32 +86,32 @@ function startup() {
      * @param {Function} callback Callback (called immediately in SyNode)
      */
     process.nextTick = function(callback, arg1, arg2, arg3){
-		if (typeof callback !== 'function') {
-			throw new TypeError('"callback" argument must be a function');
-		}
-        // on the way out, don't bother. it won't get fired anyway.
-        if (process._exiting)
-            return;
+      if (typeof callback !== 'function') {
+        throw new TypeError('"callback" argument must be a function');
+      }
+      // on the way out, don't bother. it won't get fired anyway.
+      if (process._exiting)
+        return;
 
-        var i, args;
+      var args;
 
-		switch (arguments.length) {
-		// fast cases
-		case 1:
-		  break;
-		case 2:
-		  args = [arg1];
-		  break;
-		case 3:
-		  args = [arg1, arg2];
-		  break;
-		default:
-		  args = [arg1, arg2, arg3];
-		  for (i = 4; i < arguments.length; i++)
-			args[i - 1] = arguments[i];
-		  break;
-		}
-        global._timerLoop.setTimeoutWithPriority.apply(undefined, [callback, 0, -1].concat(args));
+      switch (arguments.length) {
+      // fast cases
+      case 1:
+        break;
+      case 2:
+        args = [arg1];
+        break;
+      case 3:
+        args = [arg1, arg2];
+        break;
+      default:
+        args = [arg1, arg2, arg3];
+        for (let i = 4; i < arguments.length; i++)
+        args[i - 1] = arguments[i];
+        break;
+      }
+      global._timerLoop.setTimeoutWithPriority.apply(undefined, [callback, 0, -1].concat(args));
     };
 
     /**
@@ -122,31 +122,31 @@ function startup() {
      * @return {Number} immediateId	
      */
     global.setImmediate = function(callback, arg1, arg2, arg3){
-	  if (typeof callback !== 'function') {
-		throw new TypeError('"callback" argument must be a function');
-	  }
+      if (typeof callback !== 'function') {
+      throw new TypeError('"callback" argument must be a function');
+      }
       // on the way out, don't bother. it won't get fired anyway.
       if (process._exiting)
           return;
 
-	  var i, args;
+      var args;
 
-	  switch (arguments.length) {
-		// fast cases
-		case 1:
-		  break;
-		case 2:
-		  args = [arg1];
-		  break;
-		case 3:
-		  args = [arg1, arg2];
-		  break;
-		default:
-		  args = [arg1, arg2, arg3];
-		  for (i = 4; i < arguments.length; i++)
-			args[i - 1] = arguments[i];
-		  break;
-	  }
+      switch (arguments.length) {
+      // fast cases
+      case 1:
+        break;
+      case 2:
+        args = [arg1];
+        break;
+      case 3:
+        args = [arg1, arg2];
+        break;
+      default:
+        args = [arg1, arg2, arg3];
+        for (let i = 4; i < arguments.length; i++)
+        args[i - 1] = arguments[i];
+        break;
+      }
       global._timerLoop.setTimeoutWithPriority.apply(undefined, [callback, 0, 1].concat(args));
     };
 
@@ -175,7 +175,7 @@ const NODE_CORE_MODULES = ['fs', 'util', 'path', 'assert', 'module', 'console', 
   'internal/streams/lazy_transform',
 
   'internal/errors', 'internal/querystring',
-'polyfill/WindowTimer'];
+  'polyfill/WindowTimer'];
 
 NativeModule._source = {};
 const PATH_DELIM = process.platform === 'win32' ? '\\' : '/'
@@ -188,7 +188,7 @@ NODE_CORE_MODULES.forEach( (module_name) => {
 NativeModule._cache = {};
 
 NativeModule.require = function (id) {
-    if (id == 'native_module') {
+    if (id === 'native_module') {
         return NativeModule;
     }
 

@@ -1763,7 +1763,7 @@ begin
     ClearLastError;
     isFirst := not cx.IsRunning;
     r := obj.ptr.CallFunctionName(cx, funcName, high(args) + 1, @args[0], Result);
-    if r and isFirst and (FGlobalTimerLoopFunc <> nil) then
+    if withTimerLoop and r and isFirst and (FGlobalTimerLoopFunc <> nil) then
       r := GlobalObject.ptr.CallFunctionValue(cx, FGlobalTimerLoopFunc.ptr, 0, nil, rval);
     CheckJSError(r);
   end;
