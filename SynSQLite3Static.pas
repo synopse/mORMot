@@ -1,4 +1,4 @@
-/// SQLite3 3.35.4 Database engine - statically linked for Windows/Linux
+/// SQLite3 3.35.5 Database engine - statically linked for Windows/Linux
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSQLite3Static;
@@ -47,7 +47,7 @@ unit SynSQLite3Static;
   ***** END LICENSE BLOCK *****
 
 
-    Statically linked SQLite3 3.35.4 engine with optional AES encryption
+    Statically linked SQLite3 3.35.5 engine with optional AES encryption
    **********************************************************************
 
   To be declared in your project uses clause:  will fill SynSQlite3.sqlite3
@@ -1151,7 +1151,7 @@ function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCall
 const
   // error message if statically linked sqlite3.o(bj) does not match this
   // - Android may be a little behind, so we don't check exact version
-  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.35.4'{$endif};
+  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.35.5'{$endif};
 
 constructor TSQLite3LibraryStatic.Create;
 var error: RawUTF8;
@@ -1265,18 +1265,20 @@ begin
   if (EXPECTED_SQLITE3_VERSION='') or (fVersionText=EXPECTED_SQLITE3_VERSION) then
     exit;
   // you should never see it if you cloned https://github.com/synopse/mORMot
-  FormatUTF8('Static SQLite3 library as included within % is outdated!'#13+
-    'Linked version is % whereas the current/expected is '+EXPECTED_SQLITE3_VERSION+'.'#13#13+
-    'Please download supported latest SQLite3 '+EXPECTED_SQLITE3_VERSION+' revision'#13+
+  FormatUTF8('Static SQLite3 library as included within % is outdated!'#13#10+
+    'Linked version is % whereas the current/expected is '+EXPECTED_SQLITE3_VERSION+'.'#13#10#13#10+
+    'Please download supported latest SQLite3 '+EXPECTED_SQLITE3_VERSION+' revision'#13#10+
     'from https://synopse.info/files/sqlite3'+{$ifdef FPC}'fpc'{$else}'obj'{$endif}+'.7z',
     [ExeVersion.ProgramName,fVersionText],error);
   LogToTextFile(error); // annoyning enough on all platforms
   // SynSQLite3Log.Add.Log() would do nothing: we are in .exe initialization
-  {$ifdef MSWINDOWS} // PITA popup
-  // better than a MessageBox() especially for services
-  raise Exception.CreateFmt('Deprecated SQLite3 engine: %s',
-    [error, ExeVersion.ProgramName]);
+  {$ifdef MSWINDOWS} 
+  AllocConsole; // PITA popup - better than a MessageBox() especially for services
   {$endif MSWINDOWS}
+  {$I-}
+  writeln(error);
+  ioresult;
+  {$I+}
 end;
 
 destructor TSQLite3LibraryStatic.Destroy;
