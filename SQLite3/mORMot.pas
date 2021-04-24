@@ -16663,11 +16663,12 @@ type
     // can be used if you need an overridden constructor
     // - instance implementation pattern will be set by the appropriate parameter
     // - will return the first of the registered TServiceFactoryServer created
-    // on success (i.e. the one corresponding to the first item of the aInterfaces
-    // array), or nil if registration failed (e.g. if any of the supplied interfaces
+    // on success (i.e. corresponding to aInterfaces[0] - not to the others),
+    // or nil if registration failed (e.g. if any of the supplied interfaces
     // is not implemented by the given class)
-    // - you can use the returned TServiceFactoryServer instance to set the
-    // expected security parameters associated with this interface
+    // - you can use the returned TServiceFactoryServer instance to set
+    // the expected security parameters for aInterfaces[0] - warning: only the
+    // the first interface options are returned
     // - the same implementation class can be used to handle several interfaces
     // (just as Delphi allows to do natively)
     function ServiceRegister(aImplementationClass: TInterfacedClass;
@@ -16683,8 +16684,10 @@ type
     // on success (i.e. the one corresponding to the first item of the aInterfaces
     // array), or nil if registration failed (e.g. if any of the supplied interfaces
     // is not implemented by the given class)
-    // - you can use the returned TServiceFactoryServer instance to set the
-    // expected security parameters associated with this interface
+    // - will return the first of the registered TServiceFactoryServer created
+    // on success (i.e. corresponding to aInterfaces[0] - not to the others),
+    // or nil if registration failed (e.g. if any of the supplied interfaces
+    // is not implemented by the given class)
     // - the same implementation class can be used to handle several interfaces
     // (just as Delphi allows to do natively)
     function ServiceRegister(aSharedImplementation: TInterfacedObject;
@@ -16709,6 +16712,10 @@ type
     /// register a Service class on the server side
     // - this method expects the interface(s) to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
+    // - will return the first of the registered TServiceFactoryServer created
+    // on success (i.e. corresponding to aInterfaces[0] - not to the others),
+    // or nil if registration failed (e.g. if any of the supplied interfaces
+    // is not implemented by the given class)
     function ServiceDefine(aImplementationClass: TInterfacedClass;
       const aInterfaces: array of TGUID;
       aInstanceCreation: TServiceInstanceImplementation=sicSingle;
@@ -16717,6 +16724,10 @@ type
     // - this method expects the interface(s) to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
     // - the supplied aSharedImplementation will be owned by this Server instance
+    // - will return the first of the registered TServiceFactoryServer created
+    // on success (i.e. corresponding to aInterfaces[0] - not to the others),
+    // or nil if registration failed (e.g. if any of the supplied interfaces
+    // is not implemented by the given class)
     function ServiceDefine(aSharedImplementation: TInterfacedObject;
       const aInterfaces: array of TGUID; const aContractExpected: RawUTF8=''): TServiceFactoryServer; overload;
     /// register a remote Service via its interface
