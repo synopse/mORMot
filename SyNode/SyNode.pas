@@ -660,7 +660,7 @@ begin
   FEngineContentVersion := FManager.ContentVersion;
 // aManager.grandParent sets by call to mainEngine;
 // main engine always destroyed after all other so it's safe to use it as a parent
-// this will save up to 20% of RAM - some internal structures of SM Engines will be reused 
+// this will save up to 20% of RAM - some internal structures of SM Engines will be reused
 // between threads
   if aManager.grandParent <> nil then
     fCx := PJSContext(nil).CreateNew(FManager.MaxPerEngineMemory, $01000000, aManager.grandParent.cx)
@@ -740,7 +740,7 @@ begin
     end;
 
     if Manager.FRemoteDebuggerThread <> nil then
-      FGlobalObjectDbg := cx.NewRootedObject(cx.NewGlobalObject(@jsglobal_class));
+    FGlobalObjectDbg := cx.NewRootedObject(cx.NewGlobalObject(@jsglobal_class));
   finally
     cx.EndRequest;
   end;
@@ -1763,8 +1763,15 @@ begin
     ClearLastError;
     isFirst := not cx.IsRunning;
     r := obj.ptr.CallFunctionName(cx, funcName, high(args) + 1, @args[0], Result);
-    if withTimerLoop and r and isFirst and (FGlobalTimerLoopFunc <> nil) then
-      r := GlobalObject.ptr.CallFunctionValue(cx, FGlobalTimerLoopFunc.ptr, 0, nil, rval);
+    if (Manager.FRemoteDebuggerThread <> nil) then begin
+      // fallback to call timer loop function by name to prevent unexpected random AV in case debugger is enabled
+      // is FGlobalTimerLoopFunc value changed by debugger?
+      if r and isFirst and GlobalObject.ptr.HasProperty(cx, '_timerLoop') then
+        r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
+    end else begin
+      if withTimerLoop and r and isFirst and (FGlobalTimerLoopFunc <> nil) then
+        r := GlobalObject.ptr.CallFunctionValue(cx, FGlobalTimerLoopFunc.ptr, 0, nil, rval);
+    end;
     CheckJSError(r);
   end;
 end;
