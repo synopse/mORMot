@@ -4971,6 +4971,9 @@ type
     /// the optional Blob field name as specified in URI
     // - e.g. retrieved from "ModelRoot/TableName/TableID/BlobFieldName"
     URIBlobFieldName: RawUTF8;
+    /// decoded URI for rsoMethodUnderscoreAsSlashURI in Server.Options
+    // - e.g. 'Method_Name' from 'ModelRoot/Method/Name' URI
+    URIUnderscoreAsSlash: RawUTF8;
     /// position of the &session_signature=... text in Call^.url string
     URISessionSignaturePos: integer;
     /// the Table as specified at the URI level (if any)
@@ -15843,6 +15846,8 @@ type
   // - rsoNoInternalState could be state to avoid transmitting the
   // 'Server-InternalState' header, e.g. if the clients wouldn't need it
   // - rsoNoTableURI will disable any /root/tablename URI for safety
+  // - rsoMethodUnderscoreAsSlashURI will try to decode /root/method/name
+  // as 'method_name' method
   TSQLRestServerOption = (
     rsoNoAJAXJSON,
     rsoGetAsJsonNotAsString,
@@ -15859,7 +15864,8 @@ type
     rsoHttpHeaderCheckDisable,
     rsoGetUserRetrieveNoBlobData,
     rsoNoInternalState,
-    rsoNoTableURI);
+    rsoNoTableURI,
+    rsoMethodUnderscoreAsSlashURI);
   /// allow to customize the TSQLRestServer process via its Options property
   TSQLRestServerOptions = set of TSQLRestServerOption;
 
@@ -39583,6 +39589,13 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
         TableID := GetCardinalDef(pointer(PtrInt(URIBlobFieldName)+j),cardinal(-1));
         SetLength(URIBlobFieldName,j-1);
       end;
+    end else if rsoMethodUnderscoreAsSlashURI in Server.Options then begin
+      URIUnderscoreAsSlash := URI;
+      i := slash; // set e.g. 'Method_Name' from 'ModelRoot/Method/Name' URI
+      repeat
+        URIUnderscoreAsSlash[i] := '_';
+        i := PosEx('/',URI,i+1);
+      until i=0;
     end;
     SetLength(URI,slash-1);
   end else
@@ -39601,8 +39614,12 @@ end;
 procedure TSQLRestServerURIContext.URIDecodeSOAByMethod;
 begin
   if Table=nil then
+  begin
     // check URI as 'ModelRoot/MethodName'
-    MethodIndex := Server.fPublishedMethods.FindHashed(URI) else
+    MethodIndex := Server.fPublishedMethods.FindHashed(URI);
+    if (MethodIndex<0) and (URIUnderscoreAsSlash<>'') then
+      MethodIndex := Server.fPublishedMethods.FindHashed(URIUnderscoreAsSlash);
+  end else
   if URIBlobFieldName<>'' then
     // check URI as 'ModelRoot/TableName[/TableID]/MethodName'
     MethodIndex := Server.fPublishedMethods.FindHashed(URIBlobFieldName) else
