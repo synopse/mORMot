@@ -6672,7 +6672,7 @@ begin
   if ALogFont.lfWeight>=FW_SEMIBOLD then
     include(AStyle,pfsBold);
   result := SetFont(AName,ASize,AStyle,ALogFont.lfCharSet,-1,
-    (ALogFont.lfPitchAndFamily and 3) = FIXED_PITCH);
+    ALogFont.lfPitchAndFamily and TMPF_FIXED_PITCH=0);
 end;
 
 procedure TPdfCanvas.TextOut(X, Y: Single; const Text: PDFString);
