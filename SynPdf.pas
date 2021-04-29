@@ -10116,10 +10116,7 @@ begin
       end;
     end;
     // use transformation
-    if Custom <> nil then
-      ScaleXForm := Custom^
-    else
-      ScaleXForm := WorldTransform;
+    ScaleXForm := WorldTransform;
     if (ScaleXForm.eM11 > 0) and
        (ScaleXForm.eM22 > 0) and
        (ScaleXForm.eM12 = 0) and
