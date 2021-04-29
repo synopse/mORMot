@@ -2021,7 +2021,7 @@ type
   // - use the GDIComment*() functions to append the corresponding
   // EMR_GDICOMMENT message to a metafile content
   TPdfGDIComment =
-    (pgcOutline, pgcBookmark, pgcLink, pgcLinkNoBorder);
+    (pgcOutline, pgcBookmark, pgcLink, pgcLinkNoBorder, pgcJpegDirect);
 
   /// a dictionary wrapper class for the PDF document information fields
   // - all values use the generic VCL string type, and will be encoded
@@ -2661,6 +2661,8 @@ procedure GDICommentOutline(MetaHandle: HDC; const aTitle: RawUTF8; aLevel: Inte
 procedure GDICommentLink(MetaHandle: HDC; const aBookmarkName: RawUTF8; const aRect: TRect;
   NoBorder: boolean);
 
+/// append a EMR_GDICOMMENT message for adding jpeg direct
+procedure GDICommentJpegDirect(MetaHandle: HDC; const aFileName: RawUTF8; const aRect: TRect);
 
 {$ifdef USE_PDFSECURITY}
 const
@@ -3124,6 +3126,20 @@ begin // high(TPdfGDIComment)<$47 so it will never begin with GDICOMMENT_IDENTIF
     D^ := AnsiChar(pgcLink);
   PRect(D+1)^ := aRect;
   MoveFast(pointer(aBookmarkName)^,D[1+sizeof(TRect)],L);
+  Windows.GdiComment(MetaHandle,L+(1+sizeof(TRect)),D);
+end;
+
+procedure GDICommentJpegDirect(MetaHandle: HDC; const aFileName: RawUTF8; const aRect: TRect);
+var Data: RawByteString;
+    D: PAnsiChar;
+    L: integer;
+begin // high(TPdfGDIComment)<$47 so it will never begin with GDICOMMENT_IDENTIFIER
+  L := length(aFileName);
+  SetLength(Data,L+(1+sizeof(TRect)));
+  D := pointer(Data);
+  D^ := AnsiChar(pgcJpegDirect);
+  PRect(D+1)^ := aRect;
+  MoveFast(pointer(aFileName)^,D[1+sizeof(TRect)],L);
   Windows.GdiComment(MetaHandle,L+(1+sizeof(TRect)),D);
 end;
 
@@ -9932,6 +9948,9 @@ end;
 procedure TPdfEnum.HandleComment(Kind: TPdfGDIComment; P: PAnsiChar; Len: integer);
 var Text: RawUTF8;
     W: integer;
+    Img: TPdfImage;
+    ImgName: string;
+    ImgRect: TPdfRect;
 begin
   try
     case Kind of
@@ -9952,6 +9971,18 @@ begin
           W := 1 else
           W := 0;
         Canvas.Doc.CreateLink(Canvas.RectI(PRect(P)^,true),Text,abSolid,W);
+      end;
+      pgcJpegDirect:
+      if Len>Sizeof(TRect) then begin
+        SetString(Text,P+SizeOf(TRect),Len-SizeOf(TRect));
+        ImgName := 'SynImgJpg'+crc32cUTF8ToHex(Text);
+        if Canvas.Doc.GetXObject(ImgName) = nil then
+        begin
+          Img := TPdfImage.CreateJpegDirect(Canvas.Doc,UTF8ToString(Text));
+          Canvas.Doc.RegisterXObject(Img,ImgName);
+        end;
+        ImgRect := Canvas.RectI(PRect(P)^,true);
+        Canvas.DrawXObject(ImgRect.Left,ImgRect.Top,ImgRect.Right-ImgRect.Left,ImgRect.Bottom-ImgRect.Top,ImgName);
       end;
     end;
   except
