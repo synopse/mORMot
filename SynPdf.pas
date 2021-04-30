@@ -4230,7 +4230,7 @@ function _PdfDateToDateTime(const AText: TPdfDate): TDateTime;
 var Y,M,D, H,MI,SS: cardinal;
 begin
   if Length(AText)<16 then
-    EConvertError.CreateRes(@SDateEncodeError);
+    raise EConvertError.CreateRes(@SDateEncodeError);
   Y := ord(AText[3])*1000+ord(AText[4])*100+ord(AText[5])*10+ord(AText[6])
     -(48+480+4800+48000);
   M := ord(AText[7])*10+ord(AText[8])-(48+480);
@@ -4242,7 +4242,7 @@ begin
   if (H<24) and (MI<60) and (SS<60) then // inlined EncodeTime()
     result := result + (H * (MinsPerHour * SecsPerMin * MSecsPerSec) +
       MI * (SecsPerMin * MSecsPerSec) + SS * MSecsPerSec) / MSecsPerDay else
-    EConvertError.CreateRes(@SDateEncodeError);
+    raise EConvertError.CreateRes(@SDateEncodeError);
 end;
 
 function _HasMultiByteString(Value: PAnsiChar): boolean;
