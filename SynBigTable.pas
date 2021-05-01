@@ -2162,7 +2162,7 @@ begin
   try
     with TFileStream.Create(aFileName,fmOpenRead or fmShareDenyNone) do
     try // same exact layout as in TSynBigTable.LoadFromFile
-      result := (Seek(-4,soFromEnd)>0) and (Read(magic,4)=4) and
+      result := (Seek(-4,soEnd)>0) and (Read(magic,4)=4) and
         (magic=InternalMagic);
     finally
       Free;

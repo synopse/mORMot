@@ -1966,8 +1966,6 @@ end;
 {$endif ECC_STATICLIB_AVAILABLE}
 
 
-{$ifdef HASUINT64}
-
 { Pure Pascal Version of low-level ECC process (adapted from easy-ecc.c code)
 
  Some numbers (on another slower computer than the previous values above),
@@ -2063,6 +2061,13 @@ type // we use UInt64 instead of QWord
   end;
   PEccPoint = ^TEccPoint;
 
+function _isZero(const VLI: TVLI): boolean; {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := (VLI[0]=0) and (VLI[1]=0) and (VLI[2]=0) and (VLI[3]=0);
+end;
+
+{$ifdef HASUINT64}
+
 const
   Curve_P_32: TVLI = (
     UInt64($FFFFFFFFFFFFFFFF), UInt64($00000000FFFFFFFF),
@@ -2090,11 +2095,6 @@ begin
   VLI[1] := 0;
   VLI[2] := 0;
   VLI[3] := 0;
-end;
-
-function _isZero(const VLI: TVLI): boolean; {$ifdef HASINLINE}inline;{$endif}
-begin
-  result := (VLI[0]=0) and (VLI[1]=0) and (VLI[2]=0) and (VLI[3]=0);
 end;
 
 function _equals(const Left, Right: TVLI): boolean; {$ifdef HASINLINE}inline;{$endif}

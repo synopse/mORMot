@@ -10122,7 +10122,7 @@ begin
   if OutStream<>nil then begin
     if OutStream.InheritsFrom(TMemoryStream) then
       with TMemoryStream(OutStream) do begin
-        P := Seek(0,soFromCurrent);
+        P := Seek(0,soCurrent);
         Size := P+Len; // auto-reserve space (no Realloc:)
         Seek(P+Len,soBeginning);
         bOut := PAnsiChar(Memory)+P;

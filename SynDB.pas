@@ -4528,7 +4528,7 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
       if ExecuteWithResults then begin
         Data := TRawByteStringStream.Create(msgOutput);
         try
-          Data.Seek(0,soFromEnd); // include header
+          Data.Seek(0,soEnd); // include header
           case header.Command of
           cExecuteToBinary:
             Stmt.FetchAllToBinary(Data);
