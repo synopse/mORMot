@@ -3655,7 +3655,10 @@ end;
 procedure TQuery.Close;
 begin
   try
-    fPrepared := nil;
+    if Assigned(fPrepared) then begin
+      fPrepared.ReleaseRows;
+      fPrepared := nil;
+    end;
   finally
     //fSQL.Clear; // original TQuery expect SQL content to be preserved
     fParam.Clear;
@@ -4624,8 +4627,8 @@ end;
 
 function TSQLDBConnectionProperties.Execute(const aSQL: RawUTF8;
   const Params: array of const
-  {$ifndef LVCL}{$ifndef DELPHI5OROLDER}; RowsVariant: PVariant=nil{$endif}{$endif};
-  ForceBlobAsNull: boolean=false): ISQLDBRows;
+  {$ifndef LVCL}{$ifndef DELPHI5OROLDER}; RowsVariant: PVariant{$endif}{$endif};
+  ForceBlobAsNull: boolean): ISQLDBRows;
 var Stmt: ISQLDBStatement;
 begin
   Stmt := NewThreadSafeStatementPrepared(aSQL,true,true);
