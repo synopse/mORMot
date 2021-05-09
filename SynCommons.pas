@@ -37677,6 +37677,11 @@ begin
     L := StrLen(P);
   if L<4 then
     exit; // we need 'YYYY' at least
+  if (P[0]='''') and (P[L-1]='''') then begin // unquote input
+    inc(P);
+    dec(L, 2);
+    if L<4 then exit;
+  end;
   if P[0]='T' then begin
     dec(P,8);
     inc(L,8);
