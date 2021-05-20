@@ -107,8 +107,8 @@ begin
         i, JSTYPE2STR[vt], estr(expect[i])]);
       goto err;
     end;
-    if at < atAny then
-      continue;
+    if at >= atAny then
+      continue; // do not check subtype for atAny
     // check subtype
     if (expect[i] = atBuf) and not (vp.argv^[i].asObject.IsArrayBufferObject or vp.argv^[i].asObject.IsArrayBufferViewObject) then
     begin
