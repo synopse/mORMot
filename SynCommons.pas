@@ -39974,6 +39974,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html
     $afbc7a37, // 'application/x-7z-compressed' = 37 7A BC AF 27 1C
     $b7010000, $ba010000, // mpeg = 00 00 01 Bx
     $cececece, // jceks = CE CE CE CE
+    $dbeeabed, // .rpm package file
     $e011cfd0: // msi = D0 CF 11 E0 A1 B1 1A E1
       result := true;
     else
