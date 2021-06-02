@@ -327,7 +327,7 @@ type
   TEngineNameEvent = function(const Engine: TSMEngine): RawUTF8 of object;
 
   /// event for loading dll module
-  TDllModuleEvent = procedure(Handle: HMODULE) of object;
+  TDllModuleEvent = procedure(Handle: {$ifdef FPC}TLibHandle{$else}HMODULE{$endif}) of object;
 
   /// event for adding values to process.binding
   TSMProcessBindingHandler = function(const Engine: TSMEngine; const bindingNamespaceName: SynUnicode): jsval;
@@ -1227,7 +1227,7 @@ var
   __filename: PWideChar;
   __dirname: PWideChar;
 
-  fHandle: HMODULE;
+  fHandle: {$ifdef FPC}TLibHandle{$else}HMODULE{$endif};
   ModuleRec: PDllModuleRec;
 
 const
@@ -1244,7 +1244,7 @@ begin
       dirname := ExtractFilePath(UTF8ToString(filename)) ;
       ModuleRec := PDllModuleRec(FDllModules.GetObjectFrom(filename));
       if ModuleRec = nil then begin
-        fHandle := {$IFDEF FPC}dynlibs.{$ENDIF}SafeLoadLibrary(UTF8ToString(filename));
+        fHandle := SafeLoadLibrary(UTF8ToString(filename));
         if fHandle=0 then
           raise ESMException.CreateFmt('Unable to load %s (%s)',
             [filename, {$ifdef FPC}GetLoadErrorStr{$else}SysErrorMessage(GetLastError){$endif}]);
