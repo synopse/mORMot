@@ -45278,7 +45278,7 @@ begin // now fValue[] contains the just loaded data
     cf := 'ID' else
     for f := 0 to high(fUnique) do
       if f in fIsUnique then begin
-        c := fUnique[f].Hasher.ReHash({forced=}true,{grow=}false);
+        c := fUnique[f].Hasher.ReHash({forced=}true);
         if c>0 then begin
           cf := fUnique[f].PropInfo.Name;
           break;
