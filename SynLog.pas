@@ -4785,7 +4785,7 @@ begin
     if fWriterStream=nil then // go on if file creation fails (e.g. RO folder)
       fWriterStream := TFakeWriterStream.Create;
     if (fFileRotationSize>0) or (fFamily.FileExistsAction<>acOverwrite) then
-      fWriterStream.Seek(0,soFromEnd); // in rotation mode, append at the end
+      fWriterStream.Seek(0,soEnd); // in rotation mode, append at the end
   end;
   if fWriterClass=nil then
     // set to TTextWriterWithEcho or TJSONSerializer if mORMot.pas is linked

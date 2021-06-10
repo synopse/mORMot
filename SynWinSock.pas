@@ -844,6 +844,7 @@ type
     Sizes: TSecPkgContextStreamSizes;
     Data, Input: AnsiString;
     InputSize, DataPos, DataCount, InputCount: integer;
+    SessionClosed: boolean;
     procedure HandshakeLoop(aSocket: THandle);
     procedure AppendData(const aBuffer: TSecBuffer);
   public
@@ -1826,48 +1827,49 @@ begin
     exit;
   end;
   result := 0;
-  while DataCount = 0 do
-  try
-    DataPos := 0;
-    desc.ulVersion := SECBUFFER_VERSION;
-    desc.cBuffers := 4;
-    desc.pBuffers := @buf[0];
-    repeat
-      read := Recv(aSocket, @PByteArray(Input)[InputCount],
-        InputSize - InputCount, MSG_NOSIGNAL);
-      if read <= 0 then begin
-        result := read; // return socket error (may be WSATRY_AGAIN)
-        exit;
-      end;
-      inc(InputCount, read);
-      res := DecryptInput;
-    until res <> SEC_E_INCOMPLETE_MESSAGE;
-    needsRenegotiate := false;
-    repeat
-      case res of
-        SEC_I_RENEGOTIATE: needsRenegotiate := true;
-        SEC_I_CONTEXT_EXPIRED: exit;
-        SEC_E_INCOMPLETE_MESSAGE: break;
-        else CheckSEC_E_OK(res);
-      end;
-      InputCount := 0;
-      for i := 1 to 3 do
-        case buf[i].BufferType of
-          SECBUFFER_DATA: AppendData(buf[i]);
-          SECBUFFER_EXTRA: begin
-            Move(buf[i].pvBuffer^, pointer(Input)^, buf[i].cbBuffer);
-            InputCount := buf[i].cbBuffer;
-          end;
+  if not SessionClosed then
+    while DataCount = 0 do
+    try
+      DataPos := 0;
+      desc.ulVersion := SECBUFFER_VERSION;
+      desc.cBuffers := 4;
+      desc.pBuffers := @buf[0];
+      repeat
+        read := Recv(aSocket, @PByteArray(Input)[InputCount],
+          InputSize - InputCount, MSG_NOSIGNAL);
+        if read <= 0 then begin
+          result := read; // return socket error (may be WSATRY_AGAIN)
+          exit;
         end;
-      if InputCount = 0 then
-        break;
-      res := DecryptInput;
-    until false;
-    if needsRenegotiate then
-      HandshakeLoop(aSocket);
-  except
-    exit; // shutdown the connection on ESChannel fatal error
-  end;
+        inc(InputCount, read);
+        res := DecryptInput;
+      until res <> SEC_E_INCOMPLETE_MESSAGE;
+      needsRenegotiate := false;
+      repeat
+        case res of
+          SEC_I_RENEGOTIATE: needsRenegotiate := true;
+          SEC_I_CONTEXT_EXPIRED: SessionClosed := true;
+          SEC_E_INCOMPLETE_MESSAGE: break;
+          else CheckSEC_E_OK(res);
+        end;
+        InputCount := 0;
+        for i := 1 to 3 do
+          case buf[i].BufferType of
+            SECBUFFER_DATA: AppendData(buf[i]);
+            SECBUFFER_EXTRA: begin
+              Move(buf[i].pvBuffer^, pointer(Input)^, buf[i].cbBuffer);
+              InputCount := buf[i].cbBuffer;
+            end;
+          end;
+        if InputCount = 0 then
+          break;
+        res := DecryptInput;
+      until false;
+      if needsRenegotiate then
+        HandshakeLoop(aSocket);
+    except
+      exit; // shutdown the connection on ESChannel fatal error
+    end;
   result := DataCount;
   if aLength < result then
     result := aLength;

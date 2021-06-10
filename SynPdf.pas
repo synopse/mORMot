@@ -2021,7 +2021,7 @@ type
   // - use the GDIComment*() functions to append the corresponding
   // EMR_GDICOMMENT message to a metafile content
   TPdfGDIComment =
-    (pgcOutline, pgcBookmark, pgcLink, pgcLinkNoBorder);
+    (pgcOutline, pgcBookmark, pgcLink, pgcLinkNoBorder, pgcJpegDirect);
 
   /// a dictionary wrapper class for the PDF document information fields
   // - all values use the generic VCL string type, and will be encoded
@@ -2661,6 +2661,8 @@ procedure GDICommentOutline(MetaHandle: HDC; const aTitle: RawUTF8; aLevel: Inte
 procedure GDICommentLink(MetaHandle: HDC; const aBookmarkName: RawUTF8; const aRect: TRect;
   NoBorder: boolean);
 
+/// append a EMR_GDICOMMENT message for adding jpeg direct
+procedure GDICommentJpegDirect(MetaHandle: HDC; const aFileName: RawUTF8; const aRect: TRect);
 
 {$ifdef USE_PDFSECURITY}
 const
@@ -3124,6 +3126,20 @@ begin // high(TPdfGDIComment)<$47 so it will never begin with GDICOMMENT_IDENTIF
     D^ := AnsiChar(pgcLink);
   PRect(D+1)^ := aRect;
   MoveFast(pointer(aBookmarkName)^,D[1+sizeof(TRect)],L);
+  Windows.GdiComment(MetaHandle,L+(1+sizeof(TRect)),D);
+end;
+
+procedure GDICommentJpegDirect(MetaHandle: HDC; const aFileName: RawUTF8; const aRect: TRect);
+var Data: RawByteString;
+    D: PAnsiChar;
+    L: integer;
+begin // high(TPdfGDIComment)<$47 so it will never begin with GDICOMMENT_IDENTIFIER
+  L := length(aFileName);
+  SetLength(Data,L+(1+sizeof(TRect)));
+  D := pointer(Data);
+  D^ := AnsiChar(pgcJpegDirect);
+  PRect(D+1)^ := aRect;
+  MoveFast(pointer(aFileName)^,D[1+sizeof(TRect)],L);
   Windows.GdiComment(MetaHandle,L+(1+sizeof(TRect)),D);
 end;
 
@@ -4214,7 +4230,7 @@ function _PdfDateToDateTime(const AText: TPdfDate): TDateTime;
 var Y,M,D, H,MI,SS: cardinal;
 begin
   if Length(AText)<16 then
-    EConvertError.CreateRes(@SDateEncodeError);
+    raise EConvertError.CreateRes(@SDateEncodeError);
   Y := ord(AText[3])*1000+ord(AText[4])*100+ord(AText[5])*10+ord(AText[6])
     -(48+480+4800+48000);
   M := ord(AText[7])*10+ord(AText[8])-(48+480);
@@ -4226,7 +4242,7 @@ begin
   if (H<24) and (MI<60) and (SS<60) then // inlined EncodeTime()
     result := result + (H * (MinsPerHour * SecsPerMin * MSecsPerSec) +
       MI * (SecsPerMin * MSecsPerSec) + SS * MSecsPerSec) / MSecsPerDay else
-    EConvertError.CreateRes(@SDateEncodeError);
+    raise EConvertError.CreateRes(@SDateEncodeError);
 end;
 
 function _HasMultiByteString(Value: PAnsiChar): boolean;
@@ -5081,7 +5097,7 @@ constructor TPdfWrite.Create(Destination: TPdfDocument; DestStream: TStream);
 begin
   fDoc := Destination;
   fDestStream := DestStream;
-  fDestStreamPosition := fDestStream.Seek(0,soFromCurrent);
+  fDestStreamPosition := fDestStream.Seek(0,soCurrent);
   fCodePage := fDoc.CodePage;
   B := @Tmp;
   Bend := B+high(Tmp);
@@ -5111,7 +5127,7 @@ begin
     Save;
     result := '';
     SetLength(result,fDestStreamPosition);
-    fDestStream.Seek(0,soFromBeginning);
+    fDestStream.Seek(0,soBeginning);
     fDestStream.Read(pointer(result)^,fDestStreamPosition);
   end;
 end;
@@ -6672,7 +6688,7 @@ begin
   if ALogFont.lfWeight>=FW_SEMIBOLD then
     include(AStyle,pfsBold);
   result := SetFont(AName,ASize,AStyle,ALogFont.lfCharSet,-1,
-    (ALogFont.lfPitchAndFamily and 3) = FIXED_PITCH);
+    ALogFont.lfPitchAndFamily and TMPF_FIXED_PITCH=0);
 end;
 
 procedure TPdfCanvas.TextOut(X, Y: Single; const Text: PDFString);
@@ -9932,6 +9948,9 @@ end;
 procedure TPdfEnum.HandleComment(Kind: TPdfGDIComment; P: PAnsiChar; Len: integer);
 var Text: RawUTF8;
     W: integer;
+    Img: TPdfImage;
+    ImgName: PDFString;
+    ImgRect: TPdfRect;
 begin
   try
     case Kind of
@@ -9952,6 +9971,18 @@ begin
           W := 1 else
           W := 0;
         Canvas.Doc.CreateLink(Canvas.RectI(PRect(P)^,true),Text,abSolid,W);
+      end;
+      pgcJpegDirect:
+      if Len>Sizeof(TRect) then begin
+        SetString(Text,P+SizeOf(TRect),Len-SizeOf(TRect));
+        ImgName := 'SynImgJpg'+PDFString(crc32cUTF8ToHex(Text));
+        if Canvas.Doc.GetXObject(ImgName) = nil then
+        begin
+          Img := TPdfImage.CreateJpegDirect(Canvas.Doc,UTF8ToString(Text));
+          Canvas.Doc.RegisterXObject(Img,ImgName);
+        end;
+        ImgRect := Canvas.RectI(PRect(P)^,true);
+        Canvas.DrawXObject(ImgRect.Left,ImgRect.Top,ImgRect.Right-ImgRect.Left,ImgRect.Bottom-ImgRect.Top,ImgName);
       end;
     end;
   except
@@ -10116,10 +10147,7 @@ begin
       end;
     end;
     // use transformation
-    if Custom <> nil then
-      ScaleXForm := Custom^
-    else
-      ScaleXForm := WorldTransform;
+    ScaleXForm := WorldTransform;
     if (ScaleXForm.eM11 > 0) and
        (ScaleXForm.eM22 > 0) and
        (ScaleXForm.eM12 = 0) and
@@ -10659,7 +10687,7 @@ begin
       {$endif}
         SaveToStream(FWriter.fDestStream); // with CompressionQuality recompress
       end;
-    FWriter.fDestStreamPosition := FWriter.fDestStream.Seek(0,soFromCurrent);
+    FWriter.fDestStreamPosition := FWriter.fDestStream.Seek(0,soCurrent);
   end else begin
     if aImage.InheritsFrom(TBitmap) then
       B := TBitmap(aImage) else
@@ -10743,7 +10771,7 @@ begin
     jpeg.Read(b,1);
     case b of
       $C0..$C3: begin
-        jpeg.Seek(3,soFromCurrent);
+        jpeg.Seek(3,soCurrent);
         jpeg.Read(w,2);
         height := swap(w);
         jpeg.Read(w,2);
@@ -10756,12 +10784,12 @@ begin
       $FF:
         jpeg.Read(b,1);
       $D0..$D9, $01: begin
-        jpeg.Seek(1,soFromCurrent);
+        jpeg.Seek(1,soCurrent);
         jpeg.Read(b,1);
       end;
       else begin
         jpeg.Read(w,2);
-        jpeg.Seek(swap(w)-2, soFromCurrent);
+        jpeg.Seek(swap(w)-2, soCurrent);
         jpeg.Read(b,1);
       end;
     end;
@@ -10781,7 +10809,7 @@ begin
   FFilter := 'DCTDecode';
   FWriter.Save; // flush to allow direct access to fDestStream
   FWriter.Add(aJpegFile.Memory,Len);
-  FWriter.fDestStreamPosition := FWriter.fDestStream.Seek(0,soFromCurrent);
+  FWriter.fDestStreamPosition := FWriter.fDestStream.Seek(0,soCurrent);
   FAttributes.AddItem('Width',fPixelWidth);
   FAttributes.AddItem('Height',fPixelHeight);
   case BitDepth of

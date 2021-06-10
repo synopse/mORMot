@@ -4,7 +4,9 @@ ARCH=i386-darwin
 DST=../../static/$ARCH/sqlite3.o
 DST2=../../../lib2/static/$ARCH/sqlite3.o
 
-CROSS=/home/ab/fpcup/cross
+#CROSS=/home/ab/fpcup/cross
+# use older but working fpcupdeluxe cross compiler
+CROSS=/home/abouchez/fpcupdeluxe/__darwin
 SDK=$CROSS/lib/x86-darwin/MacOSX10.11.sdk\usr
 GCC=$CROSS/bin/x86-darwin/i386-apple-darwin15
 

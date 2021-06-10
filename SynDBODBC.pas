@@ -87,6 +87,7 @@ type
   protected
     fDriverDoesNotHandleUnicode: Boolean;
     fSQLDriverConnectPrompt: Boolean;
+    fSQLStatementTimeout: integer;
     /// this overridden method will hide de DATABASE/PWD fields in ODBC connection string
     function GetDatabaseNameSafe: RawUTF8; override;
     /// this overridden method will retrieve the kind of DBMS from the main connection
@@ -159,6 +160,10 @@ type
     // - set to TRUE to allow UI prompt if needed
     property SQLDriverConnectPrompt: boolean read fSQLDriverConnectPrompt
       write fSQLDriverConnectPrompt;
+    /// The number of seconds to wait for a SQL statement to execute before canceling the query.
+    // When set to 0 (the default) there is no timeout. See ODBC SQL_QUERY_TIMEOUT documentation
+    property SQLStatementTimeoutSec: integer read fSQLStatementTimeout
+      write fSQLStatementTimeout;
   end;
 
   /// implements a direct connection to the ODBC library
@@ -385,10 +390,12 @@ const
   SQL_ATTR_METADATA_ID = 10014;
 
   // statement attributes
+  SQL_QUERY_TIMEOUT = 0;
   SQL_ATTR_APP_ROW_DESC = 10010;
   SQL_ATTR_APP_PARAM_DESC = 10011;
   SQL_ATTR_IMP_ROW_DESC = 10012;
   SQL_ATTR_IMP_PARAM_DESC = 10013;
+  SQL_ATTR_QUERY_TIMEOUT = SQL_QUERY_TIMEOUT; // ODBC 3.0
   SQL_ATTR_CURSOR_SCROLLABLE = (-1);
   SQL_ATTR_CURSOR_SENSITIVITY = (-2);
 
@@ -1705,7 +1712,15 @@ begin
             end;
           ftDouble: begin
             CValueType := SQL_C_DOUBLE;
-	    // in case of "Invalid character value for cast specification" error
+            if (fDBMS = dMSSQL) and (VInOut=paramIn) and
+               (PDouble(@VInt64)^ > -1) and (PDouble(@VInt64)^ < 1) then begin
+              // prevent "Invalid character value for cast specification" error for numbers (-1; 1)
+              // for doubles outside this range SQL_C_DOUBLE must be used
+              ParameterType := SQL_NUMERIC;
+              ColumnSize := 9;
+              DecimalDigits := 6;
+            end;
+            // in case of "Invalid character value for cast specification" error
             // for small digits like 0.01, -0.0001 under Linux msodbcsql17 should
             // be updated to >= 17.5.2
             ParameterValue := pointer(@VInt64);
@@ -1874,6 +1889,10 @@ begin
   try
     ODBC.Check(nil,self,ODBC.PrepareW(fStatement,pointer(fSQLW),length(fSQLW) shr 1),
       SQL_HANDLE_STMT,fStatement);
+    if TODBCConnectionProperties(Connection.Properties).SQLStatementTimeoutSec > 0 then
+      ODBC.Check(nil,self,ODBC.SetStmtAttrA(fStatement,SQL_ATTR_QUERY_TIMEOUT,
+        SQLPOINTER(TODBCConnectionProperties(Connection.Properties).SQLStatementTimeoutSec), SQL_IS_INTEGER),
+       SQL_HANDLE_STMT,fStatement);
     SQLLogEnd;
   except
     on E: Exception do begin

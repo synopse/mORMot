@@ -3655,7 +3655,10 @@ end;
 procedure TQuery.Close;
 begin
   try
-    fPrepared := nil;
+    if Assigned(fPrepared) then begin
+      fPrepared.ReleaseRows;
+      fPrepared := nil;
+    end;
   finally
     //fSQL.Clear; // original TQuery expect SQL content to be preserved
     fParam.Clear;
@@ -4528,7 +4531,7 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
       if ExecuteWithResults then begin
         Data := TRawByteStringStream.Create(msgOutput);
         try
-          Data.Seek(0,soFromEnd); // include header
+          Data.Seek(0,soEnd); // include header
           case header.Command of
           cExecuteToBinary:
             Stmt.FetchAllToBinary(Data);
@@ -4624,8 +4627,8 @@ end;
 
 function TSQLDBConnectionProperties.Execute(const aSQL: RawUTF8;
   const Params: array of const
-  {$ifndef LVCL}{$ifndef DELPHI5OROLDER}; RowsVariant: PVariant=nil{$endif}{$endif};
-  ForceBlobAsNull: boolean=false): ISQLDBRows;
+  {$ifndef LVCL}{$ifndef DELPHI5OROLDER}; RowsVariant: PVariant{$endif}{$endif};
+  ForceBlobAsNull: boolean): ISQLDBRows;
 var Stmt: ISQLDBStatement;
 begin
   Stmt := NewThreadSafeStatementPrepared(aSQL,true,true);
@@ -7876,7 +7879,6 @@ procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
 var i: PtrInt;
     ChangeFirstChar: AnsiChar;
     p: PSQLDBParam;
-    v: TTimeLogBits; // faster than TDateTime
 begin
   inherited; // raise an exception in case of invalid parameter
   if fConnection=nil then
@@ -7887,10 +7889,10 @@ begin
   p^.VArray := Values; // immediate COW reference-counted assignment
   if (ParamType=ftDate) and (ChangeFirstChar<>'T') then
     for i := 0 to ValuesCount-1 do // fix e.g. for PostgreSQL
-      if (p^.VArray[i]<>'') and (p^.VArray[i][1]='''') then begin
-        v.From(PUTF8Char(pointer(p^.VArray[i]))+1,length(p^.VArray[i])-2);
-        p^.VArray[i] := v.FullText({expanded=}true,ChangeFirstChar,'''');
-      end;
+      if (p^.VArray[i]<>'') and (p^.VArray[i][1]='''') then
+        // not only replace 'T'->ChangeFirstChar, but force expanded format
+        DateTimeToIso8601(Iso8601ToDateTime(p^.VArray[i]),
+          {expanded=}true, ChangeFirstChar, {ms=}fForceDateWithMS, '''');
   fParamsArrayCount := ValuesCount;
 end;
 

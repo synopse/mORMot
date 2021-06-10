@@ -11187,7 +11187,7 @@ var s: TStream;
 begin
   if Append and FileExists(aFileName) then begin
     s := TFileStream.Create(aFileName,fmOpenWrite);
-    s.Seek(0,soFromEnd);
+    s.Seek(0,soEnd);
   end else
     s := TFileStream.Create(aFileName,fmCreate);
   Create(s,BufLen);
@@ -11944,7 +11944,7 @@ begin
     end else
       // file bigger than 2 GB: slower but accurate reading from file
       if Data=nil then begin
-        FileSeek(fMap.FileHandle,soFromCurrent,DataLen);
+        FileSeek64(fMap.FileHandle,DataLen,soFromCurrent);
         result := DataLen;
       end else
         result := FileRead(fMap.FileHandle,Data^,DataLen) else

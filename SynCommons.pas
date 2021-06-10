@@ -5960,7 +5960,7 @@ type
     procedure Clear;
     /// full computation of the internal hash table
     // - returns the number of duplicated values found
-    function ReHash(forced, forceGrow: boolean): integer;
+    function ReHash(forced: boolean): integer;
     /// compute the hash of a given item
     function HashOne(Elem: pointer): cardinal; {$ifdef FPC_OR_DELPHIXE4}inline;{$endif}
       { not inlined to circumvent Delphi 2007=C1632, 2010=C1872, XE3=C2130 }
@@ -6061,7 +6061,7 @@ type
     // FindHashedForAdding / FindHashedAndUpdate / FindHashedAndDelete methods
     // - returns the number of duplicated items found - which won't be available
     // by hashed FindHashed() by definition
-    function ReHash(forAdd: boolean=false; forceGrow: boolean=false): integer;
+    function ReHash(forAdd: boolean=false): integer;
     /// search for an element value inside the dynamic array using hashing
     // - Elem should be of the type expected by both the hash function and
     // Equals/Compare methods: e.g. if the searched/hashed field in a record is
@@ -20016,8 +20016,6 @@ begin
   UniqueText(aResult);
 end;
 
-{$ifndef NOVARIANTS}
-
 procedure ClearVariantForString(var Value: variant); {$ifdef HASINLINE} inline; {$endif}
 var v: TVarData absolute Value;
 begin
@@ -20030,6 +20028,8 @@ begin
       v.VString := nil; // to avoid GPF when assign a RawByteString
     end;
 end;
+
+{$ifndef NOVARIANTS}
 
 procedure TRawUTF8Interning.UniqueVariant(var aResult: variant; const aText: RawUTF8);
 begin
@@ -37677,6 +37677,11 @@ begin
     L := StrLen(P);
   if L<4 then
     exit; // we need 'YYYY' at least
+  if (P[0]='''') and (P[L-1]='''') then begin // unquote input
+    inc(P);
+    dec(L, 2);
+    if L<4 then exit;
+  end;
   if P[0]='T' then begin
     dec(P,8);
     inc(L,8);
@@ -39957,6 +39962,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html
     $46464f77, // 'application/font-woff' = wOFF in BigEndian
     $474e5089, // 'image/png' = 89 50 4E 47 0D 0A 1A 0A
     $4d5a4cff, // LZMA = FF 4C 5A 4D 41 00
+    $72613c21, // .ar/.deb files = '!<arch>' (assuming compressed)
     $75b22630, // 'audio/x-ms-wma' = 30 26 B2 75 8E 66
     $766f6f6d, // mov = 6D 6F 6F 76 [....moov]
     $89a8275f, // jar = 5F 27 A8 89
@@ -39968,6 +39974,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html
     $afbc7a37, // 'application/x-7z-compressed' = 37 7A BC AF 27 1C
     $b7010000, $ba010000, // mpeg = 00 00 01 Bx
     $cececece, // jceks = CE CE CE CE
+    $dbeeabed, // .rpm package file
     $e011cfd0: // msi = D0 CF 11 E0 A1 B1 1A E1
       result := true;
     else
@@ -49928,7 +49935,7 @@ end;
 procedure TDynArray.LoadFromStream(Stream: TCustomMemoryStream);
 var P: PAnsiChar;
 begin
-  P := PAnsiChar(Stream.Memory)+Stream.Seek(0,soFromCurrent);
+  P := PAnsiChar(Stream.Memory)+Stream.Seek(0,soCurrent);
   Stream.Seek(LoadFrom(P,nil,false,PAnsiChar(Stream.Memory)+Stream.Size)-P,soCurrent);
 end;
 
@@ -51983,7 +51990,7 @@ begin // on input: HashTable[result] slot is already computed
   if HashTableSize<n then
     RaiseFatalCollision('HashAdd HashTableSize',aHashCode);
   if HashTableSize-n<n shr 2 then begin // grow hash table when 25% void
-    ReHash({foradd=}true,{grow=}true);
+    ReHash({foradd=}true);
     result := Find(aHashCode,{foradd=}true); // recompute position
     if result>=0 then
       RaiseFatalCollision('HashAdd',aHashCode);
@@ -52230,7 +52237,7 @@ begin
     end;
   end;
   if not(canHash in State) then
-    ReHash({forced=}true,{grow=}false); // hash previous CountTrigger items
+    ReHash({forced=}true); // hash previous CountTrigger items
   result := FindOrNew(aHashCode,Elem,nil);
   if result<0 then begin // found no matching item
     wasAdded := true;
@@ -52304,7 +52311,7 @@ begin
     inc(ScanCounter);
     if ScanCounter>=CountTrigger*2 then begin
       CountTrigger := 2; // rather use hashing from now on
-      ReHash(false,false);   // set HashTable[] and canHash
+      ReHash(false);   // set HashTable[] and canHash
     end;
   end;
 end;
@@ -52321,34 +52328,30 @@ begin
     result := -1; // for coherency with most search methods
 end;
 
-function TDynArrayHasher.ReHash(forced, forceGrow: boolean): integer;
+function TDynArrayHasher.ReHash(forced: boolean): integer;
 var i, n, cap, siz, ndx: integer;
     P: PAnsiChar;
     hc: cardinal;
 begin
   result := 0;
-  // initialize a new void HashTable[]=0
-  siz := HashTableSize;
-  Clear;
-  if not(hasHasher in State) then
-    exit;
   n := DynArray^.Count;
-  if not forced and ((n=0) or (n<CountTrigger)) then
+  if not (Assigned(HashElement) or Assigned(EventHash)) or
+     (not forced and ((n=0) or (n<CountTrigger))) then begin
+    Clear; // reset HashTable[]
     exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
-  if forceGrow and (siz>0) then // next power of two or next prime
-    {$ifdef CPU32DELPHI}
-    if siz<HASH_PO2 then
-      siz := siz shl 1 else {$endif}
-      siz := NextPrime(siz) else begin
-    cap := DynArray^.Capacity*2; // Capacity better than Count - *2 for void slots
-    {$ifdef CPU32DELPHI}
-    if cap<=HASH_PO2 then begin
-      siz := 256; // find nearest power of two for fast bitwise division
-      while siz<cap do
-        siz := siz shl 1;
-    end else {$endif}
-      siz := NextPrime(cap);
   end;
+  cap := DynArray^.Capacity * 2; // to reserve some void slots
+  {$ifdef CPU32DELPHI}
+  if cap<=HASH_PO2 then begin
+    siz := 256;
+    while siz<cap do // find nearest power of two for fast bitwise division
+      siz := siz shl 1;
+  end else
+  {$endif CPU32DELPHI}
+    siz := NextPrime(cap);
+  if (not forced) and (siz=HashTableSize) then
+    exit; // was a paranoid ReHash() call
+  Clear;
   HashTableSize := siz;
   SetLength(HashTable,siz); // fill with 0 (void slot)
   // fill HashTable[]=index+1 from all existing items
@@ -52626,9 +52629,9 @@ begin
   result := fHash.GetHashFromIndex(aIndex);
 end;
 
-function TDynArrayHashed.ReHash(forAdd: boolean; forceGrow: boolean): integer;
+function TDynArrayHashed.ReHash(forAdd: boolean): integer;
 begin
-  result := fHash.ReHash(forAdd,forceGrow);
+  result := fHash.ReHash(forAdd);
 end;
 
 
@@ -56260,7 +56263,7 @@ begin
     end;
   if aStream<>nil then begin
     fStream := aStream;
-    fInitialStreamPosition := fStream.Seek(0,soFromCurrent);
+    fInitialStreamPosition := fStream.Seek(0,soCurrent);
     fTotalFileSize := fInitialStreamPosition;
   end;
 end;
@@ -61424,7 +61427,7 @@ begin
       exit;
     if Source.InheritsFrom(TCustomMemoryStream) then begin
       S := PAnsiChar(TCustomMemoryStream(Source).Memory)+PtrUInt(sourcePosition);
-      Source.Seek(Head.CompressedSize,soFromCurrent);
+      Source.Seek(Head.CompressedSize,soCurrent);
     end else begin
       if Head.CompressedSize>length(Buf) then
         SetString(Buf,nil,Head.CompressedSize);
