@@ -12078,27 +12078,31 @@ type
   /// the potential features, retrieved from an Intel CPU
   // - see https://en.wikipedia.org/wiki/CPUID#EAX.3D1:_Processor_Info_and_Feature_Bits
   // - is defined on all platforms, since an ARM desktop could browse Intel logs
-  TIntelCpuFeature =
-   ( { CPUID 1 in EDX }
-   cfFPU, cfVME, cfDE, cfPSE, cfTSC, cfMSR, cfPAE, cfMCE,
-   cfCX8, cfAPIC, cf_d10, cfSEP, cfMTRR, cfPGE, cfMCA, cfCMOV,
-   cfPAT, cfPSE36, cfPSN, cfCLFSH, cf_d20, cfDS, cfACPI, cfMMX,
-   cfFXSR, cfSSE, cfSSE2, cfSS, cfHTT, cfTM, cfIA64, cfPBE,
+  TIntelCpuFeature = (
+   { CPUID 1 in EDX }
+   cfFPU,  cfVME,   cfDE,   cfPSE,   cfTSC,  cfMSR, cfPAE,  cfMCE,
+   cfCX8,  cfAPIC,  cf_d10, cfSEP,   cfMTRR, cfPGE, cfMCA,  cfCMOV,
+   cfPAT,  cfPSE36, cfPSN,  cfCLFSH, cf_d20, cfDS,  cfACPI, cfMMX,
+   cfFXSR, cfSSE,   cfSSE2, cfSS,    cfHTT,  cfTM,  cfIA64, cfPBE,
    { CPUID 1 in ECX }
-   cfSSE3, cfCLMUL, cfDS64, cfMON, cfDSCPL, cfVMX, cfSMX, cfEST,
-   cfTM2, cfSSSE3, cfCID, cfSDBG, cfFMA, cfCX16, cfXTPR, cfPDCM,
-   cf_c16, cfPCID, cfDCA, cfSSE41, cfSSE42, cfX2A, cfMOVBE, cfPOPCNT,
-   cfTSC2, cfAESNI, cfXS, cfOSXS, cfAVX, cfF16C, cfRAND, cfHYP,
-   { extended features CPUID 7 in EBX, ECX, DL }
-   cfFSGS, cf_b01, cfSGX, cfBMI1, cfHLE, cfAVX2, cf_b06, cfSMEP,
+   cfSSE3, cfCLMUL, cfDS64, cfMON,   cfDSCPL, cfVMX,  cfSMX,   cfEST,
+   cfTM2,  cfSSSE3, cfCID,  cfSDBG,  cfFMA,   cfCX16, cfXTPR,  cfPDCM,
+   cf_c16, cfPCID,  cfDCA,  cfSSE41, cfSSE42, cfX2A,  cfMOVBE, cfPOPCNT,
+   cfTSC2, cfAESNI, cfXS,   cfOSXS,  cfAVX,   cfF16C, cfRAND,  cfHYP,
+   { extended features CPUID 7 in EBX, ECX, EDX }
+   cfFSGS, cfTSCADJ, cfSGX, cfBMI1, cfHLE, cfAVX2, cfFDPEO, cfSMEP,
    cfBMI2, cfERMS, cfINVPCID, cfRTM, cfPQM, cf_b13, cfMPX, cfPQE,
-   cfAVX512F, cfAVX512DQ, cfRDSEED, cfADX, cfSMAP, cfAVX512IFMA, cfPCOMMIT, cfCLFLUSH,
-   cfCLWB, cfIPT, cfAVX512PF, cfAVX512ER, cfAVX512CD, cfSHA, cfAVX512BW, cfAVX512VL,
-   cfPREFW1, cfAVX512VBMI, cfUMIP, cfPKU, cfOSPKE, cf_c05, cfAVX512VBMI2, cf_c07,
-   cfGFNI, cfVAES, cfVCLMUL, cfAVX512NNI, cfAVX512BITALG, cf_c13, cfAVX512VPC, cf_c15,
-   cf_cc16, cf_c17, cf_c18, cf_c19, cf_c20, cf_c21, cfRDPID, cf_c23,
-   cf_c24, cf_c25, cf_c26, cf_c27, cf_c28, cf_c29, cfSGXLC, cf_c31,
-   cf_d0, cf_d1, cfAVX512NNIW, cfAVX512MAS, cf_d4, cf_d5, cf_d6, cf_d7);
+   cfAVX512F, cfAVX512DQ, cfRDSEED, cfADX, cfSMAP, cfAVX512IFMA, cfPCOMMIT,
+   cfCLFLUSH, cfCLWB, cfIPT, cfAVX512PF, cfAVX512ER, cfAVX512CD, cfSHA,
+   cfAVX512BW, cfAVX512VL, cfPREFW1, cfAVX512VBMI, cfUMIP, cfPKU, cfOSPKE,
+   cf_c05, cfAVX512VBMI2, cfCETSS, cfGFNI, cfVAES, cfVCLMUL, cfAVX512NNI,
+   cfAVX512BITALG, cf_c13, cfAVX512VPC, cf_c15, cfFLP, cf_c17, cf_c18,
+   cf_c19, cf_c20, cf_c21, cfRDPID, cf_c23, cf_c24, cfCLDEMOTE, cf_c26,
+   cfMOVDIRI, cfMOVDIR64B, cfENQCMD, cfSGXLC, cfPKS, cf_d0, cf_d1,
+   cfAVX512NNIW, cfAVX512MAPS, cfFSRM, cf_d5, cf_d6, cf_d7, cfAVX512VP2I,
+   cfSRBDS, cfMDCLR, cf_d11, cf_d12, cfTSXFA, cfSER, cfHYBRID,
+   cfTSXLDTRK, cf_d17, cfPCFG, cfLBR, cfIBT, cf_d21, cfAMXBF16, cf_d23,
+   cfAMXTILE, cfAMXINT8, cfIBRSPB, cfSTIBP, cfL1DFL, cfARCAB, cfCORCAB, cfSSBD);
 
   /// all features, as retrieved from an Intel CPU
   TIntelCpuFeatures = set of TIntelCpuFeature;
