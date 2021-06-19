@@ -70,6 +70,8 @@ begin
     // implementation below dont work if called in the same time from differnt thread
     // TFileStream.Create(name, fmOpenRead).Free; // Check that file exists and can be opened;
     src := AnyTextFileToRawUTF8(name, forceUTF8);
+    if length(src) > 268435455 then
+      raise ESMException.CreateUTF8('RangeError: maximum string size is 2^28-1',[]);
     if not IsValidUTF8(src) then
       raise ESMException.CreateUTF8('file % contains an incorrect byte sequence. Check it valid UTF8 or Unicode', [name]);
     vp.rval := cx.NewJSString(src).ToJSVal;
