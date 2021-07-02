@@ -160,9 +160,9 @@ begin
   result := checkFuncArgs(cx, argc, vp, [atStr, atStr, atStr, atStr]);
   if not result then exit;
   try
+    {$ifdef USELIBCURL}
     if not (fClient is TCurlHTTP) then
       raise ESMException.Create('useClientCertificate can be used with curl backend only (Linux)');
-    {$ifdef USELIBCURL}
     TCurlHTTP(fClient).useClientCertificate(
       vp.argv^[0].asJSString.ToString(cx),
       vp.argv^[1].asJSString.ToString(cx),
