@@ -8,6 +8,11 @@
     //alternative to URL is host/port/path
     // host: 'localhost', port: '80', path: '/getAppInfo',
     method: 'POST'
+    // for peer certificate validation:
+    // cert: 'testcert.pem', // Client certificate PEM file
+    // CACert: 'cacert.pem', // Certificate authority PEM file
+    // key: 'testkey.pem', // Client private key (PEM file)
+    // passphrase: '' // optional private key password
  })
  const fileContent = fs.readFileSync('d:/binaryFile.txt') // return ArrayBuffer, since encoding not passed
  // in case of multiple request to the same host better to reuse existed request (up to x30 times faster)
@@ -32,6 +37,7 @@
  console.log(index);
  // var doc = new DOMParser().parseFromString(index);
  // assert.ok(doc.documentElement.textContent.startsWith('mORMot'), 'got mORMot from mORMot');
+
  *
  * @module http
  * @memberOf module:buildin
@@ -149,6 +155,10 @@ exports.setGlobalConnectionDefaults = function setGlobalConnectionDefaults (defa
  * @param {Number} [options.receiveTimeout] Receive timeout in ms. Default is 30000 (30 sec)
  * @param {Number} [options.connectTimeout] Connect timeout in ms. Default is 30000 (30 sec)
  * @param {Boolean} [options.strictSSL] If passed and sets to `false` - ignore SSL certificates errors, otherwise use a
+ * @param {string} [options.cert] Client certificate PEM file
+ * @param {string} [options.CACert] Certificate authority PEM file
+ * @param {string} [options.key] Client private key (PEM file)
+ * @param {string} [options.passphrase] Client private key passphrase
  * @return {ClientRequest}
  */
 exports.request = function request (options) {
@@ -263,17 +273,20 @@ exports.get = function get (options, URLParams) {
  * @class ClientRequest
  * @implements {UBWriter}
  * @protected
- * @param {Object} options
+ * @param {Object} o
  */
-function ClientRequest (options) {
-  this.options = Object.assign({}, options)
+function ClientRequest (o) {
+  this.options = Object.assign({}, o)
   const _http = this.connection = new THTTPClient()
-  _http.initialize(options.host, options.port, options.useHTTPS, options.useCompression,
-    proxyConfig.proxy, proxyConfig.bypass, options.connectTimeout, options.sendTimeout,
-    options.receiveTimeout, options.strictSSL
+  _http.initialize(o.host, o.port, o.useHTTPS, o.useCompression,
+    proxyConfig.proxy, proxyConfig.bypass, o.connectTimeout, o.sendTimeout,
+    o.receiveTimeout, o.strictSSL
   )
-  if (!options.keepAlive) {
+  if (!o.keepAlive) {
     _http.keepAlive = 0 // default is true
+  }
+  if (o.cert || o.key) {
+    _http.useClientCertificate(o.cert || '', o.CACert || '', o.key || '', o.passphrase || '')
   }
 
   // add EventEmitter for nodeJS compatibility

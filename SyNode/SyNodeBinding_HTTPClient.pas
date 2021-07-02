@@ -42,6 +42,7 @@ type
     constructor Create();
 
     function initialize(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;
+    function useClientCertificate(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;
     function write(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;
     function writeEnd(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;
     function read(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;
@@ -68,7 +69,7 @@ type
 implementation
 
 uses
-  SynZip, SyNodeReadWrite;
+  SynZip, SyNodeReadWrite, jsbUtils;
 
 { THTTPClientProtoObject }
 
@@ -150,6 +151,29 @@ begin
       Result := False;
       JSError(cx, E);
     end;
+  end;
+end;
+
+function THTTPClient.useClientCertificate(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;
+// usage: cert, CACert, key, passphrase
+begin
+  result := checkFuncArgs(cx, argc, vp, [atStr, atStr, atStr, atStr]);
+  if not result then exit;
+  try
+    if not (fClient is TCurlHTTP) then
+      raise ESMException.Create('useClientCertificate can be used with curl backend only (Linux)');
+    {$ifdef USELIBCURL}
+    TCurlHTTP(fClient).useClientCertificate(
+      vp.argv^[0].asJSString.ToString(cx),
+      vp.argv^[1].asJSString.ToString(cx),
+      vp.argv^[2].asJSString.ToString(cx),
+      vp.argv^[3].asJSString.ToString(cx)
+    );
+    {$else}
+    raise ESMException.Create('useClientCertificate can be used with curl backend only (Linux)');
+    {$endif}
+  except
+    on E: Exception do begin Result := false; JSError(cx, E); end;
   end;
 end;
 
