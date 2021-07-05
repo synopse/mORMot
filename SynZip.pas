@@ -943,8 +943,12 @@ begin
   if Count>=length(Entry) then
     SetLength(Entry,length(Entry)+20);
   with Entry[Count] do begin
-    fhr.fileInfo := ZipEntry.infoLocal^;
-    InternalAdd(ZipEntry.zipName,ZipEntry.data,fhr.fileInfo.zzipSize);
+    if ZipEntry.infoLocal.zzipMethod = 0 then // STORED
+      AddStored(ZipEntry.zipName, ZipEntry.data, ZipEntry.infoLocal.zzipSize, ZipEntry.infoLocal.zlastMod)
+    else begin // compressed
+      fhr.fileInfo := ZipEntry.infoLocal^;
+      InternalAdd(ZipEntry.zipName,ZipEntry.data,fhr.fileInfo.zzipSize);
+    end;
   end;
 end;
 
