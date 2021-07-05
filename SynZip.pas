@@ -886,6 +886,7 @@ begin
     end;
     {$endif}
     fHr.fileInfo.nameLen := length(intName);
+    fhr.fileInfo.extraLen := 0; // source may have something here
     InternalWrite(fMagic,sizeof(fMagic));
     InternalWrite(fhr.fileInfo,sizeof(fhr.fileInfo));
     InternalWrite(pointer(intName)^,fhr.fileInfo.nameLen);
