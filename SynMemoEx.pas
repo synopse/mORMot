@@ -2072,7 +2072,6 @@ begin
   fillchar(FList[Index], sizeof(TParagraph), 0); // avoid memory bug
   Inc(FCount);
   AddParaStr(Index, S);
-  Changed;
 end;
 
 {$WARNINGS OFF}
