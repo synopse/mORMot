@@ -13709,7 +13709,7 @@ type
   {$ifdef FPC} // FPC already use heap instead of GlobalAlloc()
   THeapMemoryStream = TMemoryStream;
   {$else}
-  {$ifdef MSWINDOWS}
+  {$ifndef UNICODE} // old Delphi used GlobalAlloc()
   THeapMemoryStream = class(TMemoryStream)
   protected
     function Realloc(var NewCapacity: longint): Pointer; override;
@@ -41112,7 +41112,7 @@ end;
 
 {$ifndef LVCL}
 {$ifndef FPC}
-{$ifdef MSWINDOWS}
+{$ifndef UNICODE}
 
 const
   MemoryDelta = $8000; // 32 KB granularity (must be a power of 2)
@@ -41149,7 +41149,7 @@ begin
   end;
 end;
 
-{$endif MSWINDOWS}
+{$endif UNICODE}
 {$endif FPC}
 {$endif LVCL}
 
