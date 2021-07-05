@@ -19895,7 +19895,7 @@ begin
   {$else}
   if @self=TypeInfo(QWord) then
     result := true else
-    {$ifdef UINICODE}if Kind=tkInt64 then // check MinInt64Value>MaxInt64Value
+    {$ifdef UNICODE}if Kind=tkInt64 then // check MinInt64Value>MaxInt64Value
       with PHash128Rec(PAnsiChar(@Name[1])+ord(Name[0]))^ do
         result := Lo>Hi else {$endif}
         result := false;
@@ -45278,7 +45278,7 @@ begin // now fValue[] contains the just loaded data
     cf := 'ID' else
     for f := 0 to high(fUnique) do
       if f in fIsUnique then begin
-        c := fUnique[f].Hasher.ReHash({forced=}true,{grow=}false);
+        c := fUnique[f].Hasher.ReHash({forced=}true);
         if c>0 then begin
           cf := fUnique[f].PropInfo.Name;
           break;

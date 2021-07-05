@@ -29,7 +29,7 @@ unit SynEcc;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-   - Kenneth MacKay (easy-ecc source code)
+   - Kenneth MacKay (micro-ecc source code)
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -48,7 +48,7 @@ unit SynEcc;
 
   Using secp256r1 curve from "simple and secure ECDH and ECDSA library"
   Copyright (c) 2013, Kenneth MacKay - BSD 2-clause license
-  https://github.com/esxgx/easy-ecc
+  https://github.com/kmackay/micro-ecc
 
   *** BEGIN LICENSE BLOCK *****
   Copyright (c) 2013, Kenneth MacKay
@@ -216,7 +216,7 @@ var
 
 /// create a public/private key pair
 // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
-// - directly low-level access to the statically linked easy-ecc library function
+// - directly low-level access to the statically linked micro-ecc library function
 // - returns true if the key pair was generated successfully in pub/priv
 // - returns false if an error occurred
 // - this function is thread-safe and does not perform any memory allocation
@@ -225,7 +225,7 @@ function ecc_make_key(out pub: TECCPublicKey; out priv: TECCPrivateKey): boolean
 
 /// compute a shared secret given your secret key and someone else's public key
 // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
-// - directly low-level access to the statically linked easy-ecc library function
+// - directly low-level access to the statically linked micro-ecc library function
 // - note: it is recommended that you hash the result of ecdh_shared_secret
 // before using it for symmetric encryption or HMAC (via an intermediate KDF)
 // - returns true if the shared secret was generated successfully in secret
@@ -237,7 +237,7 @@ function ecdh_shared_secret(const pub: TECCPublicKey; const priv: TECCPrivateKey
 
 /// generate an ECDSA signature for a given hash value
 // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
-// - directly low-level access to the statically linked easy-ecc library function
+// - directly low-level access to the statically linked micro-ecc library function
 // - returns true if the signature generated successfully in sign
 // - returns false if an error occurred
 // - this function is thread-safe and does not perform any memory allocation
@@ -247,7 +247,7 @@ function ecdsa_sign(const priv: TECCPrivateKey; const hash: TECCHash;
 
 /// verify an ECDSA signature
 // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
-// - directly low-level access to the statically linked easy-ecc library function
+// - directly low-level access to the statically linked micro-ecc library function
 // - returns true if the signature is valid
 // - returns false if an error occurred
 // - this function is thread-safe and does not perform any memory allocation
@@ -1966,7 +1966,7 @@ end;
 {$endif ECC_STATICLIB_AVAILABLE}
 
 
-{ Pure Pascal Version of low-level ECC process (adapted from easy-ecc.c code)
+{ Pure Pascal Version of low-level ECC process (adapted from micro-ecc.c code)
 
  Some numbers (on another slower computer than the previous values above),
  which is quite acceptable, since it is faster than gcc -O1 mode :)

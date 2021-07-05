@@ -9949,7 +9949,7 @@ procedure TPdfEnum.HandleComment(Kind: TPdfGDIComment; P: PAnsiChar; Len: intege
 var Text: RawUTF8;
     W: integer;
     Img: TPdfImage;
-    ImgName: string;
+    ImgName: PDFString;
     ImgRect: TPdfRect;
 begin
   try
@@ -9975,7 +9975,7 @@ begin
       pgcJpegDirect:
       if Len>Sizeof(TRect) then begin
         SetString(Text,P+SizeOf(TRect),Len-SizeOf(TRect));
-        ImgName := 'SynImgJpg'+crc32cUTF8ToHex(Text);
+        ImgName := 'SynImgJpg'+PDFString(crc32cUTF8ToHex(Text));
         if Canvas.Doc.GetXObject(ImgName) = nil then
         begin
           Img := TPdfImage.CreateJpegDirect(Canvas.Doc,UTF8ToString(Text));

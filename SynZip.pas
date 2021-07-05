@@ -727,7 +727,7 @@ type
     procedure AddStored(const aZipName: TFileName; Buf: pointer; Size: integer;
       FileAge: integer=1+1 shl 5+30 shl 9);
     /// add a file from an already compressed zip entry
-    procedure AddFromZip(const ZipEntry: TZipEntry);
+    procedure AddFromZip(Source: TZipRead; EntryIndex: integer);
     /// append a file content into the destination file
     // - useful to add the initial Setup.exe file, e.g.
     procedure Append(const Content: ZipString);
@@ -936,16 +936,18 @@ begin
   end;
 end;
 
-procedure TZipWriteAbstract.AddFromZip(const ZipEntry: TZipEntry);
+procedure TZipWriteAbstract.AddFromZip(Source: TZipRead; EntryIndex: integer);
+var s: ^TZipEntry;
 begin
-  if self=nil then
+  if (self=nil) or (Source=nil) then
     exit;
   if Count>=length(Entry) then
     SetLength(Entry,length(Entry)+20);
-  with Entry[Count] do begin
-    fhr.fileInfo := ZipEntry.infoLocal^;
-    InternalAdd(ZipEntry.zipName,ZipEntry.data,fhr.fileInfo.zzipSize);
-  end;
+  with Entry[Count] do
+    if Source.RetrieveFileInfo(EntryIndex, fhr.FileInfo) then begin
+      s := @Source.Entry[EntryIndex];
+      InternalAdd(s^.zipName,s^.data,fhr.fileInfo.zzipSize);
+    end;
 end;
 
 procedure TZipWriteAbstract.Append(const Content: ZipString);
@@ -1224,7 +1226,7 @@ begin
       // UnZip() will call RetrieveFileInfo()
     end else
       if (zzipSize=cardinal(-1)) or (zfullSize=cardinal(-1)) then
-        raise ESynZipException.Create('ZIP64 format not supported');
+        raise ESynZipException.Create('ZIP64 format not supported - use mORMot 2');
     with Entry[Count] do begin
       infoLocal := @lfhr^.fileInfo;
       infoDirectory := H;
@@ -5029,6 +5031,26 @@ begin
     Z_DEFAULT_STRATEGY, ZLIB_VERSION, sizeof(Stream))>=0
 end;
 
+function ZLibError(Code: integer): shortstring;
+begin
+  case Code of
+    Z_ERRNO:
+      result := 'Z_ERRNO';
+    Z_STREAM_ERROR:
+      result := 'Z_STREAM_ERROR';
+    Z_DATA_ERROR:
+      result := 'Z_DATA_ERROR';
+    Z_MEM_ERROR:
+      result := 'Z_MEM_ERROR';
+    Z_BUF_ERROR:
+      result := 'Z_BUF_ERROR';
+    Z_VERSION_ERROR:
+      result := 'Z_VERSION_ERROR';
+  else
+    str(Code,result);
+  end;
+end;
+
 function Check(const Code: Integer; const ValidCodes: array of Integer;
   const Context: string): integer;
 var i: Integer;
@@ -5039,7 +5061,7 @@ begin
   for i := Low(ValidCodes) to High(ValidCodes) do
     if ValidCodes[i]=Code then
       Exit;
-  raise ESynZipException.CreateFmt('Error %d during %s process',[Code,Context]);
+  raise ESynZipException.CreateFmt('Error %s during %s process',[ZLibError(Code),Context]);
 end;
 
 function CompressString(const data: ZipString; failIfGrow: boolean = false;

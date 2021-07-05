@@ -1712,7 +1712,8 @@ begin
             end;
           ftDouble: begin
             CValueType := SQL_C_DOUBLE;
-            if (fDBMS = dMSSQL) and (VInOut=paramIn) and (double(VInt64) > -1) and (double(VInt64) < 1) then begin
+            if (fDBMS = dMSSQL) and (VInOut=paramIn) and
+               (PDouble(@VInt64)^ > -1) and (PDouble(@VInt64)^ < 1) then begin
               // prevent "Invalid character value for cast specification" error for numbers (-1; 1)
               // for doubles outside this range SQL_C_DOUBLE must be used
               ParameterType := SQL_NUMERIC;

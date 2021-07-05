@@ -139,8 +139,12 @@ uses
   {$endif}
   {$IFDEF FMX}
   System.UITypes, System.Types, System.UIConsts,
-  FMX.Menus, FMX.Types, FMX.Layouts, FMX.ComboEdit,
-  FMX.Graphics, FMX.Forms, FMX.Controls, FMX.StdCtrls, FMX.ExtCtrls,
+  FMX.Menus, FMX.Types, FMX.Layouts,
+  {$IF (CompilerVersion >= 26.0)}// Delphi XE5 UP
+  FMX.ComboEdit,
+  FMX.Graphics,
+  {$IFEND}
+  FMX.Forms, FMX.Controls, FMX.StdCtrls, FMX.ExtCtrls,
   FMX.ListBox, FMX.Edit, FMX.Objects, FMX.Platform,
   {$IFDEF MSWINDOWS}
   FMX.Platform.Win

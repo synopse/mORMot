@@ -815,7 +815,8 @@ begin
           DoubleToStr(PDouble(@p^.VInt64)^, RawUTF8(p^.VData));
         ftDate:
           // Postgres expects space instead of T in ISO8601 expanded format
-          p^.VData := DateTimeToIso8601(PDateTime(@p^.VInt64)^, true, ' ');
+          p^.VData := DateTimeToIso8601(
+            PDateTime(@p^.VInt64)^, true, ' ', fForceDateWithMS);
         ftUTF8:
           ; // text already in p^.VData
         ftBlob:
