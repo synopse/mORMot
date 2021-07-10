@@ -1,5 +1,9 @@
 unit Project31ChatCallbackInterface;
 
+{$IFDEF FPC}
+  {$MODE Delphi}
+{$ENDIF}
+
 interface
 
 uses
