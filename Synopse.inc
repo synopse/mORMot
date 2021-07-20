@@ -598,6 +598,9 @@
       {$if CompilerVersion >= 34.0}
         {$define ISDELPHI104}
       {$ifend}
+      {$if CompilerVersion >= 35.0}
+        {$define ISDELPHI11}
+      {$ifend}
     {$ifend CompilerVersion >= 17}
     {$ifopt O-} // if we don't expect fast code, don't optimize the framework
       {$undef ENHANCEDRTL}
