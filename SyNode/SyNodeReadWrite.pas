@@ -18,10 +18,12 @@ uses
 
 implementation
 
-{$ifdef MSWINDOWS}
 uses
-  Windows; // CP_UTF8
+  SynTable
+{$ifdef MSWINDOWS}
+  ,Windows // CP_UTF8
 {$endif}
+  ;
 
 function SMRead_impl(cx: PJSContext; argc: uintN; vals: PjsvalVector; const aStr: RawByteString): jsval; cdecl;
 var

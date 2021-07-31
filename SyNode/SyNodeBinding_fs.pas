@@ -35,7 +35,8 @@ uses
   SyNodeReadWrite,
   jsbutils,
   Classes,
-  SynLog;
+  SynLog,
+  SynTable;
 
 /// decode text file to string using BOM
 //  if BOM not fount - use current system code page to convert ANSI content to unicode
