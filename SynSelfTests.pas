@@ -371,6 +371,8 @@ type
     procedure UrlEncoding;
     /// some low-level JSON encoding/decoding
     procedure EncodeDecodeJSON;
+    /// some performance numbers about JSON parsing and generating
+    procedure JSONBenchmark;
     /// HTML generation from Wiki Or Markdown syntax
     procedure WikiMarkdownToHtml;
 {$ifndef NOVARIANTS}
@@ -9421,6 +9423,105 @@ check(IsValidJSON(J));
   {$endif}
 end;
 
+procedure TTestLowLevelTypes.JSONBenchmark;
+const
+  ITER = 20;
+  ONLYLOG = false;
+var
+  people, notexpanded: RawUtf8;
+  P: PUtf8Char;
+  count, len, lennexp, i: integer;
+  dv: TDocVariantData;
+  table: TSQLTableJson;
+  timer: TPrecisionTimer;
+begin
+  people := StringFromFile('People.json');
+  if people = '' then
+    exit; // need to run at least once the ORM tests
+  len := length(people);
+  check(len > 800000, 'unexpected people.json');
+  len := len * ITER;
+  timer.Start;
+  for i := 1 to ITER do
+    Check(IsValidUtf8(people));
+  NotifyTestSpeed('IsValidUtf8()', 0, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+    Check(IsValidJson(people));
+  NotifyTestSpeed('IsValidJson(RawUtf8)', 0, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+    Check(IsValidJson(PUTF8Char(pointer(people))));
+  NotifyTestSpeed('IsValidJson(PUtf8Char)', 0, len, @timer, ONLYLOG);
+  P := @people[2]; // point just after initial '[' for JsonArrayCount
+  count := JsonArrayCount(P);
+  check(count > 8200); // = 8227 in current People.json ORM tests file
+  timer.Start;
+  for i := 1 to ITER do
+    Check(JsonArrayCount(P) = count);
+  NotifyTestSpeed('JsonArrayCount(P)', 0, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+    Check(JsonArrayCount(P, P + length(people) - 1) = count);
+  NotifyTestSpeed('JsonArrayCount(P,PMax)', 0, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER * 5000 do
+    Check(JsonObjectPropCount(P + 3) = 6, 'first TOrmPeople object');
+  NotifyTestSpeed('JsonObjectPropCount()', 0, ITER * 5000 * 119, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+  begin
+    dv.InitJson(people, JSON_OPTIONS_FAST);
+    Check(dv.count = count);
+    dv.Clear; // to reuse dv
+  end;
+  NotifyTestSpeed('TDocVariant', 0, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+  begin
+    dv.InitJson(people, JSON_OPTIONS_FAST + [dvoInternNames]);
+    Check(dv.count = count);
+    dv.Clear; // to reuse dv
+  end;
+  NotifyTestSpeed('TDocVariant dvoInternNames', 0, len, @timer, ONLYLOG);
+  table := TSQLTableJson.Create('', people);
+  try
+    Check(table.RowCount = count);
+    timer.Start;
+    for i := 1 to ITER do
+    begin
+      notexpanded := table.GetJsonValues({expand=}false, 0, 65536);
+      lennexp := length(notexpanded);
+      Check(lennexp < length(people), 'notexpanded');
+    end;
+    NotifyTestSpeed('TSQLTableJson GetJsonValues', 0, lennexp * ITER, @timer, ONLYLOG);
+  finally
+    table.Free;
+  end;
+  timer.Start;
+  for i := 1 to ITER do
+  begin
+    table := TSQLTableJson.Create('', people);
+    try
+      Check(table.RowCount = count);
+    finally
+      table.Free;
+    end;
+  end;
+  NotifyTestSpeed('TSQLTableJson expanded', 0, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+  begin
+    table := TSQLTableJson.Create('', notexpanded);
+    try
+      Check(table.RowCount = count);
+    finally
+      table.Free;
+    end;
+  end;
+  NotifyTestSpeed('TSQLTableJson not expanded', 0, lennexp * ITER, @timer, ONLYLOG);
+end;
+
 procedure TTestLowLevelTypes.WikiMarkdownToHtml;
 begin
   // wiki
@@ -10192,7 +10293,7 @@ var Doc,Doc2: TDocVariantData;
     s,j: RawUTF8;
     vd: double;
     vs: single;
-    lTable: TSQLTableJSON;
+    lTable: TSQLTableJson;
     lRefreshed: Boolean;
 begin
   Doc.Init;
@@ -10460,7 +10561,7 @@ begin
   s := VariantSaveJSON(V);
   check(s='{"ID":1,"Notation":"ABC","Price":10.1,"CustomNotation":"XYZ"}');
   // some tests to avoid regression about bugs reported by users on forum
-  lTable := TSQLTableJSON.Create('');
+  lTable := TSQLTableJson.Create('');
   try
     lTable.UpdateFrom(TEST_DATA_1,lRefreshed,nil);
     ndx := lTable.FieldIndex('RELATION_ID');
@@ -14585,12 +14686,12 @@ end;
 
 procedure TTestMemoryBased._TSQLTableWritable;
   procedure Test(intern: TRawUTF8Interning);
-  var s1,s2: TSQLTableJSON;
+  var s1,s2: TSQLTableJson;
       w: TSQLTableWritable;
       f,r: integer;
   begin
-    s1 := TSQLTableJSON.CreateFromTables([TSQLRecordPeople],'',JS);
-    s2 := TSQLTableJSON.CreateFromTables([TSQLRecordPeople],'',JS);
+    s1 := TSQLTableJson.CreateFromTables([TSQLRecordPeople],'',JS);
+    s2 := TSQLTableJson.CreateFromTables([TSQLRecordPeople],'',JS);
     w := TSQLTableWritable.CreateFromTables([TSQLRecordPeople],'',JS);
     try // merge the same data twice, and validate duplicated columns
       w.NewValuesInterning := intern;
@@ -14991,10 +15092,10 @@ begin
   if CheckFailed(Resp<>nil) then
     exit;
   try
-    Check(Resp.InheritsFrom(TSQLTableJSON));
-    len := Length(TSQLTableJSON(Resp).PrivateInternalCopy)-16;
+    Check(Resp.InheritsFrom(TSQLTableJson));
+    len := Length(TSQLTableJson(Resp).PrivateInternalCopy)-16;
     if not CheckFailed(len>0) then
-      Check(Hash32(pointer(TSQLTableJSON(Resp).PrivateInternalCopy),len)=$F11CEAC0);
+      Check(Hash32(pointer(TSQLTableJson(Resp).PrivateInternalCopy),len)=$F11CEAC0);
     //FileFromString(Resp.GetODSDocument,'people.ods');
   finally
     Resp.Free;
@@ -15082,9 +15183,9 @@ begin
   Resp := Client.List([TSQLRecordPeople],'*',CLIENTTEST_WHERECLAUSE);
   if CheckFailed(Resp<>nil) then
     exit;
-  siz := length(TSQLTableJSON(Resp).PrivateInternalCopy)-16;
+  siz := length(TSQLTableJson(Resp).PrivateInternalCopy)-16;
   if not CheckFailed(siz=4818) then
-    Check(Hash32(pointer(TSQLTableJSON(Resp).PrivateInternalCopy),siz)=$8D727024);
+    Check(Hash32(pointer(TSQLTableJson(Resp).PrivateInternalCopy),siz)=$8D727024);
   Resp.Free;
 {$ifdef WTIME}
   fRunConsole := format('%s%s, first %s, ',[fRunConsole,KB(siz),Timer.Stop]);
@@ -15159,11 +15260,11 @@ begin
     if CheckFailed(Resp<>nil) then
       exit;
     try
-      Check(Resp.InheritsFrom(TSQLTableJSON));
+      Check(Resp.InheritsFrom(TSQLTableJson));
       // every answer contains 113 rows, for a total JSON size of 4803 bytes
-      siz := length(TSQLTableJSON(Resp).PrivateInternalCopy)-16;
+      siz := length(TSQLTableJson(Resp).PrivateInternalCopy)-16;
       if not CheckFailed(siz>0) then
-        Check(Hash32(pointer(TSQLTableJSON(Resp).PrivateInternalCopy),siz)=$8D727024);
+        Check(Hash32(pointer(TSQLTableJson(Resp).PrivateInternalCopy),siz)=$8D727024);
     finally
       Resp.Free;
     end;
@@ -16773,7 +16874,7 @@ var V,V2: TSQLRecordPeople;
     Curr: Currency;
     DaVinci, s: RawUTF8;
     Refreshed: boolean;
-    J: TSQLTableJSON;
+    J: TSQLTableJson;
     i, n, nupd, ndx: integer;
     IntArray: TInt64DynArray;
     Results: TIDDynArray;
@@ -17217,7 +17318,7 @@ begin
         J := Client.List([TSQLRecordPeople],'*',s);
         Check(Client.UpdateFromServer([J],Refreshed));
         Check(not Refreshed);
-        Check(TestTable(J),'incorrect TSQLTableJSON');
+        Check(TestTable(J),'incorrect TSQLTableJson');
         Check(Client.OneFieldValues(TSQLRecordPeople,'ID','LastName=:("Dali"):',IntArray));
         Check(length(IntArray)=1001);
         for i := 0 to high(IntArray) do
@@ -17576,8 +17677,8 @@ begin
   {$endif}
 end;
 
-procedure TTestSQLite3Engine._TSQLTableJSON;
-var J: TSQLTableJSON;
+procedure TTestSQLite3Engine._TSQLTableJson;
+var J: TSQLTableJson;
     i1, i2, aR, aF, F1,F2, n: integer;
     Comp, Comp1,Comp2: TUTF8Compare;
     {$ifdef UNICODE}
@@ -17617,7 +17718,7 @@ const
     '"V03_TM":"sjentonpg@senate.gov"}]';
     {$endif}
 begin
-  J := TSQLTableJSON.Create('',JS);
+  J := TSQLTableJson.Create('',JS);
   try
     J.SetFieldType('YearOfBirth',sftModTime);
     if JS<>'' then // avoid memory leak
@@ -17767,7 +17868,7 @@ begin
     end;
   // some tests to avoid regression about bugs reported by users on forum
   {$ifndef NOVARIANTS}
-  J := TSQLTableJSON.Create('',TEST_DATA);
+  J := TSQLTableJson.Create('',TEST_DATA);
   try
     check(J.fieldCount=24);
     check(J.rowCount=3);
@@ -17792,7 +17893,7 @@ begin
   i1 := PosEx(',"CHANNEL":132',s);
   i2 := PosEx('}',s,i1);
   delete(s,i1,i2-i1); // truncate the 2nd object
-  J := TSQLTableJSON.Create('',s);
+  J := TSQLTableJson.Create('',s);
   try
     check(J.fieldCount=24);
     if not checkfailed(J.rowCount=3) then

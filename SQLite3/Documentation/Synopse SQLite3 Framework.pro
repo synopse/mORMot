@@ -16445,12 +16445,12 @@ But since the FPC trunk may be unstable, we will propose to put in place a stabl
 For this task, don't download an existing binary release of FPC / Lazarus, but use the {\i @**fpcupdeluxe@} tool, as published at @http://wiki.freepascal.org/fpcupdeluxe - it will allow to build your environment directly from the sources, and install it in a dedicated folder. Several FPC / Lazarus installations, with dedicated revision numbers, may coexist on the same computer: just ensure you run Lazarus from the shortcut created by {\i fpcupdeluxe}.
 - Download the latest release of the tool from @https://github.com/LongDirtyAnimAlf/fpcupdeluxe/releases
 - Unpack it in a dedicated folder, and run its executable.
-- On the main screen, locate on the left the two versions listboxes. Select "{\f1\fs20 3.2}" for {\i FPC version} and "{\f1\fs20 2.0.12}" for {\i Lazarus version}.
+- On the main screen, locate on the left the two versions listboxes. Select "{\f1\fs20 3.2}" for {\i FPC version} and "{\f1\fs20 2.1.0}" for {\i Lazarus version}.
 - Important note: if you want to cross-compile from Windows to other systems, e.g. install a Linux cross-compiler on Windows, ensure you installed the {\i Win32} FPC compiler and Lazarus, {\i not the Win64} version, which is known to have troubles with {\f1\fs20 currency} support;
 - Then build the FPC and Lazarus binaries directly from the latest sources, by clicking on "Install/update FPC+Laz".
 Those branches are currently used for building our production projects, so are expected to be properly tested and supported. \line At the time of the writing of this documentation, our Lazarus IDE (on Linux) reports using:
 - FPC SVN 45643 (3.2.0)
-- Lazarus SVN 64642 (2.0.12).
+- Lazarus SVN 64940 (2.1.0).
 One big advantage of {\i fpcupdeluxe} is that you can very easily install cross-compilers for the CPU / OS combinations enumerated at @202@.\line Just go to the "Cross" tab, then select the target systems, and click on "Install compiler".\line It may be needed to download the cross-compiler binaries (once): just select "Yes" when prompted.
 You could install {\i mORMot} using {\i fpcupdeluxe}, but we recommend you clone our @https://github.com/synopse/mORMot repository, and setup the expected project paths, as detailed above at @113@.
 If you don't want to define a given version, the current {\i trunk} should/could work, if it didn't include any regression at the time you get it - this is why we provide "supported" branches.\line If you want to use the {\i FPC trunk}, please modify line #262 in {\f1\fs20 Synopse.inc} to enable the {\f1\fs20 FPC_PROVIDE_ATTR_TABLE} conditional and support the latest trunk RTTI changes:
