@@ -330,6 +330,7 @@
       {$ifndef BSD}
         {$define CPUX64ASM} // Delphi XE4 or Darwin asm are buggy :(
         {$define HASAESNI}  // SynCrypto rejected by Darwin asm
+        {$define ASMX64AVX} // AVX2 ASM not available on Delphi yet (ported from mORMot2)
       {$endif BSD}
       {$define FPC_X64}   // supports AVX/AVX2/AVX512 - which Delphi doesn't
       {$ASMMODE INTEL}    // to share asm code with Delphi
