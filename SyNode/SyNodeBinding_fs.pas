@@ -72,7 +72,7 @@ begin
     src := AnyTextFileToRawUTF8(name, forceUTF8);
     if length(src) > 268435455 then
       raise ESMException.CreateUTF8('RangeError: maximum string size is 2^28-1',[]);
-    if not IsValidUTF8(src) then
+    if not IsValidUTF8(pointer(src), length(src)) then
       raise ESMException.CreateUTF8('file % contains an incorrect byte sequence. Check it valid UTF8 or Unicode', [name]);
     vp.rval := cx.NewJSString(src).ToJSVal;
   except
@@ -863,7 +863,7 @@ begin
     if not FileExists(fn, false) then
       raise ESMException.CreateFmt('file "%" does not exist', [fn]);
     src := AnyTextFileToRawUTF8(fn, true);
-    if not IsValidUTF8(src) then
+    if not IsValidUTF8(pointer(src), length(src)) then
       raise ESMException.CreateUTF8('file % contains an incorrect byte sequence. Check it valid UTF8 or Unicode', [fn]);
     RemoveCommentsFromJSON(PUTF8Char(src));
     UTF8ToSynUnicode(PUTF8Char(src), length(src), u);
