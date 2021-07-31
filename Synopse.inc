@@ -329,6 +329,7 @@
       {$define FPC_CPUINTEL}
       {$ifndef BSD}
         {$define CPUX64ASM} // Delphi XE4 or Darwin asm are buggy :(
+        {$define ASMX64AVX} // only FPC supports AVX/AVX2/AVX512
         {$define HASAESNI}  // SynCrypto rejected by Darwin asm
       {$endif BSD}
       {$define FPC_X64}   // supports AVX/AVX2/AVX512 - which Delphi doesn't

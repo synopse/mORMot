@@ -528,6 +528,30 @@ type
 
 { ************ fast UTF-8 / Unicode / Ansi types and conversion routines **** }
 
+// some constants used for UTF-8 conversion, including surrogates
+const
+  UTF16_HISURROGATE_MIN = $d800;
+  UTF16_HISURROGATE_MAX = $dbff;
+  UTF16_LOSURROGATE_MIN = $dc00;
+  UTF16_LOSURROGATE_MAX = $dfff;
+  UTF8_EXTRABYTES: array[$80..$ff] of byte = (
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, 3,3,3,3,3,3,3,3,4,4,4,4,5,5,0,0);
+  UTF8_EXTRA: array[0..6] of record
+    offset, minimum: cardinal;
+  end = ( // http://floodyberry.wordpress.com/2007/04/14/utf-8-conversion-tricks
+    (offset: $00000000;  minimum: $00010000),
+    (offset: $00003080;  minimum: $00000080),
+    (offset: $000e2080;  minimum: $00000800),
+    (offset: $03c82080;  minimum: $00010000),
+    (offset: $fa082080;  minimum: $00200000),
+    (offset: $82082080;  minimum: $04000000),
+    (offset: $00000000;  minimum: $04000000));
+  UTF8_EXTRA_SURROGATE = 3;
+  UTF8_FIRSTBYTE: array[2..6] of byte = ($c0,$e0,$f0,$f8,$fc);
+
 type
   /// kind of adding in a TTextWriter
   TTextWriterKind = (twNone, twJSONEscape, twOnSameLine);
@@ -1145,18 +1169,6 @@ function UTF8ToWideChar(dest: PWideChar; source: PUTF8Char;
 // - count may not match the UCS4 glyphs number, in case of UTF-16 surrogates
 // - faster than System.UTF8ToUnicode with dest=nil
 function Utf8ToUnicodeLength(source: PUTF8Char): PtrUInt;
-
-/// returns TRUE if the supplied buffer has valid UTF-8 encoding
-// - will stop when the buffer contains #0
-function IsValidUTF8(source: PUTF8Char): Boolean; overload;
-
-/// returns TRUE if the supplied buffer has valid UTF-8 encoding
-// - will also refuse #0 characters within the buffer
-function IsValidUTF8(source: PUTF8Char; sourcelen: PtrInt): Boolean; overload;
-
-/// returns TRUE if the supplied buffer has valid UTF-8 encoding
-// - will also refuse #0 characters within the buffer
-function IsValidUTF8(const source: RawUTF8): Boolean; overload;
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding with no #1..#31
 // control characters
@@ -16939,30 +16951,6 @@ var
   // internal list of TSynAnsiConvert instances
   SynAnsiConvertList: TSynObjectList = nil;
 
-// some constants used for UTF-8 conversion, including surrogates
-const
-  UTF16_HISURROGATE_MIN = $d800;
-  UTF16_HISURROGATE_MAX = $dbff;
-  UTF16_LOSURROGATE_MIN = $dc00;
-  UTF16_LOSURROGATE_MAX = $dfff;
-  UTF8_EXTRABYTES: array[$80..$ff] of byte = (
-    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-    2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, 3,3,3,3,3,3,3,3,4,4,4,4,5,5,0,0);
-  UTF8_EXTRA: array[0..6] of record
-    offset, minimum: cardinal;
-  end = ( // http://floodyberry.wordpress.com/2007/04/14/utf-8-conversion-tricks
-    (offset: $00000000;  minimum: $00010000),
-    (offset: $00003080;  minimum: $00000080),
-    (offset: $000e2080;  minimum: $00000800),
-    (offset: $03c82080;  minimum: $00010000),
-    (offset: $fa082080;  minimum: $00200000),
-    (offset: $82082080;  minimum: $04000000),
-    (offset: $00000000;  minimum: $04000000));
-  UTF8_EXTRA_SURROGATE = 3;
-  UTF8_FIRSTBYTE: array[2..6] of byte = ($c0,$e0,$f0,$f8,$fc);
-
 {$ifdef HASINLINE}
 {$ifdef USE_VTYPE_STATIC} // circumvent weird bug on BSD + ARM (Alfred)
 procedure VarClear(var v: variant); // defined here for proper inlining
@@ -18433,56 +18421,6 @@ Quit:
 NoSource:
   if not NoTrailingZero then
     dest^ := #0; // always append a WideChar(0) to the end of the buffer
-end;
-
-function IsValidUTF8(source: PUTF8Char): Boolean;
-var extra, i: integer;
-    c: cardinal;
-begin
-  result := false;
-  if source<>nil then
-  repeat
-    c := byte(source^);
-    inc(source);
-    if c=0 then break else
-    if c and $80<>0 then begin
-      extra := UTF8_EXTRABYTES[c];
-      if extra=0 then exit else // invalid leading byte
-      for i := 1 to extra do
-        if byte(source^) and $c0<>$80 then
-          exit else
-          inc(source); // check valid UTF-8 content
-    end;
-  until false;
-  result := true;
-end;
-
-function IsValidUTF8(const source: RawUTF8): Boolean;
-begin
-  result := IsValidUTF8(pointer(Source),length(Source));
-end;
-
-function IsValidUTF8(source: PUTF8Char; sourcelen: PtrInt): Boolean;
-var extra, i: integer;
-    c: cardinal;
-begin
-  result := false;
-  inc(sourcelen,PtrInt(source));
-  if source<>nil then
-    while PtrInt(PtrUInt(source))<sourcelen do begin
-      c := byte(source^);
-      inc(source);
-      if c=0 then exit else
-      if c and $80<>0 then begin
-        extra := UTF8_EXTRABYTES[c];
-        if extra=0 then exit else // invalid leading byte
-        for i := 1 to extra do
-          if (PtrInt(PtrUInt(source))>=sourcelen) or (byte(source^) and $c0<>$80) then
-            exit else
-            inc(source); // check valid UTF-8 content
-      end;
-    end;
-  result := true;
 end;
 
 function IsValidUTF8WithoutControlChars(source: PUTF8Char): Boolean;
