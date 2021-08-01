@@ -184,17 +184,17 @@ type
 
     /// thread specific data - pointer to any structure, passed into ThreadSafeEngine call
     //  used to access a thread-details in the native functions
-    //  as TsmEngive(cx.PrivateData).ThreadData
+    //  as TsmEngine(cx.PrivateData).ThreadData
     property ThreadData: pointer read FThreadData;
     procedure SetThreadData(pThreadData: pointer);
 
-    /// check if last call to JSAPI compile/eval fucntion was successful
+    /// check if last call to JSAPI compile/eval function was successful
     // - raise ESMException if any error occurred
     // - put error description to SynSMLog
     procedure CheckJSError(res: Boolean);
     /// clear last JavaScript error
     // - called before every evaluate() function call
-    procedure ClearLastError;
+    procedure ClearLastError; inline;
 
     /// trigger Garbage Collection
     // - all un-rooted things (JSString, JSObject, VSVal) will be released
@@ -1034,7 +1034,7 @@ begin
     end;
     raise ESMException.CreateWithTrace(FLastErrorFileName, FLastErrorNum, FLastErrorLine, FLastErrorMsg, FLastErrorStackTrace);
   end;
-  if (FInterruptRequested and (FLastErrorMsg <> '')) or FErrorExist then begin
+  if (FInterruptRequested and (FLastErrorMsg <> '')) {or FErrorExist }then begin
     raise ESMException.CreateWithTrace(FLastErrorFileName, FLastErrorNum, FLastErrorLine, FLastErrorMsg, FLastErrorStackTrace);
   end;
   if not res and not FInterruptRequested then begin
