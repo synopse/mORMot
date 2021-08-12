@@ -66,6 +66,14 @@ type
     function NewSMInstance(cx: PJSContext; argc: uintN; var vp: JSArgRec): TObject; override;
   end;
 
+type
+  THTTPClientMetricsFunction = procedure(const execTimeSec: Double;
+    const uri: RawUTF8; const respStatus: integer) of object;
+
+var
+  /// HTTP client timing collector function. nil by default (not used)
+  HTTPClientMetricsFunction: THTTPClientMetricsFunction;
+
 implementation
 
 uses
@@ -187,6 +195,7 @@ function THTTPClient.doRequest(cx: PJSContext; argc: uintN; var vp: JSArgRec): B
 var
   URL: SockString;
   in_argv: PjsvalVector;
+  t: TPrecisionTimer;
 begin
   FRespHeaders := '';
   FRespText := '';
@@ -198,7 +207,11 @@ begin
     URL := in_argv[0].asJSString.ToAnsi(cx);
     try
       fRespAlreadyRead := false;
+      if Assigned(HTTPClientMetricsFunction) then
+        t.Start;
       FResponseStatus := fClient.Request(URL, FMethod, keepAlive, fInHeaders, FInData, '', FRespHeaders, FRespText);
+      if Assigned(HTTPClientMetricsFunction) then
+         HTTPClientMetricsFunction(t.StopInMicroSec / 1000000, fClient.Server, FResponseStatus)
     except
       on E: EOSError do
         FResponseStatus := E.ErrorCode;
@@ -332,6 +345,7 @@ end;
 
 initialization
   TSMEngineManager.RegisterBinding('synode_http', SyNodeBindingProc_synode_http);
+  HTTPClientMetricsFunction := nil;
 
 end.
 
