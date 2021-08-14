@@ -939,6 +939,7 @@ end;
 
 procedure TZipWriteAbstract.AddFromZip(Source: TZipRead; EntryIndex: integer);
 var s: ^TZipEntry;
+    origZipName: TFileName;
 begin
   if (self=nil) or (Source=nil) then
     exit;
@@ -947,7 +948,11 @@ begin
   with Entry[Count] do
     if Source.RetrieveFileInfo(EntryIndex, fhr.FileInfo) then begin
       s := @Source.Entry[EntryIndex];
-      InternalAdd(s^.zipName,s^.data,fhr.fileInfo.zzipSize);
+      // backslash in s^.storedName are replaced to '\' by TZipRead.Create,
+      // accoding to ZIP file format "All slashes MUST be forward slashes '/' as opposed to
+      //  backwards slashes '\'"
+      SetString(origZipName,s^.storedName,s^.infoLocal.nameLen);
+      InternalAdd(origZipName,s^.data,fhr.fileInfo.zzipSize);
     end;
 end;
 
