@@ -5108,6 +5108,20 @@ begin
   Check(arr[0]='-1');
   Check(arr[1]='25');
   Check(arr[2]='0');
+  Finalize(arr);
+  CSVToRawUTF8DynArray('AA,BB,CC,DD', ',', ',', arr);
+  check(Length(arr)=4);
+  Check(arr[0]='AA');
+  Check(arr[1]='BB');
+  Check(arr[2]='CC');
+  Check(arr[3]='DD');
+  Finalize(arr);
+  CSVToRawUTF8DynArray('A,B,C,D', ',', ',', arr);
+  check(Length(arr)=4);
+  Check(arr[0]='A');
+  Check(arr[1]='B');
+  Check(arr[2]='C');
+  Check(arr[3]='D');
   Check(AddPrefixToCSV('One,Two,Three','Pre')='PreOne,PreTwo,PreThree');
   Check(CSVOfValue('?',3)='?,?,?');
 {$ifndef DELPHI5OROLDER}

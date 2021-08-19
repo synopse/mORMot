@@ -34702,7 +34702,7 @@ procedure CSVToRawUTF8DynArray(const CSV,Sep,SepEnd: RawUTF8; var Result: TRawUT
 var offs,i: integer;
 begin
   offs := 1;
-  while offs<length(CSV) do begin
+  while offs<=length(CSV) do begin
     SetLength(Result,length(Result)+1);
     i := PosEx(Sep,CSV,offs);
     if i=0 then begin
