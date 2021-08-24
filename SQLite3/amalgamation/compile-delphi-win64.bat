@@ -7,7 +7,7 @@ del ..\sqlite3.o
 del %DST2%
 
 set bcc=d:\dev\DelphiXE7
-rem set bcc=d:\Dev\bcc64ce
+rem set bcc=d:\Dev\bcc\bcc64ce
 
 echo ---------------------------------------------------
 echo Compiling for Delphi Win64 using %bcc%
