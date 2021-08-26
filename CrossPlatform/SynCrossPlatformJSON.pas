@@ -1682,9 +1682,9 @@ begin
     VKind := jvObject else
     if VKind<>jvObject then
       raise EJSONException.CreateFmt('AddNameValue(%s) over array',[aName]);
-  if VCount<=length(Values) then begin
-    SetLength(Values,VCount+VCount shr 3+32);
-    SetLength(Names,VCount+VCount shr 3+32);
+  if VCount>=length(Values) then begin
+    SetLength(Values,VCount+32);
+    SetLength(Names,VCount+32);
   end;
   Values[VCount] := aValue;
   Names[VCount] := aName;
