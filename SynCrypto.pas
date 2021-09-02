@@ -12241,6 +12241,8 @@ var p: ^TMD5In;
     t: cardinal;
     i: integer;
 begin
+  if len=0 then
+    exit;
   p := @buffer;
   // Update byte count
   t := bytes[0];

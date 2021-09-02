@@ -4892,47 +4892,47 @@ end;
           exit;
       result := false;
     end;
-var st, max_stack, min_stack, depth: PtrUInt;
-begin
-  depth := fFamily.StackTraceLevel;
-  if depth=0 then
-    exit;
-  asm
-    mov min_stack,ebp
-  end;
-  if Stack=nil then // if no Stack pointer set, retrieve current one
-    Stack := pointer(min_stack);
-  {$ifdef WITH_MAPPED_EXCEPTIONS}
-  max_stack := CurrentTopOfStack;
-  if max_stack=0 then begin
-    ComputeCurrentTopOfStack;
-    max_stack := CurrentTopOfStack;
-  end;
-  {$else}
-  asm
-    mov eax,fs:[4]
-    mov max_stack, eax
-    // mov eax,fs:[18h]; mov ecx,dword ptr [eax+4]; mov max_stack,ecx
-  end;
-  {$endif WITH_MAPPED_EXCEPTIONS}
-  fWriter.AddShort(' stack trace ');
-  if PtrUInt(stack)>=min_stack then
-  try
-    while (PtrUInt(stack)<max_stack) do begin
-      st := stack^;
-      if ((st>max_stack) or (st<min_stack)) and
-         not IsBadReadPtr(pointer(st-8),12) and
-         ((pByte(st-5)^=$E8) or check2(st)) then begin
-        TSynMapFile.Log(fWriter,st,false); // ignore any TSynLog.* methods
-        dec(depth);
-        if depth=0 then break;
-      end;
-      inc(stack);
+  var st, max_stack, min_stack, depth: PtrUInt;
+  begin
+    depth := fFamily.StackTraceLevel;
+    if depth=0 then
+      exit;
+    asm
+      mov min_stack,ebp
     end;
-  except
-    // just ignore any access violation here
+    if Stack=nil then // if no Stack pointer set, retrieve current one
+      Stack := pointer(min_stack);
+    {$ifdef WITH_MAPPED_EXCEPTIONS}
+    max_stack := CurrentTopOfStack;
+    if max_stack=0 then begin
+      ComputeCurrentTopOfStack;
+      max_stack := CurrentTopOfStack;
+    end;
+    {$else}
+    asm
+      mov eax,fs:[4]
+      mov max_stack, eax
+      // mov eax,fs:[18h]; mov ecx,dword ptr [eax+4]; mov max_stack,ecx
+    end;
+    {$endif WITH_MAPPED_EXCEPTIONS}
+    fWriter.AddShort(' stack trace ');
+    if PtrUInt(stack)>=min_stack then
+    try
+      while (PtrUInt(stack)<max_stack) do begin
+        st := stack^;
+        if ((st>max_stack) or (st<min_stack)) and
+           not IsBadReadPtr(pointer(st-8),12) and
+           ((pByte(st-5)^=$E8) or check2(st)) then begin
+          TSynMapFile.Log(fWriter,st,false); // ignore any TSynLog.* methods
+          dec(depth);
+          if depth=0 then break;
+        end;
+        inc(stack);
+      end;
+    except
+      // just ignore any access violation here
+    end;
   end;
-end;
 {$endif}
 {$ifdef WITH_MAPPED_EXCEPTIONS}
 begin
