@@ -11920,8 +11920,10 @@ begin
   if curl.globalShare <> nil then
     curl.easy_setopt(fHandle,coShare,curl.globalShare);
   curl.easy_setopt(fHandle,coConnectTimeoutMs,ConnectionTimeOut); // default=300 !
-  if SendTimeout + ReceiveTimeout > 0 then // prevent send+receive forever
-    curl.easy_setopt(fHandle,coTimeoutMs,SendTimeout + ReceiveTimeout);
+  if SendTimeout<ReceiveTimeout then
+    SendTimeout := ReceiveTimeout;
+  if SendTimeout<>0 then // prevent send+receive forever
+    curl.easy_setopt(fHandle,coTimeoutMs,SendTimeout);
   if fLayer=cslUNIX then
     fRootURL := 'http://localhost' else // see CURLOPT_UNIX_SOCKET_PATH doc
     fRootURL := AnsiString(Format('http%s://%s:%d',[HTTPS[fHttps],fServer,fPort]));
