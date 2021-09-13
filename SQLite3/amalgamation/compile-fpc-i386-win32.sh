@@ -12,10 +12,9 @@ rm sqlite3-$ARCH.o
 echo
 echo ---------------------------------------------------
 echo Compiling for FPC on $ARCH using $GCC
-$GCC -O2 -m32 -DSQLITE_OMIT_LOCALTIME -DWIN32 -DNDEBUG -D_WINDOWS -c sqlite3mc.c -o sqlite3-$ARCH.o
-# (-DSQLITE_NO_THREAD and) SQLITE_OMIT_LOCALTIME to allow proper linking
+$GCC -O2 -m32 -DWIN32 -DNDEBUG -D_WINDOWS -c sqlite3mc.c -o sqlite3-$ARCH.o
 
-$CROSS/i686-w64-mingw32-strip -d -x sqlite3-$FPCARCH.o 
+i686-w64-mingw32-strip -d -x sqlite3-$ARCH.o 
 
 cp sqlite3-$ARCH.o $DST
 cp sqlite3-$ARCH.o $DST2

@@ -5224,6 +5224,8 @@ begin
   try
     repeat
       code := Check(inflate(strm, Z_FINISH),[Z_OK,Z_STREAM_END,Z_BUF_ERROR],'UnCompressStream');
+      if (code=Z_BUF_ERROR) and (TempBufSize=integer(strm.avail_out)) then
+        Check(code,[],'UnCompressStream'); // occur on invalid input
       FlushBuf;
     until code=Z_STREAM_END;
     FlushBuf;

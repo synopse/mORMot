@@ -89,6 +89,14 @@ unit SynPdf;
   {$define NO_USE_BITMAP}
 {$endif}
 
+{.$define USE_PDFALEVEL}
+{ - if defined, the TPdfDocument*.Create() constructor will have an PDF/A level 
+  value instead of the boolean value PDFA1}
+{$ifdef NO_USE_PDFALEVEL}
+  { this special conditional can be set globaly for an application which doesn't
+    need the PDF/A level features }
+  {$undef USE_PDFALEVEL}
+{$endif}
 
 {$define USE_PDFSECURITY}
 { - if defined, the TPdfDocument*.Create() constructor will have an additional
@@ -311,6 +319,9 @@ type
 
   /// the internal pdf file format
   TPdfFileFormat = (pdf13, pdf14, pdf15, pdf16);
+
+  /// the PDF/A level
+  TPdfALevel = (pdfaNone, pdfa1A, pdfa1B, pdfa2A, pdfa2B, pdfa3A, pdfa3B);
 
   /// PDF exception, raised when an invalid value is given to a constructor
   EPdfInvalidValue = class(Exception);
@@ -1177,7 +1188,7 @@ type
     /// internal temporary variable - used by CreateOutline
     fLastOutline: TPdfOutlineEntry;
     fFileFormat: TPdfFileFormat;
-    fPDFA1: boolean;
+    fPDFA: TPdfALevel;
     fSaveToStreamWriter: TPdfWrite;
     {$ifdef USE_PDFSECURITY}
     fEncryption: TPdfEncryption;
@@ -1196,7 +1207,11 @@ type
     procedure SetDefaultPageHeight(const Value: cardinal);
     procedure SetDefaultPageWidth(const Value: cardinal);
     procedure SetUseOptionalContent(const Value: boolean);
+    procedure SetPDFA(const Value: TPdfALevel);
+    {$ifndef USE_PDFALEVEL}
+    function  GetPDFA1: boolean;
     procedure SetPDFA1(const Value: boolean);
+    {$endif}
     function GetDefaultPageLandscape: boolean;
     procedure SetDefaultPageLandscape(const Value: boolean);
     procedure SetFontFallBackName(const Value: string);
@@ -1241,10 +1256,11 @@ type
     // - note that only Win-Ansi encoding allows use of embedded standard fonts
     // - you can specify a Code Page to be used for the PDFString encoding;
     // by default (ACodePage left to 0), the current system code page is used
-    // - you can create a PDF/A-1 compliant document by setting APDFA1 to true
+    // - you can create a PDF/A compliant document by setting APDFA to PDF/A Level 
+    // or APDFA1 to true
     // - you can set an encryption instance, by using TPdfEncryption.New()
     constructor Create(AUseOutlines: Boolean=false; ACodePage: integer=0;
-      APDFA1: boolean=false
+      {$ifdef USE_PDFALEVEL]}APDFA: TPdfALevel=pdfaNone{$else}APDFA1: boolean=false{$endif}
       {$ifdef USE_PDFSECURITY}; AEncryption: TPdfEncryption=nil{$endif}); reintroduce;
     /// release the PDF document instance
     destructor Destroy; override;
@@ -1465,12 +1481,20 @@ type
     // the native resolution of the PDF, i.e. more than 7200 DPI (since we
     // write coordinates with 2 decimals per point - which is 1/72 inch)
     property ScreenLogPixels: Integer read FScreenLogPixels write FScreenLogPixels;
+    /// is pdfaXXX if the file was created in order to be PDF/A compliant
+    // - set APDFA parameter to a level for Create constructor in order to use it
+    // - warning: setting a value to this propery after creation will call the
+    // NewDoc method, therefore will erase all previous content and pages
+    // (including Info properties)
+    property PDFA: TPdfALevel read fPDFA write SetPDFA;
+    {$ifndef USE_PDFALEVEL}
     /// is TRUE if the file was created in order to be PDF/A-1 compliant
     // - set APDFA1 parameter to true for Create constructor in order to use it
     // - warning: setting a value to this propery after creation will call the
     // NewDoc method, therefore will erase all previous content and pages
     // (including Info properties)
-    property PDFA1: boolean read fPDFA1 write SetPDFA1;
+    property PDFA1: boolean read GetPDFA1 write SetPDFA1;
+    {$endif}
     /// set to TRUE to force PDF 1.5 format, which may produce smaller files
     property GeneratePDF15File: boolean read GetGeneratePDF15File write SetGeneratePDF15File;
   end;
@@ -2446,7 +2470,7 @@ type
     /// create the PDF document instance, with a VCL Canvas property
     // - see TPdfDocument.Create connstructor for the arguments expectations
     constructor Create(AUseOutlines: Boolean=false; ACodePage: integer=0;
-      APDFA1: boolean=false
+      {$ifdef USE_PDFALEVEL]}APDFA: TPdfALevel=pdfaNone{$else}APDFA1: boolean=false{$endif}
       {$ifdef USE_PDFSECURITY}; AEncryption: TPdfEncryption=nil{$endif});
     /// add a Page to the current PDF document
     function AddPage: TPdfPage; override;
@@ -4900,8 +4924,8 @@ begin
   aChanged := fAddGlyphFont=fNone;
   Glyph := TTF.fUsedWide[TTF.FindOrAddUsedWideChar(Char)].Glyph;
   with Canvas.fDoc do
-    if fPDFA1 and (Glyph=0) and (fFontFallBackIndex<0) then
-      raise Exception.Create('PDFA/1 expects font fallback to be enabled, '+
+    if (fPDFA <> pdfaNone) and (Glyph=0) and (fFontFallBackIndex<0) then
+      raise Exception.Create('PDFA expects font fallback to be enabled, '+
         'and the required font is not available on this system') else
     if (Glyph=0) and fUseFontFallBack and (fFontFallBackIndex>=0) then begin
       if fAddGlyphFont=fMain then
@@ -5365,11 +5389,18 @@ begin
 end;
 
 constructor TPdfDocument.Create(AUseOutlines: Boolean; ACodePage: integer;
-  APDFA1: boolean{$ifdef USE_PDFSECURITY}; AEncryption: TPdfEncryption{$endif});
+  {$ifdef USE_PDFALEVEL]}APDFA: TPdfALevel{$else}APDFA1: boolean{$endif}
+  {$ifdef USE_PDFSECURITY}; AEncryption: TPdfEncryption{$endif});
 var LFont: TLogFontW; // TLogFontW to add to FTrueTypeFonts array as UTF-8
     i: integer;
 begin
-  fPDFA1 := APDFA1;
+  {$ifdef USE_PDFALEVEL]}
+  fPDFA:=APDFA;
+  {$else}
+  if APDFA1 then
+    fPDFA := pdfa1B else
+    fPDFA := pdfaNone;
+  {$endif USE_PDFALEVEL}
   {$ifdef USE_PDFSECURITY}
   fEncryption := AEncryption;
   {$endif USE_PDFSECURITY}
@@ -5695,18 +5726,18 @@ begin
   if fEncryption<>nil then
     NeedFileID := true;
   {$endif USE_PDFSECURITY}
-  if PDFA1 then begin
+  if PDFA<>pdfaNone then begin
     if fFileFormat<pdf14 then
       fFileFormat := pdf14;
     {$ifdef USE_PDFSECURITY}
     if fEncryption<>nil then
-      raise EPdfInvalidOperation.Create('PDF/A-1 not allowed when encryption is enabled');
+      raise EPdfInvalidOperation.Create('PDF/A not allowed when encryption is enabled');
     {$endif USE_PDFSECURITY}
     fUseFontFallBack := true;
     FOutputIntents := TPdfArray.Create(FXref);
     Dico := TPdfDictionary.Create(FXRef);
     Dico.AddItem('Type','OutputIntent');
-    Dico.AddItem('S','GTS_PDFA1');
+    Dico.AddItem('S','GTS_PDFA1');  // there is no definition GTS_PDFA2 or GTS_PDFA3
     Dico.AddItemText('OutputConditionIdentifier','sRGB');
     Dico.AddItemText('RegistryName','http://www.color.org');
     RGB := TPdfStream.Create(self);
@@ -5839,6 +5870,8 @@ procedure TPdfDocument.SaveToStreamDirectBegin(AStream: TStream;
 const PDFHEADER: array[TPdfFileFormat] of PDFString = (
     '%PDF-1.3'#10, '%PDF-1.4'#10'%'#228#229#230#240#10,
     '%PDF-1.5'#10'%'#241#242#243#244#10, '%PDF-1.6'#10'%'#245#246#247#248#10);
+const PDFAPART:        array[TPdfALevel] of PDFString = ('', '1', '1', '2', '2', '3', '3');
+const PDFACONFORMANCE: array[TPdfALevel] of PDFString = ('', 'A', 'B', 'A', 'B', 'A', 'B');
 begin
   if fSaveToStreamWriter<>nil then
     raise EPdfInvalidOperation.Create('SaveToStreamDirectBegin called twice');
@@ -5848,7 +5881,7 @@ begin
     FInfo.ModDate := ForceModDate;
   FRoot.SaveOpenAction;
   // some PDF/A-1 requirements
-  if PDFA1 then begin
+  if PDFA<>pdfaNone then begin
     FMetaData.Writer.Add(RawByteString(
       '<?xpacket begin="'#$EF#$BB#$BF'" id="W5M0MpCehiHzreSzNTczkc9d"?>'+
       '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="SynPdf">'+
@@ -5870,7 +5903,7 @@ begin
       '<pdf:Keywords>').Add(StringToUTF8(Info.Keywords)).Add('</pdf:Keywords>'+
       '<pdf:Producer>'+PDF_PRODUCER+'</pdf:Producer></rdf:Description>'+
       '<rdf:Description rdf:about="" xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">'+
-      '<pdfaid:part>1</pdfaid:part><pdfaid:conformance>A</pdfaid:conformance>'+
+      '<pdfaid:part>'+PDFAPART[PDFA]+'</pdfaid:part><pdfaid:conformance>'+PDFACONFORMANCE[PDFA]+'</pdfaid:conformance>'+
       '</rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="w"?>');
   end;
   // write beginning of the content
@@ -6346,11 +6379,25 @@ begin
   NewDoc;
 end;
 
-procedure TPdfDocument.SetPDFA1(const Value: boolean);
+procedure TPdfDocument.SetPDFA(const Value: TPdfALevel);
 begin
-  fPDFA1 := Value;
+  fPDFA := Value;
   NewDoc;
 end;
+
+{$ifndef USE_PDFALEVEL}
+function  TPdfDocument.GetPDFA1: boolean;
+begin
+  result := (fPDFA = pdfa1B);
+end;
+
+procedure TPdfDocument.SetPDFA1(const Value: boolean);
+begin
+  if Value then
+    SetPDFA(pdfa1B) else
+    SetPDFA(pdfaNone);
+end;
+{$endif USE_PDFALEVEL}
 
 procedure TPdfDocument.SetFontFallBackName(const Value: string);
 begin
@@ -8098,7 +8145,7 @@ begin
       Descendant.AddItem('Type','Font');
       Descendant.AddItem('Subtype','CIDFontType2');
       Descendant.AddItem('BaseFont',FName);
-      if fDoc.PDFA1 then
+      if fDoc.PDFA<>pdfaNone then
         Descendant.AddItem('CIDToGIDMap','Identity');
       CIDSystemInfo := TPdfDictionary.Create(FDoc.FXref);
       CIDSystemInfo.AddItem('Supplement',0);
@@ -8111,7 +8158,7 @@ begin
         fLastChar := WinAnsiFont.fUsedWide[n-1].Glyph;
       end;
       Descendant.AddItem('DW',WinAnsiFont.fDefaultWidth);
-      if fDoc.PDFA1 or not WinAnsiFont.fFixedWidth then begin
+      if (fDoc.PDFA<>pdfaNone) or not WinAnsiFont.fFixedWidth then begin
         WR.Add('['); // fixed width will use /DW value
         // WinAnsiFont.fUsedWide[] contains glyphs used by ShowText
         for i := 0 to n-1 do
@@ -8179,7 +8226,7 @@ begin
         FData.AddItem('Widths',TPdfRawText.Create(WR.Add(']').ToPDFString));
       end;
       // embedd True Type font into the PDF file (allow subset of used glyph)
-      if fDoc.PDFA1 or (fDoc.EmbeddedTTF and
+      if (fDoc.PDFA<>pdfaNone) or (fDoc.EmbeddedTTF and
          ((fDoc.fEmbeddedTTFIgnore=nil) or (fDoc.fEmbeddedTTFIgnore.
            IndexOf(fDoc.FTrueTypeFonts[fTrueTypeFontsIndex-1])<0))) then begin
         fDoc.GetDCWithFont(self);
@@ -8748,7 +8795,8 @@ begin
 end;
 
 constructor TPdfDocumentGDI.Create(AUseOutlines: Boolean; ACodePage: integer;
-  APDFA1: boolean{$ifdef USE_PDFSECURITY}; AEncryption: TPdfEncryption{$endif});
+  {$ifdef USE_PDFALEVEL]}APDFA: TPdfALevel{$else}APDFA1: boolean{$endif}
+  {$ifdef USE_PDFSECURITY}; AEncryption: TPdfEncryption{$endif});
 begin
   inherited;
   fTPdfPageClass := TPdfPageGdi;

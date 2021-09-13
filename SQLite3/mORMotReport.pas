@@ -4932,11 +4932,9 @@ begin
     rc := rcPage;
     rc.Top := (fCurrentYPos*1440) div LogY;
     LastChar := 0;
-    with TextLenEx do begin
-      flags := GTL_DEFAULT;
-      codepage := CP_ACP;
-    end;
-    MaxLen := SendMessage(RichEditHandle, EM_GETTEXTLENGTHEX, Integer(@TextLenEx), 0);
+    TextLenEx.flags := GTL_DEFAULT;
+    TextLenEx.codepage := CP_ACP;
+    MaxLen := SendMessage(RichEditHandle, EM_GETTEXTLENGTHEX, PtrInt(@TextLenEx), 0);
     chrg.cpMax := -1;
     OldMap := SetMapMode(hdc, MM_TEXT);
     try
@@ -4945,7 +4943,7 @@ begin
         chrg.cpMin := LastChar;
         hdc := fCanvas.Handle;
         hdcTarget := hdc;
-        LastChar := SendMessage(RichEditHandle, EM_FORMATRANGE, 1, Integer(@Range));
+        LastChar := SendMessage(RichEditHandle, EM_FORMATRANGE, 1, PtrInt(@Range));
         if EndOfPagePositions<>nil then
           AddInteger(EndOfPagePositions^,LastChar);
         if cardinal(LastChar)>=cardinal(MaxLen) then

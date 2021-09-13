@@ -13319,7 +13319,8 @@ type
     wSeven, wSeven_64, wServer2008_R2, wServer2008_R2_64,
     wEight, wEight_64, wServer2012, wServer2012_64,
     wEightOne, wEightOne_64, wServer2012R2, wServer2012R2_64,
-    wTen, wTen_64, wServer2016, wServer2016_64, wServer2019_64);
+    wTen, wTen_64, wServer2016, wServer2016_64,
+    wEleven, wEleven_64, wServer2019_64);
   /// the running Operating System, encoded as a 32-bit integer
   TOperatingSystemVersion = packed record
     case os: TOperatingSystem of
@@ -13337,11 +13338,12 @@ const
     '7', '7 64bit', 'Server 2008 R2', 'Server 2008 R2 64bit',
     '8', '8 64bit', 'Server 2012', 'Server 2012 64bit',
     '8.1', '8.1 64bit', 'Server 2012 R2', 'Server 2012 R2 64bit',
-    '10', '10 64bit', 'Server 2016', 'Server 2016 64bit', 'Server 2019 64bit');
+    '10', '10 64bit', 'Server 2016', 'Server 2016 64bit',
+    '11', '11 64bit', 'Server 2019 64bit');
   /// the recognized Windows versions which are 32-bit
   WINDOWS_32 = [w2000, wXP, wServer2003, wServer2003_R2, wVista, wServer2008,
     wSeven, wServer2008_R2, wEight, wServer2012, wEightOne, wServer2012R2,
-    wTen, wServer2016];
+    wTen, wServer2016, wEleven];
   /// translate one operating system (and distribution) into a single character
   // - may be used internally e.g. for a HTTP User-Agent header, as with
   // TFileVersion.UserAgent
@@ -27336,9 +27338,10 @@ begin
       inc(Vers,2); // e.g. wEight -> wServer2012
       if (Vers=wServer2016) and (OSVersionInfo.dwBuildNumber>=17763) then
         Vers := wServer2019_64; // https://stackoverflow.com/q/53393150
-    end;
+    end else if (Vers=wTen) and (OSVersionInfo.dwBuildNumber>=22000) then
+      Vers := wEleven; // waiting for an official mean of Windows 11 identification
     if (SystemInfo.wProcessorArchitecture=PROCESSOR_ARCHITECTURE_AMD64) and
-       (Vers < wServer2019_64) then
+       (Vers<wServer2019_64) then
       inc(Vers);   // e.g. wEight -> wEight64
   end;
   OSVersion := Vers;
@@ -34708,7 +34711,7 @@ procedure CSVToRawUTF8DynArray(const CSV,Sep,SepEnd: RawUTF8; var Result: TRawUT
 var offs,i: integer;
 begin
   offs := 1;
-  while offs<length(CSV) do begin
+  while offs<=length(CSV) do begin
     SetLength(Result,length(Result)+1);
     i := PosEx(Sep,CSV,offs);
     if i=0 then begin
@@ -59230,7 +59233,8 @@ begin
     {$elseif defined(VER320)}'Delphi 10.2 Tokyo'
     {$elseif defined(VER330)}'Delphi 10.3 Rio'
     {$elseif defined(VER340)}'Delphi 10.4 Sydney'
-    {$elseif defined(VER350)}'Delphi 11 Next'
+    {$elseif defined(VER350)}'Delphi 11 Alexandria'
+    {$elseif defined(VER360)}'Delphi 11.1 Next'
     {$ifend}
   {$endif CONDITIONALEXPRESSIONS}
 {$endif FPC}
