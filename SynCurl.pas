@@ -147,6 +147,8 @@ type
     coFTPSSLAuth           = 129,
     coIgnoreContentLength  = 136,
     coFTPSkipPasvIp        = 137,
+    coTimeoutMs            = 155, // since libcurl 7.16.2 - April 11 2007
+    coConnectTimeoutMs     = 156,
     coFile                 = 10001,
     coWriteData            = coFile,
     coURL                  = 10002,
