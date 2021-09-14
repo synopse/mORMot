@@ -9139,6 +9139,14 @@ end;
 // adapted from https://github.com/simdjson/simdjson - Apache License 2.0
 function IsValidUtf8LenAvx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
   {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        test    source, source
+        jz      @ok
+        test    sourcelen, sourcelen
+        jle     @ok
+        {$ifdef WIN64ABI} // Win64 ABI doesn't consider rsi/rdi as volatile
+        push    rsi
+        push    rdi
+        {$endif WIN64ABI}
         push    rbp
         mov     r8, source
         mov     rdx, sourcelen
@@ -9207,10 +9215,16 @@ function IsValidUtf8LenAvx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         test    eax, eax
         jne     @last
 @ended: vpor    ymm5, ymm5, ymm4
-        vptest  ymm5, ymm5
+@final: vptest  ymm5, ymm5
         sete    al
         vzeroupper
-        leave
+        leave      // mov rsp,rbp + pop rbp
+        {$ifdef WIN64ABI}
+        pop     rdi
+        pop     rsi
+        {$endif WIN64ABI}
+        ret
+@ok:    mov     al, 1
         ret
 @small: vpxor   xmm4, xmm4, xmm4
         xor     esi, esi
@@ -9322,11 +9336,7 @@ function IsValidUtf8LenAvx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         vpxor   ymm1, ymm1, ymm8
         vpor    ymm0, ymm0, ymm1
         vpor    ymm5, ymm0, ymm5
-        vptest  ymm5, ymm5
-        sete    al
-        vzeroupper
-        leave
-        ret
+        jmp     @final
         align 16
 @20:    dq 2020202020202020H
         dq 2020202020202020H
