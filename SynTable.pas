@@ -9143,10 +9143,10 @@ function IsValidUtf8LenAvx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         jz      @ok
         test    sourcelen, sourcelen
         jle     @ok
-        {$ifdef WIN64ABI} // Win64 ABI doesn't consider rsi/rdi as volatile
+        {$ifdef win64} // this ABI doesn't consider rsi/rdi as volatile
         push    rsi
         push    rdi
-        {$endif WIN64ABI}
+        {$endif}
         push    rbp
         mov     r8, source
         mov     rdx, sourcelen
@@ -9219,10 +9219,10 @@ function IsValidUtf8LenAvx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         sete    al
         vzeroupper
         leave      // mov rsp,rbp + pop rbp
-        {$ifdef WIN64ABI}
+        {$ifdef win64}
         pop     rdi
         pop     rsi
-        {$endif WIN64ABI}
+        {$endif}
         ret
 @ok:    mov     al, 1
         ret
