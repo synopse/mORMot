@@ -719,7 +719,11 @@ type
     // - parameters marked as ? should have been already bound with Bind*() functions
     // - should raise an Exception on any error
     // - after execution, you can access any returned data via ISQLDBRows methods
-    procedure ExecutePrepared;
+    procedure ExecutePrepared; overload;
+    /// execute a prepared SQL statement
+    // - if ForUpdate - true then expected to be used with 'SELECT' locking statements.
+    // - will prepare statement for ColumnBlobFromStream use
+    procedure ExecutePrepared(ForUpdate: boolean); overload;
     // execute a prepared SQL statement and return all rows content as a JSON string
     // - JSON data is retrieved with UTF-8 encoding
     // - if Expanded is true, JSON data is an array of objects, for direct use
@@ -1893,7 +1897,10 @@ type
     // - parameters marked as ? should have been already bound with Bind*() functions
     // - should raise an Exception on any error
     // - this void default implementation will call set fConnection.fLastAccess
-    procedure ExecutePrepared; virtual;
+    procedure ExecutePrepared; overload; virtual;
+    /// execute a prepared SQL statement
+    // - if ForUpdate - true then expected to be used with 'SELECT .. FOR UPDATE' locking statements
+    procedure ExecutePrepared(ForUpdate: boolean); overload; virtual;
     /// release cursor memory and resources once Step loop is finished
     // - this method call is optional, but is better be used if the ISQLDBRows
     // statement from taken from cache, and returned a lot of content which
@@ -7605,6 +7612,12 @@ begin
   // a do-nothing default method
 end;
 
+procedure TSQLDBStatement.ExecutePrepared(ForUpdate: boolean);
+begin
+  // default implementation
+  ExecutePrepared;
+end;
+
 procedure TSQLDBStatement.Reset;
 begin
   fSQLWithInlinedParams := '';
@@ -9027,7 +9040,7 @@ begin
   if (length(Args)>0) and (Args[0].VType=vtObject) and (Args[0].VObject<>nil) then
     if Args[0].VObject.InheritsFrom(TSQLDBStatement) then begin
       fStatement := TSQLDBStatement(Args[0].VObject);
-      if fStatement.Connection.Properties.LogSQLStatementOnException then begin
+      if assigned(fStatement.Connection) and fStatement.Connection.Properties.LogSQLStatementOnException then begin
         try
           sql := fStatement.GetSQLWithInlinedParams;
         except

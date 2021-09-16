@@ -6,7 +6,7 @@ unit SynOleDB;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2021 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynOleDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2021
+  Portions created by the Initial Developer are Copyright (C) 2020
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -89,6 +89,7 @@ const
   IID_IUnknown: TGUID = '{00000000-0000-0000-C000-000000000046}';
   IID_IAccessor: TGUID = '{0C733A8C-2A1C-11CE-ADE5-00AA0044773D}';
   IID_IRowset: TGUID = '{0C733A7C-2A1C-11CE-ADE5-00AA0044773D}';
+  IID_IRowsetChange: TGUID = '{0C733A05-2A1C-11CE-ADE5-00AA0044773D}';
   IID_IMultipleResults: TGUID = '{0C733A90-2A1C-11CE-ADE5-00AA0044773D}';
   IID_IOpenRowset: TGUID = '{0C733A69-2A1C-11CE-ADE5-00AA0044773D}';
   IID_IDataInitialize: TGUID = '{2206CCB1-19C1-11D1-89E0-00C04FD7A829}';
@@ -97,6 +98,7 @@ const
   IID_ISSCommandWithParameters: TGUID = '{EEC30162-6087-467C-B995-7C523CE96561}';
   IID_ITransactionLocal: TGUID = '{0C733A5F-2A1C-11CE-ADE5-00AA0044773D}';
   IID_IDBPromptInitialize: TGUID = '{2206CCB0-19C1-11D1-89E0-00C04FD7A829}';
+  IID_ISequentialStream: TGUID = '{0C733A30-2A1C-11CE-ADE5-00AA0044773D}';
   CLSID_DATALINKS: TGUID = '{2206CDB2-19C1-11D1-89E0-00C04FD7A829}';
   CLSID_MSDAINITIALIZE: TGUID = '{2206CDB0-19C1-11D1-89E0-00C04FD7A829}';
   CLSID_ROWSET_TVP: TGUID = '{C7EF28D5-7BEE-443F-86DA-E3984FCD4DF9}';
@@ -106,6 +108,7 @@ const
   DBSCHEMA_COLUMNS: TGUID = '{C8B52214-5CF3-11CE-ADE5-00AA0044773D}';
   DBSCHEMA_INDEXES: TGUID = '{C8B5221E-5CF3-11CE-ADE5-00AA0044773D}';
   DBSCHEMA_FOREIGN_KEYS: TGUID = '{C8B522C4-5CF3-11CE-ADE5-00AA0044773D}';
+
 
   DBPROPSET_SQLSERVERPARAMETER: TGUID = '{FEE09128-A67D-47EA-8D40-24A1D4737E8D}';
   // PropIds for DBPROPSET_SQLSERVERPARAMETER
@@ -185,7 +188,22 @@ const
   DB_E_CANCELED = HResult($80040E4E);
   DB_E_NOTSUPPORTED = HResult($80040E53);
   DBCOLUMNFLAGS_MAYBENULL = $00000040;
-  ISOLATIONLEVEL_READCOMMITTED = $00001000;
+
+
+  ISOLATIONLEVEL_UNSPECIFIED	= $ffffffff;
+	ISOLATIONLEVEL_CHAOS	= $10;
+	ISOLATIONLEVEL_READUNCOMMITTED	= $100;
+	ISOLATIONLEVEL_BROWSE	= $100;  //Synonym for ISOLATIONLEVEL_READUNCOMMITTED
+	ISOLATIONLEVEL_READCOMMITTED	=  $00001000;
+	ISOLATIONLEVEL_CURSORSTABILITY	= ISOLATIONLEVEL_READCOMMITTED; //Synonym for ISOLATIONLEVEL_READCOMMITTED
+	ISOLATIONLEVEL_REPEATABLEREAD	= $10000;
+	ISOLATIONLEVEL_SERIALIZABLE	= $100000;
+	ISOLATIONLEVEL_ISOLATED	= ISOLATIONLEVEL_SERIALIZABLE; //Synonym for ISOLATIONLEVEL_SERIALIZABLE
+  ISOLATIONLEVEL_SNAPSHOT	= $1000000;
+
+
+
+
   DBPROMPTOPTIONS_PROPERTYSHEET = $2;
   DB_NULL_HCHAPTER = $00;
   DB_S_ENDOFROWSET = $00040EC6;
@@ -221,6 +239,14 @@ type
   TOleDBBindStatus = (
     bsOK, bsBadOrdinal, bsUnsupportedConversion, bsBadBindInfo,
     bsBadStorageFlags, bsNoInterface, bsMultipleStorage);
+
+
+  TOleDBTransactionIsolationLevel = (tiChaos = ISOLATIONLEVEL_CHAOS,
+                                     tiReadUncommitted = ISOLATIONLEVEL_READUNCOMMITTED,
+                                     tiReadCommitted = ISOLATIONLEVEL_READCOMMITTED,
+                                     tiRepeatable = ISOLATIONLEVEL_REPEATABLEREAD,
+                                     tiSerializable = ISOLATIONLEVEL_SERIALIZABLE,
+                                     tiSnapshot = ISOLATIONLEVEL_SNAPSHOT);
 
   PIUnknown = ^IUnknown;
   HACCESSOR = PtrUInt;
@@ -519,6 +545,19 @@ type
     function RestartPosition(hReserved: HCHAPTER): HResult; stdcall;
   end;
 
+// *********************************************************************//
+// Interface: IRowsetChange
+// GUID:      {0C733A05-2A1C-11CE-ADE5-00AA0044773D}
+// *********************************************************************//
+  IRowsetChange = interface(IUnknown)
+    ['{0C733A05-2A1C-11CE-ADE5-00AA0044773D}']
+    function DeleteRows(hReserved: HCHAPTER; cRows: UINT; rghRows: PUintArray;
+      rgRowStatus: PUintArray): HResult; stdcall;
+    function SetData(HROW: HROW; HACCESSOR: HACCESSOR; pData: Pointer): HResult; stdcall;
+    function InsertRow(hReserved: HCHAPTER; HACCESSOR: HACCESSOR; pData: Pointer;
+      out phRow: HROW): HResult; stdcall;
+  end;
+
   IOpenRowset = interface(IUnknown)
     ['{0C733A69-2A1C-11CE-ADE5-00AA0044773D}']
     function OpenRowset(const punkOuter: IUnknown; pTableID: PDBID; pIndexID: PDBID;
@@ -603,7 +642,6 @@ type
 
 
 { -------------- TOleDB* OleDB classes and types }
-
 type
   /// generic Exception type, generated for OleDB connection
   EOleDBException = class(ESQLDBException);
@@ -621,6 +659,7 @@ type
     fOnCustomError: TOleDBOnCustomError;
     fSchemaRec: array of TDBSchemaRec;
     fSupportsOnlyIRowset: boolean;
+    fTransactionIsolationLevel: TOleDBTransactionIsolationLevel;
     function GetSchema(const aUID: TGUID; const Fields: array of RawUTF8;
       var aResult: IRowSet): boolean;
     /// will create the generic fConnectionString from supplied parameters
@@ -670,6 +709,7 @@ type
   published { to be loggged as JSON }
     /// the associated OleDB provider name, as set for each class
     property ProviderName: RawUTF8 read fProviderName;
+    property TransactionIsolationLevel: TOleDBTransactionIsolationLevel read fTransactionIsolationLevel write fTransactionIsolationLevel;
   end;
 
   /// OleDB connection properties to an Oracle database using Oracle's Provider
@@ -777,13 +817,6 @@ type
   end;
 
 {$endif}
-
-  /// OleDB connection properties to Microsoft Access Database
-  TOleDBACEConnectionProperties = class(TOleDBConnectionProperties)
-  protected
-    /// will set the appropriate provider name, i.e. 'Microsoft.ACE.OLEDB.12.0'
-    procedure SetInternalProperties; override;
-  end;
 
   /// OleDB connection properties to IBM AS/400
   TOleDBAS400ConnectionProperties = class(TOleDBConnectionProperties)
@@ -1074,7 +1107,11 @@ type
     // - parameters marked as ? should have been already bound with Bind*()
     // functions above
     // - raise an EOleDBException on any error
-    procedure ExecutePrepared; override;
+    procedure ExecutePrepared; overload; override;
+    /// execute a prepared SQL statement
+    // - if ForUpdate - true then expected to be used with 'SELECT' locking statements.
+    // - will prepare statement for ColumnBlobFromStream use
+    procedure ExecutePrepared(ForUpdate: boolean) overload; override;
     /// Reset the previous prepared statement
     // - this overridden implementation will reset all bindings and the cursor state
     // - raise an EOleDBException on any error
@@ -1138,6 +1175,11 @@ type
     // e.g. a 8 bytes RawByteString for a vtInt64/vtDouble/vtDate/vtCurrency,
     // or a direct mapping of the RawUnicode
     function ColumnBlob(Col: integer): RawByteString; override;
+    /// read a blob Column into the Stream parameter
+    procedure ColumnBlobToStream(Col: integer; Stream: TStream); override;
+    /// write a blob Column into the Stream parameter
+    // - expected to be used with 'SELECT ' locking statements prepared with ForUpdate = true
+    procedure ColumnBlobFromStream(Col: integer; Stream: TStream); override;
     /// append all columns values of the current Row to a JSON stream
     // - will use WR.Expand to guess the expected output format
     // - fast overridden implementation with no temporary variable
@@ -1229,6 +1271,22 @@ type
     procedure FillRowData(pCurrentRec:PIDListRec);
     procedure FillBindingsAndSetupRowBuffer(pBindingsList: PDBBindingArray);
   end;
+
+  /// implements an ISequentialStream wrapper around a TStream object
+  TOLEDBSequentialStream = class(TInterfacedObject, ISequentialStream)
+  protected
+    FStream: TStream;
+  public
+    /// Reads data from associated TStream object
+    function Read(pv: Pointer; cb: Cardinal; pcbRead: PFixedUInt): HResult; stdcall;
+    /// Writes data to associated TStream object
+    function Write(pv: Pointer; cb: Cardinal; pcbWritten: PFixedUInt): HResult; stdcall;
+    /// Creates wrapper around a TStream object
+    constructor Create(Stream: TStream); overload;
+    //
+    destructor Destroy; override;
+  end;
+
 
 /// check from the file beginning if sounds like a valid Jet / MSAccess file
 function IsJetFile(const FileName: TFileName): boolean;
@@ -1413,9 +1471,11 @@ type
     2: (case integer of
         0: (VData: array[0..0] of byte);
         1: (VWideChar: PWideChar);
-        2: (VAnsiChar: PAnsiChar));
+        2: (VAnsiChar: PAnsiChar);
+        3: (VPointer: pointer));
   end;
   PColumnValue = ^TColumnValue;
+
 
 procedure TOleDBStatement.LogStatusError(Status: integer; Column: PSQLDBColumnProperty);
 var msg: RawUTF8;
@@ -1471,16 +1531,34 @@ function TOleDBStatement.ColumnBlob(Col: integer): RawByteString;
 var C: PSQLDBColumnProperty;
     V: PColumnValue;
     P: PAnsiChar;
+    SeqStream: ISequentialStream;
+    pcbRead, Len: Longint;
 begin
+
   V := GetCol(Col,C);
   if V=nil then // column is NULL
     result := '' else
     case C^.ColumnType of
     ftBlob: begin
       if C^.ColumnValueInlined then
-        P := @V^.VData else
-        P := V^.VAnsiChar;
-      SetString(Result,P,V^.Length);
+      begin
+        P := @V^.VData;
+        SetString(Result,P,V^.Length);
+      end else
+      begin
+        if TOleDBStatus(V^.Status) = stOK then
+        begin
+          if not assigned(V^.VPointer) then
+              raise EOleDBException.CreateUTF8('%.ColumnBlob() already consumed. ',[self]);
+
+          Len := V^.Length;
+          SetLength(result, Len);
+          pointer(SeqStream) := V^.VPointer; // will not increase reference count (refcount = 1 )
+          SeqStream.Read(pointer(result), Len, @pcbRead);
+          SeqStream := nil; // will release the reference. (refcount = 0 )
+          V^.VPointer := nil;
+        end
+      end;
     end;
     ftUTF8:
       if V^.Length=0 then
@@ -1489,10 +1567,88 @@ begin
           P := @V^.VData else
           P := V^.VAnsiChar;
         // +1 below for trailing WideChar(#0) in the resulting RawUnicode
-        SetString(Result,P,V^.Length+1);
+        SetString(result,P,V^.Length+1);
       end;
      else SetString(result,PAnsiChar(@V^.Int64),sizeof(Int64));
     end;
+end;
+
+procedure TOleDBStatement.ColumnBlobFromStream(Col: integer; Stream: TStream);
+var RowsetChange: IRowsetChange;
+    SequentialStream: ISequentialStream;
+    V: PColumnValue;
+    C: PSQLDBColumnProperty;
+begin
+  if fRowSet.QueryInterface(IID_IRowsetChange,RowsetChange) <> S_OK then
+    raise  EOleDBException.CreateUTF8('%.ColumnBlobFromStream() failed to get  IRowsetChange interface. ',[self]);
+
+  SequentialStream := TOLEDBSequentialStream.Create(Stream);
+
+  C := @fColumns[Col];
+  V := @fRowSetData[C^.ColumnAttr];
+  V^.Status := 0;
+  V^.Length := Stream.Size;
+
+  if  assigned(V^.VPointer) then
+   // release the original ISequentialStream reference
+   ISequentialStream(V^.VPointer)._Release;
+
+  // set the new  ISequentialStream reference
+  V^.VPointer := pointer(SequentialStream);
+  // Add reference
+  SequentialStream._AddRef;
+
+  // RowsetChange.SetDat will release one reference
+  OleDBConnection.OleDBCheck(self,
+    RowsetChange.SetData( fRowStepHandles[fRowStepHandleCurrent-1], fRowSetAccessor, pointer(fRowSetData))
+  );
+
+  // Set the RowSetDatse to the  ISequentialStream reference to nil
+  V^.VPointer := nil;
+
+end;
+
+procedure TOleDBStatement.ColumnBlobToStream(Col: integer; Stream: TStream);
+// ColumnBlob will return the binary content of the field
+var C: PSQLDBColumnProperty;
+    V: PColumnValue;
+    SeqStream: ISequentialStream;
+    pcbRead: Longint;
+    P: PAnsiChar;
+    tmp: RawByteString;
+const
+   BufferSize = 1024 * 1024 *  2; // 2MB
+begin
+  V := GetCol(Col,C);
+  if V=nil then // column is NULL
+    exit;
+
+  if C^.ColumnType <> ftBlob then
+      raise EOleDBException.CreateUTF8('%.ColumnBlob() only Blob coloumns are supported. ',[self]);
+
+  if C^.ColumnValueInlined then
+  begin
+    P := @V^.VData;
+    Stream.WriteBuffer(P^,V^.Length);
+  end else
+  begin
+    if TOleDBStatus(V^.Status) = stOK then
+    begin
+      if not assigned(V^.VPointer) then
+          raise EOleDBException.CreateUTF8('%.ColumnBlob() already consumed. ',[self]);
+
+      pointer(SeqStream) := V^.VPointer; // will not increase reference count (refcount = 1 )
+      SetLength(tmp, BufferSize);
+
+      repeat
+        SeqStream.Read(pointer(tmp), BufferSize, @pcbRead);
+        Stream.WriteBuffer(pointer(tmp)^,pcbRead);
+      until (BufferSize > pcbRead);
+
+      SeqStream := nil; // will release the reference. (refcount = 0 )
+      V^.VPointer := nil;
+    end
+  end;
 end;
 
 function TOleDBStatement.ColumnCurrency(Col: integer): currency;
@@ -1564,7 +1720,7 @@ begin
     ftBlob: begin
       if C^.ColumnValueInlined then
         P := @V^.VData else
-        P := V^.VAnsiChar;
+        P := pointer(ColumnBlob(col));
       result := BinToBase64WithMagic(P,V^.Length);
     end;
     ftCurrency: result := Curr64ToStr(V^.Int64);
@@ -1600,7 +1756,7 @@ begin
     ftBlob: begin
       if C^.ColumnValueInlined then
         P := @V^.VData else
-        P := V^.VAnsiChar;
+        P := pointer(ColumnBlob(col));
       result := Ansi7ToString(BinToBase64WithMagic(P,V^.Length));
     end;
     end;
@@ -1641,7 +1797,7 @@ begin // dedicated version to avoid as much memory allocation than possible
         VAny := nil;
         if C^.ColumnValueInlined then
           P := @V^.VData else
-          P := V^.VAnsiChar;
+          P := pointer(ColumnBlob(col));
         SetString(RawByteString(VAny),PAnsiChar(P),V^.Length);
       end;
       end;
@@ -1687,7 +1843,7 @@ Write:case ColumnType of
             WR.AddShort('null') else begin
             if ColumnValueInlined then
               P := @V^.VData else
-              P := V^.VAnsiChar;
+              P := pointer(ColumnBlob(col));
             WR.WrBase64(P,V^.Length,true); // withMagic=true
           end;
         else WR.AddShort('null');
@@ -1775,11 +1931,17 @@ begin
 end;
 
 procedure TOleDBStatement.ExecutePrepared;
+begin
+  ExecutePrepared(false);
+end;
+
+procedure TOleDBStatement.ExecutePrepared(ForUpdate: boolean);
 var i: integer;
     P: POleDBStatementParam;
     B: PDBBinding;
     ParamsStatus: TCardinalDynArray;
     RowSet: IRowSet;
+    RowSetChange: IRowsetChange;
     mr: IMultipleResults;
     res: HResult;
     fParamBindInfo: TDBParamBindInfoDynArray;
@@ -1930,7 +2092,7 @@ begin
     try
       // 3.1 SELECT will allow access to resulting rows data from fRowSet
       res := E_UNEXPECTED; // makes compiler happy
-      if not OleDBConnection.OleDBProperties.fSupportsOnlyIRowset then begin
+      if (not OleDBConnection.OleDBProperties.fSupportsOnlyIRowset) and (not ForUpdate)  then begin
         // use IMultipleResults for 'insert into table1 values (...); select ... from table2 where ...'
         res := fCommand.Execute(nil,IID_IMultipleResults,fDBParams,@fUpdateCount,@mr);
         if res=E_NOINTERFACE then
@@ -1940,9 +2102,20 @@ begin
               res := mr.GetResult(nil,0,IID_IRowset,@fUpdateCount,@RowSet);
             until Assigned(RowSet) or (res <> S_OK);
       end;
-      if OleDBConnection.OleDBProperties.fSupportsOnlyIRowset then
-        res := fCommand.Execute(nil,IID_IRowset,fDBParams,nil,@RowSet);
-      OleDBConnection.OleDBCheck(self,res,ParamsStatus);
+      if OleDBConnection.OleDBProperties.fSupportsOnlyIRowset or ForUpdate then
+      begin
+       if ForUpdate then
+       begin
+         res := fCommand.Execute(nil,IID_IRowsetChange,fDBParams,nil,@RowSetChange);
+         OleDBConnection.OleDBCheck(self,res,ParamsStatus);
+         RowSetChange.QueryInterface(IID_IRowset, RowSet);
+       end else
+       begin
+         res := fCommand.Execute(nil,IID_IRowset,fDBParams,nil,@RowSet);
+         OleDBConnection.OleDBCheck(self,res,ParamsStatus);
+       end;
+      end;
+
       FromRowSet(RowSet);
     except
       on E: Exception do begin
@@ -1984,9 +2157,19 @@ begin
     for c := 0 to fColumnCount-1 do
       with fColumns[c] do
       if not ColumnValueInlined then // release DBTYPE_BYREF memory
-      with PColumnValue(@fRowSetData[ColumnAttr])^ do
-        if VWideChar<>nil then
-          OleDBConnection.fMalloc.Free(VWideChar);
+      begin
+       if (ColumnType = ftBlob) then
+       begin
+         if  assigned(PColumnValue(@fRowSetData[ColumnAttr])^.VPointer) then
+           // release ISequentialStream reference
+           ISequentialStream(PColumnValue(@fRowSetData[ColumnAttr])^.VPointer)._Release;
+       end else
+       begin
+        with PColumnValue(@fRowSetData[ColumnAttr])^ do
+          if VWideChar<>nil then
+            OleDBConnection.fMalloc.Free(VWideChar);
+       end;
+      end;
   fillchar(fRowSetData[0],fRowSize,0);
 end;
 
@@ -2150,6 +2333,9 @@ var i, len: integer;
     nCols: PtrUInt;
     ColsNames: PWideChar;
     aName: RawUTF8;
+
+const dbObjTVP: TDBObject = (dwFlags: STGM_READ; iid: '{0C733A30-2A1C-11CE-ADE5-00AA0044773D}');   // IID_ISequentialStream
+
 begin
   nCols := 0;
   Cols := nil;
@@ -2209,6 +2395,12 @@ begin
           fHasColumnValueInlined := true;
           Col^.ColumnValueInlined := false;
           B^.cbMaxLen := sizeof(Pointer); // value=pointer in fRowSetData[]
+          if Col^.ColumnType =  ftBlob then
+          begin
+            B^.pObject := @dbObjTVP;
+            B^.wType := DBTYPE_IUNKNOWN;
+          end;
+
           if AlignDataInternalBuffer then
             inc(result,8) else
             inc(result,sizeof(Pointer));
@@ -2238,20 +2430,27 @@ threadvar
   OleDBCoinitialized: integer;
 
 procedure CoInit;
+var h: HRESULT;
 begin
-  inc(OleDBCoInitialized);
-  if OleDBCoInitialized=1 then
-    CoInitialize(nil);
+  if OleDBCoInitialized=0 then
+  begin
+    h := CoInitializeEx(nil, COINIT_MULTITHREADED);
+    if h = RPC_E_CHANGED_MODE then
+    begin
+      // We dont want to call Uninitialize if there was an error initializing;
+      // We also do not want to raise an exception here as different threading model could have been already initialized intentionally
+    end else
+      inc(OleDBCoInitialized); // increase to call Uninitialize on disconnect
+  end;
 end;
 
 procedure CoUninit;
 begin
-  assert(OleDBCoinitialized>0,'You should call TOleDBConnection.Free from the same '+
-    'thread which called its Create: i.e. call MyProps.EndCurrentThread from an '+
-    'THttpServerGeneric.OnHttpThreadTerminate event - see ticket 213544b2f5');
-  dec(OleDBCoinitialized);
-  if OleDBCoinitialized=0 then
+  if OleDBCoinitialized>0 then
+  begin
     CoUninitialize;
+    dec(OleDBCoinitialized);
+  end;
 end;
 
 procedure TOleDBConnection.Connect;
@@ -2445,7 +2644,7 @@ begin
   Log := SynDBLog.Enter(self,'StartTransaction');
   if assigned(fTransaction) then begin
     inherited StartTransaction;
-    OleDbCheck(nil,fTransaction.StartTransaction(ISOLATIONLEVEL_READCOMMITTED,0,nil,nil));
+    OleDbCheck(nil,fTransaction.StartTransaction(ord(OleDBProperties.TransactionIsolationLevel),0,nil,nil));
   end;
 end;
 
@@ -2744,6 +2943,8 @@ begin
   if fDatabaseName<>'' then
     tmp := tmp+'Initial Catalog='+fDatabaseName+';';
   fConnectionString := UTF8ToSynUnicode(tmp+'User Id='+fUserID+';Password='+fPassWord+';');
+
+  fTransactionIsolationLevel := tiReadCommitted;
 end;
 
 function TOleDBConnectionProperties.ColumnTypeNativeToDB(
@@ -2793,7 +2994,6 @@ type
     bClass: byte;
     wLineNumber: word;
   end;
-  /// to retrieve enhanced Microsoft SQL Server error information
   ISQLServerErrorInfo = interface(IUnknown)
     ['{5CF4CA12-EF21-11d0-97E7-00C04FC2AD98}']
     function GetErrorInfo(out ppErrorInfo: PSSERRORINFO;
@@ -2942,17 +3142,6 @@ begin
 end;
 
 {$endif CPU64}
-
-{ TOleDBACEConnectionProperties }
-
-procedure TOleDBACEConnectionProperties.SetInternalProperties;
-begin
-  fProviderName := 'Microsoft.ACE.OLEDB.12.0';
-  fDBMS := dJet;
-  inherited SetInternalProperties;
-  if not FileExists(UTF8ToString(ServerName)) then
-    CreateDatabase;
-end;
 
 
 { TBaseAggregatingRowset }
@@ -3177,6 +3366,55 @@ begin
 end;
 
 
+{ TOLEDBSequentialStream }
+
+constructor TOLEDBSequentialStream.Create(Stream: TStream);
+var Log: ISynLog;
+begin
+  inherited Create;
+  Log := SynDBLog.Enter(self,'Create');
+  FStream := Stream;
+end;
+
+destructor TOLEDBSequentialStream.Destroy;
+var Log: ISynLog;
+begin
+  Log := SynDBLog.Enter(self,'Destroy');
+  inherited;
+end;
+
+function TOLEDBSequentialStream.Read(pv: Pointer; cb: Cardinal; pcbRead: PFixedUInt): HResult;
+var Log: ISynLog;
+begin
+  try
+    pcbRead^ := FStream.Read(pv^, cb);
+    Result := S_OK;
+  except on e: Exception do
+  begin
+    Log := SynDBLog.Enter(self,'Read');
+    Log.Log(sllError,E);
+    Result := S_FALSE;
+  end;
+  end;
+end;
+
+function TOLEDBSequentialStream.Write(pv: Pointer; cb: Cardinal; pcbWritten: PFixedUInt): HResult;
+var Log: ISynLog;
+begin
+  try
+    pcbWritten^ := FStream.Write(pv^, cb);
+    Result := S_OK;
+  except on e: Exception do
+  begin
+    Log := SynDBLog.Enter(self,'Write');
+    Log.Log(sllError,E);
+    Result := S_FALSE;
+  end;
+  end;
+end;
+
+
+
 initialization
   assert(sizeof(TOleDBStatementParam) and (sizeof(Int64)-1)=0);
   TOleDBConnectionProperties.RegisterClassNameForDefinition;
@@ -3190,7 +3428,6 @@ initialization
   {$ifndef CPU64} // Jet is not available on Win64
   TOleDBJetConnectionProperties.RegisterClassNameForDefinition;
   {$endif}
-  TOleDBACEConnectionProperties.RegisterClassNameForDefinition;
   TOleDBAS400ConnectionProperties.RegisterClassNameForDefinition;
   TOleDBODBCSQLConnectionProperties.RegisterClassNameForDefinition;
 
