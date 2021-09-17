@@ -2332,6 +2332,9 @@ type
     constructor Create;
   end;
 
+  TWinHttpSecureProtocol = (spSSL3, spTLS10, spTLS11, spTLS12);
+  TWinHttpSecureProtocols = set of TWinHttpSecureProtocol;
+
   /// a class to handle HTTP/1.1 request using the WinHTTP API
   // - has a common behavior as THttpClientSocket() but seems to be faster
   // over a network and is able to retrieve the current proxy settings
@@ -2364,6 +2367,8 @@ type
     function InternalQueryDataAvailable: DWORD; override;
     function InternalReadData(var Data: SockString; Read: integer;
       Size: cardinal): cardinal; override;
+
+    function GetSecureProtocols: TWinHttpSecureProtocols; virtual;
   public
     /// relase the connection
     destructor Destroy; override;
@@ -11607,6 +11612,12 @@ function GetVersionEx(var lpVersionInformation: TOSVersionInfoEx): BOOL; stdcall
 var // raw OS call, to avoid dependency to SynCommons.pas unit
   OSVersionInfo: TOSVersionInfoEx;
 
+
+function TWinHTTP.GetSecureProtocols: TWinHttpSecureProtocols;
+begin
+  Result := [spSSL3, spTLS10, spTLS11, spTLS12];
+end;
+
 procedure TWinHTTP.InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD);
 var OpenType: integer;
     Callback: WINHTTP_STATUS_CALLBACK;
@@ -11614,6 +11625,7 @@ var OpenType: integer;
     // MPV - don't know why, but if I pass WINHTTP_FLAG_SECURE_PROTOCOL_SSL2
     // flag also, TLS1.2 do not work
     protocols: DWORD;
+    secureProtocols: TWinHttpSecureProtocols;
 begin
   if OSVersionInfo.dwOSVersionInfoSize=0 then begin // API call once
     OSVersionInfo.dwOSVersionInfoSize := sizeof(OSVersionInfo);
@@ -11634,13 +11646,20 @@ begin
      ConnectionTimeOut,SendTimeout,ReceiveTimeout) then
     RaiseLastModuleError(winhttpdll,EWinHTTP);
   if fHTTPS then begin
-     protocols := WINHTTP_FLAG_SECURE_PROTOCOL_SSL3
-       or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1;
+     secureProtocols := GetSecureProtocols;
+     protocols := 0;
+     if spSSL3 in secureProtocols then
+       protocols := protocols or WINHTTP_FLAG_SECURE_PROTOCOL_SSL3;
+     if spTLS10 in secureProtocols then
+       protocols := protocols or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1;
      // Windows 7 and newer support TLS 1.1 & 1.2
      if (OSVersionInfo.dwMajorVersion>6) or
-       ((OSVersionInfo.dwMajorVersion=6) and (OSVersionInfo.dwMinorVersion>=1)) then
-       protocols := protocols or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1
-         or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
+       ((OSVersionInfo.dwMajorVersion=6) and (OSVersionInfo.dwMinorVersion>=1)) then begin
+       if spTLS11 in secureProtocols then
+         protocols := protocols or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1;
+       if spTLS12 in secureProtocols then
+         protocols := protocols or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
+     end;
     if not WinHttpAPI.SetOption(fSession, WINHTTP_OPTION_SECURE_PROTOCOLS,
        @protocols, SizeOf(protocols)) then
       RaiseLastModuleError(winhttpdll,EWinHTTP);
