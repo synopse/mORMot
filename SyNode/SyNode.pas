@@ -383,7 +383,7 @@ type
     FEngineClass: TSMEngineClass;
 
     /// List of loaded dll modules
-    FDllModules: TRawUTF8ListHashedLocked;
+    FDllModules: TRawUTF8List;
     /// Path to core modules
     FCoreModulesPath: RawUTF8;
     FEngineExpireTimeOutTicks: Int64;
@@ -559,7 +559,7 @@ const
     );
 
 var
-  GlobalSyNodeBindingHandlers: TRawUTF8ListHashedLocked;
+  GlobalSyNodeBindingHandlers: TRawUTF8List;
 
 /// handle errors from JavaScript. Just call DoProcessJSError of corresponding TSMEngine
 // to set TSMEngine error properties
@@ -1116,7 +1116,7 @@ class procedure TSMEngineManager.RegisterBinding(const Name: RawUTF8;
   const handler: TSMProcessBindingHandler);
 begin
   if GlobalSyNodeBindingHandlers = nil then
-    GlobalSyNodeBindingHandlers := TRawUTF8ListHashedLocked.Create(false);
+    GlobalSyNodeBindingHandlers := TRawUTF8List.Create(false);
   GlobalSyNodeBindingHandlers.AddObject(Name, TObject(@handler));
 end;
 
@@ -1125,7 +1125,7 @@ var
   obj: TObject;
   handler: TSMProcessBindingHandler absolute obj;
 begin
-  obj := GlobalSyNodeBindingHandlers.GetObjectByName(Name);
+  obj := GlobalSyNodeBindingHandlers.GetObjectFrom(Name);
   result := handler;
 end;
 
@@ -1153,7 +1153,7 @@ begin
   {$ifdef ISDELPHIXE2}
   FRttiCx := TRttiContext.Create();
   {$endif}
-  FDllModules := TRawUTF8ListHashedLocked.Create();
+  FDllModules := TRawUTF8List.Create();
   FCoreModulesPath := aCoreModulesPath;
   FWorkersManager := TJSWorkersManager.Create;
 end;
@@ -1261,7 +1261,7 @@ begin
     cx.BeginRequest;
     try
       dirname := ExtractFilePath(UTF8ToString(filename)) ;
-      ModuleRec := PDllModuleRec(FDllModules.GetObjectByName(filename));
+      ModuleRec := PDllModuleRec(FDllModules.GetObjectFrom(filename));
       if ModuleRec = nil then begin
         fHandle := {$IFDEF FPC}dynlibs.{$ENDIF}SafeLoadLibrary(UTF8ToString(filename));
         if fHandle=0 then
@@ -1422,7 +1422,7 @@ begin
   try
     i := ThreadEngineIndex(aThreadID);
     if i>=0 then begin
-      (FEnginePool[i] as TSMEngine).GarbageCollect;
+      (TObject(FEnginePool[i]) as TSMEngine).GarbageCollect;
       FEnginePool.Delete(i);
     end;
   finally

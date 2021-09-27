@@ -141,8 +141,8 @@ type
   private
     fIndex: Integer;
     fIsPaused: boolean;
-    fMessagesQueue: TRawUTF8ListLocked;
-    fLogQueue: TRawUTF8ListLocked;
+    fMessagesQueue: TRawUTF8List;
+    fLogQueue: TRawUTF8List;
     {$IFNDEF SM52}
     fOldInterruptCallback: JSInterruptCallback;
     {$ENDIF}
@@ -221,7 +221,7 @@ begin
   eng := fManager.EngineForThread(curThreadID);
   if eng<>nil then begin
     Debugger := eng.PrivateDataForDebugger;
-    Debugger.fLogQueue.SafePush(Text);
+    Debugger.fLogQueue.Add(Text);
 
     if eng.cx.IsRunning then
 {$IFDEF SM52}
@@ -522,7 +522,7 @@ begin
 
     engine := fParent.fManager.EngineForThread(fDebugger.fSmThreadID);
     if (engine <> nil) then begin
-      fDebugger.fMessagesQueue.SafePush(VariantToUTF8(request));
+      fDebugger.fMessagesQueue.Add(VariantToUTF8(request));
       if not fDebugger.fIsPaused then begin
         if (not engine.cx.IsRunning) then begin
           if not Assigned(engine.doInteruptInOwnThread) then
@@ -599,8 +599,8 @@ end;
 procedure TSMDebugger.attach(aThread: TSMRemoteDebuggerCommunicationThread);
 begin
   fCommunicationThread := aThread;
-  fMessagesQueue.SafeClear;
-  fLogQueue.SafeClear;
+  fMessagesQueue.Clear;
+  fLogQueue.Clear;
 end;
 
 constructor TSMDebugger.Create(aParent: TSMRemoteDebuggerThread; aEng: TSMEngine);
@@ -617,8 +617,8 @@ begin
 
   fSmThreadID := GetCurrentThreadId;
 
-  fMessagesQueue := TRawUTF8ListLocked.Create();
-  fLogQueue := TRawUTF8ListLocked.Create();
+  fMessagesQueue := TRawUTF8List.Create();
+  fLogQueue := TRawUTF8List.Create();
   fNameForDebug := aEng.nameForDebug;
   fDebuggerName := 'synode_debPort_' + aParent.fPort;
   fWebAppRootPath := aEng.webAppRootDir;
@@ -680,8 +680,8 @@ var
   dbgObject: PJSRootedObject;
   res: Boolean;
 begin
-  fMessagesQueue.SafeClear;
-  fLogQueue.SafeClear;
+  fMessagesQueue.Clear;
+  fLogQueue.Clear;
 
   cx := aEng.cx;
   cmpDbg := cx.EnterCompartment(aEng.GlobalObjectDbg.ptr);
@@ -765,7 +765,7 @@ function debugger_read(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; 
 var
   debugger: TSMDebugger;
   msg: RawUTF8;
-  Queue: TRawUTF8ListLocked;
+  Queue: TRawUTF8List;
 begin
   debugger := TSMEngine(cx.PrivateData).PrivateDataForDebugger;
   if (argc = 0) or vp.argv[0].asBoolean then
@@ -774,7 +774,7 @@ begin
     Queue := debugger.fLogQueue;
   msg := '';
   while ((Queue <> nil) and (debugger.fCommunicationThread <> nil) and
-    (not Queue.SafePop(msg))) and (argc = 0) do
+    (not Queue.PopFirst(msg))) and (argc = 0) do
     SleepHiRes(10);
   result := true;
   if (Queue <> nil) and (debugger.fCommunicationThread <> nil) then
