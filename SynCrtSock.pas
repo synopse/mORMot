@@ -11634,13 +11634,13 @@ begin
      ConnectionTimeOut,SendTimeout,ReceiveTimeout) then
     RaiseLastModuleError(winhttpdll,EWinHTTP);
   if fHTTPS then begin
-     protocols := WINHTTP_FLAG_SECURE_PROTOCOL_SSL3
-       or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1;
+     protocols := {WINHTTP_FLAG_SECURE_PROTOCOL_SSL3 or}
+                   WINHTTP_FLAG_SECURE_PROTOCOL_TLS1;
      // Windows 7 and newer support TLS 1.1 & 1.2
      if (OSVersionInfo.dwMajorVersion>6) or
        ((OSVersionInfo.dwMajorVersion=6) and (OSVersionInfo.dwMinorVersion>=1)) then
        protocols := protocols or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1
-         or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
+                              or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
     if not WinHttpAPI.SetOption(fSession, WINHTTP_OPTION_SECURE_PROTOCOLS,
        @protocols, SizeOf(protocols)) then
       RaiseLastModuleError(winhttpdll,EWinHTTP);
