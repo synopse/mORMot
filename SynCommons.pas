@@ -5185,13 +5185,21 @@ const
   /// some convenient TDocVariant options, as JSON_OPTIONS[CopiedByReference]
   // - JSON_OPTIONS[false] is e.g. _Json() and _JsonFmt() functions default
   // - JSON_OPTIONS[true] are used e.g. by _JsonFast() and _JsonFastFmt() functions
+  // - warning: exclude dvoAllowDoubleValue so won't parse any float, just currency
   JSON_OPTIONS: array[Boolean] of TDocVariantOptions = (
     [dvoReturnNullForUnknownProperty],
     [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]);
 
   /// same as JSON_OPTIONS[true], but can not be used as PDocVariantOptions
+  // - warning: exclude dvoAllowDoubleValue so won't parse any float, just currency
+  // - as used by _JsonFast()
   JSON_OPTIONS_FAST =
     [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference];
+
+  /// same as JSON_OPTIONS_FAST, but including dvoAllowDoubleValue to parse any float
+  // - as used by _JsonFastFloat()
+  JSON_OPTIONS_FAST_FLOAT =
+    [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference,dvoAllowDoubleValue];
 
   /// TDocVariant options which may be used for plain JSON parsing
   // - this won't recognize any extended syntax
@@ -14442,6 +14450,7 @@ type
     // properties can be slow - if you expect the data to be read-only or not
     // propagated into another place, add dvoValueCopiedByReference in Options
     // will increase the process speed a lot
+    // - warning: exclude dvoAllowDoubleValue so won't parse any float, just currency
     // - in practice, you should better use the function _Json()/_JsonFast()
     // which are handy wrappers around this class method
     class function NewJSON(const JSON: RawUTF8;
@@ -15510,6 +15519,7 @@ function _Arr(const Items: array of const;
 // from a supplied (extended) JSON content
 // - this global function is an alias to TDocVariant.NewJSON(), and
 // will return an Unassigned variant if JSON content was not correctly converted
+// - warning: exclude dvoAllowDoubleValue so won't parse any float, just currency
 // - object or array will be initialized from the supplied JSON content, e.g.
 // ! aVariant := _Json('{"id":10,"doc":{"name":"John","birthyear":1972}}');
 // ! // now you can access to the properties via late binding
@@ -15544,6 +15554,7 @@ function _Json(const JSON: RawUTF8;
 // - wrapper around the _Json(FormatUTF8(...,JSONFormat=true)) function,
 // i.e. every Args[] will be inserted for each % and Params[] for each ?,
 // with proper JSON escaping of string values, and writing nested _Obj() /
+// - warning: exclude dvoAllowDoubleValue so won't parse any float, just currency
 // _Arr() instances as expected JSON objects / arrays
 // - typical use (in the context of SynMongoDB unit) could be:
 // ! aVariant := _JSONFmt('{%:{$in:[?,?]}}',['type'],['food','snack']);
@@ -15573,6 +15584,7 @@ procedure _JsonFmt(const Format: RawUTF8; const Args,Params: array of const;
 // from a supplied (extended) JSON content
 // - this global function is an alias to TDocVariant.NewJSON(), and
 // will return TRUE if JSON content was correctly converted into a variant
+// - warning: exclude dvoAllowDoubleValue so won't parse any float, just currency
 // - in addition to the JSON RFC specification strict mode, this method will
 // handle some BSON-like extensions, e.g. unquoted field names or ObjectID()
 // - by default, every internal value will be copied, so access of nested
@@ -15604,14 +15616,21 @@ function _ArrFast(const Items: array of const): variant; overload;
 
 /// initialize a variant instance to store some document-based content
 // from a supplied (extended) JSON content
+// - warning: exclude dvoAllowDoubleValue so won't parse any float, just currency
 // - this global function is an handy alias to:
-// ! _Json(JSON,JSON_OPTIONS[true]);
+// ! _Json(JSON,JSON_OPTIONS[true]); or _Json(JSON,JSON_OPTIONS_FAST)
 // so it will return an Unassigned variant if JSON content was not correct
 // - so all created objects and arrays will be handled by reference, for best
 // speed - but you should better write on the resulting variant tree with caution
 // - in addition to the JSON RFC specification strict mode, this method will
 // handle some BSON-like extensions, e.g. unquoted field names or ObjectID()
 function _JsonFast(const JSON: RawUTF8): variant;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// initialize a variant instance to store some document-based content
+// from a supplied (extended) JSON content, parsing any kind of float
+// - use JSON_OPTIONS_FAST_FLOAT including the dvoAllowDoubleValue option
+function _JsonFastFloat(const JSON: RawUTF8): variant;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// initialize a variant instance to store some extended document-based content
@@ -15622,6 +15641,7 @@ function _JsonFastExt(const JSON: RawUTF8): variant;
 
 /// initialize a variant instance to store some document-based content
 // from a supplied (extended) JSON content, with parameters formating
+// - warning: exclude dvoAllowDoubleValue so won't parse any float, just currency
 // - this global function is an handy alias e.g. to:
 // ! aVariant := _JSONFmt('{%:{$in:[?,?]}}',['type'],['food','snack'],JSON_OPTIONS[true]);
 // - so all created objects and arrays will be handled by reference, for best
@@ -49044,6 +49064,11 @@ end;
 function _JsonFast(const JSON: RawUTF8): variant;
 begin
   _Json(JSON,result,JSON_OPTIONS_FAST);
+end;
+
+function _JsonFastFloat(const JSON: RawUTF8): variant;
+begin
+  _Json(JSON,result,JSON_OPTIONS_FAST_FLOAT);
 end;
 
 function _JsonFastExt(const JSON: RawUTF8): variant;
