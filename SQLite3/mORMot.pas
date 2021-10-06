@@ -58440,17 +58440,16 @@ begin
       raise EInterfaceFactoryException.CreateUTF8(
         'ickFromInjectedResolver: TryResolveInternal(%)=false',[fInterface.fInterfaceName]);
     result := TInterfacedObject(ObjectFromInterface(IInterface(dummyObj)));
-    if AndIncreaseRefCount then // RefCount=1 after TryResolveInternal()
-      AndIncreaseRefCount := false else
-      dec(TInterfacedObjectHooked(result).FRefCount);
+    dec(TInterfacedObjectHooked(result).FRefCount); // RefCount=1 after TryResolveInternal()
   end;
   else
     result := fImplementationClass.Create;
   end;
+  inc(TInterfacedObjectHooked(result).FRefCount); // >0 to call Support() in event
   if Assigned(TSQLRestServer(Rest).OnServiceCreateInstance) then
     TSQLRestServer(Rest).OnServiceCreateInstance(self,result);
-  if AndIncreaseRefCount then
-    IInterface(result)._AddRef; // allow passing self to sub-methods
+  if not AndIncreaseRefCount then
+    dec(TInterfacedObjectHooked(result).FRefCount);
 end;
 
 procedure TServiceFactoryServer.OnLogRestExecuteMethod(Sender: TServiceMethodExecute;
