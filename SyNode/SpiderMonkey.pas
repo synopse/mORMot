@@ -649,7 +649,7 @@ type
   /// arguments of function
     property argv: PjsvalVector read getArgv;
   /// return value of function
-    property rval: jsval write rec.rval;
+    property rval: jsval read rec.rval write rec.rval;
   end;
 
 //Todo - set correct codes for some sitautions
