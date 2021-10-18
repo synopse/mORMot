@@ -48,7 +48,7 @@ unit SynSQLite3;
   ***** END LICENSE BLOCK *****
 
 
-     SQLite3 3.35.5 database engine
+     SQLite3 3.36.0 database engine
     ********************************
 
    Brand new SQLite3 library to be used with Delphi/FPC
