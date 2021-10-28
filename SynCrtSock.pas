@@ -11810,10 +11810,8 @@ begin
       RaiseLastModuleError(winhttpdll,EWinHTTP);
   L := length(aData);
   if not _SendRequest(L) or
-     not WinHttpAPI.ReceiveResponse(fRequest,nil) then begin
-    if not fHTTPS then
-      RaiseLastModuleError(winhttpdll,EWinHTTP);
-    if (GetLastError=ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED) and
+     not WinHttpAPI.ReceiveResponse(fRequest,nil) then
+    if fHTTPS and (GetLastError=ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED) and
        IgnoreSSLCertificateErrors then begin
       if not WinHttpAPI.SetOption(fRequest,WINHTTP_OPTION_SECURITY_FLAGS,
          @SECURITY_FLAT_IGNORE_CERTIFICATES,SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
@@ -11824,8 +11822,8 @@ begin
       if not _SendRequest(L) or
          not WinHttpAPI.ReceiveResponse(fRequest,nil) then
         RaiseLastModuleError(winhttpdll,EWinHTTP);
-    end;
-  end;
+    end
+    else RaiseLastModuleError(winhttpdll,EWinHTTP);
 end;
 
 
