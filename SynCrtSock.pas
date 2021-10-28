@@ -3922,6 +3922,11 @@ begin
   tmpLen := FormatMessage(
     FORMAT_MESSAGE_FROM_HMODULE or FORMAT_MESSAGE_ALLOCATE_BUFFER,
     pointer(GetModuleHandle(ModuleName)),Code,ENGLISH_LANGID,@err,0,nil);
+  // if string is empty, it may be because english is not found
+  if (tmpLen = 0) then
+     tmpLen := FormatMessage(
+       FORMAT_MESSAGE_FROM_HMODULE or FORMAT_MESSAGE_ALLOCATE_BUFFER or FORMAT_MESSAGE_IGNORE_INSERTS,
+       pointer(GetModuleHandle(ModuleName)),Code,0,@err,0,nil);
   try
     while (tmpLen>0) and (ord(err[tmpLen-1]) in [0..32,ord('.')]) do
       dec(tmpLen);
