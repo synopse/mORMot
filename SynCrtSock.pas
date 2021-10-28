@@ -11584,11 +11584,22 @@ end;
 
 procedure WinHTTPSecurityErrorCallback(hInternet: HINTERNET; dwContext: PDWORD;
   dwInternetStatus: DWORD; lpvStatusInformation: pointer; dwStatusInformationLength: DWORD); stdcall;
+var err: string;
+    code: DWORD;
 begin
+  code := PDWORD(lpvStatusInformation)^;
+  if code and $00000001<>0 then err := err+' WINHTTP_CALLBACK_STATUS_FLAG_CERT_REV_FAILED';
+  if code and $00000002<>0 then err := err+' WINHTTP_CALLBACK_STATUS_FLAG_INVALID_CERT';
+  if code and $00000004<>0 then err := err+' WINHTTP_CALLBACK_STATUS_FLAG_CERT_REVOKED';
+  if code and $00000008<>0 then err := err+' WINHTTP_CALLBACK_STATUS_FLAG_INVALID_CA';
+  if code and $00000010<>0 then err := err+' WINHTTP_CALLBACK_STATUS_FLAG_CERT_CN_INVALID';
+  if code and $00000020<>0 then err := err+' WINHTTP_CALLBACK_STATUS_FLAG_CERT_DATE_INVALID';
+  if code and $00000040<>0 then err := err+' WINHTTP_CALLBACK_STATUS_FLAG_CERT_WRONG_USAGE';
+  if code and $80000000<>0 then err := err+' WINHTTP_CALLBACK_STATUS_FLAG_SECURITY_CHANNEL_ERROR';
   // in case lpvStatusInformation^=-2147483648 this is attempt to connect to
   // non-https socket wrong port - perhaps must be 443?
-  raise EWinHTTP.CreateFmt('WinHTTP security error. Status %d, statusInfo: %d',
-    [dwInternetStatus, pdword(lpvStatusInformation)^]);
+  raise EWinHTTP.CreateFmt('WinHTTP security error. Status %d, StatusInfo: %d ($%x%s)',
+    [dwInternetStatus, code, code, err]);
 end;
 
 {$ifndef UNICODE}
