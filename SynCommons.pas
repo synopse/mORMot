@@ -8495,6 +8495,7 @@ type
   // - twoIgnoreDefaultInRecord will force custom record serialization to avoid
   // writing the fields with default values, i.e. enable soWriteIgnoreDefault
   // when TJSONCustomParserRTTI.WriteOneLevel is called
+  // - twoDateTimeWithZ appends an ending 'Z' to TDateTime/TDateTimeMS values
   TTextWriterOption = (
     twoStreamIsOwned,
     twoFlushToStreamNoAutoResize,
@@ -8506,7 +8507,8 @@ type
     twoForceJSONStandard,
     twoEndOfLineCRLF,
     twoBufferIsExternal,
-    twoIgnoreDefaultInRecord);
+    twoIgnoreDefaultInRecord,
+    twoDateTimeWithZ);
   /// options set for a TTextWriter instance
   // - allows to override e.g. AddRecordJSON() and AddDynArrayJSON() behavior;
   // or set global process customization for a TTextWriter
@@ -8645,17 +8647,20 @@ type
     procedure AddUnixMSTime(Value: PInt64; WithMS: boolean=false);
     /// append a TDateTime value, expanded as Iso-8601 encoded text
     // - use 'YYYY-MM-DDThh:mm:ss' format (with FirstChar='T')
+    // - if twoDateTimeWithZ CustomOption is set, will append an ending 'Z'
     // - if WithMS is TRUE, will append '.sss' for milliseconds resolution
     // - if QuoteChar is not #0, it will be written before and after the date
     procedure AddDateTime(Value: PDateTime; FirstChar: AnsiChar='T'; QuoteChar: AnsiChar=#0;
       WithMS: boolean=false); overload;
     /// append a TDateTime value, expanded as Iso-8601 encoded text
     // - use 'YYYY-MM-DDThh:mm:ss' format
+    // - if twoDateTimeWithZ CustomOption is set, will append an ending 'Z'
     // - append nothing if Value=0
     // - if WithMS is TRUE, will append '.sss' for milliseconds resolution
     procedure AddDateTime(const Value: TDateTime; WithMS: boolean=false); overload;
     /// append a TDateTime value, expanded as Iso-8601 text with milliseconds
     // and Time Zone designator
+    // - twoDateTimeWithZ CustomOption is ignored in favor of the TZD parameter
     // - i.e. 'YYYY-MM-DDThh:mm:ss.sssZ' format
     // - TZD is the ending time zone designator ('', 'Z' or '+hh:mm' or '-hh:mm')
     procedure AddDateTimeMS(const Value: TDateTime; Expanded: boolean=true;
@@ -11035,7 +11040,8 @@ type
     // - will handle vtPointer/vtClass/vtObject/vtVariant kind of arguments,
     // appending class name for any class or object, the hexa value for a
     // pointer, or the JSON representation of any supplied TDocVariant
-    constructor CreateLastOSError(const Format: RawUTF8; const Args: array of const);
+    constructor CreateLastOSError(const Format: RawUTF8; const Args: array of const;
+      const Trailer: RawUtf8 = 'OSError');
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// can be used to customize how the exception is logged
     // - this default implementation will call the DefaultSynLogExceptionToStr()
@@ -53869,7 +53875,7 @@ procedure TTextWriter.AddDateTime(Value: PDateTime; FirstChar: AnsiChar;
 begin
   if (Value^=0) and (QuoteChar=#0) then
     exit;
-  if BEnd-B<=25 then
+  if BEnd-B<=26 then
     FlushToStream;
   inc(B);
   if QuoteChar<>#0 then
@@ -53883,6 +53889,10 @@ begin
       B := TimeToIso8601PChar(Value^,B,true,FirstChar,WithMS);
     dec(B);
   end;
+  if twoDateTimeWithZ in fCustomOptions then begin
+    inc(B);
+    B^ := 'Z';
+  end;
   if QuoteChar<>#0 then begin
     inc(B);
     B^ := QuoteChar;
@@ -53893,14 +53903,16 @@ procedure TTextWriter.AddDateTime(const Value: TDateTime; WithMS: boolean);
 begin
   if Value=0 then
     exit;
-  if BEnd-B<=23 then
+  if BEnd-B<=24 then
     FlushToStream;
   inc(B);
   if trunc(Value)<>0 then
     B := DateToIso8601PChar(Value,B,true);
   if frac(Value)<>0 then
     B := TimeToIso8601PChar(Value,B,true,'T',WithMS);
-  dec(B);
+  if twoDateTimeWithZ in fCustomOptions then
+    B^ := 'Z' else
+    dec(B);
 end;
 
 procedure TTextWriter.AddDateTimeMS(const Value: TDateTime; Expanded: boolean;
@@ -61960,13 +61972,14 @@ begin
   inherited Create(msg);
 end;
 
-constructor ESynException.CreateLastOSError(const Format: RawUTF8; const Args: array of const);
+constructor ESynException.CreateLastOSError(
+  const Format: RawUTF8; const Args: array of const; const Trailer: RawUtf8);
 var tmp: RawUTF8;
     error: integer;
 begin
   error := GetLastError;
   FormatUTF8(Format,Args,tmp);
-  CreateUTF8('OSError % [%] %',[error,SysErrorMessage(error),tmp]);
+  CreateUTF8('% % [%] %',[Trailer,error,SysErrorMessage(error),tmp]);
 end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
