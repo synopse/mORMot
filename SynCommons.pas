@@ -47852,7 +47852,7 @@ function TDocVariantData.GetValueIndex(aName: PUTF8Char; aNameLen: PtrInt;
   aCaseSensitive: boolean): integer;
 var err: integer;
 begin
-  if (integer(VType)=DocVariantVType) and (VCount>0) then
+  if (integer(VType)=DocVariantVType) and (VCount>0) and (aName<>nil) and(aNameLen>0) then
     if dvoIsArray in VOptions then begin // try index text in array document
       result := GetInteger(aName,err);
       if (err<>0) or (cardinal(result)>=cardinal(VCount)) then
