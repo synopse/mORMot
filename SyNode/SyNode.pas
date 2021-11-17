@@ -372,7 +372,7 @@ type
     FEngineClass: TSMEngineClass;
 
     /// List of loaded dll modules
-    FDllModules: TRawUTF8ListHashedLocked;
+    FDllModules: TRawUTF8List;
     /// Path to core modules
     FCoreModulesPath: RawUTF8;
     FEngineExpireTimeOutTicks: Int64;
@@ -573,7 +573,7 @@ var
   );
 
 var
-  GlobalSyNodeBindingHandlers: TRawUTF8ListHashedLocked;
+  GlobalSyNodeBindingHandlers: TRawUTF8List;
 
 /// handle errors from JavaScript. Just call DoProcessJSError of corresponding TSMEngine
 // to set TSMEngine error properties
@@ -1064,7 +1064,7 @@ class procedure TSMEngineManager.RegisterBinding(const Name: RawUTF8;
   const handler: TSMProcessBindingHandler);
 begin
   if GlobalSyNodeBindingHandlers = nil then
-    GlobalSyNodeBindingHandlers := TRawUTF8ListHashedLocked.Create(false);
+    GlobalSyNodeBindingHandlers := TRawUTF8List.Create(false);
   GlobalSyNodeBindingHandlers.AddObject(Name, TObject(@handler));
 end;
 
@@ -1101,7 +1101,7 @@ begin
   {$ifdef ISDELPHIXE2}
   FRttiCx := TRttiContext.Create();
   {$endif}
-  FDllModules := TRawUTF8ListHashedLocked.Create();
+  FDllModules := TRawUTF8List.Create();
   FCoreModulesPath := aCoreModulesPath;
   FWorkersManager := TJSWorkersManager.Create;
 end;

@@ -36,6 +36,7 @@ Contributors
   Esteban Martin (EMartin)
   Eugene Ilyin
   Eva Freimann (EVaF)
+  FeelAirSlow
   F-Vicente
   Goran Despalatovic (gigo)
   Jean-Baptiste Roussia (jbroussia)

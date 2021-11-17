@@ -138,8 +138,8 @@ type
   private
     fIndex: Integer;
     fIsPaused: boolean;
-    fMessagesQueue: TRawUTF8ListLocked;
-    fLogQueue: TRawUTF8ListLocked;
+    fMessagesQueue: TRawUTF8List;
+    fLogQueue: TRawUTF8List;
     fSmThreadID: TThreadID;
     fNameForDebug: RawUTF8;
     fCommunicationThread: TSMRemoteDebuggerCommunicationThread;
@@ -631,8 +631,8 @@ begin
 
   fSmThreadID := GetCurrentThreadId;
 
-  fMessagesQueue := TRawUTF8ListLocked.Create();
-  fLogQueue := TRawUTF8ListLocked.Create();
+  fMessagesQueue := TRawUTF8List.Create();
+  fLogQueue := TRawUTF8List.Create();
   fNameForDebug := aEng.nameForDebug;
   fDebuggerName := 'snd';
   fWebAppRootPath := aEng.webAppRootDir;
@@ -773,7 +773,7 @@ function debugger_read(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; 
 var
   debugger: TSMDebugger;
   msg: RawUTF8;
-  Queue: TRawUTF8ListLocked;
+  Queue: TRawUTF8List;
 begin
   debugger := TSMEngine(cx.PrivateData).PrivateDataForDebugger;
   if (argc = 0) or vp.argv[0].asBoolean then

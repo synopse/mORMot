@@ -518,11 +518,13 @@ end;
 procedure TSQLDBPostgresConnection.Connect;
 var
   log: ISynLog;
+  host, port: RawUtf8;
 begin
   log := SynDBLog.Enter(self, 'Connect');
   Disconnect; // force fTrans=fError=fServer=fContext=nil
   try
-    fPGConn := PQ.SetDBLogin(pointer(Properties.ServerName), nil, nil, nil,
+    Split(Properties.ServerName, ':', host, port);
+    fPGConn := PQ.SetDBLogin(pointer(host), pointer(port), nil, nil,
       pointer(Properties.DatabaseName), pointer(Properties.UserID),
       pointer(Properties.PassWord));
     if PQ.Status(fPGConn) = CONNECTION_BAD then
@@ -536,7 +538,8 @@ begin
       log.Log(sllDB, 'Connected to % % using % v%', [fProperties.ServerName,
         fProperties.DatabaseNameSafe, PQ.fLibraryPath, PQ.LibVersion], self);
     end
-    else // to ensure no performance drop due to notice to console
+    else
+      // to ensure no performance drop due to notice to console
       PQ.SetNoticeProcessor(fPGConn, DummyNoticeProcessor, nil);
     inherited Connect; // notify any re-connection
   except

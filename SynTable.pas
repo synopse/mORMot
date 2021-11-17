@@ -3904,7 +3904,7 @@ type
     function SaveToBuffer: RawByteString;
     /// retrieve the time bias (in minutes) for a given date/time on a TzId
     function GetBiasForDateTime(const Value: TDateTime; const TzId: TTimeZoneID;
-      out Bias: integer; out HaveDaylight: boolean): boolean;
+      out Bias: integer; out HaveDaylight: boolean; DateIsUTC: boolean=false): boolean;
     /// retrieve the display text corresponding to a TzId
     // - returns '' if the supplied TzId is not recognized
     function GetDisplay(const TzId: TTimeZoneID): RawUTF8;
@@ -17522,7 +17522,8 @@ begin
 end;
 
 function TSynTimeZone.GetBiasForDateTime(const Value: TDateTime;
-  const TzId: TTimeZoneID; out Bias: integer; out HaveDaylight: boolean): boolean;
+  const TzId: TTimeZoneID; out Bias: integer; out HaveDaylight: boolean;
+  DateIsUTC: boolean): boolean;
 var ndx: integer;
     d: TSynSystemTime;
     tzi: PTimeZoneInfo;
@@ -17551,6 +17552,10 @@ begin
     HaveDaylight := true;
     std := tzi.change_time_std.EncodeForTimeChange(d.Year);
     dlt := tzi.change_time_dlt.EncodeForTimeChange(d.Year);
+    if DateIsUTC then begin // std shifts by the DST bias, dst by STD
+      std := ((std*MinsPerDay)+tzi.Bias+tzi.bias_dlt)/MinsPerDay;
+      dlt := ((dlt*MinsPerDay)+tzi.Bias+tzi.bias_std)/MinsPerDay;
+    end;
     if std<dlt then
       if (std<=Value) and (Value<dlt) then
         Bias := tzi.Bias+tzi.bias_std else
@@ -17569,7 +17574,7 @@ var Bias: integer;
 begin
   if (self=nil) or (TzId='') then
     result := UtcDateTime else begin
-    GetBiasForDateTime(UtcDateTime,TzId,Bias,HaveDaylight);
+    GetBiasForDateTime(UtcDateTime,TzId,Bias,HaveDaylight,{DateIsUTC=}true);
     result := ((UtcDateTime*MinsPerDay)-Bias)/MinsPerDay;
   end;
 end;

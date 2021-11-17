@@ -2353,6 +2353,8 @@ type
   // back-end server applications that require access to an HTTP client stack
   TWinHTTP = class(TWinHttpAPI)
   protected
+    // you can override this method e.g. to disable/enable some protocols
+    function InternalGetProtocols: cardinal; virtual;
     // those internal methods will raise an EOSError exception on error
     procedure InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD); override;
     procedure InternalCreateRequest(const aMethod,aURL: SockString); override;
@@ -3920,6 +3922,11 @@ begin
   tmpLen := FormatMessage(
     FORMAT_MESSAGE_FROM_HMODULE or FORMAT_MESSAGE_ALLOCATE_BUFFER,
     pointer(GetModuleHandle(ModuleName)),Code,ENGLISH_LANGID,@err,0,nil);
+  // if string is empty, it may be because english is not found
+  if (tmpLen = 0) then
+     tmpLen := FormatMessage(
+       FORMAT_MESSAGE_FROM_HMODULE or FORMAT_MESSAGE_ALLOCATE_BUFFER or FORMAT_MESSAGE_IGNORE_INSERTS,
+       pointer(GetModuleHandle(ModuleName)),Code,0,@err,0,nil);
   try
     while (tmpLen>0) and (ord(err[tmpLen-1]) in [0..32,ord('.')]) do
       dec(tmpLen);
@@ -11577,11 +11584,22 @@ end;
 
 procedure WinHTTPSecurityErrorCallback(hInternet: HINTERNET; dwContext: PDWORD;
   dwInternetStatus: DWORD; lpvStatusInformation: pointer; dwStatusInformationLength: DWORD); stdcall;
+var err: string;
+    code: DWORD;
 begin
+  code := PDWORD(lpvStatusInformation)^;
+  if code and $00000001<>0 then err := err+' WINHTTP_CALLBACK_STATUS_FLAG_CERT_REV_FAILED';
+  if code and $00000002<>0 then err := err+' WINHTTP_CALLBACK_STATUS_FLAG_INVALID_CERT';
+  if code and $00000004<>0 then err := err+' WINHTTP_CALLBACK_STATUS_FLAG_CERT_REVOKED';
+  if code and $00000008<>0 then err := err+' WINHTTP_CALLBACK_STATUS_FLAG_INVALID_CA';
+  if code and $00000010<>0 then err := err+' WINHTTP_CALLBACK_STATUS_FLAG_CERT_CN_INVALID';
+  if code and $00000020<>0 then err := err+' WINHTTP_CALLBACK_STATUS_FLAG_CERT_DATE_INVALID';
+  if code and $00000040<>0 then err := err+' WINHTTP_CALLBACK_STATUS_FLAG_CERT_WRONG_USAGE';
+  if code and $80000000<>0 then err := err+' WINHTTP_CALLBACK_STATUS_FLAG_SECURITY_CHANNEL_ERROR';
   // in case lpvStatusInformation^=-2147483648 this is attempt to connect to
   // non-https socket wrong port - perhaps must be 443?
-  raise EWinHTTP.CreateFmt('WinHTTP security error. Status %d, statusInfo: %d',
-    [dwInternetStatus, pdword(lpvStatusInformation)^]);
+  raise EWinHTTP.CreateFmt('WinHTTP security error. Status %d, StatusInfo: %d ($%x%s)',
+    [dwInternetStatus, code, code, err]);
 end;
 
 {$ifndef UNICODE}
@@ -11607,12 +11625,22 @@ function GetVersionEx(var lpVersionInformation: TOSVersionInfoEx): BOOL; stdcall
 var // raw OS call, to avoid dependency to SynCommons.pas unit
   OSVersionInfo: TOSVersionInfoEx;
 
+function TWinHTTP.InternalGetProtocols: cardinal;
+begin
+  // WINHTTP_FLAG_SECURE_PROTOCOL_SSL2 and WINHTTP_FLAG_SECURE_PROTOCOL_SSL3
+  // are unsafe, disabled at Windows level, therefore never supplied
+  result := WINHTTP_FLAG_SECURE_PROTOCOL_TLS1;
+  // Windows 7 and newer support TLS 1.1 & 1.2
+  if (OSVersionInfo.dwMajorVersion>6) or
+    ((OSVersionInfo.dwMajorVersion=6) and (OSVersionInfo.dwMinorVersion>=1)) then
+    result := result or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1
+                     or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
+end;
+
 procedure TWinHTTP.InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD);
 var OpenType: integer;
     Callback: WINHTTP_STATUS_CALLBACK;
     CallbackRes: PtrInt absolute Callback; // for FPC compatibility
-    // MPV - don't know why, but if I pass WINHTTP_FLAG_SECURE_PROTOCOL_SSL2
-    // flag also, TLS1.2 do not work
     protocols: DWORD;
 begin
   if OSVersionInfo.dwOSVersionInfoSize=0 then begin // API call once
@@ -11634,13 +11662,7 @@ begin
      ConnectionTimeOut,SendTimeout,ReceiveTimeout) then
     RaiseLastModuleError(winhttpdll,EWinHTTP);
   if fHTTPS then begin
-     protocols := WINHTTP_FLAG_SECURE_PROTOCOL_SSL3
-       or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1;
-     // Windows 7 and newer support TLS 1.1 & 1.2
-     if (OSVersionInfo.dwMajorVersion>6) or
-       ((OSVersionInfo.dwMajorVersion=6) and (OSVersionInfo.dwMinorVersion>=1)) then
-       protocols := protocols or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1
-         or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
+    protocols := InternalGetProtocols;
     if not WinHttpAPI.SetOption(fSession, WINHTTP_OPTION_SECURE_PROTOCOLS,
        @protocols, SizeOf(protocols)) then
       RaiseLastModuleError(winhttpdll,EWinHTTP);
@@ -11788,10 +11810,8 @@ begin
       RaiseLastModuleError(winhttpdll,EWinHTTP);
   L := length(aData);
   if not _SendRequest(L) or
-     not WinHttpAPI.ReceiveResponse(fRequest,nil) then begin
-    if not fHTTPS then
-      RaiseLastModuleError(winhttpdll,EWinHTTP);
-    if (GetLastError=ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED) and
+     not WinHttpAPI.ReceiveResponse(fRequest,nil) then
+    if fHTTPS and (GetLastError=ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED) and
        IgnoreSSLCertificateErrors then begin
       if not WinHttpAPI.SetOption(fRequest,WINHTTP_OPTION_SECURITY_FLAGS,
          @SECURITY_FLAT_IGNORE_CERTIFICATES,SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
@@ -11802,8 +11822,8 @@ begin
       if not _SendRequest(L) or
          not WinHttpAPI.ReceiveResponse(fRequest,nil) then
         RaiseLastModuleError(winhttpdll,EWinHTTP);
-    end;
-  end;
+    end
+    else RaiseLastModuleError(winhttpdll,EWinHTTP);
 end;
 
 

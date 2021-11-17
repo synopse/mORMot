@@ -4759,9 +4759,6 @@ type
   /// a set of potential actions to be executed from the server
   // - reSQL will indicate the right to execute any POST SQL statement (not only
   // SELECT statements)
-  // - reSQLSelectWithoutTable will allow executing a SELECT statement with
-  // arbitrary content via GET/LOCK (simple SELECT .. FROM aTable will be checked
-  // against TSQLAccessRights.GET[] per-table right
   // - reService will indicate the right to execute the interface-based JSON-RPC
   // service implementation
   // - reUrlEncodedSQL will indicate the right to execute a SQL query encoded
@@ -4773,6 +4770,9 @@ type
   // for one user, even if connection comes from the same IP: in this case,
   // you may have to set the SessionTimeOut to a small value, in case the
   // session is not closed gracefully
+  // - reSQLSelectWithoutTable will allow executing a SELECT statement with
+  // arbitrary content via GET/LOCK (simple SELECT .. FROM aTable will be checked
+  // against TSQLAccessRights.GET[] per-table right
   // - by default, read/write access to the TSQLAuthUser table is disallowed,
   // for obvious security reasons: but you can define reUserCanChangeOwnPassword
   // so that the current logged user will be able to change its own password
@@ -58440,17 +58440,16 @@ begin
       raise EInterfaceFactoryException.CreateUTF8(
         'ickFromInjectedResolver: TryResolveInternal(%)=false',[fInterface.fInterfaceName]);
     result := TInterfacedObject(ObjectFromInterface(IInterface(dummyObj)));
-    if AndIncreaseRefCount then // RefCount=1 after TryResolveInternal()
-      AndIncreaseRefCount := false else
-      dec(TInterfacedObjectHooked(result).FRefCount);
+    dec(TInterfacedObjectHooked(result).FRefCount); // RefCount=1 after TryResolveInternal()
   end;
   else
     result := fImplementationClass.Create;
   end;
+  inc(TInterfacedObjectHooked(result).FRefCount); // >0 to call Support() in event
   if Assigned(TSQLRestServer(Rest).OnServiceCreateInstance) then
     TSQLRestServer(Rest).OnServiceCreateInstance(self,result);
-  if AndIncreaseRefCount then
-    IInterface(result)._AddRef; // allow passing self to sub-methods
+  if not AndIncreaseRefCount then
+    dec(TInterfacedObjectHooked(result).FRefCount);
 end;
 
 procedure TServiceFactoryServer.OnLogRestExecuteMethod(Sender: TServiceMethodExecute;
@@ -58694,7 +58693,8 @@ begin
         if not execres then begin
           if err<>'' then
             Ctxt.Error('%',[err],HTTP_NOTACCEPTABLE) else
-            Error('execution failed (probably due to bad input parameters)',HTTP_NOTACCEPTABLE);
+            Error('execution failed (probably due to bad input parameters: ' +
+             'e.g. did you initialize your input record(s)?)',HTTP_NOTACCEPTABLE);
           exit; // wrong request
         end;
         Ctxt.Call.OutHead := exec.ServiceCustomAnswerHead;

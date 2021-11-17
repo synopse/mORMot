@@ -390,7 +390,7 @@ type
   TFileHeader = {$ifdef USERECORDWITHMETHODS}record
     {$else}object{$endif}
     signature     : dword;           // $02014b50 PK#1#2
-    madeBy        : word;            // $14
+    madeBy        : word;            // $0314 = OS + version
     fileInfo      : TFileInfo;
     commentLen    : word;            // 0
     firstDiskNo   : word;            // 0
@@ -865,7 +865,7 @@ begin
   with Entry[Count] do begin
     fHr.signature := ENTRY_SIGNATURE_INC; // +1 to avoid finding it in the exe
     dec(fHr.signature);
-    fHr.madeBy := $14;
+    fHr.madeBy := $0314; // where $03=Unix (for proper UTF8 filenames) and $14=version
     fHr.fileInfo.neededVersion := $14;
     result := InternalWritePosition;
     fHr.localHeadOff := result-fAppendOffset;
