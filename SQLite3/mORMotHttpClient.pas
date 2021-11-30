@@ -580,17 +580,17 @@ begin
   Create(URI.Server,URI.Port,aModel,URI.Https);
   P := Pointer(aDefinition.DataBaseName);
   while P<>nil do begin
-    if UrlDecodeCardinal(P,'CONNECTTIMEOUT',V) then
+    if UrlDecodeCardinal(P,'CONNECTTIMEOUT=',V) then
       fConnectTimeout := V else
-    if UrlDecodeCardinal(P,'SENDTIMEOUT',V) then
+    if UrlDecodeCardinal(P,'SENDTIMEOUT=',V) then
       fSendTimeout := V else
-    if UrlDecodeCardinal(P,'RECEIVETIMEOUT',V) then
+    if UrlDecodeCardinal(P,'RECEIVETIMEOUT=',V) then
       fReceiveTimeout := V else
-    if UrlDecodeValue(P,'PROXYNAME',tmp) then
+    if UrlDecodeValue(P,'PROXYNAME=',tmp) then
       fProxyName := CurrentAnsiConvert.UTF8ToAnsi(tmp) else
-    if UrlDecodeValue(P,'PROXYBYPASS',tmp) then
+    if UrlDecodeValue(P,'PROXYBYPASS=',tmp) then
       fProxyByPass := CurrentAnsiConvert.UTF8ToAnsi(tmp);
-    if UrlDecodeCardinal(P,'IGNORESSLCERTIFICATEERRORS',V,@P) then
+    if UrlDecodeCardinal(P,'IGNORESSLCERTIFICATEERRORS=',V,@P) then
       fExtendedOptions.IgnoreSSLCertificateErrors := Boolean(V);
   end;
   inherited RegisteredClassCreateFrom(aModel,aDefinition); // call SetUser()

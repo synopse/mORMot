@@ -1184,10 +1184,11 @@ begin
     fDBMS := DRIVER_TYPES[IdemPCharArray(pointer(fDriverName),DRIVER_NAMES)];
     if fDBMS=dDefault then
       fDBMS := DBMS_TYPES[IdemPCharArray(pointer(fDBMSName),DBMS_NAMES)];
-    if fDBMS=dDefault then
-      raise EODBCException.CreateUTF8(
-        '%.Connect: unrecognized provider DBMSName=% DriverName=% DBMSVersion=%',
-        [self,DBMSName,DriverName,DBMSVersion]);
+    if fDBMS=dDefault then begin
+       fDBMS := dUnknown;
+       if Log<>nil then
+         Log.Log(sllDebug,'%.Connect: Unrecognized ODBC driver %', [self, fDriverName]);
+    end;
     if Log<>nil then
       Log.Log(sllDebug,'Connected to % using % % recognized as %',
         [DBMSName,DriverName,DBMSVersion,fProperties.DBMSEngineName]);
