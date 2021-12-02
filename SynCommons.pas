@@ -6460,8 +6460,8 @@ type
   TSynLocker = object
   protected
     fSection: TRTLCriticalSection;
-    fSectionPadding: PtrInt; // paranoid to avoid FUTEX_WAKE_PRIVATE=EAGAIN
-    fLocked, fInitialized: boolean;
+    fLockCount: integer;
+    fInitialized: boolean;
     {$ifndef NOVARIANTS}
     function GetVariant(Index: integer): Variant;
     procedure SetVariant(Index: integer; const Value: Variant);
@@ -6475,8 +6475,14 @@ type
     procedure SetPointer(Index: integer; const Value: Pointer);
     function GetUTF8(Index: integer): RawUTF8;
     procedure SetUTF8(Index: integer; const Value: RawUTF8);
+    function GetIsLocked: boolean; {$ifdef HASINLINE}inline;{$endif}
     {$endif NOVARIANTS}
   public
+    /// number of values stored in the internal Padding[] array
+    // - equals 0 if no value is actually stored, or a 1..7 number otherwise
+    // - you should not have to use this field, but for optimized low-level
+    // direct access to Padding[] values, within a Lock/UnLock safe block
+    PaddingUsedCount: integer;
     /// internal padding data, also used to store up to 7 variant values
     // - this memory buffer will ensure no CPU cache line mixup occurs
     // - you should not use this field directly, but rather the Locked[],
@@ -6485,11 +6491,6 @@ type
     // using a Safe.Lock; try ... Padding[n] ... finally Safe.Unlock structure,
     // and maintain the PaddingUsedCount field accurately
     Padding: array[0..6] of TVarData;
-    /// number of values stored in the internal Padding[] array
-    // - equals 0 if no value is actually stored, or a 1..7 number otherwise
-    // - you should not have to use this field, but for optimized low-level
-    // direct access to Padding[] values, within a Lock/UnLock safe block
-    PaddingUsedCount: integer;
     /// initialize the mutex
     // - calling this method is mandatory (e.g. in the class constructor owning
     // the TSynLocker instance), otherwise you may encounter unexpected
@@ -6561,7 +6562,7 @@ type
     // !end;
     function ProtectMethod: IUnknown;
     /// returns true if the mutex is currently locked by another thread
-    property IsLocked: boolean read fLocked;
+    property IsLocked: boolean read GetIsLocked;
     /// returns true if the Init method has been called for this mutex
     // - is only relevant if the whole object has been previously filled with 0,
     // i.e. as part of a class or as global variable, but won't be accurate
@@ -53165,10 +53166,9 @@ const
 
 procedure TSynLocker.Init;
 begin
-  fSectionPadding := 0;
+  fLockCount := 0;
   PaddingUsedCount := 0;
   InitializeCriticalSection(fSection);
-  fLocked := false;
   fInitialized := true;
 end;
 
@@ -53188,22 +53188,28 @@ begin
   FreeMem(@self);
 end;
 
+function TSynLocker.GetIsLocked: boolean;
+begin
+  result := fLockCount <> 0;
+end;
+
 procedure TSynLocker.Lock;
 begin
   EnterCriticalSection(fSection);
-  fLocked := true;
+  inc(fLockCount);
 end;
 
 procedure TSynLocker.UnLock;
 begin
-  fLocked := false;
+  dec(fLockCount);
   LeaveCriticalSection(fSection);
 end;
 
 function TSynLocker.TryLock: boolean;
 begin
-  result := not fLocked and
-    (TryEnterCriticalSection(fSection){$ifdef LINUX}{$ifdef FPC}<>0{$endif}{$endif});
+  result := TryEnterCriticalSection(fSection){$ifdef LINUX}{$ifdef FPC}<>0{$endif}{$endif};
+  if result then
+    inc(fLockCount);
 end;
 
 function TSynLocker.TryLockMS(retryms: integer): boolean;
@@ -53228,12 +53234,10 @@ function TSynLocker.GetVariant(Index: integer): Variant;
 begin
   if cardinal(Index)<cardinal(PaddingUsedCount) then
     try
-      EnterCriticalSection(fSection);
-      fLocked := true;
+      Lock;
       result := variant(Padding[Index]);
     finally
-      fLocked := false;
-      LeaveCriticalSection(fSection);
+      UnLock;
     end else
     VarClear(result);
 end;
@@ -53242,14 +53246,12 @@ procedure TSynLocker.SetVariant(Index: integer; const Value: Variant);
 begin
   if cardinal(Index)<=high(Padding) then
     try
-      EnterCriticalSection(fSection);
-      fLocked := true;
+      Lock;
       if Index>=PaddingUsedCount then
         PaddingUsedCount := Index+1;
       variant(Padding[Index]) := Value;
     finally
-      fLocked := false;
-      LeaveCriticalSection(fSection);
+      UnLock;
     end;
 end;
 
@@ -53257,13 +53259,11 @@ function TSynLocker.GetInt64(Index: integer): Int64;
 begin
   if cardinal(Index)<cardinal(PaddingUsedCount) then
     try
-      EnterCriticalSection(fSection);
-      fLocked := true;
+      Lock;
       if not VariantToInt64(variant(Padding[index]),result) then
         result := 0;
     finally
-      fLocked := false;
-      LeaveCriticalSection(fSection);
+      UnLock;
     end else
     result := 0;
 end;
@@ -53277,13 +53277,11 @@ function TSynLocker.GetBool(Index: integer): boolean;
 begin
   if cardinal(Index)<cardinal(PaddingUsedCount) then
     try
-      EnterCriticalSection(fSection);
-      fLocked := true;
+      Lock;
       if not VariantToBoolean(variant(Padding[index]),result) then
         result := false;
     finally
-      fLocked := false;
-      LeaveCriticalSection(fSection);
+      UnLock;
     end else
     result := false;
 end;
@@ -53313,15 +53311,13 @@ function TSynLocker.GetPointer(Index: integer): Pointer;
 begin
   if cardinal(Index)<cardinal(PaddingUsedCount) then
     try
-      EnterCriticalSection(fSection);
-      fLocked := true;
+      Lock;
       with Padding[index] do
         if VType=varUnknown then
           result := VUnknown else
           result := nil;
     finally
-      fLocked := false;
-      LeaveCriticalSection(fSection);
+      UnLock;
     end else
     result := nil;
 end;
@@ -53330,8 +53326,7 @@ procedure TSynLocker.SetPointer(Index: integer; const Value: Pointer);
 begin
   if cardinal(Index)<=high(Padding) then
     try
-      EnterCriticalSection(fSection);
-      fLocked := true;
+      Lock;
       if Index>=PaddingUsedCount then
         PaddingUsedCount := Index+1;
       with Padding[index] do begin
@@ -53341,8 +53336,7 @@ begin
         VUnknown := Value;
       end;
     finally
-      fLocked := false;
-      LeaveCriticalSection(fSection);
+      UnLock;
     end;
 end;
 
@@ -53351,14 +53345,12 @@ var wasString: Boolean;
 begin
   if cardinal(Index)<cardinal(PaddingUsedCount) then
     try
-      EnterCriticalSection(fSection);
-      fLocked := true;
+      Lock;
       VariantToUTF8(variant(Padding[Index]),result,wasString);
       if not wasString then
         result := '';
     finally
-      fLocked := false;
-      LeaveCriticalSection(fSection);
+      UnLock;
     end else
     result := '';
 end;
@@ -53367,14 +53359,12 @@ procedure TSynLocker.SetUTF8(Index: integer; const Value: RawUTF8);
 begin
   if cardinal(Index)<=high(Padding) then
     try
-      EnterCriticalSection(fSection);
-      fLocked := true;
+      Lock;
       if Index>=PaddingUsedCount then
         PaddingUsedCount := Index+1;
       RawUTF8ToVariant(Value,Padding[Index],varString);
     finally
-      fLocked := false;
-      LeaveCriticalSection(fSection);
+      UnLock;
     end;
 end;
 
@@ -53382,16 +53372,14 @@ function TSynLocker.LockedInt64Increment(Index: integer; const Increment: Int64)
 begin
   if cardinal(Index)<=high(Padding) then
     try
-      EnterCriticalSection(fSection);
-      fLocked := true;
+      Lock;
       result := 0;
       if Index<PaddingUsedCount then
         VariantToInt64(variant(Padding[index]),result) else
         PaddingUsedCount := Index+1;
       variant(Padding[Index]) := Int64(result+Increment);
     finally
-      fLocked := false;
-      LeaveCriticalSection(fSection);
+      UnLock;
     end else
     result := 0;
 end;
@@ -53400,8 +53388,7 @@ function TSynLocker.LockedExchange(Index: integer; const Value: Variant): Varian
 begin
   if cardinal(Index)<=high(Padding) then
     try
-      EnterCriticalSection(fSection);
-      fLocked := true;
+      Lock;
       with Padding[index] do begin
         if Index<PaddingUsedCount then
           result := PVariant(@VType)^ else begin
@@ -53411,8 +53398,7 @@ begin
         PVariant(@VType)^ := Value;
       end;
     finally
-      fLocked := false;
-      LeaveCriticalSection(fSection);
+      UnLock;
     end else
     VarClear(result);
 end;
@@ -53421,8 +53407,7 @@ function TSynLocker.LockedPointerExchange(Index: integer; Value: pointer): point
 begin
   if cardinal(Index)<=high(Padding) then
     try
-      EnterCriticalSection(fSection);
-      fLocked := true;
+      Lock;
       with Padding[index] do begin
         if Index<PaddingUsedCount then
           if VType=varUnknown then
@@ -53437,8 +53422,7 @@ begin
         VUnknown := Value;
       end;
     finally
-      fLocked := false;
-      LeaveCriticalSection(fSection);
+      UnLock;
     end else
     result := nil;
 end;
@@ -59007,12 +58991,12 @@ end;
 
 procedure TAutoLocker.Enter;
 begin
-  EnterCriticalSection(fSafe.fSection);
+  fSafe.Lock;
 end;
 
 procedure TAutoLocker.Leave;
 begin
-  LeaveCriticalSection(fSafe.fSection);
+  fSafe.UnLock;
 end;
 
 function TAutoLocker.Safe: PSynLocker;
