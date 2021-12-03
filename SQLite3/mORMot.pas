@@ -52866,8 +52866,10 @@ begin
       // 1st call will return data, 2nd call SessionKey
       result := ClientGetSessionKey(Sender,User,['UserName','','data',BinToBase64(OutData)]);
     until Sender.fSessionData='';
-    if result<>'' then
-      result := SecDecrypt(SecCtx,Base64ToBin(result));
+    if result<>'' then begin
+      OutData := Base64ToBin(result);
+      result := SecDecrypt(SecCtx,OutData);
+    end;
   finally
     FreeSecContext(SecCtx);
   end;
