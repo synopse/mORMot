@@ -318,8 +318,9 @@ function SecEncrypt(var aSecContext: TSecContext; const aPlain: TSSPIBuffer): TS
 // - aSecContext must be set e.g. from previous success call to ServerSSPIAuth
 // or ClientSSPIAuth
 // - aEncrypted contains data that must be decrypted
+// - warning: aEncrypted is modified in-place during the process
 // - returns decrypted message
-function SecDecrypt(var aSecContext: TSecContext; const aEncrypted: TSSPIBuffer): TSSPIBuffer;
+function SecDecrypt(var aSecContext: TSecContext; var aEncrypted: TSSPIBuffer): TSSPIBuffer;
 
 
 type
@@ -508,7 +509,7 @@ begin
   Move(PByte(InBuf[2].pvBuffer)^, BufPtr^, InBuf[2].cbBuffer);
 end;
 
-function SecDecrypt(var aSecContext: TSecContext; const aEncrypted: TSSPIBuffer): TSSPIBuffer;
+function SecDecrypt(var aSecContext: TSecContext; var aEncrypted: TSSPIBuffer): TSSPIBuffer;
 var EncLen, SigLen: Cardinal;
     BufPtr: PByte;
     InBuf: array [0..1] of TSecBuffer;
@@ -543,7 +544,6 @@ begin
     raise ESynSSPI.CreateLastOSError(aSecContext);
 
   SetString(Result, PAnsiChar(InBuf[1].pvBuffer), InBuf[1].cbBuffer);
-  FreeContextBuffer(InBuf[1].pvBuffer);
 end;
 
 
