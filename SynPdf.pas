@@ -1664,6 +1664,7 @@ type
     // property getters
     function GetDoc: TPdfDocument;    {$ifdef HASINLINE}inline;{$endif}
     function GetPage: TPdfPage;       {$ifdef HASINLINE}inline;{$endif}
+    function RectExcludeBottomRight(ARect: TRect): TRect;
   public
     /// create the PDF canvas instance
     constructor Create(APdfDoc: TPdfDocument);
@@ -7518,12 +7519,20 @@ begin // PDF can't draw twisted rects -> normalize such values
   end;
 end;
 
+function TPdfCanvas.RectExcludeBottomRight(ARect: TRect): TRect;
+begin
+  Result.Left := ARect.Left;
+  Result.Top := ARect.Top;
+  Result.Right := ARect.Right - 1;
+  Result.Bottom := ARect.Bottom - 1;
+end;
+
 function TPdfCanvas.RectI(Rect: TRect; Normalize: boolean): TPdfRect;
 begin
   result.Left := I2X(Rect.Left);
-  result.Right := I2X(Rect.Right-1);
+  result.Right := I2X(Rect.Right);
   result.Top := I2Y(Rect.Top);
-  result.Bottom := I2Y(Rect.Bottom-1);
+  result.Bottom := I2Y(Rect.Bottom);
   if Normalize then
     NormalizeRect(result);
 end;
@@ -9058,6 +9067,8 @@ function EnumEMFFunc(DC: HDC; var Table: THandleTable; R: PEnhMetaRecord;
 var i: integer;
     InitTransX: XForm;
     polytypes: PByteArray;
+    RegionData: PRgnData;
+    PtrRect: PRect;
 begin
   result := true;
   with E.DC[E.nDC] do
@@ -9226,7 +9237,12 @@ begin
   EMR_FILLRGN: begin
     E.SelectObjectFromIndex(PEMRFillRgn(R)^.ihBrush);
     E.NeedBrushAndPen;
-    E.FillRectangle(PRgnDataHeader(@PEMRFillRgn(R)^.RgnData[0])^.rcBound,false);
+    RegionData := PRgnData(@PEMRFillRgn(R)^.RgnData[0]);
+    PtrRect := PRect(@RegionData.Buffer[0]);
+    for I := 0 to RegionData.rdh.nCount - 1 do begin
+      E.FillRectangle(PtrRect^, False);
+      Inc(PtrRect);
+    end;
   end;
   EMR_POLYGON, EMR_POLYLINE, EMR_POLYGON16, EMR_POLYLINE16:
   if not brush.null or not pen.null then begin
@@ -9534,7 +9550,8 @@ begin
   EMR_EXTSELECTCLIPRGN:
     E.ExtSelectClipRgn(@PEMRExtSelectClipRgn(R)^.RgnData[0],PEMRExtSelectClipRgn(R)^.iMode);
   EMR_INTERSECTCLIPRECT:
-    ClipRgn := E.IntersectClipRect(E.Canvas.BoxI(PEMRIntersectClipRect(r)^.rclClip,true),ClipRgn);
+    ClipRgn := E.IntersectClipRect(
+      E.Canvas.BoxI(E.Canvas.RectExcludeBottomRight(PEMRIntersectClipRect(r)^.rclClip), true), ClipRgn);
   EMR_SETMAPMODE:
     MappingMode := PEMRSetMapMode(R)^.iMode;
   EMR_BEGINPATH: begin
@@ -10278,7 +10295,7 @@ procedure TPdfEnum.ExtSelectClipRgn(data: PRgnDataHeader; iMode: DWord);
 var ExtClip: TRect;
 begin
   try
-    ExtClip := data^.rcBound;
+    ExtClip := Canvas.RectExcludeBottomRight(data^.rcBound);
     with DC[nDC] do
     case iMode of
       RGN_COPY: begin
