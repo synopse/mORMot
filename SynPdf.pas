@@ -8954,6 +8954,12 @@ type
     width: Single;
   end;
 
+  TPdfEnumStateBrush = record
+    null: boolean;
+    color: integer;
+    style: integer;
+  end;
+
   /// a state of the EMF enumeration engine, for the PDF canvas
   // - used also for the SaveDC/RestoreDC stack
   TPdfEnumState = record
@@ -8973,11 +8979,7 @@ type
     // current selected pen
     pen: TPdfEnumStatePen;
     // current selected brush
-    brush: record
-      null: boolean;
-      color: integer;
-      style: integer;
-    end;
+    brush: TPdfEnumStateBrush;
     // current selected font
     font: record
       color: integer;
@@ -9069,6 +9071,7 @@ var i: integer;
     polytypes: PByteArray;
     RegionData: PRgnData;
     PtrRect: PRect;
+    CurrentBrush: TPdfEnumStateBrush;
 begin
   result := true;
   with E.DC[E.nDC] do
@@ -9235,6 +9238,7 @@ begin
   end;
   {$endif USE_ARC}
   EMR_FILLRGN: begin
+    MoveFast(E.DC[E.nDC].brush, CurrentBrush, SizeOf(TPdfEnumStateBrush));
     E.SelectObjectFromIndex(PEMRFillRgn(R)^.ihBrush);
     E.NeedBrushAndPen;
     RegionData := PRgnData(@PEMRFillRgn(R)^.RgnData[0]);
@@ -9243,6 +9247,7 @@ begin
       E.FillRectangle(PtrRect^, False);
       Inc(PtrRect);
     end;
+    MoveFast(CurrentBrush, E.DC[E.nDC].brush, SizeOf(TPdfEnumStateBrush));
   end;
   EMR_POLYGON, EMR_POLYLINE, EMR_POLYGON16, EMR_POLYLINE16:
   if not brush.null or not pen.null then begin
