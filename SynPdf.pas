@@ -10614,6 +10614,7 @@ begin
     if WithClip then begin
       Canvas.GRestore;
       fFillColor := -1; // force set drawing color
+      fStrokeColor := -1; // Ensure stroke color is reset after a GRestore
     end;
     if not Canvas.FNewPath then begin
       if WithClip then
