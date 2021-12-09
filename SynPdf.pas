@@ -10421,7 +10421,7 @@ begin
     if AUseDX then begin
       DX := pointer(PtrUInt(@R)+R.emrtext.offDx);
       W := DXTextWidth(DX, R.emrText.nChars);
-      if W<R.rclBounds.Right-R.rclBounds.Left then // offDX=0 or within box
+      if W < Trunc((R.rclBounds.Right-R.rclBounds.Left) / Canvas.FFactorX) then // offDX=0 or within box
         DX := nil;
     end else
       DX := nil;
