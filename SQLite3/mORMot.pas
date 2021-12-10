@@ -52868,7 +52868,7 @@ begin
     until Sender.fSessionData='';
     if result<>'' then begin
       OutData := Base64ToBin(result);
-      result := SecDecrypt(SecCtx,OutData);
+      result := SecDecrypt(SecCtx,{$ifdef MSWINDOWS}TSSPIBuffer{$endif}(OutData));
     end;
   finally
     FreeSecContext(SecCtx);
