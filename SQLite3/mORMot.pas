@@ -52847,7 +52847,7 @@ class function TSQLRestServerAuthenticationSSPI.ClientComputeSessionKey(
   Sender: TSQLRestClientURI; User: TSQLAuthUser): RawUTF8;
 var SecCtx: TSecContext;
     WithPassword: Boolean;
-    OutData: RawByteString;
+    OutData: TSSPIBuffer;
 begin
   result := '';
   InvalidateSecContext(SecCtx,0);
