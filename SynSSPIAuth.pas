@@ -70,7 +70,7 @@ uses
 // and call function again width data, returned from servsr
 function ClientSSPIAuth(var aSecContext: TSecContext;
     const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
-    out aOutData: RawByteString): Boolean;
+    out aOutData: TSSPIBuffer): Boolean;
 
 /// Client-side authentication procedure with clear text password.
 //  This function must be used when application need to use different
@@ -85,7 +85,7 @@ function ClientSSPIAuth(var aSecContext: TSecContext;
 // and call function again width data, returned from server
 function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
     const aInData: RawByteString; const aUserName: RawUTF8;
-    const aPassword: RawUTF8; out aOutData: RawByteString): Boolean;
+    const aPassword: RawUTF8; out aOutData: TSSPIBuffer): Boolean;
 
 /// Server-side authentication procedure
 // - aSecContext holds information between function calls
@@ -138,7 +138,7 @@ var
 function ClientSSPIAuthWorker(var aSecContext: TSecContext;
     const aInData: RawByteString; pszTargetName: PWideChar;
     pAuthData: PSecWinntAuthIdentityW;
-    out aOutData: RawByteString): Boolean;
+    out aOutData: TSSPIBuffer): Boolean;
 var InBuf: TSecBuffer;
     InDesc: TSecBufferDesc;
     InDescPtr: PSecBufferDesc;
@@ -204,7 +204,7 @@ end;
 
 function ClientSSPIAuth(var aSecContext: TSecContext;
     const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
-    out aOutData: RawByteString): Boolean;
+    out aOutData: TSSPIBuffer): Boolean;
 var TargetName: PWideChar;
 begin
   if aSecKerberosSPN <> '' then
@@ -218,7 +218,7 @@ end;
 
 function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
     const aInData: RawByteString; const aUserName: RawUTF8;
-    const aPassword: RawUTF8; out aOutData: RawByteString): Boolean;
+    const aPassword: RawUTF8; out aOutData: TSSPIBuffer): Boolean;
 var UserPos: Integer;
     Domain, User, Password: SynUnicode;
     AuthIdentity: TSecWinntAuthIdentityW;
