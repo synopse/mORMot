@@ -60643,7 +60643,7 @@ begin
         inc(Par);
       '{': begin // retrieve parameters values from JSON object
         repeat inc(Par) until not(Par^ in [#1..' ']);
-        if Par<>'}' then begin
+        if Par^<>'}' then begin
           ParObjValuesUsed := true;
           FillCharFast(ParObjValues,(ArgsInLast+1)*SizeOf(pointer),0); // := nil
           a1 := ArgsInFirst;
