@@ -33,7 +33,7 @@ unit SynFPCx64MM;
 
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2021 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2022 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -52,7 +52,7 @@ unit SynFPCx64MM;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2021
+  Portions created by the Initial Developer are Copyright (C) 2022
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):

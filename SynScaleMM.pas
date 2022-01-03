@@ -49,12 +49,12 @@ unit SynScaleMM;
 
   The Initial Developer of the Original Code is André Mussche.
 
-  Portions created by the Initial Developer are Copyright (C) 2021
+  Portions created by the Initial Developer are Copyright (C) 2022
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
   - Arnaud Bouchez https://synopse.info
-  Portions created by each contributor are Copyright (C) 2021
+  Portions created by each contributor are Copyright (C) 2022
   each contributor. All Rights Reserved.
 
   Alternatively, the contents of this file may be used under the terms of
