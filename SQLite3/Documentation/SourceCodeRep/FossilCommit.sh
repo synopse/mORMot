@@ -6,10 +6,10 @@ echo FossilRepository=$3
 
 
 cd $3
-fossil ci -M --no-warnings $1
+fossil ci -M $1
 
 # push if chkFossilPush checked in SourceCodeRep tool
 if [ $2 -eq 1 ]
 then
-  fossil --no-warnings push
+  fossil push
 fi

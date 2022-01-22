@@ -2250,7 +2250,9 @@ type
   // when multiple connections may break stability, consume too much resources
   // and/or decrease performance
   TSQLDBConnectionPropertiesThreadSafeThreadingMode = (
-    tmThreadPool, tmMainConnection, tmBackgroundThread);
+    tmThreadPool,
+    tmMainConnection,
+    tmBackgroundThread);
 
   /// connection properties which will implement an internal Thread-Safe
   // connection pool
