@@ -5071,10 +5071,17 @@ type
   /// internal set to specify some standard Delphi arrays
   TDynArrayKinds = set of TDynArrayKind;
 
-  /// internal integer type used for string/dynarray header reference counters
-  TRefCnt = {$ifdef FPC}SizeInt{$else}longint{$endif};
-  /// internal pointer integer type used for string/dynarray header reference counters
-  PRefCnt = ^TRefCnt;
+  /// cross-compiler type used for string reference counter
+  // - FPC and Delphi don't always use the same type
+  TStrCnt = {$ifdef STRCNT32} longint {$else} SizeInt {$endif};
+  /// pointer to cross-compiler type used for string reference counter
+  PStrCnt = ^TStrCnt;
+
+  /// cross-compiler type used for dynarray reference counter
+  // - FPC uses PtrInt/SizeInt, Delphi uses longint even on CPU64
+  TDACnt = {$ifdef DACNT32} longint {$else} SizeInt {$endif};
+  /// pointer to cross-compiler type used for dynarray reference counter
+  PDACnt = ^TDACnt;
 
   /// internal integer type used for string header length field
   TStrLen = {$ifdef FPC}SizeInt{$else}longint{$endif};
@@ -5090,7 +5097,7 @@ type
   // - match tdynarray type definition in dynarr.inc
   TDynArrayRec = {packed} record
     /// dynamic array reference count (basic memory management mechanism)
-    refCnt: TRefCnt;
+    refCnt: TDACnt;
     /// equals length-1
     high: tdynarrayindex;
     function GetLength: sizeint; inline;
@@ -5105,15 +5112,15 @@ const
   // - to be used inlined e.g. as PStrLen(p-_STRLEN)^
   _STRLEN = SizeOf(TStrLen);
   /// cross-compiler negative offset to TStrRec.refCnt field
-  // - to be used inlined e.g. as PRefCnt(p-_STRREFCNT)^
-  _STRREFCNT = Sizeof(TRefCnt)+_STRLEN;
+  // - to be used inlined e.g. as PStrCnt(p-_STRREFCNT)^
+  _STRREFCNT = Sizeof(TStrCnt)+_STRLEN;
 
   /// cross-compiler negative offset to TDynArrayRec.high/length field
   // - to be used inlined e.g. as PDALen(PtrUInt(Values)-_DALEN)^{$ifdef FPC}+1{$endif}
   _DALEN = SizeOf(PtrInt);
   /// cross-compiler negative offset to TDynArrayRec.refCnt field
-  // - to be used inlined e.g. as PRefCnt(PtrUInt(Values)-_DAREFCNT)^
-  _DAREFCNT = Sizeof(TRefCnt)+_DALEN;
+  // - to be used inlined e.g. as PDACnt(PtrUInt(Values)-_DAREFCNT)^
+  _DAREFCNT = Sizeof(TDACnt)+_DALEN;
 
 function ToText(k: TDynArrayKind): PShortString; overload;
 
@@ -13627,12 +13634,16 @@ function InterlockedDecrement(var I: Integer): Integer;
 
 {$endif FPC}
 
-/// low-level string/dynarray reference counter unprocess
+/// low-level string reference counter unprocess
 // - caller should have tested that refcnt>=0
 // - returns true if the managed variable should be released (i.e. refcnt was 1)
-// - on Delphi, RefCnt field is a 32-bit longint, whereas on FPC it is a SizeInt/PtrInt
-function RefCntDecFree(var refcnt: TRefCnt): boolean;
-  {$ifndef CPUINTEL}inline;{$endif}
+function StrCntDecFree(var refcnt: TStrCnt): boolean;
+  {$ifndef CPUINTEL} inline; {$endif}
+
+/// low-level dynarray reference counter unprocess
+// - caller should have tested that refcnt>=0
+function DACntDecFree(var refcnt: TDACnt): boolean;
+  {$ifndef CPUINTEL} inline; {$endif}
 
 type
   /// stores some global information about the current executable and computer
@@ -19862,7 +19873,7 @@ begin
     s := pointer(Value);
     d := s;
     for i := 1 to Safe.Padding[0].VInteger do begin
-      if PRefCnt(PAnsiChar(s^)-_STRREFCNT)^<=aMaxRefCount then begin
+      if PStrCnt(PAnsiChar(s^)-_STRREFCNT)^<=aMaxRefCount then begin
         {$ifdef FPC}
         Finalize(PRawUTF8(s)^);
         {$else}
@@ -20460,11 +20471,11 @@ type
   {$ifdef ISFPC27}
     codePage: TSystemCodePage; // =Word
     elemSize: Word;
+    {$ifndef STRCNT32}
     {$ifdef CPU64}
     _PaddingToQWord: DWord;
-    {$endif}
-  {$endif}
-    refCnt: TRefCnt; // =SizeInt
+    {$endif} {$endif} {$endif}
+    refCnt: TStrCnt; // =SizeInt on older FPC, =longint since FPC 3.4
     length: SizeInt;
   end;
 {$else FPC}
@@ -20475,7 +20486,7 @@ type
     _Padding: LongInt;
     {$endif}
     /// dynamic array reference count (basic garbage memory mechanism)
-    refCnt: TRefCnt;
+    refCnt: TDACnt;
     /// length in element count
     // - size in bytes = length*ElemSize
     length: PtrInt;
@@ -20501,7 +20512,7 @@ type
     elemSize: Word;
   {$endif UNICODE}
     /// COW string reference count (basic garbage memory mechanism)
-    refCnt: TRefCnt;
+    refCnt: TStrCnt;
     /// length in characters
     // - size in bytes = length*elemSize
     length: Longint;
@@ -20779,9 +20790,15 @@ asm
         jz      @z
         mov     qword ptr[p], rdx
         mov     p, rax
+        {$ifdef STRCNT32}
+        cmp     dword ptr[rax - _STRREFCNT], rdx
+        jl      @z
+lock    dec     dword ptr[rax - _STRREFCNT]
+        {$else}
         cmp     qword ptr[rax - _STRREFCNT], rdx
         jl      @z
 lock    dec     qword ptr[rax - _STRREFCNT]
+        {$endif STRCNT32}
         jbe     @free
 @z:     ret
 @free:  sub     p, STRRECSIZE
@@ -20792,9 +20809,15 @@ procedure _ansistr_incr_ref(p: pointer); nostackframe; assembler;
 asm
         test    p, p
         jz      @z
+        {$ifdef STRCNT32}
+        cmp     dword ptr[p - _STRREFCNT], 0
+        jl      @z
+lock    inc     dword ptr[p - _STRREFCNT]
+        {$else}
         cmp     qword ptr[p - _STRREFCNT], 0
         jl      @z
 lock    inc     qword ptr[p - _STRREFCNT]
+        {$endif STRCNT32}
 @z:
 end;
 
@@ -20805,6 +20828,19 @@ asm
         jz      @eq
         test    s, s
         jz      @ns
+        {$ifdef STRCNT32}
+        cmp     dword ptr[s - _STRREFCNT], 0
+        jl      @ns
+lock    inc     dword ptr[s - _STRREFCNT]
+@ns:    mov     qword ptr[d], s
+        test    rax, rax
+        jnz     @z
+@eq:    ret
+@z:     mov     d, rax
+        cmp     dword ptr[rax - _STRREFCNT], 0
+        jl      @n
+ lock   dec     dword ptr[rax - _STRREFCNT]
+        {$else}
         cmp     qword ptr[s - _STRREFCNT], 0
         jl      @ns
 lock    inc     qword ptr[s - _STRREFCNT]
@@ -20816,6 +20852,7 @@ lock    inc     qword ptr[s - _STRREFCNT]
         cmp     qword ptr[rax - _STRREFCNT], 0
         jl      @n
  lock   dec     qword ptr[rax - _STRREFCNT]
+        {$endif STRCNT32}
         ja      @n
 @free:  sub     d, STRRECSIZE
         jmp     _Freemem
@@ -20940,9 +20977,15 @@ asm
         test    rax, rax
         jz      @z
         mov     d, rax
+        {$ifdef STRCNT32}
+        cmp     dword ptr[rax - _STRREFCNT], 0
+        jl      @z
+lock    dec     dword ptr[rax - _STRREFCNT]
+        {$else}
         cmp     qword ptr[rax - _STRREFCNT], 0
         jl      @z
 lock    dec     qword ptr[rax - _STRREFCNT]
+        {$endif STRCNT32}
         jbe     @free
 @z:     ret
 @free:  sub     d, STRRECSIZE
@@ -20980,7 +21023,11 @@ asm
         jle     _ansistr_decr_ref
         test    rax, rax
         jz      _ansistr_setlength_new
+        {$ifdef STRCNT32}
+        cmp     dword ptr[rax - _STRREFCNT], 1
+        {$else}
         cmp     qword ptr[rax - _STRREFCNT], 1
+        {$endif STRCNT32}
         jne     _ansistr_setlength_new
         push    len
         push    s
@@ -21214,7 +21261,7 @@ begin
   if sr = nil then
     exit;
   dec(sr);
-  if (sr^.refcnt >= 0) and RefCntDecFree(sr^.refcnt) then
+  if (sr^.refcnt >= 0) and StrCntDecFree(sr^.refcnt) then
     FreeMem(sr);
 end;
 {$endif FPC_X64}
@@ -27631,23 +27678,43 @@ begin
   end;
 end;
 
-function RefCntDecFree(var refcnt: TRefCnt): boolean;
+function StrCntDecFree(var refcnt: TStrCnt): boolean;
 {$ifdef CPUINTEL} {$ifdef FPC}nostackframe; assembler; {$endif}
 asm {$ifdef CPU64DELPHI} .noframe {$endif}
-        {$ifdef FPC_64}
-        lock dec qword ptr[refcnt]  // TRefCnt=SizeInt=PtrInt=Int64 for FPC_64
+        {$ifdef STRCNT32}
+        lock dec dword ptr[refcnt]
         {$else}
-        lock dec dword ptr[refcnt]  // TRefCnt=longint on Delphi and FPC_32
-        {$endif}
+        lock dec qword ptr[refcnt]
+        {$endif STRCNT32}
         setbe   al
 end; // we don't check for ismultithread global since lock is cheap on new CPUs
 {$else}
 begin // fallback to RTL asm e.g. for ARM
-  {$ifdef FPC_64}
-  result := InterLockedDecrement64(refcnt)<=0;
-  {$else}
+  {$ifdef STRCNT32}
   result := InterLockedDecrement(refcnt)<=0;
-  {$endif FPC_64}
+  {$else}
+  result := InterLockedDecrement64(refcnt)<=0;
+  {$endif STRCNT32}
+end;
+{$endif CPUINTEL}
+
+function DACntDecFree(var refcnt: TDACnt): boolean;
+{$ifdef CPUINTEL} {$ifdef FPC}nostackframe; assembler; {$endif}
+asm {$ifdef CPU64DELPHI} .noframe {$endif}
+        {$ifdef DACNT32}
+        lock dec dword ptr[refcnt]
+        {$else}
+        lock dec qword ptr[refcnt]
+        {$endif DACNT32}
+        setbe   al
+end; // we don't check for ismultithread global since lock is cheap on new CPUs
+{$else}
+begin // fallback to RTL asm e.g. for ARM
+  {$ifdef DACNT32}
+  result := InterLockedDecrement(refcnt)<=0;
+  {$else}
+  result := InterLockedDecrement64(refcnt)<=0;
+  {$endif DACNT32}
 end;
 {$endif CPUINTEL}
 
@@ -31456,7 +31523,7 @@ begin
     exit; // wrong Index
   dec(n);
   if n>Index then begin
-    if PRefCnt(PtrUInt(Values)-_DAREFCNT)^>1 then
+    if PDACnt(PtrUInt(Values)-_DAREFCNT)^>1 then
       DynArrayMakeUnique(@Values,TypeInfo(TWordDynArray));
     MoveFast(Values[Index+1],Values[Index],(n-Index)*SizeOf(Word));
   end;
@@ -31471,7 +31538,7 @@ begin
     exit; // wrong Index
   dec(n);
   if n>Index then begin
-    if PRefCnt(PtrUInt(Values)-_DAREFCNT)^>1 then
+    if PDACnt(PtrUInt(Values)-_DAREFCNT)^>1 then
       DynArrayMakeUnique(@Values,TypeInfo(TIntegerDynArray));
     MoveFast(Values[Index+1],Values[Index],(n-Index)*SizeOf(Integer));
   end;
@@ -31486,7 +31553,7 @@ begin
     exit; // wrong Index
   dec(n,Index+1);
   if n>0 then begin
-    if PRefCnt(PtrUInt(Values)-_DAREFCNT)^>1 then
+    if PDACnt(PtrUInt(Values)-_DAREFCNT)^>1 then
       DynArrayMakeUnique(@Values,TypeInfo(TIntegerDynArray));
     MoveFast(Values[Index+1],Values[Index],n*SizeOf(Integer));
   end;
@@ -31501,7 +31568,7 @@ begin
     exit; // wrong Index
   dec(n);
   if n>Index then begin
-    if PRefCnt(PtrUInt(Values)-_DAREFCNT)^>1 then
+    if PDACnt(PtrUInt(Values)-_DAREFCNT)^>1 then
       DynArrayMakeUnique(@Values,TypeInfo(TInt64DynArray));
     MoveFast(Values[Index+1],Values[Index],(n-Index)*SizeOf(Int64));
   end;
@@ -31516,7 +31583,7 @@ begin
     exit; // wrong Index
   dec(n,Index+1);
   if n>0 then begin
-    if PRefCnt(PtrUInt(Values)-_DAREFCNT)^>1 then
+    if PDACnt(PtrUInt(Values)-_DAREFCNT)^>1 then
       DynArrayMakeUnique(@Values,TypeInfo(TInt64DynArray));
     MoveFast(Values[Index+1],Values[Index],n*SizeOf(Int64));
   end;
@@ -31528,9 +31595,9 @@ var i,v,x,n: PtrInt;
 begin
   if (Values=nil) or (Excluded=nil) then
     exit; // nothing to exclude
-  if PRefCnt(PtrUInt(Values)-_DAREFCNT)^>1 then
+  if PDACnt(PtrUInt(Values)-_DAREFCNT)^>1 then
     DynArrayMakeUnique(@Values,TypeInfo(TIntegerDynArray));
-  if PRefCnt(PtrUInt(Excluded)-_DAREFCNT)^>1 then
+  if PDACnt(PtrUInt(Excluded)-_DAREFCNT)^>1 then
     DynArrayMakeUnique(@Excluded,TypeInfo(TIntegerDynArray));
   v := length(Values);
   n := 0;
@@ -31563,9 +31630,9 @@ begin
     Values := nil;
     exit;
   end;
-  if PRefCnt(PtrUInt(Values)-_DAREFCNT)^>1 then
+  if PDACnt(PtrUInt(Values)-_DAREFCNT)^>1 then
     DynArrayMakeUnique(@Values,TypeInfo(TIntegerDynArray));
-  if PRefCnt(PtrUInt(Included)-_DAREFCNT)^>1 then
+  if PDACnt(PtrUInt(Included)-_DAREFCNT)^>1 then
     DynArrayMakeUnique(@Included,TypeInfo(TIntegerDynArray));
   v := length(Values);
   n := 0;
@@ -40478,7 +40545,7 @@ begin
   if cardinal(Index)>=cardinal(n) then
     result := false else begin
     dec(n);
-    if PRefCnt(PtrUInt(Values)-_DAREFCNT)^>1 then
+    if PDACnt(PtrUInt(Values)-_DAREFCNT)^>1 then
       DynArrayMakeUnique(@Values,TypeInfo(TRawUTF8DynArray));
     Values[Index] := ''; // avoid GPF
     if n>Index then begin
@@ -40499,7 +40566,7 @@ begin
     result := false else begin
     dec(n);
     ValuesCount := n;
-    if PRefCnt(PtrUInt(Values)-_DAREFCNT)^>1 then
+    if PDACnt(PtrUInt(Values)-_DAREFCNT)^>1 then
       DynArrayMakeUnique(@Values,TypeInfo(TRawUTF8DynArray));
     Values[Index] := ''; // avoid GPF
     dec(n,Index);
@@ -44535,7 +44602,7 @@ begin
   p := pointer(Data);
   dec(p);
   Data := 0;
-  if (p^.refCnt>=0) and RefCntDecFree(p^.refCnt) then begin
+  if (p^.refCnt>=0) and DACntDecFree(p^.refCnt) then begin
     for i := 1 to p^.length do
       FinalizeNestedRecord(ItemData);
     FreeMem(p);
@@ -47761,11 +47828,11 @@ begin
     result := false else begin
     dec(VCount);
     if VName<>nil then begin
-      if PRefCnt(PtrUInt(VName)-_DAREFCNT)^>1 then
+      if PDACnt(PtrUInt(VName)-_DAREFCNT)^>1 then
         DynArrayMakeUnique(@VName,TypeInfo(TRawUTF8DynArray));
       VName[Index] := '';
     end;
-    if PRefCnt(PtrUInt(VValue)-_DAREFCNT)^>1 then
+    if PDACnt(PtrUInt(VValue)-_DAREFCNT)^>1 then
       DynArrayMakeUnique(@VValue,TypeInfo(TVariantDynArray));
     VarClear(VValue[Index]);
     if Index<VCount then begin
@@ -49306,7 +49373,7 @@ begin
     if p<>nil then begin
       v^ := nil;
       dec(p);
-      if (p^.refCnt>=0) and RefCntDecFree(p^.refCnt) then
+      if (p^.refCnt>=0) and StrCntDecFree(p^.refCnt) then
         freemem(p);
     end;
     inc(v);
@@ -49371,7 +49438,7 @@ begin
     p := Value^;
     if p<>nil then begin
       dec(p);
-      if (p^.refCnt>=0) and RefCntDecFree(p^.refCnt) then begin
+      if (p^.refCnt>=0) and DACntDecFree(p^.refCnt) then begin
         if ElemTypeInfo<>nil then
           FastFinalizeArray(Value^,ElemTypeInfo,p^.length);
         Freemem(p);
@@ -49729,7 +49796,7 @@ begin
   n := GetCount;
   if PtrUInt(aIndex)>=PtrUInt(n) then
     exit; // out of range
-  if PRefCnt(PtrUInt(fValue^)-_DAREFCNT)^>1 then
+  if PDACnt(PtrUInt(fValue^)-_DAREFCNT)^>1 then
     InternalSetLength(n,n); // unique
   dec(n);
   P := pointer(PtrUInt(fValue^)+PtrUInt(aIndex)*ElemSize);
@@ -51278,7 +51345,7 @@ begin // this method is faster than default System.DynArraySetLength() function
   if NewLength=0 then begin
     if p<>nil then begin // FastDynArrayClear() with ObjArray support
       dec(p);
-      if (p^.refCnt>=0) and RefCntDecFree(p^.refCnt) then begin
+      if (p^.refCnt>=0) and DACntDecFree(p^.refCnt) then begin
         if OldLength<>0 then
           if ElemType<>nil then
             FastFinalizeArray(fValue^,ElemType,OldLength) else
@@ -51303,7 +51370,7 @@ begin // this method is faster than default System.DynArraySetLength() function
     OldLength := NewLength;    // no FillcharFast() below
   end else begin
     dec(PtrUInt(p),SizeOf(TDynArrayRec)); // p^ = start of heap object
-    if (p^.refCnt>=0) and RefCntDecFree(p^.refCnt) then begin
+    if (p^.refCnt>=0) and DACntDecFree(p^.refCnt) then begin
       if NewLength<OldLength then // reduce array in-place
         if ElemType<>nil then // release managed types in trailing items
           FastFinalizeArray(pointer(PAnsiChar(p)+NeededSize),ElemType,OldLength-NewLength) else
