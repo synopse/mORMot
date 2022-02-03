@@ -2630,7 +2630,8 @@ function SendEmail(const Server, From, CSVDest, Subject, Text: SockString;
 // - retry true on success
 // - the Subject is expected to be in plain 7 bit ASCII, so you could use
 // SendEmailSubject() to encode it as Unicode, if needed
-// - you can optionally set the encoding charset to be used for the Text body
+// - you can optionally set the encoding charset to be used for the Text body,
+// or even TextCharSet='JSON' to force application/json
 function SendEmail(const Server: TSMTPConnection;
   const From, CSVDest, Subject, Text: SockString; const Headers: SockString='';
   const TextCharSet: SockString = 'ISO-8859-1'; aTLS: boolean=false): boolean; overload;
@@ -6041,9 +6042,12 @@ begin
     head := trim(Headers);
     if head<>'' then
       head := head+#13#10;
-    writeln(TCP.SockOut^,'Subject: ',Subject,#13#10'From: ',From,
-      ToList,#13#10'Content-Type: text/plain; charset=',TextCharSet,
-      #13#10'Content-Transfer-Encoding: 8bit'#13#10,head,#13#10,Text);
+    writeln(TCP.SockOut^,'Subject: ',Subject,#13#10'From: ',From,ToList);
+    if TextCharSet='JSON' then
+      writeln(TCP.SockOut^,'Content-Type: application/json; charset=UTF-8')
+    else
+      writeln(TCP.SockOut^,'Content-Type: text/plain; charset=',TextCharSet);
+    writeln(TCP.SockOut^,'Content-Transfer-Encoding: 8bit'#13#10,head,#13#10,Text);
     Exec('.','25');
     writeln(TCP.SockOut^,'QUIT');
     result := true;
