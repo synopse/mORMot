@@ -121,7 +121,7 @@ type
     fUnit: TSynMapUnitDynArray;
     fSymbols: TDynArray;
     fUnits: TDynArrayHashed;
-    fSymCount, fUnitCount, fUnitSynLogIndex,fUnitSystemIndex: integer;
+    fSymCount, fUnitCount, fUnitSynLogIndex, fUnitSystemIndex: integer;
     fCodeOffset: PtrUInt;
     fHasDebugInfo: boolean;
   public

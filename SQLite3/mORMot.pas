@@ -9147,7 +9147,9 @@ type
   // pointing in opposite directions
   // - by default, only two TSQLRecord (i.e. INTEGER) fields must be created,
   // named "Source" and "Dest", the first pointing to the source record (the one
-  // with a TSQLRecordMany published property) and the second to the destination record
+  // with a TSQLRecordMany published property) and the second to the destination
+  // record - note that by design, those source/dest tables are stored as
+  // pointers, so are limited to 32-bit ID values on 32-bit systems
   // - you should first create a type inheriting from TSQLRecordMany, which
   // will define the pivot table, providing optional "through" parameters if needed
   // ! TSQLDest = class(TSQLRecord);
