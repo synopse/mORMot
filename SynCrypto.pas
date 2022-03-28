@@ -15129,10 +15129,8 @@ begin
     if N=nil then
       exit;
     V := GetJSONFieldOrObjectOrArray(P,@wasstring,@EndOfObject,true);
-    if V=nil then
-      exit;
     len := StrLen(N);
-    if len=3 then begin
+    if (len=3) and (V<>nil) then begin
       c := PInteger(N)^;
       for claim := low(claim) to high(claim) do
         if PInteger(JWT_CLAIMS_TEXT[claim])^=c then begin
@@ -15189,7 +15187,7 @@ begin
     if JWT.data.Count=0 then
       JWT.data.Capacity := cap;
     JWT.data.AddValue(N,len,value)
-  until EndOfObject='}';
+  until (EndOfObject='}') or (P=nil);
   if JWT.data.Count>0 then
     JWT.data.Capacity := JWT.data.Count;
   if requiredclaims-JWT.claims<>[] then
