@@ -222,7 +222,7 @@ type
   TSQLTableToGridAlign = (alLeft, alCenter, alRight);
 
   /// a hidden component, used for displaying a TSQLTable in a TDrawGrid
-  // - just call  TSQLTableToGrid.Create(Grid,Table)  to initiate the association
+  // - just call TSQLTableToGrid.Create(Grid,Table)  to initiate the association
   // - the Table will be released when no longer necessary
   // - any former association by TSQLTableToGrid.Create() will be overridden
   // - handle unicode, column size, field sort, incremental key lookup, hide ID
@@ -720,7 +720,7 @@ begin
   end;
 end;
 
-function CreateAnIcon (const Name, Description, Path, Parameters,
+function CreateAnIcon(const Name, Description, Path, Parameters,
   WorkingDir, IconFilename: TFileName; const IconIndex: Integer;
   const RunMinimized: Boolean = false): TFileName;
 var Dir: TFileName;

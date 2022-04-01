@@ -2285,7 +2285,7 @@ begin
 end;
 
 
- { TGDIPlusEnum }
+{ TGDIPlusEnum }
 
 type
   {$ifdef FPC}
@@ -2365,7 +2365,7 @@ type
   end;
 
 const
-   GdipRectFNull: TGdipRectF = (X:0;Y:0;Width:0;Height:0);
+  GdipRectFNull: TGdipRectF = (X:0;Y:0;Width:0;Height:0);
 
 function DXTextWidth(DX: PIntegerArray; n: Integer): integer;
 var i: integer;
