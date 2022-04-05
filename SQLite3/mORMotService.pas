@@ -1680,7 +1680,9 @@ begin
         ExeVersion.Version.DetailedOrVoid], daemon);
     start;
     while SynDaemonTerminated = 0 do
-      {$ifdef FPC}fpPause{$else}pause{$endif};
+      if GetCurrentThreadID = MainThreadID then
+        CheckSynchronize(100) else
+        Sleep(100);
   finally
     if log <> nil then
       log.Log(sllNewRun, 'Stop /% from Sig=%', [TXT[dofork], SynDaemonTerminated], daemon);

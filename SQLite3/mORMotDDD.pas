@@ -2540,7 +2540,7 @@ begin
     end;
     writeln('Press [Enter] to quit');
     ioresult;
-    readln;
+    ConsoleWaitForEnterKey; // for proper Synchronize() work
     {$ifdef LINUX}
     if ioresult<>0 then // e.g. when redirected from "nohup daemon &" command
       WaitUntilHalted;
