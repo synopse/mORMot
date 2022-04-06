@@ -112,8 +112,8 @@ unit SynPdf;
 { - if defined, the PDF engine will use the Windows Uniscribe API to
   render Ordering and Shaping of the text (useful for Hebrew, Arabic and
   some Asiatic languages)
-  - this feature need the TPdfDocument.UseUniscribe property to be forced to true
-  according to the language of the text you want to render
+  - this feature need the TPdfDocument.UseUniscribe property to be forced to
+  true according to the language of the text you want to render
   - can be undefined to safe some KB if you're sure you won't need it }
 {$ifdef NO_USE_UNISCRIBE}
   { this special conditional can be set globaly for an application which doesn't

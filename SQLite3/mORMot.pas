@@ -42926,7 +42926,7 @@ begin
     if (Model.TableProps[TableModelIndex].Props.RecordVersionField=nil) or
        not result then
       exit;
-    Batch := TSQLRestBatch.Create(self,Model.Tables[TableModelIndex],1000);
+    Batch := TSQLRestBatch.Create(self,fSQLRecordVersionDeleteTable,1000);
     try
       for i := 0 to high(IDs) do
         InternalRecordVersionDelete(TableModelIndex,IDs[i],Batch);
