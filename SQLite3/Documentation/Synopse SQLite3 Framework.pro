@@ -7447,7 +7447,7 @@ In practice, for your project, you will have several possibilities to create a C
 |SOA Interfaces|RPC REST|RPC
 |SOA Methods|Full REST/HTTP|Verbose
 |MVC Web|Web site + AJAX|HTML-oriented
-|ORM REST|Tests or internal use|Security/design flows
+|ORM REST|Tests or internal use|Security/design flaws
 |%
 In a nutshell,
 - {\i SOA Interfaces} - see @63@ - is the preferred way to build both public and private services: both client and server code will be defined from {\f1\fs20 interface} types, including sessions management, stubbing/mocking, documentation generation, and security features.
