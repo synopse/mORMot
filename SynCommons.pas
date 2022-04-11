@@ -33844,14 +33844,14 @@ begin
     _80 := PtrUInt($8080808080808080); // use registers for constants
     _61 := $6161616161616161;
     _7b := $7b7b7b7b7b7b7b7b;
-    for i := 0 to sourceLen shr 3 do begin
+    for i := 0 to (sourceLen-1) shr 3 do begin
       c := PPtrUIntArray(source)^[i];
       d := c or _80;
       PPtrUIntArray(dest)^[i] := c-((d-PtrUInt(_61)) and not(d-_7b)) and
         ((not c) and _80)shr 2;
     end;
     {$else} // unbranched uppercase conversion of 4 chars blocks
-    for i := 0 to sourceLen shr 2 do begin
+    for i := 0 to (sourceLen-1) shr 2 do begin
       c := PPtrUIntArray(source)^[i];
       d := c or PtrUInt($80808080);
       PPtrUIntArray(dest)^[i] := c-((d-PtrUInt($61616161)) and not(d-PtrUInt($7b7b7b7b))) and
