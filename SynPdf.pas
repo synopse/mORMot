@@ -7270,7 +7270,7 @@ begin
     if FPage.FFont.FTrueTypeFontsIndex=0 then begin
       Ansi := CurrentAnsiConvert.UnicodeBufferToAnsi(PW,StrLenW(PW));
       i := 1;
-      while i<length(Ansi) do begin // loop is MBCS ready
+      while i<=length(Ansi) do begin // loop is MBCS ready
         inc(W,FPage.FFont.GetAnsiCharWidth(Ansi,i));
         if SysLocale.FarEast  then
           i := NextCharIndex(Ansi,i) else
