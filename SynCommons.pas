@@ -40408,7 +40408,7 @@ function FastFindUpperPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt;
   Value: PUTF8Char; ValueLen: PtrInt): PtrInt;
 var tmp: array[byte] of AnsiChar;
 begin
-  UpperCopy255Buf(@tmp,Value,ValueLen);
+  UpperCopy255Buf(@tmp,Value,ValueLen)^ := #0;
   result := FastFindPUTF8CharSorted(P,R,@tmp);
 end;
 
@@ -44354,7 +44354,7 @@ begin
     UpperCaseCopy(TypeName,TypeNameLen,ItemTypeName^);
     up := pointer(ItemTypeName^);
   end else begin
-    UpperCopy255Buf(@tmp,TypeName,TypeNameLen);
+    UpperCopy255Buf(@tmp,TypeName,TypeNameLen)^ := #0;
     up := @tmp;
   end;
 //for ndx := 1 to SORTEDMAX do assert(StrComp(SORTEDNAMES[ndx],SORTEDNAMES[ndx-1])>0,SORTEDNAMES[ndx]);
