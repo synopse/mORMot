@@ -6124,6 +6124,7 @@ const
   TTFCFP_MS_PLATFORMID = 3;
   TTFCFP_SYMBOL_CHAR_SET = 0;
   TTFCFP_UNICODE_CHAR_SET = 1;
+  TTFCFP_DONT_CARE = 65535;
 
   TTFCFP_FLAGS_SUBSET = 1;
   TTFMFP_SUBSET = 0;
@@ -8296,7 +8297,7 @@ begin
                 if CreateFontPackage(pointer(ttf),ttfSize,
                     SubSetData,SubSetMem,SubSetSize,
                     usFlags,ttcIndex,TTFMFP_SUBSET,0,
-                    TTFCFP_MS_PLATFORMID,TTFCFP_UNICODE_CHAR_SET,
+                    TTFCFP_MS_PLATFORMID,TTFCFP_DONT_CARE,
                     pointer(Used.Values),Used.Count,
                     @lpfnAllocate,@lpfnReAllocate,@lpfnFree,nil)=0 then begin
                   // subset was created successfully -> save to PDF file
