@@ -3772,9 +3772,21 @@ begin
 end;
 
 procedure TPdfName.AppendPrefix;
+var prefix: RawUtf8;
+    c: cardinal;
+    i: PtrInt;
 begin
-  if self<>nil then
-    FValue := 'SUBSET+'+FValue; // we ensured a single subset per font
+  if self=nil then
+    exit;
+  SetLength(prefix, 7);
+  c := Random32; // we will consume only 24-bit of randomness
+  for i := 1 to 6 do
+  begin
+    prefix[i] := AnsiChar((c and 15) + 65);
+    c := c shr 4;
+  end;
+  prefix[7] := '+';
+  FValue := prefix+FValue; // we ensured a single subset per font
 end;
 
 

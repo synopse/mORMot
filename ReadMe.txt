@@ -73,6 +73,7 @@ Contributors
   Pierre le Riche
   RalfS
   Richard6688
+  Rik (rvk)
   Sabbiolina
   Sanyin
   Sinisa (sinisav)
