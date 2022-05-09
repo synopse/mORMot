@@ -257,7 +257,7 @@ type
     /// Offset of the mapping table
     offset: Cardinal;
   end;
-  /// The 'hhea' table contains information needed to layout fonts whose
+  /// 'hhea' table contains information needed to layout fonts whose
   // characters are written horizontally, that is, either left to right or
   // right to left
   TCmapHHEA = packed record
@@ -276,7 +276,7 @@ type
     metricDataFormat: SmallInt;
     numOfLongHorMetrics: word;
   end;
-  /// The 'head' table contains global information about the font
+  /// 'head' table contains global information about the font
   TCmapHEAD = packed record
     version: longint;
     fontRevision: longint;
@@ -296,7 +296,6 @@ type
     indexToLocFormat: SmallInt;
     glyphDataFormat: SmallInt
   end;
-  PCmapHEAD = ^TCmapHEAD;
   /// header for the 'cmap' Format 4 table
   // - this is a two-byte encoding format
   TCmapFmt4 = packed record
@@ -5689,7 +5688,6 @@ var CatalogDictionary: TPdfDictionary;
     RGB: TPdfStream;
     ID: TPdfArray;
     IDs: PDFString;
-    i: integer;
     NeedFileID: boolean;
     FileID: array[0..3] of cardinal;
     {$ifndef USE_PDFSECURITY}
@@ -5785,10 +5783,7 @@ begin
     NeedFileID := true;
   end;
   if NeedFileID then begin
-    Randomize;
-    for i := 0 to high(FileID) do
-      FileID[i] := cardinal(Random(MaxInt));
-    inc(FileID[0],GetTickCount);
+    FillRandom(@FileID, 4, true);
     {$ifdef USE_PDFSECURITY}
     fFileID := MD5Buf(FileID[0],16);
     IDs := '<'+RawByteString(MD5DigestToString(fFileID))+'>';
@@ -8167,7 +8162,7 @@ type
   PTtfTableEntry = ^TTtfTableEntry;
 
 const
-  // see http://www.4real.gr/technical-documents-ttf-subset.html
+  // see http://www.4real.gr/technical-documents-ttf-subset.html and
   // https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6.html
   TTF_SUBSET: array[0..9] of array[0..3] of AnsiChar = (
     'head', 'cvt ', 'fpgm', 'prep', 'hhea', 'maxp', 'hmtx', 'cmap', 'loca', 'glyf');
@@ -8175,7 +8170,7 @@ const
 procedure ReduceTTF(out ttf: PDFString; SubSetData: pointer; SubSetSize: integer);
 var dir: PTtfTableDirectory;
     d, e: PTtfTableEntry;
-    head: PCmapHEAD;
+    head: ^TCmapHEAD;
     n, i, len: PtrInt;
     checksum: cardinal;
 begin
@@ -8196,7 +8191,7 @@ begin
       inc(e);
     end;
   // update the main directory
-  if n < 8 then begin // pdf expects 10, and our fixed dir^ below in 8..15
+  if n < 8 then begin // pdf expects 10, and 8..15 for our fixed dir^ values
     MoveFast(SubSetData^, pointer(ttf)^, SubSetSize); // paranoid
     exit;
   end;
