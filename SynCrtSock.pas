@@ -994,16 +994,16 @@ type
     property FullURL: SockUnicode read fFullURL;
     {$endif}
     /// input parameter containing the caller URI
-    property URL: SockString read fURL;
+    property URL: SockString read fURL write fUrl;
     /// input parameter containing the caller method (GET/POST...)
-    property Method: SockString read fMethod;
+    property Method: SockString read fMethod write fMethod;
     /// input parameter containing the caller message headers
-    property InHeaders: SockString read fInHeaders;
+    property InHeaders: SockString read fInHeaders write fInHeaders;
     /// input parameter containing the caller message body
     // - e.g. some GET/POST/PUT JSON data can be specified here
-    property InContent: SockString read fInContent;
+    property InContent: SockString read fInContent write fInContent;
     // input parameter defining the caller message body content type
-    property InContentType: SockString read fInContentType;
+    property InContentType: SockString read fInContentType write fInContentType;
     /// output parameter to be set to the response message body
     property OutContent: SockString read fOutContent write fOutContent;
     /// output parameter to define the reponse message body content type
@@ -9287,7 +9287,7 @@ begin
         // parse method and headers
         Context.fConnectionID := Req^.ConnectionId;
         Context.fHttpApiRequest := Req;
-        Context.fFullURL := Req^.CookedUrl.pFullUrl; // FullUrlLength seems buggy
+        Context.fFullURL := Req^.CookedUrl.pFullUrl; // FullUrlLength is in bytes
         SetString(Context.fURL,Req^.pRawUrl,Req^.RawUrlLength);
         if Req^.Verb in [low(Verbs)..high(Verbs)] then
           Context.fMethod := Verbs[Req^.Verb] else
