@@ -8302,10 +8302,10 @@ begin
       Data.AddItem('DescendantFonts',Descendants);
       // create ToUnicode CMaping
       ToUnicode := TPdfStream.Create(fDoc);
-      ToUnicode.Writer.Add('/CIDInit /ProcSet findresource begin'#10+
+      ToUnicode.Writer.Add('/CIDInit/ProcSet findresource begin'#10+
         '12 dict begin'#10'begincmap'#10'/CIDSystemInfo'#10'<<'#10'/Registry (').
         Add(ShortCut).Add('+0)'#10'/Ordering (UCS)'#10'/Supplement 0'#10'>> def'#10+
-        '/CMapName /').Add(ShortCut).Add('+0 def'#10'/CMapType 2 def'#10+
+        '/CMapName/').Add(ShortCut).Add('+0 def'#10'/CMapType 2 def'#10+
         '1 begincodespacerange'#10'<').AddHex4(fFirstChar).Add('> <').
         AddHex4(fLastChar).Add('>'#10'endcodespacerange'#10);
       ndx := 0;
@@ -8411,7 +8411,7 @@ begin
                   FreeMem(SubSetData);
                   // see 5.5.3 Font Subsets: begins with a tag followed by a +
                   TPdfName(fFontDescriptor.ValueByName('FontName')).AppendPrefix;
-                  TPdfName(fFontDescriptor.ValueByName('BaseFont')).AppendPrefix;
+                  TPdfName(Data.ValueByName('BaseFont')).AppendPrefix;
                 end;
               end;
             end;
