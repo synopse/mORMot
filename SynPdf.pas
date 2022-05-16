@@ -848,7 +848,7 @@ type
   public
     /// append the 'SUBSET+' prefix to the Value
     // - used e.g. to notify that a font is included as a subset
-    procedure AppendPrefix;
+    function AppendPrefix: RawUtf8;
   end;
 
   /// used to store an array of PDF objects
@@ -3770,7 +3770,7 @@ begin
   W.Add('/').AddEscapeName(pointer(FValue));
 end;
 
-procedure TPdfName.AppendPrefix;
+function TPdfName.AppendPrefix: RawUtf8;
 var prefix: RawUtf8;
     c: cardinal;
     i: PtrInt;
@@ -3786,6 +3786,7 @@ begin
   end;
   prefix[7] := '+';
   FValue := prefix+FValue; // we ensured a single subset per font
+  result := FValue;
 end;
 
 
@@ -8271,7 +8272,8 @@ begin
       Descendant := TPdfDictionary.Create(fDoc.FXref);
       Descendant.AddItem('Type','Font');
       Descendant.AddItem('Subtype','CIDFontType2');
-      Descendant.AddItem('BaseFont',FName);
+      Descendant.AddItem('BaseFont', // name may have been prefixed
+        TPdfName(WinAnsiFont.Data.ValueByName('BaseFont')).Value);
       if fDoc.PDFA<>pdfaNone then
         Descendant.AddItem('CIDToGIDMap','Identity');
       CIDSystemInfo := TPdfDictionary.Create(FDoc.FXref);
@@ -8410,8 +8412,8 @@ begin
                   ReduceTTF(ttf,SubSetData,SubSetSize);
                   FreeMem(SubSetData);
                   // see 5.5.3 Font Subsets: begins with a tag followed by a +
-                  TPdfName(fFontDescriptor.ValueByName('FontName')).AppendPrefix;
-                  TPdfName(Data.ValueByName('BaseFont')).AppendPrefix;
+                  TPdfName(Data.ValueByName('BaseFont')).Value :=
+                    TPdfName(fFontDescriptor.ValueByName('FontName')).AppendPrefix;
                 end;
               end;
             end;
