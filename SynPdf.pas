@@ -1460,7 +1460,8 @@ type
     property UseFontFallBack: boolean read fUseFontFallBack write fUseFontFallBack;
     /// set the font name to be used for missing characters
     // - used only if UseFontFallBack is TRUE
-    // - default value is 'Arial Unicode MS', if existing
+    // - default value is 'Lucida Sans Unicode' or 'Arial Unicode MS', if
+    // available - but you may also consider https://fonts.google.com/noto/fonts
     property FontFallBackName: string read GetFontFallBackName write SetFontFallBackName;
 
     /// this property can force saving all canvas bitmaps images as JPEG
@@ -5453,7 +5454,9 @@ begin
   fMissingBookmarks := TRawUTF8List.Create;
   FUseOutlines := AUseOutlines;
   fUseFontFallBack := true;
-  fFontFallBackIndex := GetTrueTypeFontIndex('Arial Unicode MS');
+  fFontFallBackIndex := GetTrueTypeFontIndex('Lucida Sans Unicode');
+  if fFontFallBackIndex<0 then
+    fFontFallBackIndex := GetTrueTypeFontIndex('Arial Unicode MS');
   if fFontFallBackIndex<0 then
     for i := 0 to high(FTrueTypeFonts) do
       if PosEx('Unicode',FTrueTypeFonts[i])>0 then begin
