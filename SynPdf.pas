@@ -3185,7 +3185,7 @@ function GetTTCIndex(const FontName: RawUTF8; var ttcIndex: Word;
 // For some locales, the lookup may fail
 // Result must not be greater than FontCount-1
 const
-  // Font names for Simp/Trad Chinese, Japanese, Korean locales.
+  // lower-cased Font names for Simpl/Trad Chinese, Japanese, Korean locales
   BATANG_KO = #48148#53461;
   BATANGCHE_KO = BATANG_KO + #52404;
   GUNGSUH_KO = #44417#49436;
@@ -3200,10 +3200,10 @@ const
   MINGLIU_XB_CH = MINGLIU_CH + '-extb';
   PMINGLIU_XB_CH = PMINGLIU_CH + '-extb';
   MINGLIU_XBHK_CH = MINGLIU_CH + '-extb_hkscs';
-  MSGOTHIC_JA = #65325#65331#32#12468#12471#12483#12463;
-  MSPGOTHIC_JA = #65325#65331#32#65328#12468#12471#12483#12463;
-  MSMINCHO_JA = #65325#65331#32#26126#26397;
-  MSPMINCHO_JA = #65325#65331#32#65328#26126#26397;
+  MSGOTHIC_JA = #65357#65363#32#12468#12471#12483#12463;
+  MSPGOTHIC_JA = #65357#65363#32#65328#12468#12471#12483#12463;
+  MSMINCHO_JA = #65357#65363#32#26126#26397;
+  MSPMINCHO_JA = #65357#65363#32#65328#26126#26397;
   SIMSUN_CHS = #23435#20307;
   NSIMSUN_CHS = #26032#23435#20307;
 var
@@ -3250,20 +3250,16 @@ begin
   if (lcfn='mingliu_hkscs-extb') or (lcfn=MINGLIU_XBHK_CH) then
     ttcIndex := 2 else
   // msgothic.ttc (Japanese)
-  if (lcfn='ms gothic') or
-     (lcfn={$ifdef UNICODE}SysUtils.LowerCase{$else}WideLowerCase{$endif}(MSGOTHIC_JA)) then
-    ttcIndex := 0 // MSGOTHIC_JA contains full-width uppercase chars
-  else if (lcfn='ms pgothic') or
-    (lcfn={$ifdef UNICODE}SysUtils.LowerCase{$else}WideLowerCase{$endif}(MSPGOTHIC_JA)) then
+  if (lcfn='ms gothic') or (lcfn=MSGOTHIC_JA) then
+    ttcIndex := 0 
+  else if (lcfn='ms pgothic') or (lcfn=MSPGOTHIC_JA) then
       ttcIndex := 1 else
   if lcfn='ms ui gothic' then
     ttcIndex := 2 else
   // msmincho.ttc (Japanese)
-  if (lcfn='ms mincho') or
-     (lcfn={$ifdef UNICODE}SysUtils.LowerCase{$else}WideLowerCase{$endif}(MSMINCHO_JA)) then
+  if (lcfn='ms mincho') or (lcfn=MSMINCHO_JA) then
     ttcIndex := 0 else
-  if (lcfn='ms pmincho') or
-     (lcfn={$ifdef UNICODE}SysUtils.LowerCase{$else}WideLowerCase{$endif}(MSPMINCHO_JA)) then
+  if (lcfn='ms pmincho') or (lcfn=MSPMINCHO_JA) then
     ttcIndex := 1 else
   // simsun.ttc (Simplified Chinese)
   if (lcfn='simsun') or (lcfn=SIMSUN_CHS) then
@@ -5454,9 +5450,9 @@ begin
   fMissingBookmarks := TRawUTF8List.Create;
   FUseOutlines := AUseOutlines;
   fUseFontFallBack := true;
-  fFontFallBackIndex := GetTrueTypeFontIndex('Lucida Sans Unicode');
-  if fFontFallBackIndex<0 then
-    fFontFallBackIndex := GetTrueTypeFontIndex('Arial Unicode MS');
+  fFontFallBackIndex := GetTrueTypeFontIndex('Arial Unicode MS');
+  if fFontFallBackIndex<0 then // greek/hebrew fallback
+    fFontFallBackIndex := GetTrueTypeFontIndex('Lucida Sans Unicode');
   if fFontFallBackIndex<0 then
     for i := 0 to high(FTrueTypeFonts) do
       if PosEx('Unicode',FTrueTypeFonts[i])>0 then begin
