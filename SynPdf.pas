@@ -5451,7 +5451,7 @@ begin
   FUseOutlines := AUseOutlines;
   fUseFontFallBack := true;
   fFontFallBackIndex := GetTrueTypeFontIndex('Arial Unicode MS');
-  if fFontFallBackIndex<0 then // greek/hebrew fallback
+  if fFontFallBackIndex<0 then // greek/hebrew/cyrillic fallback
     fFontFallBackIndex := GetTrueTypeFontIndex('Lucida Sans Unicode');
   if fFontFallBackIndex<0 then
     for i := 0 to high(FTrueTypeFonts) do
@@ -6180,7 +6180,8 @@ begin // from PDF 1.3 #5.5.2
     if (Result[i]<=' ') or (Result[i]>=#127) then
       Delete(result,i,1); // spaces and not ASCII chars are removed
   if not IsAnsiCompatible(aFontName) then // unique non-void font name
-    result := result+PDFString(CardinalToHexLower(CRC32string(aFontName)));
+    result := result+PDFString(CardinalToHexLower(
+      crc32c(0,pointer(aFontName),length(aFontName))));
   if pfsItalic in AStyle then
     if pfsBold in AStyle then
       result := result+',BoldItalic' else
