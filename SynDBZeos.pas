@@ -1326,10 +1326,12 @@ begin // take care of the layout of internal ZDBC buffers for each provider
         WR.Add('"');
         if fDBMS = dMSSQL then begin
           P := Pointer(fResultSet.GetPWideChar(Col+FirstDbcIndex, Len));
-          WR.AddJSONEscapeW(Pointer(P), Len);
+          if Len>0 then // ZDBC returns P<>nil but Len=0 for ""
+            WR.AddJSONEscapeW(Pointer(P),Len);
         end else begin
           P := fResultSet.GetPAnsiChar(col+FirstDbcIndex,Len);
-          WR.AddJSONEscape(P,Len);
+          if Len>0 then
+            WR.AddJSONEscape(P,Len);
         end;
         WR.Add('"');
       end;

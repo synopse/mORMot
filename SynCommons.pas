@@ -43350,14 +43350,14 @@ asm // eax=source edx=dest ecx=count
       mov     esi, eax
       mov     edi, edx
       cld
-      rep movsb
+      rep movsb // (much) slower on small blocks moves
       pop     edi
       pop     esi
 @none:ret
 @down:lea     esi, [eax + ecx - 1]
       lea     edi, [edx + ecx - 1]
       std
-      rep     movsb
+      rep     movsb // backward move does not support ERMSB so is slow
       pop     edi
       pop     esi
       cld
