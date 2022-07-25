@@ -709,6 +709,8 @@ type
     // - those will be appended after the data blocks at the end of the .zip file
     Entry: array of record
       /// the file name, as stored in the .zip internal directory
+      // - the path delimiter is forced to '/' just before writing to disk,
+      // as requested by 4.4.17 of reference PKware appnote
       intName: ZipString;
       /// the corresponding file header
       fhr: TFileHeader;
@@ -861,6 +863,8 @@ begin
 end;
 
 function TZipWriteAbstract.InternalAdd(const zipName: TFileName; Buf: pointer; Size: integer): cardinal;
+var
+  i: PtrInt;
 begin
   with Entry[Count] do begin
     fHr.signature := ENTRY_SIGNATURE_INC; // +1 to avoid finding it in the exe
@@ -889,6 +893,9 @@ begin
     fhr.fileInfo.extraLen := 0; // source may have something here
     InternalWrite(fMagic,sizeof(fMagic));
     InternalWrite(fhr.fileInfo,sizeof(fhr.fileInfo));
+    for i := 1 to fhr.fileInfo.nameLen do
+      if intName[i]='\' then
+        intName[i] := '/'; // as stated by 4.4.17 of reference PKware appnote
     InternalWrite(pointer(intName)^,fhr.fileInfo.nameLen);
   end;
   if Buf<>nil then begin
@@ -1030,8 +1037,8 @@ begin
   RecursiveAdd(IncludeTrailingPathDelimiter(FolderName),'');
 end;
 
-procedure TZipWrite.AddDeflated(const aFileName: TFileName; RemovePath: boolean=true;
-  CompressLevel: integer=6; ZipName: TFileName='');
+procedure TZipWrite.AddDeflated(const aFileName: TFileName; RemovePath: boolean;
+  CompressLevel: integer; ZipName: TFileName);
 var {$ifdef MSWINDOWS}
     Time: TFileTime;
     FileTime: LongRec;
@@ -1048,14 +1055,14 @@ begin
     if ZipName='' then
       if RemovePath then
         ZipName := ExtractFileName(aFileName) else
-    {$ifdef MSWINDOWS}
+        {$ifdef MSWINDOWS}
         ZipName := aFileName;
-    GetFileTime(S.Handle,nil,nil,@Time);
-    FileTimeToLocalFileTime(Time,Time);
-    FileTimeToDosDateTime(Time,FileTime.Hi,FileTime.Lo);
-    {$else}
+        GetFileTime(S.Handle,nil,nil,@Time);
+        FileTimeToLocalFileTime(Time,Time);
+        FileTimeToDosDateTime(Time,FileTime.Hi,FileTime.Lo);
+        {$else}
         ZipName := StringReplace(aFileName,'/','\',[rfReplaceAll]);
-    {$endif}
+        {$endif}
     Size := S.Size;
     if Size64.Hi<>0 then
       raise ESynZipException.CreateFmt('%s file too big for .zip',[aFileName]);
