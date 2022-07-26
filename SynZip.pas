@@ -208,11 +208,11 @@ type
 {$endif}
 {$ifdef FPC}
   ZipPtrUInt = PtrUInt;
-  ZipPtrInt = PtrInt;
+  ZipPtrInt  = PtrInt;
 {$else}
   /// as available in FPC
   ZipPtrUInt = {$ifdef CPU64}UInt64{$else}cardinal{$endif};
-  ZipPtrInt = {$ifdef CPU64}Int64{$else}integer{$endif};
+  ZipPtrInt  = {$ifdef CPU64}Int64{$else}integer{$endif};
 {$endif}
 
 /// ZLib INFLATE decompression from memory into a AnsiString (ZipString) variable
@@ -864,7 +864,7 @@ end;
 
 function TZipWriteAbstract.InternalAdd(const zipName: TFileName; Buf: pointer; Size: integer): cardinal;
 var
-  i: PtrInt;
+  i: ZipPtrInt;
 begin
   with Entry[Count] do begin
     fHr.signature := ENTRY_SIGNATURE_INC; // +1 to avoid finding it in the exe
