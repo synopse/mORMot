@@ -50465,7 +50465,7 @@ begin
   if (Source=nil) or (fValue=nil) then
     exit;
   // ignore legacy element size for cross-platform compatibility
-  if not FromVarUInt32(Source,SourceMax,n) or
+  if not FromVarUInt32(Source,SourceMax,n) or // n=0 from mORMot 2 anyway
      ((SourceMax<>nil) and (PAnsiChar(Source)>=PAnsiChar(SourceMax))) then
     exit;
   // check stored element type
