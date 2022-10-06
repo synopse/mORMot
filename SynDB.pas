@@ -4287,13 +4287,13 @@ begin
           Ins := NewStatement;
           Ins.Prepare(SQL,false);
         end;
-        Rows.ReleaseRows;
         // write row data
         Ins.BindFromRows(ColumnForcedTypes,Rows);
         Ins.ExecutePrepared;
         Ins.Reset;
         inc(result);
       end;
+      Rows.ReleaseRows;
       if WithinTransaction then
         Commit;
     finally
