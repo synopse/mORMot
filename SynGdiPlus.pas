@@ -626,7 +626,7 @@ type
   protected
     /// this function is available only with GDI+ version 1.1
     fConvertToEmfPlus: function(graphics, image: THandle; var flag: BOOL;
-      emftype: TEmfType; description: PWideChar; var out_metafile: integer): TGdipStatus; stdcall;
+      emftype: TEmfType; description: PWideChar; var out_metafile: THandle): TGdipStatus; stdcall;
     fConvertToEmfPlusTested: Boolean;
     fForceInternalConvertToEmfPlus: boolean;
     fUseDrawString: boolean;
@@ -2695,7 +2695,7 @@ function TGDIPlusFull.ConvertToEmfPlus(Source: TMetafile; Dest: HDC;
   aSmoothing: TSmoothingMode; aTextRendering: TTextRenderingHint): THandle;
 var Ref: TGDIPlusEnum;
     flag: BOOL;
-    EmfPlusImg: integer;
+    EmfPlusImg: THandle;
     pstm: IStream;
     Img: TSynPicture;
     GR: TGdipRect;
