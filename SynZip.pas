@@ -864,7 +864,7 @@ end;
 
 function TZipWriteAbstract.InternalAdd(const zipName: TFileName; Buf: pointer; Size: integer): cardinal;
 var
-  i: ZipPtrInt;
+  i: integer; // ZipPtrInt make a compilation error on Delphi Win64 :(
 begin
   with Entry[Count] do begin
     fHr.signature := ENTRY_SIGNATURE_INC; // +1 to avoid finding it in the exe
@@ -893,7 +893,7 @@ begin
     fhr.fileInfo.extraLen := 0; // source may have something here
     InternalWrite(fMagic,sizeof(fMagic));
     InternalWrite(fhr.fileInfo,sizeof(fhr.fileInfo));
-    for i := 1 to fhr.fileInfo.nameLen do
+    for i := 1 to integer(fhr.fileInfo.nameLen) do
       if intName[i]='\' then
         intName[i] := '/'; // as stated by 4.4.17 of reference PKware appnote
     InternalWrite(pointer(intName)^,fhr.fileInfo.nameLen);
