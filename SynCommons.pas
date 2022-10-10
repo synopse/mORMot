@@ -49650,7 +49650,7 @@ begin
     end else
   if (AT<=varNull) or (BT<=varNull) then
     result := ord(AT>varNull)-ord(BT>varNull) else
-  if (AT<varString) and (BT<varString) then
+  if (AT<varString) and (BT<varString) and (AT<>varOleStr) and (BT<>varOleStr) then
     result := ICMP[VarCompareValue(variant(A),variant(B))] else
     result := CMP[caseInsensitive](variant(A),variant(B));
 end;
