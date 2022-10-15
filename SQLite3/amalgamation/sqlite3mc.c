@@ -18,7 +18,12 @@
 // assuming multi-thread safety is made by caller - in our framework, there is
 // only one thread using the database connection at the same time, but there could
 // be multiple database connection at the same time
-// * the 1 value is good enough for our purpose - 0 may be needed
+// * 0 = single-thread = all mutexes disabled - seems unsafe
+// * 1 = serialized = all calls serialized - seems overkill
+// * 2 = multi-thread = thread-safe by connection - fine for our purpose
+// - note that we keep 1=serialized at compile time (to allow all modes)
+// but SQLITE_CONFIG_MULTITHREAD is set in TSqlite3Library.BeforeInitialization
+// and rely on TSqlDataBase to do explicit Lock/LockJson/UnLock calls 
 #if SQLITE_NO_THREAD
 # define SQLITE_THREADSAFE 0
 #else  

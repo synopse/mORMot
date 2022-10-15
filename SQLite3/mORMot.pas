@@ -6,7 +6,7 @@ unit mORMot;
 (*
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2021 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2022 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMot;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2021
+  Portions created by the Initial Developer are Copyright (C) 2022
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -9147,7 +9147,9 @@ type
   // pointing in opposite directions
   // - by default, only two TSQLRecord (i.e. INTEGER) fields must be created,
   // named "Source" and "Dest", the first pointing to the source record (the one
-  // with a TSQLRecordMany published property) and the second to the destination record
+  // with a TSQLRecordMany published property) and the second to the destination
+  // record - note that by design, those source/dest tables are stored as
+  // pointers, so are limited to 32-bit ID values on 32-bit systems
   // - you should first create a type inheriting from TSQLRecordMany, which
   // will define the pivot table, providing optional "through" parameters if needed
   // ! TSQLDest = class(TSQLRecord);
@@ -18559,7 +18561,10 @@ type
     // - set OnAuthentificationFailed to nil in order to avoid any retry
     property MaximumAuthentificationRetry: Integer
       read fMaximumAuthentificationRetry write fMaximumAuthentificationRetry;
-    /// if the client shall retry once in case of "408 REQUEST TIMEOUT" error
+    /// if the client shall retry once after "408 REQUEST TIMEOUT" server error
+    // - this is about an HTTP error 408 returned by the server, e.g. when the
+    // ORM lock or transaction could not be acquired in a good enough time: this
+    // value does not apply to the client side timeout, e.g. at HTTP level
     property RetryOnceOnTimeout: Boolean
       read fRetryOnceOnTimeout write fRetryOnceOnTimeout;
     /// the current session ID as set after a successfull SetUser() method call
@@ -20774,7 +20779,7 @@ begin
   GetValueVar(Instance,true,temp,@wasString);
   if wasString then
     result := temp='' else
-    result := GetInt64(pointer(temp))=0;
+    result := (temp='0') or (temp='false') or (temp='null');
 end;
 
 function TSQLPropInfo.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
@@ -42924,7 +42929,7 @@ begin
     if (Model.TableProps[TableModelIndex].Props.RecordVersionField=nil) or
        not result then
       exit;
-    Batch := TSQLRestBatch.Create(self,Model.Tables[TableModelIndex],1000);
+    Batch := TSQLRestBatch.Create(self,fSQLRecordVersionDeleteTable,1000);
     try
       for i := 0 to high(IDs) do
         InternalRecordVersionDelete(TableModelIndex,IDs[i],Batch);
@@ -52866,8 +52871,10 @@ begin
       // 1st call will return data, 2nd call SessionKey
       result := ClientGetSessionKey(Sender,User,['UserName','','data',BinToBase64(OutData)]);
     until Sender.fSessionData='';
-    if result<>'' then
-      result := SecDecrypt(SecCtx,Base64ToBin(result));
+    if result<>'' then begin
+      OutData := Base64ToBin(result);
+      result := SecDecrypt(SecCtx,{$ifdef MSWINDOWS}TSSPIBuffer{$endif}(OutData));
+    end;
   finally
     FreeSecContext(SecCtx);
   end;
@@ -60641,7 +60648,7 @@ begin
         inc(Par);
       '{': begin // retrieve parameters values from JSON object
         repeat inc(Par) until not(Par^ in [#1..' ']);
-        if Par<>'}' then begin
+        if Par^<>'}' then begin
           ParObjValuesUsed := true;
           FillCharFast(ParObjValues,(ArgsInLast+1)*SizeOf(pointer),0); // := nil
           a1 := ArgsInFirst;

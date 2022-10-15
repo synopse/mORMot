@@ -8,7 +8,7 @@ unit SynCrypto;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2021 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2022 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -27,7 +27,7 @@ unit SynCrypto;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2021
+  Portions created by the Initial Developer are Copyright (C) 2022
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -15129,10 +15129,8 @@ begin
     if N=nil then
       exit;
     V := GetJSONFieldOrObjectOrArray(P,@wasstring,@EndOfObject,true);
-    if V=nil then
-      exit;
     len := StrLen(N);
-    if len=3 then begin
+    if (len=3) and (V<>nil) then begin
       c := PInteger(N)^;
       for claim := low(claim) to high(claim) do
         if PInteger(JWT_CLAIMS_TEXT[claim])^=c then begin
@@ -15189,7 +15187,7 @@ begin
     if JWT.data.Count=0 then
       JWT.data.Capacity := cap;
     JWT.data.AddValue(N,len,value)
-  until EndOfObject='}';
+  until (EndOfObject='}') or (P=nil);
   if JWT.data.Count>0 then
     JWT.data.Capacity := JWT.data.Count;
   if requiredclaims-JWT.claims<>[] then

@@ -6,7 +6,7 @@ unit SynDB;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2021 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2022 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2021
+  Portions created by the Initial Developer are Copyright (C) 2022
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -2250,7 +2250,9 @@ type
   // when multiple connections may break stability, consume too much resources
   // and/or decrease performance
   TSQLDBConnectionPropertiesThreadSafeThreadingMode = (
-    tmThreadPool, tmMainConnection, tmBackgroundThread);
+    tmThreadPool,
+    tmMainConnection,
+    tmBackgroundThread);
 
   /// connection properties which will implement an internal Thread-Safe
   // connection pool
@@ -4285,13 +4287,13 @@ begin
           Ins := NewStatement;
           Ins.Prepare(SQL,false);
         end;
-        Rows.ReleaseRows;
         // write row data
         Ins.BindFromRows(ColumnForcedTypes,Rows);
         Ins.ExecutePrepared;
         Ins.Reset;
         inc(result);
       end;
+      Rows.ReleaseRows;
       if WithinTransaction then
         Commit;
     finally

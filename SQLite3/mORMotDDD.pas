@@ -6,7 +6,7 @@ unit mORMotDDD;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2021 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2022 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotDDD;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2021
+  Portions created by the Initial Developer are Copyright (C) 2022
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -2540,7 +2540,7 @@ begin
     end;
     writeln('Press [Enter] to quit');
     ioresult;
-    readln;
+    ConsoleWaitForEnterKey; // for proper Synchronize() work
     {$ifdef LINUX}
     if ioresult<>0 then // e.g. when redirected from "nohup daemon &" command
       WaitUntilHalted;

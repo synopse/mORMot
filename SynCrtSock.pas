@@ -6,7 +6,7 @@ unit SynCrtSock;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2021 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2022 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynCrtSock;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2021
+  Portions created by the Initial Developer are Copyright (C) 2022
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -994,16 +994,16 @@ type
     property FullURL: SockUnicode read fFullURL;
     {$endif}
     /// input parameter containing the caller URI
-    property URL: SockString read fURL;
+    property URL: SockString read fURL write fUrl;
     /// input parameter containing the caller method (GET/POST...)
-    property Method: SockString read fMethod;
+    property Method: SockString read fMethod write fMethod;
     /// input parameter containing the caller message headers
-    property InHeaders: SockString read fInHeaders;
+    property InHeaders: SockString read fInHeaders write fInHeaders;
     /// input parameter containing the caller message body
     // - e.g. some GET/POST/PUT JSON data can be specified here
-    property InContent: SockString read fInContent;
+    property InContent: SockString read fInContent write fInContent;
     // input parameter defining the caller message body content type
-    property InContentType: SockString read fInContentType;
+    property InContentType: SockString read fInContentType write fInContentType;
     /// output parameter to be set to the response message body
     property OutContent: SockString read fOutContent write fOutContent;
     /// output parameter to define the reponse message body content type
@@ -2630,7 +2630,8 @@ function SendEmail(const Server, From, CSVDest, Subject, Text: SockString;
 // - retry true on success
 // - the Subject is expected to be in plain 7 bit ASCII, so you could use
 // SendEmailSubject() to encode it as Unicode, if needed
-// - you can optionally set the encoding charset to be used for the Text body
+// - you can optionally set the encoding charset to be used for the Text body,
+// or even TextCharSet='JSON' to force application/json
 function SendEmail(const Server: TSMTPConnection;
   const From, CSVDest, Subject, Text: SockString; const Headers: SockString='';
   const TextCharSet: SockString = 'ISO-8859-1'; aTLS: boolean=false): boolean; overload;
@@ -6041,9 +6042,12 @@ begin
     head := trim(Headers);
     if head<>'' then
       head := head+#13#10;
-    writeln(TCP.SockOut^,'Subject: ',Subject,#13#10'From: ',From,
-      ToList,#13#10'Content-Type: text/plain; charset=',TextCharSet,
-      #13#10'Content-Transfer-Encoding: 8bit'#13#10,head,#13#10,Text);
+    writeln(TCP.SockOut^,'Subject: ',Subject,#13#10'From: ',From,ToList);
+    if TextCharSet='JSON' then
+      writeln(TCP.SockOut^,'Content-Type: application/json; charset=UTF-8')
+    else
+      writeln(TCP.SockOut^,'Content-Type: text/plain; charset=',TextCharSet);
+    writeln(TCP.SockOut^,'Content-Transfer-Encoding: 8bit'#13#10,head,#13#10,Text);
     Exec('.','25');
     writeln(TCP.SockOut^,'QUIT');
     result := true;
@@ -9283,7 +9287,7 @@ begin
         // parse method and headers
         Context.fConnectionID := Req^.ConnectionId;
         Context.fHttpApiRequest := Req;
-        SetString(Context.fFullURL,Req^.CookedUrl.pFullUrl,Req^.CookedUrl.FullUrlLength);
+        Context.fFullURL := Req^.CookedUrl.pFullUrl; // FullUrlLength is in bytes
         SetString(Context.fURL,Req^.pRawUrl,Req^.RawUrlLength);
         if Req^.Verb in [low(Verbs)..high(Verbs)] then
           Context.fMethod := Verbs[Req^.Verb] else

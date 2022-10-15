@@ -6,7 +6,7 @@ unit SynDBZeos;
 {
   This file is part of Synopse framework.
 
-  Synopse framework. Copyright (C) 2021 Arnaud Bouchez
+  Synopse framework. Copyright (C) 2022 Arnaud Bouchez
   Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDBZeos;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2021
+  Portions created by the Initial Developer are Copyright (C) 2022
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -1326,10 +1326,12 @@ begin // take care of the layout of internal ZDBC buffers for each provider
         WR.Add('"');
         if fDBMS = dMSSQL then begin
           P := Pointer(fResultSet.GetPWideChar(Col+FirstDbcIndex, Len));
-          WR.AddJSONEscapeW(Pointer(P), Len);
+          if Len>0 then // ZDBC returns P<>nil but Len=0 for ""
+            WR.AddJSONEscapeW(Pointer(P),Len);
         end else begin
           P := fResultSet.GetPAnsiChar(col+FirstDbcIndex,Len);
-          WR.AddJSONEscape(P,Len);
+          if Len>0 then
+            WR.AddJSONEscape(P,Len);
         end;
         WR.Add('"');
       end;

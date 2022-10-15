@@ -6,7 +6,7 @@ unit SynCrossPlatformREST;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2021 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2022 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynCrossPlatformREST;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2021
+  Portions created by the Initial Developer are Copyright (C) 2022
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -253,8 +253,8 @@ type
   /// a set of published property Kind
   TSQLFieldKinds = set of TSQLFieldKind;
 
-  { TODO: TID should be a string since number is limited to 53-bit in JavaScript
-    -> define and use an explicit Int52 type for SMS }
+  { Should TID be a string since number is limited to 53-bit in JavaScript?
+    -> or define and use an explicit Int52 type for SMS? }
   /// the TSQLRecord primary key is a 64 bit integer
   TID = {$ifndef ISDWS}type{$endif} Int64;
 
@@ -2895,7 +2895,7 @@ begin
 end;
 
 /// marshall {result:...,id:...} and {result:...} body answers
-function CallGetResult(const aCall: TSQLRestURIParams; var outID: integer): variant;
+function CallGetResult(const aCall: TSQLRestURIParams; var outID: TID): variant;
 {$ifndef ISSMS}
 var doc: TJSONVariantData;
     jsonres: string;
@@ -2922,7 +2922,7 @@ end;
 function TSQLRestClientURI.CallBackGetResult(const aMethodName: string;
   const aNameValueParameters: array of const; aTable: TSQLRecordClass; aID: TID): string;
 var Call: TSQLRestURIParams;
-    dummyID: integer;
+    dummyID: TID;
 begin
   CallBackGet(aMethodName,aNameValueParameters,Call,aTable,aID);
   result := CallGetResult(Call,dummyID);
@@ -3038,7 +3038,7 @@ begin
             onError(self);
         exit;
       end;
-      var outID: integer;
+      var outID: TID;
       var result := CallGetResult(Call,outID); // from {result:...,id:...}
       if VarIsValidRef(result) then begin
          if (aCaller.fInstanceImplementation=sicClientDriven) and (outID<>0) then
@@ -3067,7 +3067,7 @@ function TSQLRestClientURI.CallRemoteServiceSynch(aCaller: TServiceClientAbstrac
   const aInputParams: array of variant; aReturnsCustomAnswer: boolean): TVariantDynArray;
 var Call: TSQLRestURIParams;
     outResult: variant;
-    outID: integer;
+    outID: TID;
 procedure RaiseError;
 begin
   raise EServiceException.CreateFmt('Error calling %s.%s - returned status %d',
@@ -3119,7 +3119,8 @@ var Call: TSQLRestURIParams;
     result: variant;
     bodyerror: string;
     arr: PJSONVariantData;
-    i,outID: integer;
+    i: integer;
+    outID: TID;
 begin
   params.Init;
   for i := 0 to high(aInputParams) do
@@ -3671,7 +3672,7 @@ end;
 
 constructor TServiceClientAbstract.Create(aClient: TSQLRestClientURI);
 var Call: TSQLRestURIParams; // manual synchronous call
-    dummyID: integer;
+    dummyID: TID;
     result: variant;
     contract: string;
 begin
