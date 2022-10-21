@@ -1355,11 +1355,12 @@ begin
   if i<0 then
     exit; // avoid any GPF
   Srv := Services.Items[i];
-  for i := 1 to ArgCount-1 do begin
-    Inc(Args);
-    SetLength(Srv.FArgsList, length(Srv.FArgsList)+1);
-    Srv.FArgsList[high(Srv.FArgsList)] := Args^;
-  end;
+  if Args<>nil then // Args may be nil 
+    for i := 1 to integer(ArgCount)-1 do begin
+      Inc(Args); // first arg is name of the service
+      SetLength(Srv.FArgsList, length(Srv.FArgsList)+1);
+      Srv.FArgsList[high(Srv.FArgsList)] := Args^;
+    end;
   Srv.FStatusHandle := RegisterServiceCtrlHandler(
     pointer(Srv.fSName), @Srv.ControlHandler);
   if Srv.FStatusHandle = 0 then begin
