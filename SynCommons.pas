@@ -1788,11 +1788,11 @@ type
 
 /// convert the endianness of a given unsigned 32-bit integer into BigEndian
 function bswap32(a: cardinal): cardinal;
-  {$ifndef CPUINTEL}inline;{$endif}
+  {$ifdef FPC}{$ifndef CPUINTEL}inline;{$endif}{$endif}
 
 /// convert the endianness of a given unsigned 64-bit integer into BigEndian
 function bswap64({$ifdef FPC_X86}constref{$else}const{$endif} a: QWord): QWord;
-  {$ifndef CPUINTEL}inline;{$endif}
+  {$ifdef FPC}{$ifndef CPUINTEL}inline;{$endif}{$endif}
 
 /// convert the endianness of an array of unsigned 64-bit integer into BigEndian
 // - n is required to be > 0
