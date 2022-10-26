@@ -169,7 +169,7 @@ type
   end;
 
   SC_HANDLE = THandle;
-  SERVICE_STATUS_HANDLE = DWORD;
+  SERVICE_STATUS_HANDLE = THandle;
   TServiceTableEntry = record
     lpServiceName: PChar;
     lpServiceProc: procedure(ArgCount: DWORD; Args: PPChar); stdcall;
