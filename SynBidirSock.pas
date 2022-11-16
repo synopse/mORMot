@@ -2894,7 +2894,7 @@ begin
   result := GetBytes(pointer(data),hdr.len32);
   if result then begin
     if hdr.mask<>0 then
-      ProcessMask(pointer(data),hdr.mask,hdr.len32);
+      ProcessMask(@data[1],hdr.mask,hdr.len32);
     len := 0; // prepare upcoming GetHeader
   end;
 end;
@@ -3013,7 +3013,7 @@ begin
       end;
       if fMaskSentFrames<>0 then begin
         hdr.mask := Random32gsl; // https://tools.ietf.org/html/rfc6455#section-10.3
-        ProcessMask(pointer(Frame.payload),hdr.mask,len);
+        ProcessMask(@Frame.payload[1],hdr.mask,len);
         inc(hdrlen,4);
       end;
       tmp.Init(hdrlen+len); // avoid most memory allocations
