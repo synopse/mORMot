@@ -9299,6 +9299,7 @@ begin
         InCompressAccept := ComputeContentEncoding(fCompress,pointer(InAcceptEncoding));
         Context.fUseSSL := Req^.pSslInfo<>nil;
         Context.fInHeaders := RetrieveHeaders(Req^,fRemoteIPHeaderUpper,RemoteIP);
+        Context.RemoteIP  :=  RemoteIP;
         // compute remote connection ID
         L := length(fRemoteConnIDHeaderUpper);
         if L<>0 then begin
