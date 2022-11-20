@@ -746,6 +746,8 @@ type
     property ForceDateWithMS: boolean read GetForceDateWithMS write SetForceDateWithMS;
     /// gets a number of updates made by latest executed statement
     function UpdateCount: Integer;
+    /// The actual value of the lass `Step` call
+    function LastStepReturnedValue: Integer;
   end;
 
 {$ifdef WITH_PROXY}
@@ -1715,6 +1717,7 @@ type
     fSQLLogTimer: TPrecisionTimer;
     fCacheIndex: integer;
     fSQLPrepared: RawUTF8;
+    FLastStepReturnedValue: Integer;
     function GetSQLCurrent: RawUTF8;
     function GetSQLWithInlinedParams: RawUTF8;
     procedure ComputeSQLWithInlinedParams;
@@ -2194,6 +2197,8 @@ type
     // - follows the format expected by TSQLDBProxyStatement
     procedure ColumnsToBinary(W: TFileBufferWriter;
       Null: pointer; const ColTypes: TSQLDBFieldTypeDynArray); virtual;
+    /// The actual value of the lass `Step` call
+    function LastStepReturnedValue: Integer;
     /// low-level access to the Timer used for last DB operation
     property SQLLogTimer: TPrecisionTimer read fSQLLogTimer;
     /// after a call to Prepare(), contains the query text to be passed to the DB
@@ -6762,6 +6767,7 @@ begin
   fConnection := aConnection;
   fStripSemicolon := true;
   fCacheIndex := -1;
+  FLastStepReturnedValue := 0; // Default value is SQLITE_OK (0)
   if aConnection<>nil then
     fDBMS := aConnection.fProperties.DBMS;
 end;
@@ -7169,6 +7175,11 @@ begin
         [self,ColumnName(F),ord(ft)]);
     end;
   end;
+end;
+
+function TSQLDBStatement.LastStepReturnedValue: Integer;
+begin
+  Result := FLastStepReturnedValue;
 end;
 
 const

@@ -731,7 +731,8 @@ begin
     //fStatement.Reset;
   end;
   try
-    result := fStatement.Step=SQLITE_ROW;
+    FLastStepReturnedValue := fStatement.Step;
+    result := FLastStepReturnedValue=SQLITE_ROW;
   except
     on E: Exception do begin
       if fShouldLogSQL then
