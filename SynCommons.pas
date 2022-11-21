@@ -155,6 +155,10 @@ var
   GetACP: integer = CODEPAGE_US;
 {$endif}
 
+const
+    /// Maximum bytes for single char.
+  UTF8_CHAR_MAX_BYTES = 4;
+
 {$ifdef FPC} { make cross-compiler and cross-CPU types available to Delphi }
 
 type

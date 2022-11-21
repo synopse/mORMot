@@ -1395,6 +1395,8 @@ type
   public
     // the client verion numbers
     major_version, minor_version, update_num, patch_num, port_update_num: sword;
+    /// Maximum supported varchar string length
+    MaxVarCharLength: Integer;
     /// if OCI handles directly Int64 bound parameters (revision >= 11.2)
     SupportsInt64Params: boolean;
     /// OCI will call OCILobGetChunkSize when retrieving BLOB/CLOB content
@@ -1444,6 +1446,10 @@ begin
     ClientVersion(major_version, minor_version,
       update_num, patch_num, port_update_num);
     SupportsInt64Params := (major_version>11) or ((major_version=11) and (minor_version>1));
+    if major_version > 7 then
+      MaxVarCharLength := 4000
+    else
+      MaxVarCharLength := 2000;
     UseLobChunks := true;
   end;
 end;
@@ -2936,10 +2942,18 @@ begin
             ftUTF8: begin
     txt:      VDBType := SQLT_STR; // use STR external data type (SQLT_LVC fails)
               oLength := Length(VData)+1; // include #0
+              L := OCI.MaxVarCharLength * UTF8_CHAR_MAX_BYTES;
+                // input text pre-allocation for OUT param
+              if (VInOut in [paramOut, paramInOut]) and (oLength < L) then
+              begin
+                SetLength(VData, L);
+                if VInOut = paramInOut then
+                  VData[oLength] := #0;
+                oLength := L + 1;
+              end;
               if oLength=1 then // '' will just map one #0
                 oData := @VData else
                 oData := pointer(VData);
-              // for OUT param, input text shall be pre-allocated
             end;
             ftBlob:
               if VInOut<>paramIn then
