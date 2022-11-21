@@ -10891,6 +10891,23 @@ begin
   Check((length(Stmt.Select)=2)and(Stmt.Select[1].Field=0)and
     (Props.Fields.List[Stmt.Select[0].Field-1].Name='Data'));
   Check(Stmt.OrderByField=nil);
+  NewStmt('select id from tab where YearOfBirth=1600 and (YearOfDeath<>80 or YearOfDeath is null)');
+  Check(Stmt.TableName='tab');
+  Check(length(Stmt.Where)=3);
+  Check(Props.Fields.List[Stmt.Where[0].Field-1].Name='YearOfBirth');
+  Check(Stmt.Where[0].Operator=opEqualTo);
+  Check(Stmt.Where[0].Value='1600');
+  Check(Props.Fields.List[Stmt.Where[1].Field-1].Name='YearOfDeath');
+  Check(Stmt.Where[1].Operator=opNotEqualTo);
+  Check(Stmt.Where[1].ParenthesisBefore='(');
+  Check(Stmt.Where[1].Value='80');
+  Check(Stmt.Where[2].JoinedOR);
+  Check(Props.Fields.List[Stmt.Where[2].Field-1].Name='YearOfDeath');
+  Check(Stmt.Where[2].Operator=opIsNull);
+  Check(Stmt.Where[2].ParenthesisAfter=')');
+  Check(Stmt.Limit=0);
+  Check(Stmt.Offset=0);
+  Check(Stmt.OrderByField=nil);
   NewStmt('select count(*) from tab');
   Check(Stmt.TableName='tab');
   Check(Stmt.Where=nil);

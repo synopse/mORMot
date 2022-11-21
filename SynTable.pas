@@ -7380,6 +7380,19 @@ begin
   inc(selectCount);
   result := true;
 end;
+procedure GetWhereParenthesisAfter(var Where: TSynTableStatementWhere);
+var B: PUTF8Char;
+begin
+  if (P^=')') and (Where.FunctionName='') then begin
+    B := P;
+    repeat
+      inc(P);
+    until not (P^ in [#1..' ',')']);
+    while P[-1]=' ' do dec(P); // trim right space
+    SetString(Where.ParenthesisAfter,B,P-B);
+    P := GotoNextNotSpace(P);
+  end;
+end;
 function GetWhereValue(var Where: TSynTableStatementWhere): boolean;
 var B: PUTF8Char;
 begin
@@ -7430,15 +7443,7 @@ begin
     inc(P,2); // ignore :(...): parameter
   Where.ValueSQLLen := P-Where.ValueSQL;
   P := GotoNextNotSpace(P);
-  if (P^=')') and (Where.FunctionName='') then begin
-    B := P;
-    repeat
-      inc(P);
-    until not (P^ in [#1..' ',')']);
-    while P[-1]=' ' do dec(P); // trim right space
-    SetString(Where.ParenthesisAfter,B,P-B);
-    P := GotoNextNotSpace(P);
-  end;
+  GetWhereParenthesisAfter(Where);
   result := true;
 end;
 {$ifndef NOVARIANTS}
@@ -7540,6 +7545,7 @@ begin
         inc(P,8);
         result := true; // leave ValueVariant=unassigned
       end;
+      GetWhereParenthesisAfter(Where);
       exit;
     end;
     {$ifndef NOVARIANTS}
