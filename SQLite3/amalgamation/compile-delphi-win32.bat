@@ -12,7 +12,7 @@ rem set bcc=d:\dev\bcc
 echo ---------------------------------------------------
 echo Compiling for Delphi Win32 using %bcc%
 
-%bcc%\bin\bcc32 -6 -Oi -O2 -c -d -u- sqlite3mc.c
+%bcc%\bin\bcc32 -6 -Oi -O2 -c -d -u- -DNDEBUG sqlite3mc.c
 
 copy sqlite3mc.obj ..\sqlite3.obj
 copy sqlite3mc.obj %DST2%
