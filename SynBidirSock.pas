@@ -439,6 +439,8 @@ type
     /// the frame data itself
     // - is plain UTF-8 for focText kind of frame
     // - is raw binary for focBinary or any other frames
+    // - warning: the content will be masked in-place so caller should ensure
+    // this buffer can be modified (e.g. do not fill from a constant)
     payload: RawByteString;
   end;
 
