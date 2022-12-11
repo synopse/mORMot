@@ -49815,9 +49815,8 @@ begin
 end;
 
 function TDynArray.ElemPtr(index: PtrInt): pointer;
-label ok;
 var c: PtrUInt;
-begin // very efficient code on FPC and modern Delphi
+begin // no goto/label, because it does not properly inline on modern Delphi
   result := pointer(fValue);
   if result=nil then
     exit;
@@ -49825,17 +49824,17 @@ begin // very efficient code on FPC and modern Delphi
   if result=nil then
     exit;
   c := PtrUInt(fCountP);
-  if c<>0 then begin
+  if c<>0 then
     if PtrUInt(index)<PCardinal(c)^ then
-ok:   inc(PByte(result),PtrUInt(index)*ElemSize) else
+      inc(PByte(result),PtrUInt(index)*ElemSize) else
       result := nil
-  end else
+  else
     {$ifdef FPC}
     if PtrUInt(index)<=PPtrUInt(PtrUInt(result)-_DALEN)^ then
     {$else}
     if PtrUInt(index)<PPtrUInt(PtrUInt(result)-_DALEN)^ then
     {$endif FPC}
-      goto ok else
+      inc(PByte(result),PtrUInt(index)*ElemSize) else
       result := nil;
 end;
 
