@@ -539,7 +539,7 @@ type
     // - e.g. 'Content-Encoding: synlz' header if compressed using synlz
     // - and if Data is not '', will add 'Content-Type: ' header
     procedure CompressDataAndWriteHeaders(const OutContentType: SockString;
-      var OutContent: SockString);
+      var OutContent: SockString; OutContentLength: PtrInt = -1);
   public
     /// TCP/IP prefix to mask HTTP protocol
     // - if not set, will create full HTTP/1.0 or HTTP/1.1 compliant content
@@ -6546,6 +6546,7 @@ var ctxt: THttpServerRequest;
   var
     fs: TFileStream;
     fn: TFileName;
+    len: PtrInt;
   begin
     result := not Terminated; // true=success
     if not result then
@@ -6554,16 +6555,21 @@ var ctxt: THttpServerRequest;
     TSynLog.Add.Log(sllCustom2, 'SendResponse respsent=% code=%', [respsent,code], self);
     {$endif}
     respsent := true;
+    len := -1; // use length(ctxt.OutContent) by default
     // handle case of direct sending of static file (as with http.sys)
     if (ctxt.OutContent<>'') and (ctxt.OutContentType=HTTP_RESP_STATICFILE) then
       try
         ExtractNameValue(ctxt.fOutCustomHeaders,'CONTENT-TYPE:',ctxt.fOutContentType);
         fn := {$ifdef UNICODE}UTF8ToUnicodeString{$else}Utf8ToAnsi{$endif}(ctxt.OutContent);
-        if not Assigned(fOnSendFile) or not fOnSendFile(ctxt,fn) then begin
+        if (ctxt.Method='HEAD') or not Assigned(fOnSendFile) or not fOnSendFile(ctxt,fn) then begin
           fs := TFileStream.Create(fn,fmOpenRead or fmShareDenyNone);
           try
-            SetString(ctxt.fOutContent,nil,fs.Size);
-            fs.Read(Pointer(ctxt.fOutContent)^,length(ctxt.fOutContent));
+            if ctxt.Method='HEAD' then
+              len := fs.Size else
+            begin // regular GET or POST response
+              SetString(ctxt.fOutContent,nil,fs.Size);
+              fs.Read(Pointer(ctxt.fOutContent)^,length(ctxt.fOutContent));
+            end;
          finally
             fs.Free;
           end;
@@ -6610,7 +6616,7 @@ var ctxt: THttpServerRequest;
     ClientSock.SockSend([
       {$ifndef NOXPOWEREDNAME}XPOWEREDNAME+': '+XPOWEREDVALUE+#13#10+{$endif}
       'Server: ',fServerName]);
-    ClientSock.CompressDataAndWriteHeaders(ctxt.OutContentType,ctxt.fOutContent);
+    ClientSock.CompressDataAndWriteHeaders(ctxt.OutContentType,ctxt.fOutContent,len);
     if ClientSock.KeepAliveClient then begin
       if ClientSock.fCompressAcceptEncoding<>'' then
         ClientSock.SockSend(ClientSock.fCompressAcceptEncoding);
@@ -7096,7 +7102,7 @@ begin
 end;
 
 procedure THttpSocket.CompressDataAndWriteHeaders(const OutContentType: SockString;
-  var OutContent: SockString);
+  var OutContent: SockString; OutContentLength: PtrInt);
 var OutContentEncoding: SockString;
 begin
   if integer(fCompressAcceptHeader)<>0 then begin
@@ -7105,7 +7111,9 @@ begin
     if OutContentEncoding<>'' then
         SockSend(['Content-Encoding: ',OutContentEncoding]);
   end;
-  SockSend(['Content-Length: ',length(OutContent)]); // needed even 0
+  if OutContentLength<0 then
+    OutContentLength := length(OutContent);
+  SockSend(['Content-Length: ',OutContentLength]); // needed even 0
   if (OutContentType<>'') and (OutContentType<>HTTP_RESP_STATICFILE) then
     SockSend(['Content-Type: ',OutContentType]);
 end;
