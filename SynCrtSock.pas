@@ -2547,7 +2547,7 @@ function OpenHttp(const aURI: SockString; aAddress: PSockString=nil): THttpClien
 // the overloaded HttpGet() methods
 function HttpGet(const server, port: SockString; const url: SockString;
   const inHeaders: SockString; outHeaders: PSockString=nil;
-  aLayer: TCrtSocketLayer = cslTCP): SockString; overload;
+  aLayer: TCrtSocketLayer = cslTCP; outStatus: PInteger = nil): SockString; overload;
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket for plain http URI,
@@ -5873,14 +5873,18 @@ end;
 
 function HttpGet(const server, port: SockString; const url: SockString;
   const inHeaders: SockString; outHeaders: PSockString;
-  aLayer: TCrtSocketLayer): SockString;
+  aLayer: TCrtSocketLayer; outStatus: PInteger): SockString;
 var Http: THttpClientSocket;
+    status: integer;
 begin
   result := '';
   Http := OpenHttp(server,port,false,aLayer);
   if Http<>nil then
   try
-    if Http.Get(url,0,inHeaders) in [STATUS_SUCCESS..STATUS_PARTIALCONTENT] then begin
+    status := Http.Get(url,0,inHeaders);
+    if outStatus <> nil then
+      outStatus^ := status;
+    if status in [STATUS_SUCCESS..STATUS_PARTIALCONTENT] then begin
       result := Http.Content;
       if outHeaders<>nil then
         outHeaders^ := Http.HeaderGetText;
@@ -5911,7 +5915,7 @@ begin
       raise ECrtSocket.CreateFmt('https is not supported by HttpGet(%s)',[aURI]) else
       {$endif}
       {$endif USEWININET}
-      result := HttpGet(URI.Server,URI.Port,URI.Address,inHeaders,outHeaders,URI.Layer) else
+      result := HttpGet(URI.Server,URI.Port,URI.Address,inHeaders,outHeaders,URI.Layer,outStatus) else
     result := '';
   {$ifdef LINUX_RAWDEBUGVOIDHTTPGET}
   if result='' then
