@@ -11663,10 +11663,6 @@ var OpenType: integer;
     CallbackRes: PtrInt absolute Callback; // for FPC compatibility
     protocols: DWORD;
 begin
-  if OSVersionInfo.dwOSVersionInfoSize=0 then begin // API call once
-    OSVersionInfo.dwOSVersionInfoSize := sizeof(OSVersionInfo);
-    GetVersionEx(OSVersionInfo);
-  end;
   if fProxyName='' then
     if (OSVersionInfo.dwMajorVersion>6) or
        ((OSVersionInfo.dwMajorVersion=6) and (OSVersionInfo.dwMinorVersion>=3)) then
@@ -13130,6 +13126,8 @@ begin
   {$ifdef USEWININET}
   FillChar(WinHttpAPI, SizeOf(WinHttpAPI), 0);
   WinHttpAPIInitialize;
+  OSVersionInfo.dwOSVersionInfoSize := sizeof(OSVersionInfo);
+  GetVersionEx(OSVersionInfo);
   {$endif}
   {$endif MSWINDOWS}
   FillChar(WsaDataOnce,sizeof(WsaDataOnce),0);
