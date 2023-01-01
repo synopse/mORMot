@@ -6,7 +6,7 @@ unit mORMotSelfTests;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2022 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2023 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotSelfTests;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2022
+  Portions created by the Initial Developer are Copyright (C) 2023
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -137,7 +137,8 @@ type // mORMot.pas unit doesn't compile with Delphi 5 yet
 {$else}
 procedure TTestSynopsemORMotFramework._mORMot;
 begin
-  //AddCase(TTestBasicClasses);
+  //TSynLog.Add.Log(sllError, self);
+  //AddCase(TTestBidirectionalRemoteConnection);
   //exit; // (*
   AddCase([TTestFileBased,TTestFileBasedMemoryMap,TTestFileBasedWAL]);
   AddCase(TTestMemoryBased);
