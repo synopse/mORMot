@@ -5209,10 +5209,22 @@ begin
     end;
     dec(PEnd);
     P := PEnd;
-    repeat if P<=PBeg then exit else dec(P) until P^=' ';
-    FastSetString(fExeVersion,P+1,PEnd-P-1);
-    repeat dec(P); if P<=PBeg then exit; until P^<>' ';
-    FastSetString(fExeName,PBeg,P-PBeg+1);
+    while P>PBeg do begin
+      dec(P);
+      if P^=' ' then
+        break;
+    end;
+    if P=PBeg then // no version
+      FastSetString(fExeName,PBeg,PEnd-PBeg)
+    else begin
+      FastSetString(fExeVersion,P+1,PEnd-P-1);
+      while P>PBeg do begin
+        dec(P);
+        if P^<>' ' then
+          break;
+      end;
+      FastSetString(fExeName,PBeg,P-PBeg+1);
+    end;
     PBeg := PUTF8Char(fLines[1])+5;
     PEnd := PUTF8Char(fLines[1])+LineSize(1);
     if not GetOne(' USER=',fHost) or not GetOne(' CPU=',fUser) or
