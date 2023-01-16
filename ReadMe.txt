@@ -5,12 +5,16 @@ An Open Source Client-Server ORM/SOA framework
  (c) 2008-2023 Synopse Informatique
   https://synopse.info
   http://mormot.net
-  
-WARNING:
----------------------------------------------------------------
-This repository is now in "frozen/maintenance" mode. Only SQLite3 static binaries and important bug fixes will be included in the future.
-Please consider using https://github.com/synopse/mORMot2 for any new or maintainable project.
----------------------------------------------------------------
+
+=========  
+ WARNING
+=========
+ This repository is now in "frozen/maintenance" mode. 
+ Only SQLite3 static binaries and important bug fixes will be included in the future.
+-----------------------------------------------------------------------------------------------
+ Please consider using https://github.com/synopse/mORMot2 for any new or maintainable project.
+-----------------------------------------------------------------------------------------------
+
 
 Contributors
   Alan Chate
