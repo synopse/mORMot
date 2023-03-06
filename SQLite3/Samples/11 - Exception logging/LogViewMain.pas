@@ -273,7 +273,7 @@ begin
     end;
     ThreadListBox.Items.EndUpdate;
   end;
-  lstDays.Visible := (FLog<>nil) and (FLog.DayChangeIndex<>nil);
+  lstDays.Visible := (FLog<>nil) and (FLog.DayChangeIndex<>nil) and (FLog.DayCount<>nil);
   if lstDays.Visible then begin
     FLog.GetDays(FDays);
     lstDays.Top := y;

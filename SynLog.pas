@@ -5218,11 +5218,9 @@ begin
       FastSetString(fExeName,PBeg,PEnd-PBeg)
     else begin
       FastSetString(fExeVersion,P+1,PEnd-P-1);
-      while P>PBeg do begin
+      repeat
         dec(P);
-        if P^<>' ' then
-          break;
-      end;
+      until (P=PBeg) or (P^<>' ');
       FastSetString(fExeName,PBeg,P-PBeg+1);
     end;
     PBeg := PUTF8Char(fLines[1])+5;
