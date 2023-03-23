@@ -381,9 +381,30 @@ type
     function AlgoID: integer; // 1..15  (1=SynLZ e.g.) from flags
     procedure SetAlgoID(Algorithm: integer);
     function GetUTF8FileName: boolean;
+    function ExtraUnicodeFileNamePos: PAnsiChar;
     procedure SetUTF8FileName;
     procedure UnSetUTF8FileName;
   end;
+
+  TFileInfoExtra = packed record
+    id: word;
+    size: word;
+    // here is extra data of size `size`
+  end;
+  PFileInfoExtra = ^TFileInfoExtra;
+
+// See Info-ZIP Unicode Path Extra Field at https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
+const
+  FileInfoExtra_UnicodePathId = $7075;
+type
+  TFileInfoExtraName = packed record
+    id: word; // UPath 0x7075
+    size: word;
+    version: byte; // version of this extra field, currently 1
+    nameCRC32: cardinal; // File Name Field CRC32 Checksum
+    utf8Name: UTF8Char; // UTF-8 version of the entry File Name of `size` bytes length
+  end;
+  PFileInfoExtraName = ^TFileInfoExtraName;
 
   /// directory file information structure, as used in .zip file format
   // - used at the end of the zip file to recap all entries
@@ -1206,6 +1227,7 @@ var lhr: PLastHeader;
     i,j: integer;
     {$ifndef DELPHI5OROLDER}
     tmp: UTF8String;
+    P: PAnsiChar;
     {$else}
     tmp: ZipString;
     {$endif}
@@ -1250,9 +1272,15 @@ begin
         if storedName[j]='/' then // normalize path delimiter
           PAnsiChar(Pointer(tmp))[j] := '\';
       {$ifndef DELPHI5OROLDER} // Delphi 5 lacks UTF-8 functions -> 7 bit
+      P := infoLocal^.ExtraUnicodeFileNamePos;
       if infoLocal^.GetUTF8FileName then
         // decode UTF-8 file name into native string/TFileName type
-        zipName := TFileName(UTF8Decode(tmp)) else
+        zipName := TFileName(UTF8Decode(tmp))
+      else if P <> nil then begin
+        // use unicode path stored in extra
+        SetString(tmp, @PFileInfoExtraName(P).utf8Name, PFileInfoExtraName(P).size - 5{version + nameCrc});
+        zipName := TFileName(UTF8Decode(tmp));
+      end else
       {$endif DELPHI5OROLDER}
       begin
         {$ifdef MSWINDOWS} // decode OEM/DOS file name into native encoding
@@ -5398,6 +5426,27 @@ end;
 function TFileInfo.GetUTF8FileName: boolean;
 begin // from PKware appnote, Bit 11: Language encoding flag (EFS)
   result := (flags and (1 shl 11))<>0;
+end;
+
+function TFileInfo.ExtraUnicodeFileNamePos: PAnsiChar;
+var
+  pExtraStart, P: PAnsiChar;
+begin
+  Result := nil;
+  if extraLen = 0 then
+    exit;
+  // points to beginning of the extra
+  pExtraStart := PAnsiChar(pointer(@Self)) + sizeof(Self) + NameLen;
+  P := pExtraStart;
+  repeat
+    if PFileInfoExtra(P).id = FileInfoExtra_UnicodePathId then begin
+      Result := P;
+      break;
+    end else if P + sizeof(word) * 2 + PFileInfoExtra(P).size - pExtraStart < extraLen then
+      inc(P, PFileInfoExtra(P).size + sizeof(word) * 2)
+    else
+      break; // no extra anymore
+  until false;
 end;
 
 procedure TFileInfo.SetUTF8FileName;
