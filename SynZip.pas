@@ -402,7 +402,7 @@ type
     size: word;
     version: byte; // version of this extra field, currently 1
     nameCRC32: cardinal; // File Name Field CRC32 Checksum
-    utf8Name: UTF8Char; // UTF-8 version of the entry File Name of `size` bytes length
+    utf8Name: AnsiChar; // UTF-8 version of the entry File Name of `size` bytes length
   end;
   PFileInfoExtraName = ^TFileInfoExtraName;
 
@@ -1278,7 +1278,8 @@ begin
         zipName := TFileName(UTF8Decode(tmp))
       else if P <> nil then begin
         // use unicode path stored in extra
-        SetString(tmp, @PFileInfoExtraName(P).utf8Name, PFileInfoExtraName(P).size - 5{version + nameCrc});
+        SetString(tmp, PAnsiChar(@PFileInfoExtraName(P).utf8Name),
+          PFileInfoExtraName(P).size - 5{version + nameCrc});
         zipName := TFileName(UTF8Decode(tmp));
       end else
       {$endif DELPHI5OROLDER}
