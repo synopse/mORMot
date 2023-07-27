@@ -12,11 +12,13 @@ We supply and validate the proper static `.o` `.obj` files within our https://gi
 
 1. Copy here the latest amalgamation files from  https://www.sqlite.org/download.html
 
-2. Run the `patch-and-compile.sh` script to patch main `sqlite3.c` and cross-compile it for FPC
+2. The `objconv.exe` tool should be downloaded from https://agner.org/optimize/objconv.zip and copied into this folder.
 
-3. Run `c*.bat` to generate the `sqlite3.o` and `sqlite3.obj` for Delphi Win32/Win64
+3. Run the `patch-and-compile.sh` script to patch main `sqlite3.c` and cross-compile it for FPC
 
-4. Don't forget to tune the expected *SQLite3* version text in `SynSQLite3Static.pas`
+4. Run `c*.bat` to generate the `sqlite3.o` and `sqlite3.obj` for Delphi Win32/Win64
+
+5. Don't forget to tune the expected *SQLite3* version text in `SynSQLite3Static.pas`
 
 
 ## Cross-Compile

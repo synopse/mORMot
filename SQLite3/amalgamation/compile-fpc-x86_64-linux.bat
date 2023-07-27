@@ -12,6 +12,7 @@ set path=%path%;%GCCPATH%
 del %DST%
 del %DST2%
 del sqlite3-%FPCARCH%.o
+del sqlite3-%FPCARCH%.orig
 
 echo.
 echo ---------------------------------------------------
@@ -19,6 +20,12 @@ echo Compiling for FPC on %FPCARCH% using %GCC%
 %GCC% -static -w -O2 -fno-pic -fno-stack-protector -fomit-frame-pointer -fno-exceptions -fno-asynchronous-unwind-tables -fno-unwind-tables -m64 -DNDEBUG -DNO_TCL -D_CRT_SECURE_NO_DEPRECATE -c sqlite3mc.c -o sqlite3-%FPCARCH%.o
 
 %FPCARCH%-strip -x sqlite3-%FPCARCH%.o
+
+echo Renaming dl and pthread symbols for proper cross-GLIBC execution
+copy sqlite3-%FPCARCH%.o sqlite3-%FPCARCH%.orig
+rem objconv.exe should be downloaded from https://agner.org/optimize/objconv.zip
+objconv -np:pthread:_pthread -np:dl:_dl sqlite3-%FPCARCH%.orig sqlite3-%FPCARCH%.o
+del sqlite3-%FPCARCH%.orig
 
 copy sqlite3-%FPCARCH%.o %DST%
 copy sqlite3-%FPCARCH%.o %DST2%
