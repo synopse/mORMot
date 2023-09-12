@@ -10728,14 +10728,6 @@ begin
       end else
         Canvas.ShowText(pointer(tmp));
     Canvas.EndText;
-    case Positioning of
-    tpSetTextJustification:
-      if nspace>0 then
-        Canvas.SetWordSpace(0);
-    tpKerningFromAveragePosition:
-      if hscale<>100 then
-        Canvas.SetHorizontalScaling(100); //reset hor. scaling
-    end;
     // handle underline or strike out styles (direct draw PDF lines on canvas)
     if font.LogFont.lfUnderline<>0 then
       DrawLine(Posi, aSize / 8 / Canvas.GetWorldFactorX / Canvas.FDevScaleX);
@@ -10746,6 +10738,16 @@ begin
       Canvas.GRestore;
       fFillColor := -1; // force set drawing color
     end;
+    
+    case Positioning of
+    tpSetTextJustification:
+      if nspace>0 then
+        Canvas.SetWordSpace(0);
+    tpKerningFromAveragePosition:
+      if hscale<>100 then
+        Canvas.SetHorizontalScaling(100); //reset hor. scaling
+    end;
+    
     if not Canvas.FNewPath then begin
       if WithClip then
         if not DC[nDC].ClipRgnNull then begin
