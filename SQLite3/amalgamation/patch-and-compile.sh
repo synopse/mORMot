@@ -31,6 +31,7 @@ echo Use Native fpcupdeluxe cross-compilers for FPC Darwin
 
 ./compile-fpc-i386-darwin.sh
 ./compile-fpc-x86_64-darwin.sh
+./compile-fpc-aarch64-darwin.sh
 
 echo
 echo Use Native fpcupdeluxe cross-compilers for FPC Linux arm/aarch64-linux
