@@ -1,7 +1,7 @@
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2023 Arnaud Bouchez
+    Synopse framework. Copyright (c) Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -20,7 +20,7 @@
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2023
+  Portions created by the Initial Developer are Copyright (c)
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):

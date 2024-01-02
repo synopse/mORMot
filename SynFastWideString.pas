@@ -9,7 +9,7 @@ interface
 (*
     This file is part of Synopse Framework.
 
-    Synopse Framework. Copyright (C) 2023 Arnaud Bouchez
+    Synopse Framework. Copyright (c) Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -28,7 +28,7 @@ interface
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2023
+  Portions created by the Initial Developer are Copyright (c)
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):

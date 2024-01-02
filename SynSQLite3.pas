@@ -6,7 +6,7 @@ unit SynSQLite3;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2023 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (c) Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynSQLite3;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2023
+  Portions created by the Initial Developer are Copyright (c)
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -48,7 +48,7 @@ unit SynSQLite3;
   ***** END LICENSE BLOCK *****
 
 
-     SQLite3 3.42.0 database engine
+     SQLite3 3.44.2 database engine
     ********************************
 
    Brand new SQLite3 library to be used with Delphi/FPC
@@ -1187,7 +1187,7 @@ type
     close: function(DB: TSQLite3DB): integer; cdecl;
 
     /// Return the version of the SQLite database engine, in ascii format
-    // - currently returns '3.42.0', when used with our SynSQLite3Static unit
+    // - currently returns '3.44.2', when used with our SynSQLite3Static unit
     // - if an external SQLite3 library is used, version may vary
     // - you may use the VersionText property (or Version for full details) instead
     libversion: function: PUTF8Char; cdecl;
