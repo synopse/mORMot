@@ -6143,7 +6143,7 @@ const
 initialization
   assert(ord(sfLocal7)=23);
   assert(ord(ssDebug)=7);
-  InitializeCriticalSection(GlobalThreadLock);   // deleted with the process
+  InitializeCriticalSection(GlobalThreadLock);
   SynLogFamily := TSynObjectList.Create;         // TSynLogFamily instances
   SynLogFileList := TSynObjectListLocked.Create; // TSynLog instances
   {$ifndef NOEXCEPTIONINTERCEPT}
@@ -6162,4 +6162,5 @@ finalization
   {$ifndef NOEXCEPTIONINTERCEPT}
   GlobalCurrentHandleExceptionSynLog := nil; // paranoid
   {$endif}
+  DeleteCriticalSection(GlobalThreadLock);
 end.
