@@ -21,13 +21,16 @@ echo Compiling for FPC on %FPCARCH% using %GCC%
 
 %FPCARCH%-strip -x sqlite3-%FPCARCH%.o
 
-echo Renaming dl and pthread symbols for proper cross-GLIBC execution
+echo Direct use for mORMot 1
+copy sqlite3-%FPCARCH%.o %DST%
+
+echo.
+echo Renaming dl and pthread symbols for proper cross-GLIBC mORMot 2 execution
 copy sqlite3-%FPCARCH%.o sqlite3-%FPCARCH%.orig
 rem objconv.exe should be downloaded from https://agner.org/optimize/objconv.zip
 objconv -np:pthread:_pthread -np:dl:_dl sqlite3-%FPCARCH%.orig sqlite3-%FPCARCH%.o
 del sqlite3-%FPCARCH%.orig
 
-copy sqlite3-%FPCARCH%.o %DST%
 copy sqlite3-%FPCARCH%.o %DST2%
 
 rem pause
