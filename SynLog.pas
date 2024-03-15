@@ -5960,7 +5960,7 @@ begin
       if LineContains(aPattern,fSelected[result]) then
         exit;
     // search from end
-    for result := fCount-1 downto aRow+1 do
+    for result := fSelectedCount-1 downto aRow+1 do
       if LineContains(aPattern,fSelected[result]) then
         exit;
   end;
