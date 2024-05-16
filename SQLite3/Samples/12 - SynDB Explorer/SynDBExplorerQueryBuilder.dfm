@@ -1,7 +1,6 @@
 object DBQueryBuilderForm: TDBQueryBuilderForm
   Left = 1019
   Top = 265
-  BorderStyle = bsSingle
   Caption = ' SynDB Explorer - Query Builder'
   ClientHeight = 374
   ClientWidth = 799
@@ -11,12 +10,10 @@ object DBQueryBuilderForm: TDBQueryBuilderForm
   Font.Height = -11
   Font.Name = 'Tahoma'
   Font.Style = []
-  OldCreateOrder = False
   Position = poMainFormCenter
   DesignSize = (
     799
     374)
-  PixelsPerInch = 96
   TextHeight = 13
   object GroupJoin: TGroupBox
     Left = 344
@@ -52,7 +49,7 @@ object DBQueryBuilderForm: TDBQueryBuilderForm
       Width = 177
       Height = 160
       Anchors = [akLeft, akTop, akBottom]
-      ItemHeight = 13
+      ItemHeight = 17
       TabOrder = 1
       OnClick = FieldsColumnClick
     end

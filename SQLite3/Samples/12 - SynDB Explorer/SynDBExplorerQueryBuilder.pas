@@ -14,7 +14,7 @@ type
     NameWithSchema: RawUTF8;
     Fields: TSQLDBColumnDefineDynArray;
     FieldsDefinition,
-    FieldsAlias: TRawUTF8DynArray;
+      FieldsAlias: TRawUTF8DynArray;
     SelectedAll: boolean;
     Selected: set of byte;
     function FieldAlias(FieldIndex: integer): RawUTF8;
@@ -23,14 +23,17 @@ type
     function AsTSQLRecordType(Props: TSQLDBConnectionProperties): RawUTF8;
     function FromIniSection(P: PUTF8Char): PUTF8Char;
   end;
+
   TDBQueryJoin = record
     SourceTable: integer;
     SourceField: integer;
     DestTable: integer;
     DestField: integer;
   end;
+
   TDBQueryTableDynArray = array of TDBQueryTable;
-  TDBQueryJoinDynArray = array of TDBQueryJoin;
+  TDBQueryJoinDynArray  = array of TDBQueryJoin;
+
   TDBQueryObject = object
     Name: string;
     Tables: TDBQueryTableDynArray;
@@ -38,11 +41,12 @@ type
     procedure InitJOIN(Size: integer);
     function ComputeSQLSelect: RawUTF8;
     function AsIniSection: string;
-    function FromIniSection(P: PUTF8Char): Boolean; overload;
-    function FromIniSection(const IniContent: RawUTF8): Boolean; overload;
+    function FromIniSection(P: PUTF8Char): boolean; overload;
+    function FromIniSection(const IniContent: RawUTF8): boolean; overload;
   end;
+
   PDBQueryTable = ^TDBQueryTable;
-  
+
   TDBQueryBuilderForm = class(TForm)
     GroupJoin: TGroupBox;
     GroupFields: TGroupBox;
@@ -62,9 +66,9 @@ type
     procedure BtnToObjectClick(Sender: TObject);
     procedure MenuToOneTSQLRecordClick(Sender: TObject);
   private
-    fProps: TSQLDBConnectionProperties;
-    fObject: TDBQueryObject;
-    fJOINUI: array of record
+    fProps       : TSQLDBConnectionProperties;
+    fObject      : TDBQueryObject;
+    fJOINUI      : array of record
       SourceTable: TComboBox;
       SourceField: TComboBox;
       DestTable: TComboBox;
@@ -85,7 +89,6 @@ type
 resourcestring
   sMissingJOIN = 'Missing JOIN';
 
-
 implementation
 
 {$R *.dfm}
@@ -95,11 +98,11 @@ implementation
 function TDBQueryTable.AsIniRow: RawUTF8;
 var f: integer;
 begin
-  result := FormatUTF8('%,%,%,',[Name,length(Fields),SelectedAll]);
+  result := FormatUTF8('%,%,%,', [Name, length(Fields), SelectedAll]);
   for f := 0 to high(Fields) do
-  with Fields[f] do
-    result := FormatUTF8('%%,%,%,%,',
-      [result,ColumnName,Ord(ColumnType),FieldAlias(f),f in Selected]);
+    with Fields[f] do
+      result := FormatUTF8('%%,%,%,%,',
+        [result, ColumnName, Ord(ColumnType), FieldAlias(f), f in Selected]);
 end;
 
 function TDBQueryTable.AsTSQLRecordType(Props: TSQLDBConnectionProperties): RawUTF8;
@@ -107,7 +110,7 @@ var f, RowIDIndex: integer;
     IdField: TSQLDBColumnCreate;
     def: RawUTF8;
 begin
-  RowIDIndex := -1;
+  RowIDIndex := - 1;
   for f := 0 to high(Fields) do
   with Fields[f] do begin
     if IsRowID(pointer(ColumnName)) then begin
@@ -138,11 +141,11 @@ begin
     IdField.Name := 'ID';
     IdField.DBType := ftUnknown;
     IdField.PrimaryKey := true;
-    result := FormatUTF8('%  // - note that the ORM will add one missing ID field via:'#13#10+
-      '  // $ %'#13#10,[result,Props.SQLAddColumn(NameWithSchema,IdField)]);
+    result := FormatUTF8('%  // - note that the ORM will add one missing ID field via:'#13#10 +
+      '  // $ %'#13#10, [result, Props.SQLAddColumn(NameWithSchema, IdField)]);
   end;
   result := FormatUTF8('%  TSQL% = class(TSQLRecord)'#13#10'  protected'#13#10'%  end;',
-    [result,NameWithoutSchema,def]);
+    [result, NameWithoutSchema, def]);
 end;
 
 function TDBQueryTable.FieldAlias(FieldIndex: integer): RawUTF8;
@@ -176,7 +179,7 @@ begin
   SelectedAll := GetNextItemCardinal(result)=1;
   if result=nil then exit;
   Selected := [];
-  SetLength(FieldsAlias,length(Fields));
+  SetLength(FieldsAlias, length(Fields));
   for i := 0 to high(Fields) do
   with Fields[i] do begin
     ColumnName := GetNextItem(result);
@@ -187,7 +190,6 @@ begin
   end;
 end;
 
-
 { TDBQueryObject }
 
 function TDBQueryObject.AsIniSection: string;
@@ -195,13 +197,13 @@ var ini: RawUTF8;
     t: integer;
 begin
   ini := FormatUTF8('[%]'#13#10'TableCount=%'#13#10,
-    [Name,length(Tables)]);
+    [Name, length(Tables)]);
   for t := 0 to high(Tables) do
-    ini := FormatUTF8('%Table%=%'#13#10,[ini,t,Tables[t].AsIniRow]);
+    ini := FormatUTF8('%Table%=%'#13#10, [ini, t, Tables[t].AsIniRow]);
   for t := 0 to high(JOIN) do
     with JOIN[t] do
       ini := FormatUTF8('%Join%=%,%,%,%'#13#10,
-        [ini,t,SourceTable,SourceField,DestTable,DestField]);
+        [ini, t, SourceTable, SourceField, DestTable, DestField]);
   result := UTF8ToString(ini);
 end;
 
@@ -295,11 +297,11 @@ begin
         SourceTable := GetNextItemCardinal(P);
         SourceField := GetNextItemCardinal(P);
         DestTable := GetNextItemCardinal(P);
-        DestField := GetNextItemCardinal(P,#13);
+        DestField := GetNextItemCardinal(P, #13);
       end;
     end;
   end;
-  result := True;
+  result := true;
 end;
 
 function TDBQueryObject.FromIniSection(const IniContent: RawUTF8): Boolean;
@@ -311,10 +313,12 @@ end;
 
 procedure TDBQueryObject.InitJOIN(Size: integer);
 begin
-  SetLength(JOIN,Size);
-  fillchar(JOIN[0],Size*sizeof(JOIN[0]),255); // fill all to -1
+  if Size > 0 then
+  begin
+    SetLength(JOIN, Size);
+    fillchar(JOIN[0], Size * sizeof(JOIN[0]), 255); // fill all to -1
+  end;
 end;
-
 
 { TDBQueryBuilderForm }
 
@@ -322,21 +326,21 @@ class function TDBQueryBuilderForm.BuildQuery(aTableNames: TStrings;
   aProps: TSQLDBConnectionProperties; out SQL: string): integer;
 begin
   result := mrCancel;
-  if (aProps<>nil) and (aTableNames<>nil) then
-  with TDBQueryBuilderForm.Create(Application) do
-  try
-    Props := aProps;
-    SetTableNames(aTableNames);
-    result := ShowModal;
-    case result of
-    mrOk,mrYes:
-      SQL := MemoSQL.Text;
-    mrRetry:
-      SQL := fObject.AsIniSection; 
-    end;
-  finally
-    Free;
-  end;
+  if (aProps <> nil) and (aTableNames <> nil) then
+    with TDBQueryBuilderForm.Create(Application) do
+      try
+        Props := aProps;
+        SetTableNames(aTableNames);
+        result := ShowModal;
+        case result of
+          mrOk, mrYes:
+            SQL := MemoSQL.Text;
+          mrRetry:
+            SQL := fObject.AsIniSection;
+        end;
+      finally
+        Free;
+      end;
 end;
 
 class function TDBQueryBuilderForm.BuildQuery(aListBox: TListBox;
@@ -345,16 +349,16 @@ var T: TStringList;
     i: integer;
 begin
   result := mrCancel;
-  if (aListBox=nil) or (aListBox.SelCount=0) then
+  if (aListBox = nil) or (aListBox.SelCount = 0) then
     exit;
-  T := TStringList.Create;
+  t := TStringList.Create;
   try
-    for i := 0 to aListBox.Count-1 do
+    for i := 0 to aListBox.Count - 1 do
       if aListBox.Selected[i] then
-        T.Add(aListBox.Items[i]);
-    result := BuildQuery(T,aProps,SQL);
+        t.Add(aListBox.Items[i]);
+    result := BuildQuery(t, aProps, SQL);
   finally
-    T.Free;
+    t.Free;
   end;
 end;
 
@@ -365,7 +369,7 @@ var t,j,f,k,Y: Integer;
   begin
     result := TComboBox.Create(self);
     result.Parent := GroupJoin;
-    result.SetBounds(X,Y,100,20);
+    result.SetBounds(X, Y, 100, 20);
     result.Style := csDropDownList;
     result.Font.Size := 7;
     if Table>=0 then begin
@@ -375,12 +379,13 @@ var t,j,f,k,Y: Integer;
     end else
       result.OnClick := ComputeSQL;
   end;
+
 begin
   FieldsTable.Clear;
   Screen.Cursor := crHourGlass;
   try
     // fill fObject.Tables[]
-    SetLength(fObject.Tables,Value.Count);
+    SetLength(fObject.Tables, Value.Count);
     for t := 0 to high(fObject.Tables) do
     with fObject.Tables[t] do begin
       Name := Value[t];
@@ -394,7 +399,7 @@ begin
       FieldsTable.Items.Add(Name);
     end;
     // create JOIN controls on form
-    SetLength(fJOINUI,length(fObject.Tables)-1);
+    SetLength(fJOINUI, length(fObject.Tables) - 1);
     Y := 20;
     for t := 0 to high(fJOINUI) do
     with fJOINUI[t] do begin
@@ -464,12 +469,12 @@ var i: integer;
     T: PDBQueryTable;
 begin
   FieldsColumn.Clear;
-  T := FieldsTableCurrent;
-  if T=nil then
+  t := FieldsTableCurrent;
+  if t = nil then
     exit;
-  for i := 0 to High(T^.FieldsDefinition) do
-    FieldsColumn.Items.Add(Ansi7ToString(T^.FieldsDefinition[i]));
-  FieldsAll.Checked := T^.SelectedAll;
+  for i := 0 to High(t^.FieldsDefinition) do
+    FieldsColumn.Items.Add(Ansi7ToString(t^.FieldsDefinition[i]));
+  FieldsAll.Checked := t^.SelectedAll;
   FieldsAllClick(nil);
 end;
 
@@ -478,12 +483,12 @@ var T: PDBQueryTable;
     i: integer;
 begin
   FieldsColumn.Enabled := not FieldsAll.Checked;
-  T := FieldsTableCurrent;
-  if T=nil then
+  t := FieldsTableCurrent;
+  if t = nil then
     exit;
-  T^.SelectedAll := FieldsAll.Checked;
-  for i := 0 to High(T^.Fields) do
-    FieldsColumn.Checked[i] := i in T^.Selected;
+  t^.SelectedAll := FieldsAll.Checked;
+  for i := 0 to High(t^.Fields) do
+    FieldsColumn.Checked[i] := i in t^.Selected;
   ComputeSQL(nil);
 end;
 
@@ -500,13 +505,13 @@ procedure TDBQueryBuilderForm.FieldsColumnClick(Sender: TObject);
 var T: PDBQueryTable;
     i: integer;
 begin
-  T := FieldsTableCurrent;
-  if T=nil then
+  t := FieldsTableCurrent;
+  if t = nil then
     exit;
-  FillChar(T^.Selected,sizeof(T^.Selected),0);
-  for i := 0 to High(T^.Fields) do
+  fillchar(t^.Selected, sizeof(t^.Selected), 0);
+  for i := 0 to High(t^.Fields) do
     if FieldsColumn.Checked[i] then
-      Include(T^.Selected,i);
+      include(t^.Selected, i);
   ComputeSQL(nil);
 end;
 
@@ -531,17 +536,16 @@ begin
   Field := TComboBox(Table.Tag);
   Field.Items.Clear;
   t := Table.ItemIndex;
-  if t>=0 then
+  if t >= 0 then
     with fObject.Tables[t] do
-    for f := 0 to high(Fields) do
-      Field.Items.Add(Ansi7ToString(Fields[f].ColumnName));
+      for f := 0 to high(Fields) do
+        Field.Items.Add(Ansi7ToString(Fields[f].ColumnName));
 end;
-
 
 procedure TDBQueryBuilderForm.BtnToObjectClick(Sender: TObject);
 begin
-  with ClientToScreen(Point(BtnToObject.Left,BtnToObject.Top+BtnToObject.Height)) do
-      BtnToObjectMenu.Popup(X,Y);
+  with ClientToScreen(Point(BtnToObject.Left, BtnToObject.Top + BtnToObject.Height)) do
+    BtnToObjectMenu.Popup(X, Y);
 end;
 
 procedure TDBQueryBuilderForm.MenuToOneTSQLRecordClick(Sender: TObject);
@@ -551,7 +555,7 @@ var s: RawUTF8;
 begin
   s := 'type'#13#10;
   for i := 0 to high(fObject.Tables) do
-    s := s+fObject.Tables[i].AsTSQLRecordType(Props)+#13#10#13#10;
+    s := s + fObject.Tables[i].AsTSQLRecordType(Props) + #13#10#13#10;
   txt := UTF8ToString(s);
   MemoSQL.Text := txt;
   Clipboard.AsText := txt;
