@@ -11,7 +11,9 @@ object HTTPServerForm: THTTPServerForm
   Font.Height = -11
   Font.Name = 'Tahoma'
   Font.Style = []
+  OldCreateOrder = False
   OnDestroy = FormDestroy
+  PixelsPerInch = 96
   TextHeight = 13
   object lbledtPort: TLabeledEdit
     Left = 40

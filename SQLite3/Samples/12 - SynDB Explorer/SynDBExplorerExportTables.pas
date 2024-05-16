@@ -32,11 +32,11 @@ implementation
 
 {$R *.dfm}
 
-
 resourcestring
   sTableExportWhereHint = 'e.g. "ID>1000" or "RowNum<=500"';
 
-  { TDBExportTablesForm }
+  
+{ TDBExportTablesForm }
 
 class function TDBExportTablesForm.ExportTables(aTableNames: TStrings;
   aProps: TSQLDBConnectionProperties; const aDestFileName: TFileName): integer;
@@ -127,14 +127,14 @@ var T: TStringList;
     i: integer;
 begin
   result := 0;
-  if (aListBox = nil) or (aListBox.SelCount = 0) then
+  if (aListBox=nil) or (aListBox.SelCount=0) then
     exit;
   T := TStringList.Create;
   try
-    for i := 0 to aListBox.Count - 1 do
+    for i := 0 to aListBox.Count-1 do
       if aListBox.Selected[i] then
         T.Add(aListBox.Items[i]);
-    result := ExportTables(T, aProps, aDestFileName);
+    result := ExportTables(T,aProps,aDestFileName);
   finally
     T.Free;
   end;
@@ -147,23 +147,23 @@ begin
   if Value=nil then
     n := 0 else
     n := Value.Count;
-  SetLength(fEdits, n);
+  SetLength(fEdits,n);
   max := Screen.Height;
   if n*32+132>max then
     h := 24 else
     h := 32;
   x := 160;
-  n := n * h + 24;
-  if n + 148 > max then
-    n := max - 164;
+  n := n*h+24;
+  if n+148>max then
+    n := max-164;
   GroupWhere.Height := n;
-  ClientHeight := n + 132;
+  ClientHeight := n+132;
   y := 24;
   for i := 0 to high(fEdits) do begin
     E := TLabeledEdit.Create(self);
     E.Parent := GroupWhere;
     E.LabelPosition := lpLeft;
-    E.SetBounds(x, y, 180, 22);
+    E.SetBounds(x,y,180,22);
     E.EditLabel.Caption := Value[i];
     E.ShowHint := true;
     E.Hint := sTableExportWhereHint;
@@ -174,7 +174,7 @@ begin
       y := 24;
       inc(x,340);
       Width := 740;
-      end;
+    end;
   end;
 end;
 

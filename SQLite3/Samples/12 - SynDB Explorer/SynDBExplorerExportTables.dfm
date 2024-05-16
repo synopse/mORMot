@@ -1,6 +1,7 @@
 object DBExportTablesForm: TDBExportTablesForm
   Left = 387
   Top = 248
+  BorderStyle = bsDialog
   Caption = ' SynDB Explorer - Export Tables'
   ClientHeight = 471
   ClientWidth = 393
