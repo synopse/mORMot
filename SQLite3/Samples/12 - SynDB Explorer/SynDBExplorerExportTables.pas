@@ -167,6 +167,7 @@ begin
     E.EditLabel.Caption := Value[i];
     E.ShowHint := true;
     E.Hint := sTableExportWhereHint;
+    fEdits[i] := E;
     inc(y,h);
     if (h=24) and (y>=n-24) and (i<>high(fEdits)) then
     if x<>160 then break else begin

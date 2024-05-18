@@ -1,7 +1,7 @@
 object DBQueryBuilderForm: TDBQueryBuilderForm
   Left = 1019
   Top = 265
-  BorderStyle = bsSingle
+  BorderStyle = bsDialog
   Caption = ' SynDB Explorer - Query Builder'
   ClientHeight = 374
   ClientWidth = 799
