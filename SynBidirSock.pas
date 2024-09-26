@@ -2300,7 +2300,7 @@ end;
 function TWebSocketProtocolList.CloneByName(
   const aProtocolName, aClientURI: RawUTF8): TWebSocketProtocol;
 var i: Integer;
-  clientUri : RawUtf8;
+   clientUri : RawUtf8;
 begin
   result := nil;
   if self=nil then

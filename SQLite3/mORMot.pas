@@ -29811,10 +29811,11 @@ end;
 
 function TEnumType.SizeInStorageAsSet: Integer;
 begin
-  case MaxValue of
-  0..7:   result := 1;
-  8..15:  result := 2;
-  16..31: result := 4;
+  case MaxValue of // our code (e.g. in smvSet) supports up to Int64
+  0..7:   result := SizeOf(byte);
+  8..15:  result := SizeOf(word);
+  16..31: result := SizeOf(cardinal);
+  32..63: result := SizeOf(Int64);
   else    result := 0;
   end;
 end;
