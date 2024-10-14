@@ -449,8 +449,6 @@ var
   // - see also https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
   curl: packed record
     /// hold a reference to the loaded library
-    // - PtrInt(Module)=0 before initialization, or PtrInt(Module) = -1
-    // on initialization failure, or PtrInt(Module)>0 if loaded
     {$ifdef FPC}
     Module: TLibHandle;
     {$else}
@@ -652,8 +650,6 @@ var
 type
   // some internal cross-compiler array of bytes string definition
   SockString = {$ifdef HASCODEPAGE}RawByteString{$else}AnsiString{$endif};
-  // some internal cross-compiler PtrInt definition
-  {$ifndef FPC} PtrInt = {$ifdef CPU64}Int64{$else}integer{$endif}; {$endif}
 
 function CurlWriteRawByteString(buffer: PAnsiChar; size,nitems: integer;
   opaque: pointer): integer; cdecl;
@@ -669,6 +665,12 @@ begin
   end;
 end;
 
+{$ifndef LIBCURLSTATIC}
+var
+  curl_initialized: boolean;
+  curl_failed: boolean;
+{$endif LIBCURLSTATIC}
+
 function CurlIsAvailable: boolean;
 begin
   {$ifdef LIBCURLSTATIC}
@@ -677,9 +679,9 @@ begin
   result := true;
   {$else}
   try
-    if curl.Module=0 then
+    if not curl_initialized then
       LibCurlInitialize;
-    result := PtrInt(curl.Module)>0;
+    result := curl_initialized;
   except
     result := false;
   end;
@@ -742,8 +744,9 @@ begin
     curl.multi_wait := @curl_multi_wait;
     {$endif LIBCURLMULTI}
     {$else}
+    if curl_initialized or curl_failed then
+      exit;
     h := 0;
-    if curl.Module=0 then // try to load libcurl once
     try
       {$ifdef MSWINDOWS}
       h := SafeLoadLibrary(ExtractFilePath(paramstr(0))+dllname);
@@ -785,10 +788,11 @@ begin
       on E: Exception do begin
         if h<>0 then
           FreeLibrary(h);
-        PtrInt(curl.Module) := -1; // <>0 so that won't try to load any more
+        curl_failed := true;
         raise;
       end;
     end;
+    curl_initialized := true;
     {$endif LIBCURLSTATIC}
     curl.global_init(engines);
     curl.info := curl.version_info(cvFour)^;
@@ -866,7 +870,7 @@ finalization
     curl.global_cleanup;
   end;
   {$else}
-  if PtrInt(curl.Module)>0 then begin
+  if curl_initialized then begin
     CurlDisableGlobalShare;
     curl.global_cleanup;
     FreeLibrary(curl.Module);
