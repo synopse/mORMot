@@ -80,6 +80,8 @@ function CompressString(const data: RawByteZip; failIfGrow: boolean = false): Ra
 /// uncompress memory using the ZLib INFLATE algorithm, checking crc32 checksum
 function UncompressString(const data: RawByteZip): RawByteZip;
 
+/// create a void .zip file
+procedure CreateVoidZip(const aFileName: TFileName);
 
 {$ifdef MSWINDOWS} { use Windows MapFile }
 
@@ -107,9 +109,6 @@ function IsCompressedFileEqual(const uncomprFile, comprFile: TFileName): boolean
 //  is set to TRUE.
 function Zip(const zip: TFileName; const files, zipAs: array of TFileName;
   NoSubDirectories: boolean = false): boolean;
-
-/// create a void .zip file
-procedure CreateVoidZip(const aFileName: TFileName);
 
 {$endif MSWINDOWS}
 
@@ -3796,6 +3795,21 @@ begin
     result := '';
 end;
 
+procedure CreateVoidZip(const aFileName: TFileName);
+var
+  H: THandle;
+  lhr: TLastHeader;
+begin
+  fillchar(lhr, sizeof(lhr), 0);
+  lhr.signature := $06054b50 + 1;
+  dec(lhr.signature); // +1 to avoid finding it in the exe
+  H := FileCreate(aFileName);
+  if H < 0 then
+    exit;
+  FileWrite(H, lhr, sizeof(lhr));
+  FileClose(H);
+end;
+
 
 {$ifdef MSWINDOWS}
 
@@ -3806,8 +3820,8 @@ type
 
 function CompressFile(const srcFile, dstFile: TFileName; failIfGrow: boolean): boolean;
 var
-  sf, df: dword;
-  sm, dm: dword;
+  sf, df: THandle;
+  sm, dm: THandle;
   sb, db: pointer;
   sl, dl: int64;
   err: dword;
@@ -3881,8 +3895,8 @@ end;
 function UncompressFile(const srcFile, dstFile: TFileName; lastWriteTime: int64;
   attr: dword): boolean;
 var
-  sf, df: dword;
-  sm, dm: dword;
+  sf, df: THandle;
+  sm, dm: THandle;
   sb, db: pointer;
   sl, dl: int64;
   err: dword;
@@ -3962,14 +3976,15 @@ var
   crc1, crc2: dword;
 begin
   result := GetCompressedFileInfo(comprFile, size1, crc1) and
-    GetUncompressedFileInfo(uncomprFile, size2, crc2) and (size1 = size2) and
-    (crc1 = crc2);
+            GetUncompressedFileInfo(uncomprFile, size2, crc2) and
+            (size1 = size2) and
+            (crc1 = crc2);
 end;
 
 function GetCompressedFileInfo(const comprFile: TFileName; var size: int64;
   var crc32: dword): boolean;
 var
-  file_: dword;
+  file_: THandle;
   c1: dword;
 begin
   result := false;
@@ -3986,7 +4001,7 @@ end;
 function GetUncompressedFileInfo(const uncomprFile: TFileName; var size: int64;
   var crc32: dword): boolean;
 var
-  file_, map: dword;
+  file_, map: THandle;
   buf: pointer;
 begin
   result := false;
@@ -4049,12 +4064,13 @@ end;
 
 
 {$ifdef MSWINDOWS}
+
 function Zip(const zip: TFileName; const files, zipAs: array of TFileName;
   NoSubDirectories: boolean = false): boolean;
 var
   i1, i2, i3: integer;
-  dstFh: dword;
-  srcFh: dword;
+  dstFh: THandle;
+  srcFh: THandle;
   ft: TFileTime;
   c1: dword;
   lfhr: TLocalFileHeader;
@@ -4168,21 +4184,6 @@ begin
     if not result then
       Windows.DeleteFile(pointer(zip));
   end;
-end;
-
-procedure CreateVoidZip(const aFileName: TFileName);
-var
-  H: THandle;
-  lhr: TLastHeader;
-begin
-  fillchar(lhr, sizeof(lhr), 0);
-  lhr.signature := $06054b50 + 1;
-  dec(lhr.signature); // +1 to avoid finding it in the exe
-  H := FileCreate(aFileName);
-  if H < 0 then
-    exit;
-  FileWrite(H, lhr, sizeof(lhr));
-  FileClose(H);
 end;
 
 {$endif MSWINDOWS}
