@@ -246,7 +246,7 @@ type
   // - can open a .zip archive file content from memory
   TZipRead = class
   private
-    file_, map: dword; // we use a memory mapped file to access the zip content
+    file_, map: THandle; // we use a memory mapped file to access the zip content
     buf: PByteArray;
     fZipStartOffset: cardinal;
     fShowMessageBoxOnError: boolean;
@@ -295,7 +295,7 @@ type
     fMagic: cardinal;
   public
     /// the associated file handle
-    Handle: integer;
+    Handle: THandle;
     /// the total number of entries
     Count: integer;
     /// the resulting file entries
@@ -4578,7 +4578,7 @@ var
   tmp: pointer;
   tmpsize: integer;
 begin
-  if (self = nil) or (Handle = 0) or (Handle < 0) then
+  if (self = nil) or not ValidHandle(Handle) then
     exit;
   if Count >= length(Entry) then
     SetLength(Entry, length(Entry) + 20);
