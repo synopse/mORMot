@@ -179,6 +179,14 @@ const
 {$ifdef MSWINDOWS}
 
 type
+  {$ifdef ISDELPHI2010}
+  // The return type for FileCreate since Delphi 2010 has changed
+  // from an Integer type to THandle
+  TFileHandle = THandle;
+  {$else}
+  TFileHandle = integer;
+  {$endif ISDELPHI2010}
+
   /// generic file information structure, as used in .zip file format
   // - used in any header, contains info about following block
   TFileInfo = packed record
@@ -246,7 +254,7 @@ type
   // - can open a .zip archive file content from memory
   TZipRead = class
   private
-    file_, map: dword; // we use a memory mapped file to access the zip content
+    file_, map: THandle; // we use a memory mapped file to access the zip content
     buf: PByteArray;
     fZipStartOffset: cardinal;
     fShowMessageBoxOnError: boolean;
@@ -295,7 +303,7 @@ type
     fMagic: cardinal;
   public
     /// the associated file handle
-    Handle: integer;
+    Handle: TFileHandle;
     /// the total number of entries
     Count: integer;
     /// the resulting file entries
