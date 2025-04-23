@@ -546,8 +546,8 @@ type
     /// the optional URI on which this protocol would be enabled
     // - leave to '' if any URI should match
     property URI: RawUTF8 read fURI;
-    /// the associated 'Remote-IP' HTTP header value
-    // - returns '' if self=nil or RemoteLocalhost=true
+    /// the associated Remote IP as set by the raw socket layer
+    // - returns '' if self=nil or RemoteLocalhost=true on localhost
     property RemoteIP: SockString read GetRemoteIP;
     /// the URI on which this protocol has been upgraded
     property UpgradeURI: RawUTF8 read fUpgradeURI;
@@ -941,8 +941,8 @@ type
     function Settings: PWebSocketProcessSettings; {$ifdef HASINLINE}inline;{$endif}
     /// returns the current state of the underlying connection
     function State: TWebSocketProcessState;
-    /// the associated 'Remote-IP' HTTP header value
-    // - returns '' if Protocol=nil or Protocol.RemoteLocalhost=true
+    /// the associated Remote IP as set by the raw socket layer
+    // - returns '' if Protocol=nil or Protocol.RemoteLocalhost=true on localhost
     function RemoteIP: SockString;
     /// direct access to the low-level incoming frame stack
     property Incoming: TWebSocketFrameList read fIncoming;

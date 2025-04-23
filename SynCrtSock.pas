@@ -6973,7 +6973,7 @@ var s,c: SockString;
     i, len: PtrInt;
     err: integer;
     P: PAnsiChar;
-    line: array[0..4095] of AnsiChar; // avoid most memory allocation
+    line: array[0..8191] of AnsiChar; // avoid most memory allocation
 begin
   HeaderFlags := [];
   fBodyRetrieved := false;
