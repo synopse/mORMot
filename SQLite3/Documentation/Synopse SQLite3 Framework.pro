@@ -7621,7 +7621,7 @@ Here is a sample program which can be launched to allow our {\f1\fs20 TestSQL3.d
 !{$R VistaAdm.res}
 !
 !begin
-!!  THttpApiServer.AddUrlAuthorize('root','888',false,'+'));
+!!  THttpApiServer.AddUrlAuthorize('root','888',false,'+');
 !end.
 Take also a look at the {\f1\fs20 Project04ServerRegister.dpr} sample, in the context of a whole client/server RESTful solution over HTTP.
 Note that you still need to open the IP port for incoming TCP traffic, in the Windows @**firewall@, if you want your server to be accessible to the outer world, as usual.

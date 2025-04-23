@@ -366,27 +366,27 @@ end;
 
 const
   SAMPLE_JSON_1 = // from http://json.org/example.html
-    '{' + #13#10 + 
-    '"glossary": {' + #13#10 + 
-        '"title": "example glossary",' + #13#10 + 
-        '		"GlossDiv": {' + #13#10 + 
-            '"title": "S",' + #13#10 +
-            '			"GlossList": {' + #13#10 +
-                '"GlossEntry": {' + #13#10 + 
-                    '"ID": "SGML",' + #13#10 + 
-                    '					"SortAs": "SGML",' + #13#10 +
-                    '					"GlossTerm": "Standard Generalized Markup Language",' + #13#10 +
-                    '					"Acronym": "SGML",' + #13#10 +
-                    '					"Abbrev": "ISO 8879:1986",' + #13#10 +
-                    '					"GlossDef": {' + #13#10 +
-                        '"para": "A meta-markup language, used to create markup languages such as DocBook.",' + #13#10 +
-                        '						"GlossSeeAlso": ["GML", "XML"]' + #13#10 +
-                    '},' + #13#10 +
-                    '					"GlossSee": "markup"' + #13#10 +
-                '}' + #13#10 +
-            '}' + #13#10 +
-        '}' + #13#10 +
-    '}' + #13#10 +
+    '{'#13#10 + 
+    '"glossary": {'#13#10 + 
+        '"title": "example glossary",'#13#10 + 
+        '		"GlossDiv": {'#13#10 + 
+            '"title": "S",'#13#10 +
+            '			"GlossList": {'#13#10 +
+                '"GlossEntry": {'#13#10 + 
+                    '"ID": "SGML",'#13#10 + 
+                    '					"SortAs": "SGML",'#13#10 +
+                    '					"GlossTerm": "Standard Generalized Markup Language",'#13#10 +
+                    '					"Acronym": "SGML",'#13#10 +
+                    '					"Abbrev": "ISO 8879:1986",'#13#10 +
+                    '					"GlossDef": {'#13#10 +
+                        '"para": "A meta-markup language, used to create markup languages such as DocBook.",'#13#10 +
+                        '						"GlossSeeAlso": ["GML", "XML"]'#13#10 +
+                    '},'#13#10 +
+                    '					"GlossSee": "markup"'#13#10 +
+                '}'#13#10 +
+            '}'#13#10 +
+        '}'#13#10 +
+    '}'#13#10 +
     '}';
 
 {$ifdef USEENHANCEDRTTIFORRECORDS}
