@@ -7002,7 +7002,8 @@ begin
       P := pointer(s); // set P=nil below to store in Headers[]
     end;
     case IdemPCharArray(P,['CONTENT-', 'TRANSFER-ENCODING: CHUNKED', 'CONNECTION: ',
-      'ACCEPT-ENCODING:', 'UPGRADE:', 'SERVER-INTERNALSTATE:', 'X-POWERED-BY:']) of
+      'ACCEPT-ENCODING:', 'UPGRADE:', 'SERVER-INTERNALSTATE:', 'X-POWERED-BY:',
+      'REMOTEIP:']) of
     0: case IdemPCharArray(P+8,['LENGTH:', 'TYPE:', 'ENCODING:']) of
        0: ContentLength := GetCardinal(P+16);
        1: begin
@@ -7046,6 +7047,7 @@ begin
     4: GetTrimmed(P+8,Upgrade);
     5: ServerInternalState := GetCardinal(P+21);
     6: GetTrimmed(P+13,XPoweredBy);
+    7: continue; // any transmitted 'RemoteIP:' should be ignored
     else P := nil;
     end;
     if (P=nil) or HeadersUnFiltered then // only store meaningful headers
@@ -8541,7 +8543,12 @@ begin
     end;
   P := Request.Headers.pUnknownHeaders;
   if P<>nil then
-    for i := 1 to Request.Headers.UnknownHeaderCount do begin
+    for i := 1 to Request.Headers.UnknownHeaderCount do
+    if (P^.NameLength<>8) or // filter unexpected 'RemoteIP:' from client
+       ((PCardinal(P^.pName)^ or $20202020) <>
+         ord('r') + ord('e') shl 8 + ord('m') shl 16 + ord('o') shl 24) or
+       ((PCardinal(P^.pName + 4)^ or $20202020) <>
+         ord('t') + ord('e') shl 8 + ord('i') shl 16 + ord('p') shl 24) then begin
       move(P^.pName^,D^,P^.NameLength);
       inc(D,P^.NameLength);
       PWord(D)^ := ord(':')+ord(' ')shl 8;
@@ -8558,13 +8565,10 @@ begin
     move(pointer(RemoteIP)^,D^,Lip);
     inc(D,Lip);
     PWord(D)^ := 13+10 shl 8;
-  {$ifopt C+}
     inc(D,2);
   end;
-  assert(D-pointer(result)=L);
-  {$else}
-  end;
-  {$endif}
+  if D-pointer(result)<>L then // external 'RemoteIP:' was filtered
+    SetLength(result,D-pointer(result));
 end;
 
 type
