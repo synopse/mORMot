@@ -84,10 +84,10 @@ function CompressString(const data: RawByteZip; failIfGrow: boolean = false): Ra
 /// uncompress memory using the ZLib INFLATE algorithm, checking crc32 checksum
 function UncompressString(const data: RawByteZip): RawByteZip;
 
+{$ifdef MSWINDOWS} { use Windows MapFile }
+
 /// create a void .zip file
 procedure CreateVoidZip(const aFileName: TFileName);
-
-{$ifdef MSWINDOWS} { use Windows MapFile }
 
 function CompressFile(const srcFile, dstFile: TFileName; failIfGrow: boolean = false): boolean;
 
@@ -3800,21 +3800,6 @@ begin
     result := '';
 end;
 
-procedure CreateVoidZip(const aFileName: TFileName);
-var
-  H: THandle;
-  lhr: TLastHeader;
-begin
-  fillchar(lhr, sizeof(lhr), 0);
-  lhr.signature := $06054b50 + 1;
-  dec(lhr.signature); // +1 to avoid finding it in the exe
-  H := FileCreate(aFileName);
-  if H < 0 then
-    exit;
-  FileWrite(H, lhr, sizeof(lhr));
-  FileClose(H);
-end;
-
 {$ifdef MSWINDOWS}
 
 function ValidHandle(Handle: THandle): boolean; {$ifdef HASINLINE}inline;{$endif}
@@ -4073,6 +4058,21 @@ end;
 
 
 {$ifdef MSWINDOWS}
+
+procedure CreateVoidZip(const aFileName: TFileName);
+var
+  H: THandle;
+  lhr: TLastHeader;
+begin
+  fillchar(lhr, sizeof(lhr), 0);
+  lhr.signature := $06054b50 + 1;
+  dec(lhr.signature); // +1 to avoid finding it in the exe
+  H := FileCreate(aFileName);
+  if H < 0 then
+    exit;
+  FileWrite(H, lhr, sizeof(lhr));
+  FileClose(H);
+end;
 
 function Zip(const zip: TFileName; const files, zipAs: array of TFileName;
   NoSubDirectories: boolean = false): boolean;
