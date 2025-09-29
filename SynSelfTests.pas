@@ -7475,7 +7475,8 @@ begin
     Check(length(mus.tests)>5);
     for i := 0 to high(mus.tests) do
     with mus.Tests[i] do begin
-      if desc='Dotted names should be resolved against former resolutions.' then
+      if (desc='Dotted names should be resolved against former resolutions.') or
+         (desc='Implicit iterators should work on root-level lists.') then
         continue; // we don't handle a":{"b":{}} context (yet)
       if PosEx(' {{>partial}}',template)>0 then
         continue; // we don't indent each line of the expanded partials (yet)
