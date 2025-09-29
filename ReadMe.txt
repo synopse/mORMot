@@ -1,8 +1,8 @@
 
-  Synopse mORMot 1 Framework
+  Synopse mORMot 1 Framework - Frozen Mode
 
 An Open Source Client-Server ORM/SOA framework
- (c) 2008-2024 Synopse Informatique
+ (c) 2008-2025 Synopse Informatique
   https://synopse.info
   http://mormot.net
 
@@ -11,6 +11,7 @@ An Open Source Client-Server ORM/SOA framework
 =========
  This repository is now in "frozen/maintenance" mode. 
  Only SQLite3 static binaries and important bug fixes will be included in the future.
+ The https://synopse.info/fossil repository has been disabled after our server failure.
 -----------------------------------------------------------------------------------------------
  Please consider using https://github.com/synopse/mORMot2 for any new or maintainable project.
 -----------------------------------------------------------------------------------------------
@@ -223,18 +224,14 @@ https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#T
 FAQ:
 https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#TITL_123
 
-How to get the source:
-https://synopse.info/fossil/wiki?name=Get+the+source
-
 A forum is dedicated to support:
 https://synopse.info
 
 A blog is available:
-http://blog.synopse.info
+https://blog.synopse.info
 
 Issues and feature requests can be posted (take a look at the forums
-and latest unstable version first!):
-https://synopse.info/fossil/reportlist
+and latest unstable version first!) on GitHub.
 
 You can also monitor/fork our projects on GitHub:
 https://github.com/synopse/mORMot
@@ -249,6 +246,11 @@ used by the framework.
 A developer guide is included in this SAD document, in its 2nd part. You'll
 get good practice guidance, presentation of the ORM/SOA approach and other
 underlying concepts.
+
+The original Fossil repository was removed and GitHub will remain alive.
+https://synopse.info/fossil
+But consider switching to mORMot 2 if you really want to stay updated. It is
+usually painless, only a matter of changing the unit names in your code.
 
 Feel free to contribute by posting enhancements and patches to this
 quickly evolving project.
@@ -292,3 +294,4 @@ Quick Steps when upgrading from a previous 1.17 revision:
  - TSQLRestServerStatic* classes renamed as TSQLRestStorage*;
  - rmJSON* enums replaced by TSQLRestRoutingREST/JSON_RPC classes;
  - Changed '¤' into '~' character for mORMoti18n language files.
+
