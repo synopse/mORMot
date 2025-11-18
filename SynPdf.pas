@@ -10737,6 +10737,7 @@ begin
     if WithClip then begin
       Canvas.GRestore;
       fFillColor := -1; // force set drawing color
+      fStrokeColor := -1; // Ensure stroke color is reset after a GRestore
     end;
     case Positioning of // reset to be done after Canvas.GRestore
     tpSetTextJustification:
