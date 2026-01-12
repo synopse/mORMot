@@ -58443,8 +58443,7 @@ begin
       CreateWithResolverAndRest(Rest.Services,self,RestServer,true);
   ickFromInjectedResolver: begin
     dummyObj := nil;
-    if not TSQLRestServer(Rest).Services.
-       TryResolveInternal(fInterface.fInterfaceTypeInfo,dummyObj) then
+    if not Rest.Services.TryResolveInternal(fInterface.fInterfaceTypeInfo,dummyObj) then
       raise EInterfaceFactoryException.CreateUTF8(
         'ickFromInjectedResolver: TryResolveInternal(%)=false',[fInterface.fInterfaceName]);
     result := TInterfacedObject(ObjectFromInterface(IInterface(dummyObj)));
