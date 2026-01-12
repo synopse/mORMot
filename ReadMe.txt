@@ -2,7 +2,7 @@
   Synopse mORMot 1 Framework - Frozen Mode
 
 An Open Source Client-Server ORM/SOA framework
- (c) 2008-2025 Synopse Informatique
+ (c) 2008-2026 Synopse Informatique
   https://synopse.info
   http://mormot.net
 
