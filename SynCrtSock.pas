@@ -5221,7 +5221,7 @@ begin
       inc(PByte(P),sent);
     end else if WSAIsFatalError then
       exit; // fatal socket error
-    now := GetTick64; 
+    now := GetTick64;
     if (start=0) or (sent>0) then
       start := now else // measure timeout since nothing written
       if now-start>TimeOut then
@@ -5471,7 +5471,7 @@ begin
         inc(PByte(Buffer),read);
       end;
       now := GetTick64;
-      if (last=0) or (read>0) then // check timeout from unfinished read 
+      if (last=0) or (read>0) then // check timeout from unfinished read
         last := now else begin
         diff := now-last;
         if diff>=TimeOut then begin
@@ -9289,7 +9289,7 @@ begin
       Context.fInContent := ''; // release input/output body buffers ASAP
       Context.fOutContent := '';
       // Reset AuthenticationStatus & user between requests
-      Context.fAuthenticationStatus := hraNone; 
+      Context.fAuthenticationStatus := hraNone;
       Context.fAuthenticatedUser := '';
       // retrieve next pending request, and read its headers
       fillchar(Req^,sizeof(HTTP_REQUEST),0);
@@ -9342,7 +9342,7 @@ begin
               if AccessToken<>0 then begin
                 GetDomainUserNameFromToken(AccessToken,Context.fAuthenticatedUser);
                 // Per spec https://docs.microsoft.com/en-us/windows/win32/http/authentication-in-http-version-2-0
-                // AccessToken lifecycle is application responsability and should be closed after use 
+                // AccessToken lifecycle is application responsability and should be closed after use
                 CloseHandle(AccessToken);
               end;
             end;
@@ -12054,12 +12054,15 @@ end;
 
 procedure TCurlHTTP.InternalSendRequest(const aMethod,aData: SockString);
 begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
-  if fIn.Method='HEAD' then // the only verb what do not expect body in answer is HEAD
+  if (fIn.Method='HEAD') or (fIn.Method='OPTIONS') then // the only verb what do not expect body in answer is HEAD and OPTIONS
     curl.easy_setopt(fHandle,coNoBody,1) else
     curl.easy_setopt(fHandle,coNoBody,0);
   curl.easy_setopt(fHandle,coCustomRequest,pointer(fIn.Method));
-  curl.easy_setopt(fHandle,coPostFields,pointer(aData));
-  curl.easy_setopt(fHandle,coPostFieldSize,length(aData));
+  if length(aData) > 0 then begin // libcurl sets Content-Type: application/x-www-form-urlencoded by default when CURLOPT_POSTFIELDS option is used
+    curl.easy_setopt(fHandle,coPostFields,pointer(aData));
+    curl.easy_setopt(fHandle,coPostFieldSize,length(aData));
+  end else
+    curl.easy_setopt(fHandle,coPost,0); // resets the request type to the default to disable the POST
   curl.easy_setopt(fHandle,coHTTPHeader,fIn.Headers);
   curl.easy_setopt(fHandle,coFile,@fOut.Data);
   curl.easy_setopt(fHandle,coWriteHeader,@fOut.Header);
