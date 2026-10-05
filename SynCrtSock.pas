@@ -854,7 +854,7 @@ type
     fPendingContextCount: integer;
     fSafe: TRTLCriticalSection;
     function GetPendingContextCount: integer;
-    function PopPendingContext: pointer;
+    function PopPendingContext(aCaller: TSynThreadPoolWorkThread): pointer;
     function QueueLength: integer; virtual;
     {$endif USE_WINIOCP}
     /// end thread on IO error
@@ -7491,20 +7491,21 @@ begin
     (GetPendingContextCount+fWorkThreadCount>QueueLength);
 end;
 
-function TSynThreadPool.PopPendingContext: pointer;
+function TSynThreadPool.PopPendingContext(aCaller: TSynThreadPoolWorkThread): pointer;
 begin
   result := nil;
-  if (self=nil) or fTerminated or (fPendingContext=nil) then
+  if self=nil then
     exit;
   EnterCriticalsection(fSafe);
   try
-    if fPendingContextCount>0 then begin
+    if (fPendingContextCount>0) and not fTerminated then begin
       result := fPendingContext[0];
       dec(fPendingContextCount);
       Move(fPendingContext[1],fPendingContext[0],fPendingContextCount*SizeOf(pointer));
       if fPendingContextCount=128 then
         SetLength(fPendingContext,128); // small queue when congestion is resolved
-    end;
+    end else
+      aCaller.fProcessingContext := nil; // indicates this thread is now available
   finally
     LeaveCriticalsection(fSafe);
   end;
@@ -7588,14 +7589,9 @@ begin
       EnterCriticalSection(fOwner.fSafe);
       ctxt := fProcessingContext;
       LeaveCriticalSection(fOwner.fSafe);
-      if ctxt<>nil then begin
-        repeat
-          DoTask(ctxt);
-          ctxt := fOwner.PopPendingContext; // unqueue any pending context
-        until ctxt=nil;
-        EnterCriticalSection(fOwner.fSafe);
-        fProcessingContext := nil; // indicates this thread is now available
-        LeaveCriticalSection(fOwner.fSafe);
+      while ctxt<>nil do begin
+        DoTask(ctxt);
+        ctxt := fOwner.PopPendingContext(self); // unqueue any pending context
       end;
       {$endif USE_WINIOCP}
     until fOwner.fTerminated or Terminated;
