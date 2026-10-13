@@ -11955,11 +11955,11 @@ begin
   fHandle := curl.easy_init;
   if curl.globalShare <> nil then
     curl.easy_setopt(fHandle,coShare,curl.globalShare);
-  curl.easy_setopt(fHandle,coConnectTimeoutMs,ConnectionTimeOut); // default=300 !
+  curl.easy_setopt(fHandle,coConnectTimeoutMs,PtrInt(ConnectionTimeOut)); // default=300 !
   if SendTimeout<ReceiveTimeout then
     SendTimeout := ReceiveTimeout;
   if SendTimeout<>0 then // prevent send+receive forever
-    curl.easy_setopt(fHandle,coTimeoutMs,SendTimeout);
+    curl.easy_setopt(fHandle,coTimeoutMs,PtrInt(SendTimeout));
   if fLayer=cslUNIX then
     fRootURL := 'http://localhost' else // see CURLOPT_UNIX_SOCKET_PATH doc
     fRootURL := AnsiString(Format('http%s://%s:%d',[HTTPS[fHttps],fServer,fPort]));
@@ -11995,7 +11995,7 @@ procedure TCurlHTTP.InternalCreateRequest(const aMethod,aURL: SockString);
 const CERT_PEM: SockString = 'PEM';
 begin
   fIn.URL := fRootURL+aURL;
-  curl.easy_setopt(fHandle,coFollowLocation,1); // url redirection (as TWinHTTP)
+  curl.easy_setopt(fHandle,coFollowLocation,PtrInt(1)); // url redirection (as TWinHTTP)
   //curl.easy_setopt(fHandle,coTCPNoDelay,0); // disable Nagle
   if fLayer=cslUNIX then
     curl.easy_setopt(fHandle,coUnixSocketPath,pointer(fServer));
@@ -12004,10 +12004,10 @@ begin
     curl.easy_setopt(fHandle,coProxy,pointer(fProxyName));
   if fHttps then
     if IgnoreSSLCertificateErrors then begin
-      curl.easy_setopt(fHandle,coSSLVerifyPeer,0);
-      curl.easy_setopt(fHandle,coSSLVerifyHost,0);
-      //curl.easy_setopt(fHandle,coProxySSLVerifyPeer,0);
-      //curl.easy_setopt(fHandle,coProxySSLVerifyHost,0);
+      curl.easy_setopt(fHandle,coSSLVerifyPeer,PtrInt(0));
+      curl.easy_setopt(fHandle,coSSLVerifyHost,PtrInt(0));
+      //curl.easy_setopt(fHandle,coProxySSLVerifyPeer,PtrInt(0));
+      //curl.easy_setopt(fHandle,coProxySSLVerifyHost,PtrInt(0));
     end else begin
       // see https://curl.haxx.se/libcurl/c/simplessl.html
       if fSSL.CertFile<>'' then begin
@@ -12018,7 +12018,7 @@ begin
         curl.easy_setopt(fHandle,coSSLKeyType,nil);
         curl.easy_setopt(fHandle,coSSLKey,pointer(fSSL.KeyName));
         curl.easy_setopt(fHandle,coCAInfo,pointer(fSSL.CACertFile));
-        curl.easy_setopt(fHandle,coSSLVerifyPeer,1);
+        curl.easy_setopt(fHandle,coSSLVerifyPeer,PtrInt(1));
       end
       else if fSSL.CACertFile<>'' then
         curl.easy_setopt(fHandle,coCAInfo,pointer(fSSL.CACertFile));
@@ -12055,14 +12055,14 @@ end;
 procedure TCurlHTTP.InternalSendRequest(const aMethod,aData: SockString);
 begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
   if (fIn.Method='HEAD') or (fIn.Method='OPTIONS') then // the only verb what do not expect body in answer is HEAD and OPTIONS
-    curl.easy_setopt(fHandle,coNoBody,1) else
-    curl.easy_setopt(fHandle,coNoBody,0);
+    curl.easy_setopt(fHandle,coNoBody,PtrInt(1)) else
+    curl.easy_setopt(fHandle,coNoBody,PtrInt(0));
   curl.easy_setopt(fHandle,coCustomRequest,pointer(fIn.Method));
   if length(aData) > 0 then begin // libcurl sets Content-Type: application/x-www-form-urlencoded by default when CURLOPT_POSTFIELDS option is used
     curl.easy_setopt(fHandle,coPostFields,pointer(aData));
     curl.easy_setopt(fHandle,coPostFieldSize,length(aData));
   end else
-    curl.easy_setopt(fHandle,coPost,0); // resets the request type to the default to disable the POST
+    curl.easy_setopt(fHandle,coPost,PtrInt(0)); // resets the request type to the default to disable the POST
   curl.easy_setopt(fHandle,coHTTPHeader,fIn.Headers);
   curl.easy_setopt(fHandle,coFile,@fOut.Data);
   curl.easy_setopt(fHandle,coWriteHeader,@fOut.Header);
