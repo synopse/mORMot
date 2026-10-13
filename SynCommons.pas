@@ -10286,7 +10286,7 @@ type
   TOnKeyResolve = function(const aInterface: TGUID; const Key: RawUTF8; out Obj): boolean of object;
   /// event signature to notify a given string key
   TOnKeyNotify = procedure(Sender: TObject; const Key: RawUTF8) of object;
-  
+
 var
   /// mORMot.pas will registry here its T*ObjArray serialization process
   // - will be used by TDynArray.GetIsObjArray
@@ -11197,7 +11197,7 @@ procedure HexToBinFast(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer);
 
 /// conversion from octal C-like escape into binary data
 // - \xxx is converted into a single xxx byte from octal, and \\ into \
-// - will stop the conversion when Oct^=#0 or when invalid \xxx is reached 
+// - will stop the conversion when Oct^=#0 or when invalid \xxx is reached
 // - returns the number of bytes written to Bin^
 function OctToBin(Oct: PAnsiChar; Bin: PByte): PtrInt; overload;
 
@@ -30983,7 +30983,7 @@ begin
   {$endif}
 end;
 
-function SearchRecValidFile(const F: TSearchRec): boolean; 
+function SearchRecValidFile(const F: TSearchRec): boolean;
 begin
   {$ifndef DELPHI5OROLDER}
   {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
@@ -35726,7 +35726,7 @@ asm  // eax=Data edx=Len
         jz      @z
         shr     edx, 4
         jz      @by4
-        nop  
+        nop
 @by16:  add     esi, dword ptr[eax]
         add     edi, esi
         add     esi, dword ptr[eax+4]
@@ -36826,7 +36826,7 @@ begin // uses anti-forensic time constant "xor/or" pattern
 end;
 
 function Hash256Index(P: PHash256Rec; Count: integer; h: PHash256Rec): integer;
-{$ifdef CPU64} 
+{$ifdef CPU64}
 var _0, _1: PtrInt;
 begin // fast O(n) brute force search
   if P<>nil then begin
@@ -37701,6 +37701,33 @@ begin
   result := true; // error
 end;
 
+// parse 1..3 digits of an ISO-8601 decimal fraction of a second into milliseconds
+// - P points to the first char after '.', L is the number of remaining chars
+// - stops at the first non-digit char, e.g. 'Z' or '+hh:mm' in '23.13Z
+function Iso8601FractionToMS(P: PUTF8Char; L: integer): cardinal;
+var
+  B: cardinal;
+  tab: {$ifdef CPUX86NOTPIC}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
+begin
+  Result := 0;
+  {$ifndef CPUX86NOTPIC}tab := @ConvertHexToBin;{$endif} // faster on PIC and x86_64
+  B := tab[ord(P[0])];
+  if B > 9 then exit;
+  Result := B*100;
+  if L>1 then begin
+    B := tab[ord(P[1])];
+    if B > 9 then exit;
+    Result := Result+B*10;
+    if L>2 then begin
+      B := tab[ord(P[2])];
+      if B > 9 then exit;
+      Result := Result+B;
+    end;
+  end;
+  if Result>1000 then
+    Result := 0;
+end;
+
 procedure Iso8601ToDateTimePUTF8CharVar(P: PUTF8Char; L: integer; var result: TDateTime);
 var B: cardinal;
     Y,M,D, H,MI,SS,MS: cardinal;
@@ -37767,14 +37794,10 @@ begin
   MI := ord(P[11])*10+ord(P[12])-(48+480);
   if P[13]=':' then begin inc(P); dec(L); end; // allow hh:mm:ss
   SS := ord(P[13])*10+ord(P[14])-(48+480);
-  if (L>16) and (P[15]='.') then begin
+  if (L>16) and (P[15]='.') then
     // one or more digits representing a decimal fraction of a second
-    MS := ord(P[16])*100-4800;
-    if L>17 then MS := MS+ord(P[17])*10-480;
-    if L>18 then MS := MS+ord(P[18])-48;
-    if MS>1000 then
-      MS := 0;
-  end else
+    MS := Iso8601FractionToMS(@P[16],L-16)
+  else
     MS := 0;
   if (H<24) and (MI<60) and (SS<60) then // inlined EncodeTime()
     result := result+(H*(MinsPerHour*SecsPerMin*MSecsPerSec)+
@@ -37809,12 +37832,10 @@ begin
   M := ord(P[2])*10+ord(P[3])-(48+480);
   if P[4]=':' then begin inc(P); dec(L); end; // allow hh:mm:ss
   S := ord(P[4])*10+ord(P[5])-(48+480);
-  if (L>6) and (P[6]='.') then begin
+  if (L>6) and (P[6]='.') then
     // one or more digits representing a decimal fraction of a second
-    MS := ord(P[7])*100-4800;
-    if L>7 then MS := MS+ord(P[8])*10-480;
-    if L>8 then MS := MS+ord(P[9])-48;
-  end else
+    MS := Iso8601FractionToMS(@P[7],L-7)
+  else
     MS := 0;
   if (H<24) and (M<60) and (S<60) and (MS<1000) then
     result := true;
@@ -40521,7 +40542,7 @@ begin
       if I < R then
         Sort(I, R);
       R := J;
-    end; 
+    end;
   until L >= R;
 end;
 
@@ -41099,7 +41120,7 @@ begin
   while PtrUInt(Old)+PtrUInt(Size)>=PtrUInt(AlignedAddr)+PageSize do
     Inc(PageSize,SystemInfo.dwPageSize);
   ProtectedResult := SynMProtect(AlignedAddr,PageSize,PROT_READ or PROT_WRITE or PROT_EXEC) = 0;
-  ProtectedMemory := not ProtectedResult; 
+  ProtectedMemory := not ProtectedResult;
   if ProtectedMemory then
     ProtectedResult := SynMProtect(AlignedAddr,PageSize,PROT_READ or PROT_WRITE) = 0;
   if ProtectedResult then
@@ -42688,7 +42709,7 @@ begin
   len := RecordSaveLength(Rec,TypeInfo);
   if len=0 then
     exit;
-  temp.Init(len+4); 
+  temp.Init(len+4);
   RecordSave(Rec,PAnsiChar(temp.buf)+4,TypeInfo,dummy);
   PCardinal(temp.buf)^ := crc32c(0,PAnsiChar(temp.buf)+4,len);
   if UriCompatible then
