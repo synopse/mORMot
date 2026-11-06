@@ -105,7 +105,11 @@ begin
   F := F-D;
 end;
 
+{$IF (CompilerVersion >= 28)}   //TButton, TLabel inherit from TPresentedTextControl since XE8
+function FMXMeasureText( s:string; C : TPresentedTextControl; MaxWidth : Single; WordWrap : boolean ):TRectF;
+{$ELSE}
 function FMXMeasureText( s:string; C : TTextControl; MaxWidth : Single; WordWrap : boolean ):TRectF;
+{$IFEND}
 var
   R : TRectF;
 begin
@@ -117,3 +121,7 @@ begin
   C.Canvas.MeasureText( R, s, WordWrap, [], TTextAlign.Leading, TTextAlign.Leading );
   Result := R;
 end;
+
+
+
+
